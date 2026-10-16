@@ -25,6 +25,7 @@ model User {
   sessions      Session[]
   accounts      Account[]
   profile       UserProfile?
+  projects      Project[]
 
   @@map("auth_user")
 }
@@ -98,4 +99,21 @@ model RateLimit {
   lastRequest BigInt
 
   @@map("auth_rate_limit")
+}
+
+// 一个项目就是一张画布；未来运行快照独立建模，不能复用可变草稿。
+model Project {
+  id         String   @id @default(uuid()) @db.Uuid
+  ownerId    String
+  name       String   @db.VarChar(80)
+  revision   Int      @default(1)
+  definition Json
+  viewport   Json
+  nodeCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, updatedAt, id])
+  @@map("canvas_project")
 }

@@ -1,35 +1,14 @@
 'use client';
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
-import { App, Avatar, Button, Dropdown, Tabs, Tag } from 'antd';
-import { Clapperboard, LogOut, Settings2, ShieldCheck, UserRound } from 'lucide-react';
+import { Avatar, Button, Tabs, Tag } from 'antd';
+import { Clapperboard, ShieldCheck, UserRound, Waypoints } from 'lucide-react';
 import type { CurrentUser } from '@dramaflow/contracts';
-import { authClient } from '@/features/auth/auth-client';
+import { AccountMenuButton } from '@/features/auth/account-menu';
 import { ProfileForm } from './profile-form';
 import { SecurityPanel } from './security-panel';
 
 export function AccountHome({ user }: { user: CurrentUser }) {
   const router = useRouter();
-  const cache = useQueryClient();
-  const { message } = App.useApp();
-  const [signingOut, setSigningOut] = useState(false);
-  async function signOut() {
-    setSigningOut(true);
-    try {
-      const result = await authClient.signOut();
-      if (result.error) {
-        void message.error('退出未完成，请重试');
-        return;
-      }
-      cache.clear();
-      router.replace('/login');
-    } catch {
-      void message.error('无法连接认证服务，请稍后重试');
-    } finally {
-      setSigningOut(false);
-    }
-  }
   return (
     <main className="account-layout">
       <header className="account-header">
@@ -40,26 +19,16 @@ export function AccountHome({ user }: { user: CurrentUser }) {
           <span>DramaFlow</span>
         </div>
         <span className="account-location">账户与安全</span>
-        <Dropdown
-          menu={{
-            items: [
-              {
-                key: 'logout',
-                icon: <LogOut size={15} />,
-                label: '退出登录',
-                disabled: signingOut,
-              },
-            ],
-            onClick: () => void signOut(),
-          }}
-          trigger={['click']}
-        >
-          <Button type="text" className="account-menu" aria-label="账户菜单" loading={signingOut}>
-            <Avatar size={26}>{user.name.slice(0, 1)}</Avatar>
-            <span>{user.name}</span>
-            <Settings2 size={15} />
+        <div className="account-actions">
+          <Button
+            type="text"
+            icon={<Waypoints size={15} />}
+            onClick={() => router.push('/projects')}
+          >
+            项目画布
           </Button>
-        </Dropdown>
+          <AccountMenuButton />
+        </div>
       </header>
       <section className="account-space">
         <div className="account-intro">

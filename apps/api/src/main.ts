@@ -10,7 +10,7 @@ async function bootstrap() {
     bodyParser: false,
   });
   mountAuth(app.getHttpAdapter().getInstance(), app.get(AuthService));
-  app.useBodyParser('json', { limit: '64kb' });
+  app.useBodyParser('json', { limit: '1mb' });
   app.setGlobalPrefix('api/v1');
   app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000' });
   app.useGlobalFilters(new ApiExceptionFilter());
