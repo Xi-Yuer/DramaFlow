@@ -1,0 +1,40 @@
+{
+  "name": "dramaflow",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.7.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "node scripts/task.mjs dev",
+    "build": "node scripts/task.mjs build",
+    "typecheck": "node scripts/task.mjs typecheck",
+    "lint": "node scripts/task.mjs lint",
+    "test": "node scripts/task.mjs test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "infra:up": "docker compose up -d --wait postgres redis rustfs && pnpm storage:init",
+    "infra:down": "docker compose down",
+    "db:generate": "node scripts/task.mjs generate",
+    "db:migrate": "node scripts/task.mjs migrate",
+    "bootstrap-admin": "node scripts/task.mjs bootstrap",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "stack:up": "docker compose --profile app up -d --build --wait",
+    "stack:down": "docker compose --profile app down",
+    "env:init": "node scripts/setup.mjs",
+    "test:integration": "node scripts/integration.mjs",
+    "storage:init": "node scripts/storage-init.mjs",
+    "test:storage": "node scripts/test-storage.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "eslint": "^10.12.0",
+    "typescript-eslint": "^8.56.0",
+    "prettier": "^3.6.2",
+    "turbo": "^2.8.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.0",
+    "tsx": "^4.21.0"
+  }
+}

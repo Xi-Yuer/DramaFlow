@@ -1,0 +1,2 @@
+ALTER TABLE "WorkflowVersion" ADD COLUMN "sourceRevision" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "Operation" ADD COLUMN "request" JSONB NOT NULL DEFAULT '{}';

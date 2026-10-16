@@ -1,0 +1,1 @@
+ALTER TABLE "HumanTask" ADD COLUMN "resumedAt" TIMESTAMP(3);

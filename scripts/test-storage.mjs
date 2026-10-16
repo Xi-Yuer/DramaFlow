@@ -1,0 +1,16 @@
+import { existsSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+
+if (existsSync('.env')) process.loadEnvFile('.env');
+const child = spawn(
+  'pnpm',
+  ['--filter', '@dramaflow/api', 'exec', 'vitest', 'run', '--config', 'vitest.config.storage.ts'],
+  {
+    stdio: 'inherit',
+    env: { ...process.env, STORAGE_DRIVER: 's3' },
+  },
+);
+child.once('error', (error) => {
+  throw error;
+});
+child.once('exit', (code) => process.exit(code ?? 1));

@@ -1,0 +1,177 @@
+name: dramaflow
+
+x-app-environment: &app-environment
+  NODE_ENV: production
+  DATABASE_URL: postgresql://dramaflow:${POSTGRES_PASSWORD:?请先运行 pnpm env:init}@postgres:5432/dramaflow
+  REDIS_URL: redis://redis:6379
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?请先运行 pnpm env:init}
+  BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+  WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+  CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?请先运行 pnpm env:init}
+  STORAGE_DRIVER: s3
+  STORAGE_PATH: /app/.local/assets
+  MODEL_ENDPOINT_ALLOWLIST: ${MODEL_ENDPOINT_ALLOWLIST:-https://api.openai.com}
+  ASSET_DOWNLOAD_ALLOWLIST: ${ASSET_DOWNLOAD_ALLOWLIST:-}
+  S3_ENDPOINT: http://rustfs:9000
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_BUCKET: ${S3_BUCKET:-dramaflow}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?请先运行 pnpm env:init}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?请先运行 pnpm env:init}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dramaflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请先运行 pnpm env:init}
+      POSTGRES_DB: dramaflow
+    ports:
+      - 127.0.0.1:${POSTGRES_PORT:-5432}:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U dramaflow -d dramaflow']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: [redis-server, --appendonly, 'yes', --maxmemory-policy, noeviction]
+    ports:
+      - 127.0.0.1:${REDIS_PORT:-6379}:6379
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rustfs:
+    image: rustfs/rustfs:1.0.1
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:?请先运行 pnpm env:init}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:?请先运行 pnpm env:init}
+      RUSTFS_ADDRESS: ':9000'
+      RUSTFS_CONSOLE_ADDRESS: ':9001'
+      RUSTFS_CONSOLE_ENABLE: 'true'
+      RUSTFS_OBS_LOGGER_LEVEL: warn
+      RUSTFS_OBS_LOG_DIRECTORY: /logs
+    command: ['/data']
+    ports:
+      - '127.0.0.1:9000:9000'
+      - '127.0.0.1:9001:9001'
+    volumes:
+      - rustfs-data:/data
+      - rustfs-logs:/logs
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          'curl -fsS http://127.0.0.1:9000/health && curl -fsS http://127.0.0.1:9001/rustfs/console/health',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+
+  storage-init:
+    profiles: [app]
+    image: dramaflow-app:local
+    build: .
+    environment: *app-environment
+    command: [node, scripts/storage-init.mjs]
+    depends_on:
+      rustfs: { condition: service_healthy }
+
+  migrate:
+    profiles: [app]
+    image: dramaflow-app:local
+    build: .
+    environment:
+      <<: *app-environment
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?请设置管理员邮箱}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?请设置管理员密码}
+      ADMIN_NAME: ${ADMIN_NAME:-管理员}
+      WORKSPACE_NAME: ${WORKSPACE_NAME:-我的工作空间}
+      WORKSPACE_SLUG: ${WORKSPACE_SLUG:-default}
+    command: [sh, -c, 'pnpm db:migrate && pnpm bootstrap-admin']
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  api:
+    profiles: [app]
+    image: dramaflow-app:local
+    build: .
+    restart: unless-stopped
+    environment:
+      <<: *app-environment
+      PORT: 3001
+    command: [node, apps/api/dist/main.js]
+    volumes: [assets:/app/.local/assets]
+    expose: ['3001']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      storage-init: { condition: service_completed_successfully }
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    profiles: [app]
+    image: dramaflow-app:local
+    build: .
+    restart: unless-stopped
+    environment: *app-environment
+    command: [node, apps/worker/dist/main.js]
+    volumes: [assets:/app/.local/assets]
+    depends_on:
+      api: { condition: service_healthy }
+
+  web:
+    profiles: [app]
+    image: dramaflow-app:local
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:3001
+    command: [pnpm, --filter, '@dramaflow/web', start]
+    ports: ['127.0.0.1:3000:3000']
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:
+  assets:
+  rustfs-data:
+  rustfs-logs:
