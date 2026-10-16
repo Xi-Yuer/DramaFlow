@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Spin } from 'antd';
 import { z } from 'zod';
 import { AuthBoundary } from '@/features/auth/auth-boundary';
+import { pluginApi, pluginKeys } from '@/features/plugins/plugin-api';
 import { CanvasEditor } from './canvas-editor';
 import { projectApi, projectKeys } from './project-api';
 
@@ -25,21 +26,46 @@ function CanvasLoader({ projectId }: { projectId: string }) {
     enabled: valid,
     staleTime: 60_000,
   });
+  const manifests = useQuery({
+    queryKey: pluginKeys.catalog,
+    queryFn: pluginApi.catalog,
+    enabled: valid,
+    staleTime: 60_000,
+  });
+  const installations = useQuery({
+    queryKey: pluginKeys.installations,
+    queryFn: pluginApi.installations,
+    enabled: valid,
+  });
   if (!valid)
     return (
       <div className="page-loading">
         <Alert type="error" title="项目地址无效" showIcon />
       </div>
     );
-  if (project.isPending || catalog.isPending)
+  if (project.isPending || catalog.isPending || manifests.isPending || installations.isPending)
     return (
       <div className="page-loading">
         <Spin size="large" />
         <span>正在打开画布…</span>
       </div>
     );
-  if (project.error || catalog.error || !project.data || !catalog.data) {
-    const message = project.error?.message ?? catalog.error?.message ?? '无法打开画布';
+  if (
+    project.error ||
+    catalog.error ||
+    manifests.error ||
+    installations.error ||
+    !project.data ||
+    !catalog.data ||
+    !manifests.data ||
+    !installations.data
+  ) {
+    const message =
+      project.error?.message ??
+      catalog.error?.message ??
+      manifests.error?.message ??
+      installations.error?.message ??
+      '无法打开画布';
     return (
       <div className="page-loading">
         <Alert type="error" title={message} showIcon />
@@ -47,6 +73,8 @@ function CanvasLoader({ projectId }: { projectId: string }) {
           onClick={() => {
             void project.refetch();
             void catalog.refetch();
+            void manifests.refetch();
+            void installations.refetch();
           }}
         >
           重新连接
@@ -59,6 +87,8 @@ function CanvasLoader({ projectId }: { projectId: string }) {
       key={generation}
       project={project.data}
       catalog={catalog.data.items}
+      manifests={manifests.data.items}
+      installations={installations.data.items}
       onReload={() => {
         void project.refetch().then((result) => {
           if (result.data) setGeneration((value) => value + 1);

@@ -7,7 +7,7 @@ export const portSchema = z
   .object({
     id: identifierSchema,
     label: z.string().min(1).max(80),
-    kind: z.enum(['json', 'text', 'number', 'boolean', 'asset']),
+    kind: z.enum(['json', 'text', 'number', 'boolean', 'asset', 'image', 'video', 'file']),
     required: z.boolean(),
   })
   .strict();
@@ -22,6 +22,7 @@ export const nodeDefinitionSchema = z
     configSchema: jsonObjectSchema,
     defaultConfig: jsonObjectSchema,
     executable: z.boolean(),
+    pluginCapability: z.enum(['text', 'image', 'video']).nullable(),
   })
   .strict();
 export type NodeDefinition = z.infer<typeof nodeDefinitionSchema>;
@@ -98,20 +99,155 @@ export const emptyWorkflow = (): WorkflowDefinition => ({
   bindings: [],
 });
 
-// 仅供画布编排使用；业务执行器由后续节点实现显式注册。
+// 节点配置只描述草稿。模型调用由已安装插件提供，当前节点本身不执行生成。
 export const stepConfigSchema = z.object({ notes: z.string().max(2000) }).strict();
-export const foundationNodeDefinitions: NodeDefinition[] = [
-  {
-    type: 'core.step',
+export const startNodeConfigSchema = z
+  .object({
+    text: z.string().max(20000),
+    fileUrl: z
+      .string()
+      .max(2000)
+      .refine(
+        (value) => value === '' || /^https:\/\/\S+$/.test(value),
+        '文件地址需要是 https 链接',
+      ),
+  })
+  .strict();
+export const textNodeConfigSchema = z.object({ body: z.string().max(20000) }).strict();
+export const characterNodeConfigSchema = z.object({ summary: z.string().max(4000) }).strict();
+export const imageNodeConfigSchema = z
+  .object({
+    url: z
+      .string()
+      .max(2000)
+      .refine(
+        (value) => value === '' || /^https:\/\/\S+$/.test(value),
+        '图片地址需要是 https 链接',
+      ),
+    caption: z.string().max(500),
+  })
+  .strict();
+export const modelNodeConfigSchema = z
+  .object({
+    installationId: z.union([z.uuid(), z.literal('')]),
+    modelId: z.string().max(160),
+    instruction: z.string().max(8000),
+  })
+  .strict();
+const port = (
+  id: string,
+  label: string,
+  kind: 'text' | 'image' | 'video' | 'file',
+  required: boolean,
+) => ({ id, label, kind, required }) as const;
+const portKindLabel = {
+  json: 'JSON',
+  text: '文本',
+  number: '数字',
+  boolean: '布尔',
+  asset: '素材',
+  image: '图片',
+  video: '视频',
+  file: '文件',
+} as const;
+function definition(
+  partial: Omit<NodeDefinition, 'version' | 'executable' | 'configSchema'> & {
+    config: z.ZodType;
+  },
+): NodeDefinition {
+  const { config, ...rest } = partial;
+  return {
+    ...rest,
     version: 1,
+    executable: false,
+    configSchema: jsonObjectSchema.parse(z.toJSONSchema(config)),
+  };
+}
+export const foundationNodeDefinitions: NodeDefinition[] = [
+  definition({
+    type: 'drama.start',
+    title: '开始',
+    description:
+      '接收用户输入。输出文本和文件，只能连到接受对应类型的下游。本地上传尚未接入，文件可先填写 https 地址。',
+    inputs: [],
+    outputs: [port('text', '文本', 'text', false), port('file', '文件', 'file', false)],
+    defaultConfig: { text: '', fileUrl: '' },
+    pluginCapability: null,
+    config: startNodeConfigSchema,
+  }),
+  definition({
+    type: 'drama.text',
+    title: '文本',
+    description: '手写剧本、旁白或提示词，输出文本。',
+    inputs: [],
+    outputs: [port('text', '文本', 'text', true)],
+    defaultConfig: { body: '' },
+    pluginCapability: null,
+    config: textNodeConfigSchema,
+  }),
+  definition({
+    type: 'drama.character',
+    title: '角色',
+    description: '记录角色设定，输出文本，可供大模型和文生图引用。',
+    inputs: [],
+    outputs: [port('text', '设定', 'text', true)],
+    defaultConfig: { summary: '' },
+    pluginCapability: null,
+    config: characterNodeConfigSchema,
+  }),
+  definition({
+    type: 'drama.llm',
+    title: '大模型',
+    description:
+      '输入文本，可选文件，输出文本。选择已安装的文本模型。当前只保存选择和指令，不会发起生成。',
+    inputs: [port('prompt', '提示', 'text', false), port('file', '文件', 'file', false)],
+    outputs: [port('text', '结果', 'text', true)],
+    defaultConfig: { installationId: '', modelId: '', instruction: '' },
+    pluginCapability: 'text',
+    config: modelNodeConfigSchema,
+  }),
+  definition({
+    type: 'drama.image',
+    title: '图片',
+    description: '放置一张参考图片并输出图片。可填写 https 地址；本地上传尚未接入。',
+    inputs: [],
+    outputs: [port('image', '图片', 'image', false)],
+    defaultConfig: { url: '', caption: '' },
+    pluginCapability: null,
+    config: imageNodeConfigSchema,
+  }),
+  definition({
+    type: 'drama.image-gen',
+    title: '文生图',
+    description:
+      '输入文本，可选参考图，输出图片。选择已安装的图片模型。当前只保存选择和指令，不会发起生成。',
+    inputs: [port('prompt', '提示', 'text', true), port('image', '参考图', 'image', false)],
+    outputs: [port('image', '图片', 'image', true)],
+    defaultConfig: { installationId: '', modelId: '', instruction: '' },
+    pluginCapability: 'image',
+    config: modelNodeConfigSchema,
+  }),
+  definition({
+    type: 'drama.video-gen',
+    title: '视频生成',
+    description:
+      '输入文本或参考图，输出视频。选择已安装的视频模型。当前只保存选择和指令，不会发起生成。',
+    inputs: [port('prompt', '提示', 'text', false), port('image', '参考图', 'image', false)],
+    outputs: [port('video', '视频', 'video', true)],
+    defaultConfig: { installationId: '', modelId: '', instruction: '' },
+    pluginCapability: 'video',
+    config: modelNodeConfigSchema,
+  }),
+  definition({
+    type: 'core.step',
     title: '流程节点',
-    description: '用于组织流程结构。当前仅编排，具体业务能力后续接入。',
+    description: '只连接其他没有数据端口的流程节点，不能接入文本、图片、视频或文件。',
     inputs: [],
     outputs: [],
-    configSchema: jsonObjectSchema.parse(z.toJSONSchema(stepConfigSchema)),
     defaultConfig: { notes: '' },
-    executable: false,
-  },
+    pluginCapability: null,
+    config: stepConfigSchema,
+  }),
 ];
 
 export type WorkflowIssue = { code: string; message: string; nodeId?: string };
@@ -167,7 +303,11 @@ export function validateWorkflow(
     if (!output || !input)
       issues.push({ code: 'invalid_binding', message: '数据绑定引用不存在的节点或端口' });
     else if (input.kind !== 'json' && input.kind !== output.kind)
-      issues.push({ code: 'port_type', message: '数据绑定端口类型不匹配', nodeId: target?.id });
+      issues.push({
+        code: 'port_type',
+        message: `${portKindLabel[output.kind]}不能连接到${portKindLabel[input.kind]}`,
+        nodeId: target?.id,
+      });
     const key = `${binding.target.nodeId}:${binding.target.port}`;
     if (targets.has(key))
       issues.push({

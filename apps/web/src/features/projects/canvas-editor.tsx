@@ -18,13 +18,15 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { App, Button } from 'antd';
+import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import {
   saveProjectSchema,
   validateWorkflow,
+  type InstallationSummary,
   type NodeDefinition,
+  type PluginManifest,
   type Project,
-  type WorkflowDefinition,
 } from '@dramaflow/contracts';
 import { ApiError } from '@/lib/http';
 import { AccountMenuButton } from '@/features/auth/account-menu';
@@ -38,6 +40,7 @@ import {
   toWorkflow,
   type CanvasNode,
 } from './graph';
+import { NodeInspector } from './node-inspector';
 import { NodeMenu, type CanvasMenu } from './node-menu';
 import { projectApi } from './project-api';
 
@@ -49,10 +52,14 @@ const edgeDefaults = {
 export function CanvasEditor({
   project,
   catalog,
+  manifests,
+  installations,
   onReload,
 }: {
   project: Project;
   catalog: NodeDefinition[];
+  manifests: PluginManifest[];
+  installations: InstallationSummary[];
   onReload: () => void;
 }) {
   const catalogMap = useMemo(
@@ -62,7 +69,13 @@ export function CanvasEditor({
   return (
     <CatalogContext.Provider value={catalogMap}>
       <ReactFlowProvider>
-        <CanvasBoard project={project} catalog={catalog} onReload={onReload} />
+        <CanvasBoard
+          project={project}
+          catalog={catalog}
+          manifests={manifests}
+          installations={installations}
+          onReload={onReload}
+        />
       </ReactFlowProvider>
     </CatalogContext.Provider>
   );
@@ -71,10 +84,14 @@ export function CanvasEditor({
 function CanvasBoard({
   project,
   catalog,
+  manifests,
+  installations,
   onReload,
 }: {
   project: Project;
   catalog: NodeDefinition[];
+  manifests: PluginManifest[];
+  installations: InstallationSummary[];
   onReload: () => void;
 }) {
   const router = useRouter();
@@ -85,9 +102,6 @@ function CanvasBoard({
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(
     toCanvasEdges(project.definition).map((edge) => ({ ...edge, ...edgeDefaults })),
-  );
-  const [bindings, setBindings] = useState<WorkflowDefinition['bindings']>(
-    project.definition.bindings,
   );
   const [name, setName] = useState(project.name);
   const [viewport, setViewport] = useState(project.viewport);
@@ -100,11 +114,16 @@ function CanvasBoard({
       project.name,
       toCanvasNodes(project.definition),
       toCanvasEdges(project.definition),
-      project.definition.bindings,
+      catalog,
       project.viewport,
     ),
   );
-  const signature = draftSignature(name, nodes, edges, bindings, viewport);
+  const clickStart = useRef<{
+    nodeId: string;
+    handleId: string | null;
+    handleType: 'source' | 'target';
+  } | null>(null);
+  const signature = draftSignature(name, nodes, edges, catalog, viewport);
   const dirty = signature !== savedSignature;
   const selected = nodes.filter((node) => node.selected);
   const active = selected.length === 1 ? selected[0] : undefined;
@@ -165,20 +184,24 @@ function CanvasBoard({
       const source = connection.source;
       const target = connection.target;
       if (!source || !target) return;
-      const issue = connectionIssue(toWorkflow(nodes, edges, bindings), catalog, {
-        source,
-        target,
-      });
+      const issue = connectionIssue(toWorkflow(nodes, edges, catalog), catalog, connection);
       if (issue) {
         void message.warning(issue);
         return;
       }
       setEdges((current) => [
         ...current,
-        { id: crypto.randomUUID(), source, target, ...edgeDefaults },
+        {
+          id: crypto.randomUUID(),
+          source,
+          target,
+          sourceHandle: connection.sourceHandle,
+          targetHandle: connection.targetHandle,
+          ...edgeDefaults,
+        },
       ]);
     },
-    [bindings, catalog, edges, message, nodes, setEdges],
+    [catalog, edges, message, nodes, setEdges],
   );
 
   const onMoveEnd = useCallback<OnMove>((_, next) => {
@@ -219,7 +242,7 @@ function CanvasBoard({
       void message.error('请为每个节点填写标题');
       return;
     }
-    const definition = toWorkflow(nodes, edges, bindings);
+    const definition = toWorkflow(nodes, edges, catalog);
     const view = clampViewport(getViewport());
     const payload = { revision, name: trimmed, definition, viewport: view };
     const parsed = saveProjectSchema.safeParse(payload);
@@ -237,9 +260,8 @@ function CanvasBoard({
     try {
       const result = await projectApi.save(project.id, parsed.data);
       setRevision(result.revision);
-      setBindings(definition.bindings);
       setViewport(view);
-      setSavedSignature(draftSignature(trimmed, nodes, edges, definition.bindings, view));
+      setSavedSignature(draftSignature(trimmed, nodes, edges, catalog, view));
       setName(trimmed);
       setConflict(false);
       void message.success('画布已保存');
@@ -254,7 +276,7 @@ function CanvasBoard({
       savingLock.current = false;
       setSaving(false);
     }
-  }, [bindings, catalog, dirty, edges, getViewport, message, name, nodes, project.id, revision]);
+  }, [catalog, dirty, edges, getViewport, message, name, nodes, project.id, revision]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -293,9 +315,6 @@ function CanvasBoard({
     });
   }
 
-  const notes =
-    active && typeof active.data.config.notes === 'string' ? active.data.config.notes : null;
-
   return (
     <main className="canvas-shell" onContextMenu={(event) => event.preventDefault()}>
       <header className="canvas-top">
@@ -326,7 +345,12 @@ function CanvasBoard({
         >
           保存
         </Button>
-        <AccountMenuButton />
+        <div className="canvas-actions">
+          <Link href="/plugins" className="header-link">
+            模型插件
+          </Link>
+          <AccountMenuButton />
+        </div>
       </header>
       <div className="canvas-stage">
         <ReactFlow
@@ -341,8 +365,58 @@ function CanvasBoard({
           onPaneContextMenu={openPaneMenu}
           onNodeContextMenu={onNodeContextMenu}
           isValidConnection={(connection) =>
-            connectionIssue(toWorkflow(nodes, edges, bindings), catalog, connection) === null
+            connectionIssue(toWorkflow(nodes, edges, catalog), catalog, connection) === null
           }
+          onClickConnectStart={(_, params) => {
+            if (
+              !params.nodeId ||
+              (params.handleType !== 'source' && params.handleType !== 'target')
+            ) {
+              clickStart.current = null;
+              return;
+            }
+            clickStart.current = {
+              nodeId: params.nodeId,
+              handleId: params.handleId,
+              handleType: params.handleType,
+            };
+          }}
+          onClickConnectEnd={(event) => {
+            const start = clickStart.current;
+            clickStart.current = null;
+            const raw = event.target;
+            const element = raw instanceof Element ? raw.closest('.react-flow__handle') : null;
+            if (!start || !element) return;
+            const nodeId = element.getAttribute('data-nodeid');
+            const handleId = element.getAttribute('data-handleid');
+            if (!nodeId || (nodeId === start.nodeId && handleId === start.handleId)) return;
+            const connection =
+              start.handleType === 'source'
+                ? {
+                    source: start.nodeId,
+                    target: nodeId,
+                    sourceHandle: start.handleId,
+                    targetHandle: handleId,
+                  }
+                : {
+                    source: nodeId,
+                    target: start.nodeId,
+                    sourceHandle: handleId,
+                    targetHandle: start.handleId,
+                  };
+            const issue = connectionIssue(toWorkflow(nodes, edges, catalog), catalog, connection);
+            if (issue) void message.warning(issue);
+          }}
+          onConnectEnd={(_, state) => {
+            if (state.isValid !== false || !state.fromNode || !state.toNode) return;
+            const issue = connectionIssue(toWorkflow(nodes, edges, catalog), catalog, {
+              source: state.fromNode.id,
+              target: state.toNode.id,
+              sourceHandle: state.fromHandle?.id,
+              targetHandle: state.toHandle?.id,
+            });
+            if (issue) void message.warning(issue);
+          }}
           defaultViewport={project.viewport}
           minZoom={0.1}
           maxZoom={3}
@@ -358,8 +432,8 @@ function CanvasBoard({
         </ReactFlow>
         {nodes.length === 0 ? (
           <div className="canvas-empty">
-            <p>右击画布，添加流程节点</p>
-            <span>当前节点只负责编排。生成、运行和具体能力后续再接入。</span>
+            <p>右击画布，从开始节点接出文本、图片或视频</p>
+            <span>只有输入输出类型一致的端口可以连线。模型节点只保存选择，不会发起生成。</span>
           </div>
         ) : null}
         {menu ? (
@@ -372,41 +446,14 @@ function CanvasBoard({
           />
         ) : null}
         {active ? (
-          <aside className="node-inspector" aria-label="节点设置">
-            <span className="flow-kicker">
-              {activeDefinition?.executable === false
-                ? '编排节点'
-                : (activeDefinition?.title ?? '节点')}
-            </span>
-            <label>
-              标题
-              <input
-                value={active.data.title}
-                maxLength={80}
-                onChange={(event) => updateNode(active.id, { title: event.target.value })}
-              />
-            </label>
-            {notes !== null ? (
-              <label>
-                备注
-                <textarea
-                  value={notes}
-                  maxLength={2000}
-                  rows={5}
-                  placeholder="给这个步骤留一点说明"
-                  onChange={(event) =>
-                    updateNode(active.id, {
-                      config: { ...active.data.config, notes: event.target.value },
-                    })
-                  }
-                />
-              </label>
-            ) : null}
-            <p>{activeDefinition?.description ?? '这个节点类型当前未安装，保存时会被拒绝。'}</p>
-            <Button size="small" danger onClick={() => removeNode(active.id)}>
-              删除节点
-            </Button>
-          </aside>
+          <NodeInspector
+            node={active}
+            definition={activeDefinition}
+            manifests={manifests}
+            installations={installations}
+            onChange={(patch) => updateNode(active.id, patch)}
+            onRemove={() => removeNode(active.id)}
+          />
         ) : null}
       </div>
     </main>

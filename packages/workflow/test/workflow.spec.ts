@@ -33,6 +33,7 @@ function echoDefinition(executable = true): NodeDefinition {
     configSchema: {},
     defaultConfig: {},
     executable,
+    pluginCapability: null,
   };
 }
 
@@ -79,9 +80,55 @@ describe('工作流草稿校验', () => {
   });
   it('基础流程节点可以保存为空画布，但不能编译执行', () => {
     const registry = createFoundationRegistry();
-    expect(registry.catalog()).toHaveLength(1);
-    expect(registry.catalog()[0]?.executable).toBe(false);
+    expect(registry.catalog().some((item) => item.type === 'drama.llm')).toBe(true);
+    expect(registry.catalog().every((item) => item.executable === false)).toBe(true);
     expect(registry.validate(emptyWorkflow())).toEqual([]);
+    const catalog = registry.catalog();
+    const textNode = {
+      id: 'text',
+      type: 'drama.text',
+      version: 1,
+      title: '旁白',
+      position: { x: 0, y: 0 },
+      config: { body: '夜色' },
+    };
+    const imageNode = {
+      id: 'picture',
+      type: 'drama.image-gen',
+      version: 1,
+      title: '文生图',
+      position: { x: 40, y: 0 },
+      config: { installationId: '', modelId: '', instruction: '' },
+    };
+    expect(
+      validateWorkflow(
+        definition({
+          nodes: [textNode, imageNode],
+          bindings: [
+            {
+              source: { nodeId: 'text', port: 'text' },
+              target: { nodeId: 'picture', port: 'image' },
+            },
+          ],
+        }),
+        catalog,
+      ).some((issue) => issue.code === 'port_type'),
+    ).toBe(true);
+    expect(
+      validateWorkflow(
+        definition({
+          nodes: [textNode, imageNode],
+          edges: [{ id: 'e1', source: 'text', target: 'picture' }],
+          bindings: [
+            {
+              source: { nodeId: 'text', port: 'text' },
+              target: { nodeId: 'picture', port: 'prompt' },
+            },
+          ],
+        }),
+        catalog,
+      ),
+    ).toEqual([]);
     expect(() => compileWorkflow(emptyWorkflow(), registry)).toThrow(/空画布/);
     expect(() =>
       compileWorkflow(

@@ -12,6 +12,8 @@ import {
   projectSummarySchema,
   emptyWorkflow,
 } from '@dramaflow/contracts';
+import { validateNodePlugins } from '@dramaflow/contracts';
+import { systemPlugins } from '@dramaflow/plugins';
 import { createFoundationRegistry } from '@dramaflow/workflow';
 import { DatabaseService } from '../infrastructure/database.service.js';
 
@@ -75,7 +77,19 @@ export class ProjectsService {
   async save(ownerId: string, rawId: string, raw: unknown) {
     const id = z.string().uuid().parse(rawId);
     const input = saveProjectSchema.parse(raw);
-    const issues = this.registry.validate(input.definition);
+    const installations = await this.db.client.pluginInstallation.findMany({
+      where: { ownerId },
+      select: { id: true, pluginId: true },
+    });
+    const issues = [
+      ...this.registry.validate(input.definition),
+      ...validateNodePlugins(
+        input.definition,
+        this.registry.catalog(),
+        installations,
+        systemPlugins,
+      ),
+    ];
     if (issues.length)
       throw new BadRequestException({
         code: 'INVALID_WORKFLOW',

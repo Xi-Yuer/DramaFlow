@@ -1,2 +1,3 @@
-// 预留包入口；具体业务按用户指导逐步实现。
-export {};
+export { pluginById, systemPlugins } from './catalog.js';
+export { credentialSchema, normalizeCredentials, publicCredentials } from './credentials.js';
+export { ModelListError, listRemoteModels } from './list-models.js';

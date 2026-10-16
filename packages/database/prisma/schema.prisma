@@ -26,6 +26,7 @@ model User {
   accounts      Account[]
   profile       UserProfile?
   projects      Project[]
+  pluginInstallations PluginInstallation[]
 
   @@map("auth_user")
 }
@@ -116,4 +117,20 @@ model Project {
 
   @@index([ownerId, updatedAt, id])
   @@map("canvas_project")
+}
+
+// 插件安装只保存加密后的凭证。明文密钥不能进入这个模型的查询结果。
+model PluginInstallation {
+  id            String   @id @default(uuid()) @db.Uuid
+  ownerId       String
+  pluginId      String   @db.VarChar(80)
+  pluginVersion Int
+  label         String   @db.VarChar(80)
+  secretCipher  String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, updatedAt])
+  @@map("plugin_installation")
 }

@@ -44,6 +44,9 @@ importers:
       '@dramaflow/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@dramaflow/plugins':
+        specifier: workspace:*
+        version: link:../../packages/plugins
       '@dramaflow/workflow':
         specifier: workspace:*
         version: link:../../packages/workflow

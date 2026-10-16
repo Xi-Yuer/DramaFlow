@@ -42,6 +42,7 @@
     "ioredis": "5.11.1",
     "better-auth": "1.7.10",
     "@dramaflow/contracts": "workspace:*",
+    "@dramaflow/plugins": "workspace:*",
     "@dramaflow/workflow": "workspace:*"
   },
   "devDependencies": {

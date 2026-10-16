@@ -36,9 +36,11 @@ a {
   display: flex;
   align-items: center;
   gap: 11px;
+  color: inherit;
   font-size: 19px;
   font-weight: 650;
   letter-spacing: -0.5px;
+  text-decoration: none;
 }
 .brand-symbol {
   display: inline-flex;
@@ -290,6 +292,26 @@ a {
 }
 .canvas-top .account-menu {
   margin-left: auto;
+}
+.canvas-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.canvas-top .canvas-actions .account-menu {
+  margin-left: 0;
+}
+.header-link {
+  color: #c8c8d2;
+  font-size: 13px;
+  text-decoration: none;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+.header-link:hover {
+  color: #f2f2f6;
+  background: #ffffff0c;
 }
 .account-menu .ant-avatar,
 .identity-summary .ant-avatar {
@@ -640,6 +662,18 @@ a {
   background: #d5d5dc;
   border: 2px solid #121214;
 }
+.canvas-stage .react-flow__handle.port-text {
+  background: #d5d5dc;
+}
+.canvas-stage .react-flow__handle.port-image {
+  background: #8fd0b0;
+}
+.canvas-stage .react-flow__handle.port-video {
+  background: #8eb4ff;
+}
+.canvas-stage .react-flow__handle.port-file {
+  background: #e0c36a;
+}
 .canvas-stage .react-flow__handle-left {
   left: -5px;
 }
@@ -674,6 +708,12 @@ a {
   margin: 7px 0 0;
   font-size: 14px;
   font-weight: 550;
+}
+.flow-ports {
+  margin: 8px 0 0;
+  color: #8e8e9a;
+  font-size: 11px;
+  line-height: 1.4;
 }
 .flow-note {
   display: -webkit-box;
@@ -711,8 +751,8 @@ a {
 .node-menu {
   position: fixed;
   z-index: 30;
-  width: 260px;
-  max-height: 320px;
+  width: 280px;
+  max-height: min(70vh, 520px);
   padding: 8px;
   overflow: auto;
   background: #1c1c20ee;
@@ -762,7 +802,9 @@ a {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: 280px;
+  width: 300px;
+  max-height: calc(100% - 32px);
+  overflow: auto;
   padding: 16px;
   background: #16161ae6;
   border: 1px solid #ffffff12;
@@ -778,7 +820,9 @@ a {
   font-size: 12px;
 }
 .node-inspector input,
-.node-inspector textarea {
+.node-inspector textarea,
+.node-inspector select,
+.plugin-form input {
   width: 100%;
   padding: 8px 10px;
   color: inherit;
@@ -788,15 +832,96 @@ a {
   resize: vertical;
 }
 .node-inspector input:focus,
-.node-inspector textarea:focus {
+.node-inspector textarea:focus,
+.node-inspector select:focus,
+.plugin-form input:focus {
   border-color: #67ded566;
   outline: none;
 }
-.node-inspector p {
+.node-inspector p,
+.inspector-hint {
   margin: 0;
   color: #8d8d98;
   font-size: 12px;
   line-height: 1.6;
+}
+.inspector-hint a,
+.plugin-card p {
+  color: #9a9aa6;
+}
+.inspector-hint a {
+  margin-left: 6px;
+  color: #8ee0d8;
+}
+.plugin-section {
+  margin-top: 28px;
+}
+.plugin-section h2,
+.plugin-dialog h2,
+.plugin-card h3 {
+  margin: 0;
+  font-weight: 550;
+}
+.plugin-section h2 {
+  margin-bottom: 14px;
+  font-size: 16px;
+}
+.plugin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.plugin-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: #141416;
+  border: 1px solid #ffffff12;
+  border-radius: 16px;
+}
+.plugin-card p,
+.plugin-meta {
+  margin: 0;
+  color: #8d8d98;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.plugin-actions {
+  display: flex;
+  gap: 8px;
+}
+.plugin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plugin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #b7b7c2;
+  font-size: 12px;
+}
+.plugin-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #00000088;
+}
+.plugin-dialog-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(420px, 100%);
+  padding: 20px;
+  background: #16161a;
+  border: 1px solid #ffffff14;
+  border-radius: 18px;
 }
 @media (max-width: 740px) {
   .project-heading {

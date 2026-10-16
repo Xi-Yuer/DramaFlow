@@ -2,6 +2,11 @@ import { z } from 'zod';
 import {
   nodeDefinitionSchema,
   stepConfigSchema,
+  startNodeConfigSchema,
+  textNodeConfigSchema,
+  characterNodeConfigSchema,
+  imageNodeConfigSchema,
+  modelNodeConfigSchema,
   foundationNodeDefinitions,
   validateWorkflow,
   type NodeDefinition,
@@ -59,9 +64,23 @@ export class NodeRegistry {
     return issues;
   }
 }
+const nodeConfigs = {
+  'core.step@1': stepConfigSchema,
+  'drama.start@1': startNodeConfigSchema,
+  'drama.text@1': textNodeConfigSchema,
+  'drama.character@1': characterNodeConfigSchema,
+  'drama.image@1': imageNodeConfigSchema,
+  'drama.llm@1': modelNodeConfigSchema,
+  'drama.image-gen@1': modelNodeConfigSchema,
+  'drama.video-gen@1': modelNodeConfigSchema,
+};
 export function createFoundationRegistry(): NodeRegistry {
   const registry = new NodeRegistry();
-  for (const definition of foundationNodeDefinitions)
-    registry.register({ definition, config: stepConfigSchema });
+  for (const definition of foundationNodeDefinitions) {
+    const config =
+      nodeConfigs[`${definition.type}@${definition.version}` as keyof typeof nodeConfigs];
+    if (!config) throw new Error(`节点缺少配置协议：${definition.type}`);
+    registry.register({ definition, config });
+  }
   return registry;
 }
