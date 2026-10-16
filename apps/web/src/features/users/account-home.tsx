@@ -20,11 +20,7 @@ export function AccountHome({ user }: { user: CurrentUser }) {
         </div>
         <span className="account-location">账户与安全</span>
         <div className="account-actions">
-          <Button
-            type="text"
-            icon={<Waypoints size={15} />}
-            onClick={() => router.push('/projects')}
-          >
+          <Button type="text" icon={<Waypoints size={15} />} onClick={() => router.push('/')}>
             项目画布
           </Button>
           <AccountMenuButton />

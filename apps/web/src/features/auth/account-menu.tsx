@@ -18,7 +18,7 @@ export function AccountMenuButton() {
           { key: 'logout', icon: <LogOut size={15} />, label: '退出登录', disabled: signingOut },
         ],
         onClick: ({ key }) => {
-          if (key === 'account') router.push('/');
+          if (key === 'account') router.push('/account');
           if (key === 'logout') void signOut();
         },
       }}
