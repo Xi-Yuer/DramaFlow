@@ -7,10 +7,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./manifest": {
-      "types": "./dist/manifest.d.ts",
-      "import": "./dist/manifest.js"
     }
   },
   "files": [
@@ -20,8 +16,7 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src test",
-    "test": "vitest run"
+    "lint": "eslint src"
   },
   "dependencies": {
     "@dramaflow/contracts": "workspace:*",

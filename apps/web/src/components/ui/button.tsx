@@ -1,40 +1,34 @@
-import * as React from 'react';
-import { Slot } from '@radix-ui/react-slot';
-import { cva, type VariantProps } from 'class-variance-authority';
+'use client';
+
+import type { ComponentProps } from 'react';
+import { Button as AntButton } from 'antd';
 import { cn } from '@/lib/utils';
 
-const buttonVariants = cva(
-  'button inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4 [&_svg]:shrink-0',
-  {
-    variants: {
-      variant: {
-        default: 'button-primary',
-        secondary: 'button-secondary',
-        ghost: 'button-ghost',
-        destructive: 'button-destructive',
-        outline: 'button-outline',
-      },
-      size: { default: 'h-9 px-3.5', sm: 'h-8 px-3 text-xs', lg: 'h-11 px-5', icon: 'size-9' },
-    },
-    defaultVariants: { variant: 'default', size: 'default' },
-  },
-);
+type ButtonProps = Omit<ComponentProps<'button'>, 'color'> & {
+  variant?: 'default' | 'secondary' | 'ghost' | 'destructive' | 'outline';
+  size?: 'default' | 'sm' | 'lg' | 'icon';
+};
 
-function Button({
+/** 保留领域组件使用的简洁接口，交互与视觉统一交给 Ant Design。 */
+export function Button({
   className,
-  variant,
-  size,
-  asChild = false,
+  variant = 'default',
+  size = 'default',
+  type,
+  children,
   ...props
-}: React.ComponentProps<'button'> & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot : 'button';
+}: ButtonProps) {
   return (
-    <Comp
-      data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+    <AntButton
       {...props}
-    />
+      htmlType={type ?? 'button'}
+      icon={size === 'icon' ? children : undefined}
+      type={variant === 'default' ? 'primary' : variant === 'ghost' ? 'text' : 'default'}
+      danger={variant === 'destructive'}
+      size={size === 'sm' ? 'small' : size === 'lg' ? 'large' : 'middle'}
+      className={cn(className)}
+    >
+      {size === 'icon' ? undefined : children}
+    </AntButton>
   );
 }
-
-export { Button, buttonVariants };

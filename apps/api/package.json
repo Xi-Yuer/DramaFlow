@@ -7,9 +7,9 @@
   "license": "UNLICENSED",
   "type": "module",
   "exports": {
-    "./worker": {
-      "types": "./dist/runtime/worker.module.d.ts",
-      "default": "./dist/runtime/worker.module.js"
+    "./infrastructure": {
+      "types": "./dist/infrastructure/infrastructure.module.d.ts",
+      "default": "./dist/infrastructure/infrastructure.module.js"
     }
   },
   "scripts": {
@@ -29,15 +29,8 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts"
   },
   "dependencies": {
-    "@dramaflow/contracts": "workspace:*",
-    "@dramaflow/context": "workspace:*",
     "@dramaflow/database": "workspace:*",
-    "@dramaflow/plugins": "workspace:*",
-    "@dramaflow/workflow": "workspace:*",
-    "@langchain/langgraph-checkpoint-postgres": "^1.0.0",
     "@aws-sdk/client-s3": "^3.1030.0",
-    "@aws-sdk/s3-request-presigner": "^3.1030.0",
-    "better-auth": "1.7.10",
     "pg": "^8.16.3",
     "bullmq": "^5.63.0",
     "zod": "^4.1.0",
@@ -45,7 +38,8 @@
     "@nestjs/core": "^12.0.1",
     "@nestjs/platform-express": "^12.0.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "ioredis": "5.11.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",

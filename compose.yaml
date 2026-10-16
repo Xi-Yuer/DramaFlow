@@ -4,14 +4,8 @@ x-app-environment: &app-environment
   NODE_ENV: production
   DATABASE_URL: postgresql://dramaflow:${POSTGRES_PASSWORD:?请先运行 pnpm env:init}@postgres:5432/dramaflow
   REDIS_URL: redis://redis:6379
-  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?请先运行 pnpm env:init}
-  BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
-  WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
   CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?请先运行 pnpm env:init}
-  STORAGE_DRIVER: s3
-  STORAGE_PATH: /app/.local/assets
-  MODEL_ENDPOINT_ALLOWLIST: ${MODEL_ENDPOINT_ALLOWLIST:-https://api.openai.com}
-  ASSET_DOWNLOAD_ALLOWLIST: ${ASSET_DOWNLOAD_ALLOWLIST:-}
+  WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
   S3_ENDPOINT: http://rustfs:9000
   S3_REGION: ${S3_REGION:-us-east-1}
   S3_BUCKET: ${S3_BUCKET:-dramaflow}
@@ -96,14 +90,8 @@ services:
     profiles: [app]
     image: dramaflow-app:local
     build: .
-    environment:
-      <<: *app-environment
-      ADMIN_EMAIL: ${ADMIN_EMAIL:?请设置管理员邮箱}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?请设置管理员密码}
-      ADMIN_NAME: ${ADMIN_NAME:-管理员}
-      WORKSPACE_NAME: ${WORKSPACE_NAME:-我的工作空间}
-      WORKSPACE_SLUG: ${WORKSPACE_SLUG:-default}
-    command: [sh, -c, 'pnpm db:migrate && pnpm bootstrap-admin']
+    environment: *app-environment
+    command: [pnpm, db:migrate]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -117,7 +105,6 @@ services:
       <<: *app-environment
       PORT: 3001
     command: [node, apps/api/dist/main.js]
-    volumes: [assets:/app/.local/assets]
     expose: ['3001']
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -141,7 +128,6 @@ services:
     restart: unless-stopped
     environment: *app-environment
     command: [node, apps/worker/dist/main.js]
-    volumes: [assets:/app/.local/assets]
     depends_on:
       api: { condition: service_healthy }
 
@@ -172,6 +158,5 @@ services:
 volumes:
   postgres-data:
   redis-data:
-  assets:
   rustfs-data:
   rustfs-logs:

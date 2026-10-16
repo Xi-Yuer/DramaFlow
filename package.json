@@ -18,7 +18,6 @@
     "infra:down": "docker compose down",
     "db:generate": "node scripts/task.mjs generate",
     "db:migrate": "node scripts/task.mjs migrate",
-    "bootstrap-admin": "node scripts/task.mjs bootstrap",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "stack:up": "docker compose --profile app up -d --build --wait",
     "stack:down": "docker compose --profile app down",

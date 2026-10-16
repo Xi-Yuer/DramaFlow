@@ -1,9 +1,14 @@
-import { Global, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
+import { DatabaseModule, DatabaseService } from './database.service.js';
+import { RedisService } from './redis.service.js';
+import { StorageService } from './storage.service.js';
 import { SecretsService } from './secrets.service.js';
-import { RunQueue } from './queue.service.js';
-@Global()
+
 @Module({
-  providers: [SecretsService, RunQueue],
-  exports: [SecretsService, RunQueue],
+  imports: [DatabaseModule],
+  providers: [RedisService, StorageService, SecretsService],
+  exports: [DatabaseModule, RedisService, StorageService, SecretsService],
 })
 export class InfrastructureModule {}
+
+export { DatabaseService, RedisService, StorageService };

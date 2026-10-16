@@ -1,13 +1,15 @@
-import { Suspense } from 'react';
-import { AuthGate } from '@/features/auth/auth-gate';
-import { WorkspaceApp } from '@/features/workspaces/workspace-app';
+'use client';
+
+import { Result } from 'antd';
 
 export default function Home() {
   return (
-    <AuthGate>
-      <Suspense fallback={<div className="app-loading">正在准备工作台…</div>}>
-        <WorkspaceApp />
-      </Suspense>
-    </AuthGate>
+    <main className="foundation-page">
+      <Result
+        status="info"
+        title="DramaFlow"
+        subTitle="基础工程已保留，业务功能将按你的指导逐步实现。"
+      />
+    </main>
   );
 }

@@ -13,8 +13,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint src test",
-    "test": "vitest run"
+    "lint": "eslint src"
   },
   "dependencies": {
     "@dramaflow/contracts": "workspace:*",

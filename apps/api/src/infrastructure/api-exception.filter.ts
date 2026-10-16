@@ -40,16 +40,6 @@ export class ApiExceptionFilter implements ExceptionFilter {
       });
       return;
     }
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      error.code === 'CONTEXT_BUDGET_EXCEEDED'
-    ) {
-      response
-        .status(400)
-        .json({ code: error.code, message: error.message, requestId });
-      return;
-    }
     this.logger.error(
       `未处理的服务错误，requestId=${requestId}，type=${error instanceof Error ? error.name : 'unknown'}`,
     );

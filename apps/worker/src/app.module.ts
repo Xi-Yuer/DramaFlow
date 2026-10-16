@@ -1,7 +1,5 @@
 import { Module } from '@nestjs/common';
-import { RuntimeWorkerModule } from '@dramaflow/api/worker';
+import { InfrastructureModule } from '@dramaflow/api/infrastructure';
 
-@Module({
-  imports: [RuntimeWorkerModule],
-})
+@Module({ imports: [InfrastructureModule] })
 export class AppModule {}

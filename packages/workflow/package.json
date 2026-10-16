@@ -7,14 +7,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./catalog": {
-      "types": "./dist/catalog.d.ts",
-      "import": "./dist/catalog.js"
-    },
-    "./validation": {
-      "types": "./dist/validation.d.ts",
-      "import": "./dist/validation.js"
     }
   },
   "files": [
@@ -24,8 +16,7 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src test",
-    "test": "vitest run"
+    "lint": "eslint src"
   },
   "dependencies": {
     "@dramaflow/contracts": "workspace:*",

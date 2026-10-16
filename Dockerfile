@@ -23,7 +23,6 @@ RUN pnpm build
 FROM base AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
 COPY --from=build --chown=node:node /app /app
-RUN mkdir -p /app/.local/assets && chown -R node:node /app/.local
 USER node
 EXPOSE 3000 3001
 CMD ["node", "apps/api/dist/main.js"]

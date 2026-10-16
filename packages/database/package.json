@@ -14,13 +14,11 @@
     "build": "prisma generate && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "migrate:deploy": "prisma migrate deploy",
-    "migrate:dev": "prisma migrate dev",
-    "bootstrap-admin": "tsx src/bootstrap-admin.ts"
+    "migrate:dev": "prisma migrate dev"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
-    "better-auth": "1.7.10",
     "pg": "^8.16.3"
   },
   "devDependencies": {

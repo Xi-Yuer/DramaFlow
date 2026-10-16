@@ -3,8 +3,6 @@
   "globalEnv": [
     "DATABASE_URL",
     "REDIS_URL",
-    "BETTER_AUTH_SECRET",
-    "BETTER_AUTH_URL",
     "CREDENTIAL_ENCRYPTION_KEY",
     "API_URL",
     "STORAGE_DRIVER",
@@ -15,54 +13,31 @@
     "S3_ACCESS_KEY_ID",
     "S3_SECRET_ACCESS_KEY",
     "ALLOWED_ORIGIN",
-    "BOOTSTRAP_ADMIN_EMAIL",
-    "BOOTSTRAP_ADMIN_PASSWORD",
-    "ADMIN_EMAIL",
-    "ADMIN_PASSWORD",
-    "ADMIN_NAME",
-    "WORKSPACE_NAME",
-    "WORKSPACE_SLUG",
     "WEB_ORIGIN",
     "PORT",
-    "MODEL_ENDPOINT_ALLOWLIST",
-    "ASSET_DOWNLOAD_ALLOWLIST",
     "API_PORT",
     "WORKER_CONCURRENCY"
   ],
   "tasks": {
     "build": {
-      "dependsOn": [
-        "^build"
-      ],
-      "outputs": [
-        "dist/**",
-        ".next/**",
-        "!.next/cache/**"
-      ]
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "dev": {
-      "dependsOn": [
-        "^build"
-      ],
+      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     },
     "typecheck": {
-      "dependsOn": [
-        "^build"
-      ],
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "lint": {
-      "dependsOn": [
-        "^build"
-      ],
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "test": {
-      "dependsOn": [
-        "^build"
-      ],
+      "dependsOn": ["^build"],
       "outputs": [],
       "cache": false
     }

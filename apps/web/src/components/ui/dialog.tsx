@@ -1,9 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
-import { Button } from './button';
-import { cn } from '@/lib/utils';
+import { Modal } from 'antd';
 
 export function Dialog({
   title,
@@ -18,27 +15,16 @@ export function Dialog({
   onClose: () => void;
   wide?: boolean;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const dialog = ref.current;
-    dialog?.showModal();
-    return () => dialog?.close();
-  }, []);
   return (
-    <dialog
-      ref={ref}
-      className={cn('native-dialog', wide && 'wide')}
+    <Modal
+      open
+      title={title}
       onCancel={onClose}
-      aria-label={title}
+      footer={footer ?? null}
+      width={wide ? 880 : 560}
+      centered
     >
-      <div className="dialog-header">
-        <h2>{title}</h2>
-        <Button size="icon" variant="ghost" onClick={onClose} aria-label="关闭对话框">
-          <X />
-        </Button>
-      </div>
-      <div className="dialog-content">{children}</div>
-      {footer && <div className="dialog-footer">{footer}</div>}
-    </dialog>
+      {children}
+    </Modal>
   );
 }

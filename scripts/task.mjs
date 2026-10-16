@@ -11,7 +11,6 @@ const commands = {
   test: ['exec', 'turbo', 'run', 'test'],
   generate: ['--filter', '@dramaflow/database', 'generate'],
   migrate: ['--filter', '@dramaflow/database', 'migrate:deploy'],
-  bootstrap: ['--filter', '@dramaflow/database', 'bootstrap-admin'],
 };
 if (!commands[task]) throw new Error(`未知任务 ${task}`);
 const child = spawn('pnpm', [...commands[task], ...args], { stdio: 'inherit', env: process.env });

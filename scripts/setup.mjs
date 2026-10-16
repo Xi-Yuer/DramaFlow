@@ -22,7 +22,7 @@ if (existsSync('.env')) {
     );
   }
   chmodSync('.env', 0o600);
-  console.info('.env 已保留，缺少的 RustFS 配置已补齐；已有 STORAGE_DRIVER 不会自动改写。');
+  console.info('.env 已保留，缺少的 RustFS 配置已补齐。');
 } else {
   const password = randomKey();
   const config = {
@@ -31,20 +31,11 @@ if (existsSync('.env')) {
     REDIS_PORT: '6379',
     DATABASE_URL: `postgresql://dramaflow:${password}@localhost:5432/dramaflow`,
     REDIS_URL: 'redis://localhost:6379',
-    BETTER_AUTH_SECRET: randomBytes(32).toString('hex'),
-    BETTER_AUTH_URL: 'http://localhost:3000',
     WEB_ORIGIN: 'http://localhost:3000',
     CREDENTIAL_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
     API_URL: 'http://localhost:3001',
     PORT: '3001',
-    STORAGE_DRIVER: 's3',
-    STORAGE_PATH: `${process.cwd()}/.local/assets`,
     ...storage,
-    ADMIN_EMAIL: 'admin@dramaflow.local',
-    ADMIN_PASSWORD: randomBytes(18).toString('base64url'),
-    ADMIN_NAME: '管理员',
-    WORKSPACE_NAME: '我的工作空间',
-    WORKSPACE_SLUG: 'default',
   };
   writeFileSync(
     '.env',
@@ -53,5 +44,5 @@ if (existsSync('.env')) {
       .join('\n')}\n`,
     { mode: 0o600, flag: 'wx' },
   );
-  console.info('已生成 .env（权限 0600），包含管理员及 RustFS 随机凭证。');
+  console.info('已生成 .env（权限 0600），包含 PostgreSQL 及 RustFS 随机凭证。');
 }

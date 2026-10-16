@@ -1,17 +1,20 @@
 import type { Metadata } from 'next';
+import { AntdRegistry } from '@ant-design/nextjs-registry';
 import './globals.css';
 import { Providers } from './providers';
 
 export const metadata: Metadata = {
-  title: 'DramaFlow · 创作工作台',
-  description: '以漫剧创作为起点，让每一种想法拥有自己的工作流。',
+  title: 'DramaFlow · 工程基础',
+  description: 'DramaFlow 前后端基础工程。',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN">
       <body>
-        <Providers>{children}</Providers>
+        <AntdRegistry>
+          <Providers>{children}</Providers>
+        </AntdRegistry>
       </body>
     </html>
   );

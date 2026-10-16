@@ -1,5 +1,2 @@
-export * from './catalog.js';
-export * from './validation.js';
-export * from './types.js';
-export * from './inputs.js';
-export * from './runtime.js';
+// 预留包入口；具体业务按用户指导逐步实现。
+export {};
