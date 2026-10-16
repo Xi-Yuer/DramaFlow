@@ -4,7 +4,7 @@
 
 本文件定义后续界面的视觉与交互方向。实施前阅读下方提示词，按用户当轮指定的页面或组件应用，不据此自动恢复业务功能或重做整站。
 
-当前基础工程仍安装 Ant Design、Next.js Registry 和 TanStack Query，主题入口为 `apps/web/src/app/theme.ts`。这些是现有技术底座，不代表最终界面必须沿用 Ant Design 默认外观。当前源码中的蓝色主题尚未按新要求调整；本次仅更新设计文档。
+当前使用 Ant Design、Next.js Registry 和 TanStack Query，主题入口为 `apps/web/src/app/theme.ts`。登录页和账户中心已应用石墨灰与青色主题，通用表单、密码输入、选择器、页签、菜单、提示和弹窗复用组件库。定制样式集中在页面布局与少量装饰；后续按具体模块继续遵守下方提示词。
 
 ## 可直接用于后续实施的样式提示词
 

@@ -12,4 +12,18 @@ function run(args) {
   });
 }
 await run(['build']);
+const { createDatabase } = await import('../packages/database/dist/index.js');
+const db = createDatabase();
+try {
+  const existing =
+    await db.$queryRaw`SELECT datname FROM pg_database WHERE datname = 'dramaflow_test'`;
+  if (!existing.length) await db.$executeRawUnsafe('CREATE DATABASE dramaflow_test');
+} finally {
+  await db.$disconnect();
+}
+const url = new URL(process.env.DATABASE_URL);
+url.pathname = '/dramaflow_test';
+process.env.DATABASE_URL = url.toString();
+process.env.DRAMAFLOW_INTEGRATION = '1';
+await run(['--filter', '@dramaflow/database', 'migrate:deploy']);
 await run(['--filter', '@dramaflow/api', 'test:e2e']);

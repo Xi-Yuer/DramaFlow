@@ -45,7 +45,6 @@ it('已移除的业务接口不再对外提供服务', async () => {
   for (const path of [
     '/api/v1/workspaces',
     '/api/v1/catalog',
-    '/api/auth/get-session',
   ]) {
     const response = await fetch(`${origin}${path}`);
     expect(response.status).toBe(404);

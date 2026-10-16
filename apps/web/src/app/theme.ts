@@ -1,27 +1,28 @@
-import type { ThemeConfig } from 'antd';
-
-/** 全站唯一设计令牌入口，避免各功能模块自行定义主题。 */
+import { theme, type ThemeConfig } from 'antd';
 export const workspaceTheme: ThemeConfig = {
+  algorithm: theme.darkAlgorithm,
   token: {
-    colorPrimary: '#1677ff',
-    colorInfo: '#1677ff',
-    colorSuccess: '#16a574',
-    colorWarning: '#d89614',
-    colorError: '#e5484d',
-    colorText: '#1d2939',
-    colorTextSecondary: '#667085',
-    colorBorder: '#dce3ed',
-    colorBgLayout: '#f4f6fa',
-    borderRadius: 8,
-    controlHeight: 36,
+    colorPrimary: '#67ded5',
+    colorInfo: '#67ded5',
+    colorSuccess: '#68cc9a',
+    colorWarning: '#e2ba6c',
+    colorError: '#ee777c',
+    colorBgBase: '#101012',
+    colorBgContainer: '#1b1b1f',
+    colorBgElevated: '#252529',
+    colorText: '#efeff2',
+    colorTextSecondary: '#a2a2ad',
+    colorBorder: '#36363d',
+    borderRadius: 10,
+    controlHeight: 40,
     fontFamily: "'PingFang SC', 'Microsoft YaHei', sans-serif",
     fontSize: 13,
   },
   components: {
-    Layout: { siderBg: '#101d35', headerBg: '#ffffff' },
-    Menu: { darkItemBg: '#101d35', darkItemSelectedBg: '#1677ff', itemHeight: 44 },
-    Card: { headerFontSize: 15 },
-    Tabs: { horizontalMargin: '0', horizontalItemGutter: 24 },
-    Modal: { titleFontSize: 17 },
+    Button: { primaryColor: '#0c2926', fontWeight: 600 },
+    Input: { activeShadow: '0 0 0 2px #67ded515' },
+    Tabs: { horizontalMargin: '0 0 28px' },
+    Modal: { borderRadiusLG: 16 },
+    Form: { labelColor: '#c7c7ce' },
   },
 };

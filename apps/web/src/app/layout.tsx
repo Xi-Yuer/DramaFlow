@@ -4,8 +4,8 @@ import './globals.css';
 import { Providers } from './providers';
 
 export const metadata: Metadata = {
-  title: 'DramaFlow · 工程基础',
-  description: 'DramaFlow 前后端基础工程。',
+  title: 'DramaFlow · 创作空间',
+  description: 'DramaFlow 智能创作空间与账户中心。',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

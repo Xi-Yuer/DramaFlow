@@ -5,6 +5,9 @@ x-app-environment: &app-environment
   DATABASE_URL: postgresql://dramaflow:${POSTGRES_PASSWORD:?请先运行 pnpm env:init}@postgres:5432/dramaflow
   REDIS_URL: redis://redis:6379
   CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?请先运行 pnpm env:init}
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?请先运行 pnpm env:init}
+  TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+  BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
   WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
   S3_ENDPOINT: http://rustfs:9000
   S3_REGION: ${S3_REGION:-us-east-1}
@@ -90,8 +93,12 @@ services:
     profiles: [app]
     image: dramaflow-app:local
     build: .
-    environment: *app-environment
-    command: [pnpm, db:migrate]
+    environment:
+      <<: *app-environment
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@dramaflow.local}
+      ADMIN_NAME: ${ADMIN_NAME:-管理员}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?请先运行 pnpm env:init}
+    command: [sh, -c, 'pnpm db:migrate && pnpm auth:bootstrap']
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

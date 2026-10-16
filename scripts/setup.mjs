@@ -3,6 +3,11 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 const randomKey = () => randomBytes(24).toString('hex');
 const storage = {
+  BETTER_AUTH_SECRET: randomBytes(32).toString('hex'),
+  BETTER_AUTH_URL: 'http://localhost:3000',
+  ADMIN_EMAIL: 'admin@dramaflow.local',
+  ADMIN_NAME: '管理员',
+  ADMIN_PASSWORD: randomBytes(18).toString('base64url'),
   S3_ENDPOINT: 'http://localhost:9000',
   S3_REGION: 'us-east-1',
   S3_BUCKET: 'dramaflow',
@@ -22,7 +27,7 @@ if (existsSync('.env')) {
     );
   }
   chmodSync('.env', 0o600);
-  console.info('.env 已保留，缺少的 RustFS 配置已补齐。');
+  console.info('.env 已保留，缺少的认证与 RustFS 配置已补齐。');
 } else {
   const password = randomKey();
   const config = {

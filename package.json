@@ -24,7 +24,9 @@
     "env:init": "node scripts/setup.mjs",
     "test:integration": "node scripts/integration.mjs",
     "storage:init": "node scripts/storage-init.mjs",
-    "test:storage": "node scripts/test-storage.mjs"
+    "test:storage": "node scripts/test-storage.mjs",
+    "auth:bootstrap": "pnpm exec turbo run build --filter=@dramaflow/api && node scripts/provision-user.mjs --admin",
+    "auth:create-user": "pnpm exec turbo run build --filter=@dramaflow/api && node scripts/provision-user.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

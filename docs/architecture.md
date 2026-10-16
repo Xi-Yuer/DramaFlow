@@ -1,11 +1,11 @@
-# 当前基础架构
+# 当前架构
 
-当前阶段只维护工程和基础设施，不实现业务。此前工作流、节点、插件、模型调用、会话、权限及素材业务代码均已删除。
+工程底座上新增了用户登录、平台鉴权和账户中心。工作流、节点、模型插件、生成与业务对话仍未实现。
 
-Next.js 使用 App Router、Ant Design 和 TanStack Query Provider；同源 /api/v1 代理到 NestJS。API 仅暴露健康检查。worker 是独立 NestJS 进程，复用 API 导出的 infrastructure 模块连接 PostgreSQL、Redis 和 RustFS，不消费旧队列任务。
+Next.js 使用 App Router、Ant Design 深色主题和 TanStack Query。认证请求同源代理到 NestJS 的 Better Auth HTTP 白名单入口；业务 API 默认受全局 Guard 保护，只有显式 Public 端点可匿名访问。
 
-PostgreSQL 使用 pgvector 镜像和 Prisma；当前 schema 没有业务模型，迁移只启用 vector 扩展。Redis 与 BullMQ 依赖保留用于后续任务基础，当前不定义任务协议。RustFS 通过官方 S3 SDK 提供基础读写，没有资产版本、权限、生成或下载业务接口。
+PostgreSQL/Prisma 保存身份、资料、凭证、会话与认证限流；Redis 与 RustFS 保留基础服务。会话 Cookie 不使用 localStorage，服务端每次重新校验用户是否停用及其平台角色。详细数据结构、接口与安全边界见 [认证实施](authentication.md)。
 
-contracts、workflow、plugins、context 保留包目录、构建配置和空入口，不提供假实现。LangChain、LangGraph、React Flow 等已选技术依赖保留，实际接入方式等待用户逐步指导。
+worker 为独立 NestJS 应用上下文，只复用 infrastructure 模块，不引入 HTTP 认证模块，也不消费历史业务队列。workflow、plugins、context 保留空入口及选定依赖，contracts 目前仅实现用户资料协议。
 
-已确认的长期业务约束保留在 AGENTS.md，属于后续设计依据，不代表当前已交付业务功能。
+将来工作空间成员关系与平台角色分离，领域模块通过服务与契约协作；本轮认证功能不授权恢复整个旧工作台。

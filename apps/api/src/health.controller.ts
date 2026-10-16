@@ -1,8 +1,10 @@
+import { Public } from './auth/auth.guard.js';
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { DatabaseService } from './infrastructure/database.service.js';
 import { RedisService } from './infrastructure/redis.service.js';
 import { StorageService } from './infrastructure/storage.service.js';
 
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(

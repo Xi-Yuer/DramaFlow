@@ -24,6 +24,7 @@ jobs:
       - run: pnpm infra:up
       - run: pnpm db:generate
       - run: pnpm db:migrate
+      - run: pnpm auth:bootstrap
       - run: pnpm check
       - run: pnpm test:storage
       - run: pnpm test:integration

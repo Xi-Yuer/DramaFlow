@@ -16,7 +16,10 @@
     "WEB_ORIGIN",
     "PORT",
     "API_PORT",
-    "WORKER_CONCURRENCY"
+    "WORKER_CONCURRENCY",
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_URL",
+    "TRUSTED_PROXY_CIDRS"
   ],
   "tasks": {
     "build": {
