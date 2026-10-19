@@ -6,7 +6,9 @@
 
 共享包通过 dist 暴露；根 Turbo 任务先构建依赖。前后端业务目录保留 .gitkeep，加入实际文件后可删除该占位文件。空包入口只标识预留结构，不可当作可用功能。
 
-修改基础服务后运行相关 typecheck、lint、build；需要真实基础设施时运行 pnpm test:storage 或 pnpm test:integration。contracts 与 workflow 的契约、值校验和快照测试已接入 pnpm test，pnpm check 同时检查源码与新增测试的类型。没有测试的空业务包不设置虚假的通过测试任务。
+修改基础服务后运行相关 typecheck、lint、build；需要真实基础设施时运行 pnpm test:storage 或 pnpm test:integration。contracts 与 workflow 的契约、值校验、快照及 LangGraph 编译适配测试已接入 pnpm test，pnpm check 同时检查源码与测试的类型。没有测试的空业务包不设置虚假的通过测试任务。
+
+工作流基础开发先阅读 [Runtime 架构](runtime-architecture.md)。复用 LangGraph 的 StateGraph、Checkpoint、Interrupt / Resume、Send 和条件路由，使用真实 LangGraph 测试编译适配；MemorySaver 仅显式用于测试，不作为未接入生产持久化的兜底。普通节点操作的值校验测试与图执行测试分开，不能用单节点成功证明整个 WorkflowDefinition 已可执行。
 
 数据库模型在 packages/database/prisma/schema.prisma 定义。执行迁移前核对 DATABASE_URL 仅指向本项目开发库，再运行 pnpm db:migrate。迁移影响范围与操作方式统一见 [部署与数据库](deployment.md)。
 
@@ -14,7 +16,7 @@
 
 认证相关开发先阅读 authentication.md。新增业务 API 默认受 AuthGuard 保护，公开接口需显式 Public；修改角色、停用或会话逻辑后执行隔离数据库集成测试。
 
-项目接口或保存协议变更后，执行 pnpm check 和 pnpm test:integration，重点验证名称/视口边界、所有者隔离、分页、revision 冲突及旧节点/插件字段被拒绝；浏览器检查登录、新建项目、名称和视口保存、重新加载及账户中心。节点、模型调用和任务执行不在当前验证范围内。
+项目接口或保存协议变更后，执行 pnpm check 和 pnpm test:integration，重点验证名称/视口边界、所有者隔离、分页、revision 冲突及旧节点/插件字段被拒绝；浏览器检查登录、新建项目、名称和视口保存、重新加载及账户中心。当前应用接口仍不保存或执行节点；基础库的 LangGraph 测试不覆盖生产运行持久化、队列、真实插件或模型调用。
 
 仅更新架构和规划文档时，检查 Markdown 格式、相对链接、当前实现描述及模型约束的一致性；不把未运行的构建、集成测试或模型调用写成已通过。后续各步新增真实能力后，再更新相应验证范围。
 
@@ -22,17 +24,18 @@
 
 文档是随实施修订的当前说明。每个主题保留一个主要维护入口，其他位置仅保留必要摘要与链接，避免同一阶段或方案存在多份独立维护的正文。
 
-| 入口                             | 主要维护内容                                        |
-| -------------------------------- | --------------------------------------------------- |
-| `AGENTS.md`                      | 稳定的协作约束、领域边界与阅读入口                  |
-| `README.md`                      | 项目简介、启动入口、简要能力说明与文档导航          |
-| `docs/architecture.md`           | 已实现能力、当前结构和实际依赖边界                  |
-| `docs/platform-model.md`         | 仍有效的平台定位、概念与顶层设计边界                |
-| `docs/workflow-model.md`         | Workflow 静态定义、版本、输入输出及运行关系         |
-| `docs/node-model.md`             | Node 实例、有效类型契约、Preset、调用和运行记录边界 |
-| `docs/implementation-plan.md`    | 当前阶段、设计顺序、下一步与待决策项                |
-| 认证、存储、部署、前端等专题文档 | 对应主题的当前实现、操作方式或有效规范              |
-| 应用与包的 README                | 本目录职责、局部限制及相关文档链接                  |
+| 入口                             | 主要维护内容                                             |
+| -------------------------------- | -------------------------------------------------------- |
+| `AGENTS.md`                      | 稳定的协作约束、领域边界与阅读入口                       |
+| `README.md`                      | 项目简介、启动入口、简要能力说明与文档导航               |
+| `docs/architecture.md`           | 已实现能力、当前结构和实际依赖边界                       |
+| `docs/platform-model.md`         | 仍有效的平台定位、概念与顶层设计边界                     |
+| `docs/workflow-model.md`         | Workflow 静态定义、版本、输入输出及运行关系              |
+| `docs/node-model.md`             | Node 实例、有效类型契约、Preset、调用和运行记录边界      |
+| `docs/runtime-architecture.md`   | 技术职责、Workflow / Node 编译、LangGraph 执行及恢复边界 |
+| `docs/implementation-plan.md`    | 当前阶段、设计顺序、下一步与待决策项                     |
+| 认证、存储、部署、前端等专题文档 | 对应主题的当前实现、操作方式或有效规范                   |
+| 应用与包的 README                | 本目录职责、局部限制及相关文档链接                       |
 
 每轮实施在交付前完成以下维护：
 

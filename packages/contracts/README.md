@@ -2,7 +2,7 @@
 
 平台共享协议，提供身份、用户资料、会话摘要、基础项目及 Workflow / Node 基础 Schema。不依赖 React Flow、NestJS、Prisma 或 LangGraph，第三方类型在适配层转换。
 
-Workflow 已提供元数据、版本元数据、运行元数据、六种运行状态、契约名称及输出来源校验。时间使用 ISO 字符串；运行元数据不包含输入输出值，也不替代运行状态机。
+Workflow 已提供元数据、版本元数据、运行元数据、六种运行状态、契约名称及输出来源校验。时间使用 ISO 字符串；运行元数据不包含输入输出值。Run / NodeRun 状态是基于 LangGraph 执行事实生成的业务投影，不用于驱动另一套调度器。
 
 Node 已提供静态实例、输入绑定、端口映射 Edge、Preset、NodeRun 及八种状态 Schema。来源统一为 nodeId / outputKey；同一目标端口不能重复绑定；配置、输入输出必须为 JSON，错误采用 code / message。NodeRun 是记录结构，不内置状态转换或权限检查。
 

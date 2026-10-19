@@ -17,7 +17,7 @@
 | 概念               | 职责                                                 | 边界                                                              |
 | ------------------ | ---------------------------------------------------- | ----------------------------------------------------------------- |
 | Project            | 一个内容创作项目，提供创作归属与管理边界             | 当前按所有者隔离；一个项目恰好一张画布，未来对应一个逻辑 Workflow |
-| Canvas             | 工作流的可视化编辑视图                               | 平移、缩放等编辑状态不决定执行语义；React Flow 类型留在前端适配层 |
+| Canvas             | 使用 React Flow 的工作流可视化编辑视图               | 平移、缩放等编辑状态不决定执行语义；React Flow 类型留在前端适配层 |
 | Workflow           | 管理流程身份、元数据及可编辑草稿                     | 草稿内容是静态 WorkflowDefinition，不包含一次运行的状态           |
 | WorkflowDefinition | 描述节点、连接方式及整个流程的输入输出               | 包含 inputs、nodes、edges、outputs；不包含运行数据                |
 | WorkflowVersion    | 发布后的完整定义快照                                 | 输入输出契约与图一起冻结，发布不触发执行                          |
@@ -25,7 +25,7 @@
 | Node Preset        | 同一 Runtime 类型下的场景配置与有效契约选择          | 业务名称不直接等同于新 Runtime 类型，不复制相近业务执行器         |
 | Edge               | 表达节点之间的控制或数据关系                         | 执行激活与数据传值的语义必须区分，具体表达方式留待后续设计        |
 | State              | 一次 WorkflowRun 的运行状态                          | 不成为跨项目共享状态、工作流定义或自动收集全部聊天的容器          |
-| Runtime            | 解释工作流并协调执行、状态推进和恢复                 | 调度交给 LangGraph；不包含漫剧、广告、口播的专用调度分支          |
+| Runtime            | LangGraph 执行编译后的图，推进 State 并支持恢复      | 平台提供领域 DSL 与编译适配，不自建调度器或领域专用调度分支       |
 | Capability         | 描述节点所需的能力类别，例如图像生成                 | 表达能力需求，不指定厂商；具体协议随 Node、Plugin 阶段设计        |
 | Tool               | Node / Agent 可调用的操作                            | 本身不自动成为画布节点或独立的工作流调度单位                      |
 | Plugin             | 接入外部模型、API 或平台能力的受信任适配单元         | 声明能力及配置；外部生成能力通过明确选择的插件、模型与凭证调用    |
@@ -35,11 +35,11 @@
 | Agent              | 在约束下使用模型、Tool 与上下文完成任务的能力        | 具体模型待第 ⑫ 步设计，不赋予隐式修改工作流或继续执行的权限       |
 | Domain Template    | 漫剧、广告、产品、口播等场景的流程模板               | 组合通用底座与领域节点；不把专用流程写进 Runtime                  |
 
-WorkflowDefinition、WorkflowVersion 与 WorkflowRun 的详细关系集中在 [Workflow 模型](workflow-model.md)，节点、有效类型契约和 Preset 集中在 [Node 模型](node-model.md) 维护；本表只保留一级职责摘要。
+WorkflowDefinition、WorkflowVersion 与 WorkflowRun 的详细关系集中在 [Workflow 模型](workflow-model.md)，节点、有效类型契约和 Preset 集中在 [Node 模型](node-model.md)，技术栈与编译关系集中在 [Runtime 架构](runtime-architecture.md) 维护；本表只保留一级职责摘要。
 
 ## 核心职责分工
 
-**Workflow 描述“怎么生产”，Node 描述“做什么”，Tool 描述“可以做什么操作”，Plugin 描述“外部能力由谁提供”，Runtime 负责“怎么执行”。**
+**Workflow 描述“怎么生产”，Node 描述“做什么”，Tool 描述“可以做什么操作”，Plugin 描述“外部能力由谁提供”，LangGraph Runtime 负责“怎么执行”。**
 
 Capability 补充描述“需要哪一类能力”；Middleware 在调用边界应用横切策略；State 记录本次运行的推进情况；Asset 提供可持续引用的生产资料和结果。
 
@@ -76,7 +76,9 @@ Tool 让一个操作可被 Node / Agent 调用；Plugin 对外部供应商做适
 
 ### 执行、中间件与人工操作
 
-Runtime 协调节点执行、结果校验、持久化、事件及恢复，节点执行器返回自身结果。LangGraph 承担调度，队列只负责唤醒；Middleware 包围相应执行边界应用日志、权限或成本策略，不再建立另一套调度器。
+React Flow 是可视化编辑器，平台保存自己的 WorkflowDefinition，经 Workflow Compiler、NodeRegistry / NodeCompiler 与 Edge Compiler 转换为 LangGraph StateGraph。LangGraph 是核心 Graph Runtime，负责图调度、State 更新、Checkpoint、Interrupt / Resume、Send 和条件路由；平台负责领域契约、Binding 适配、权限与业务记录。普通节点操作返回自身结果，编译适配层将结果转换为 State 更新。
+
+LangChain 提供模型、Tool、Agent、Message、Runnable 等抽象，外部能力仍经受信任 Plugin 适配。队列与 worker 承担长异步作业、跨运行和供应商配额控制及唤醒；Middleware 在相应边界应用策略。技术职责、恢复及并发边界统一见 [Runtime 架构](runtime-architecture.md)，不另建调度器。
 
 重试必须区分可安全重试的操作与可能收费的生成副作用。供应商受理结果不明时记录 `outcome_unknown`，不能由通用重试中间件盲目重发。崩溃恢复与用户主动重生成分离，不承诺外部调用 exactly-once。
 
@@ -89,7 +91,9 @@ Runtime 协调节点执行、结果校验、持久化、事件及恢复，节点
 ```text
 Workflow：角色设定 → 角色图片生成 → 人工审核 → 分镜生成
 
-Runtime 为本次 WorkflowRun 执行“角色图片生成”Node
+Workflow Compiler 将“角色图片生成”Node 编译为 LangGraph 节点
+    ↓
+LangGraph 为本次 WorkflowRun 调度该节点
     ↓
 Middleware 应用相应的日志、权限、成本等策略
     ↓
@@ -101,7 +105,7 @@ Plugin 通过供应商 SDK 或 HTTP 客户端访问外部服务
     ↓
 Node 返回自身结果
     ↓
-Runtime 协调校验与持久化：Image Asset 引用 + 本次 State 更新
+平台适配层校验输出并保存 Image Asset 元数据，LangGraph 应用 State 更新
 ```
 
 如果此步骤需要可复用操作，可以调用 Tool。该示例不要求每次插件调用必须经过 Tool，也不允许 Tool 绕过插件直接提供外部生成能力。人工审核是后续独立步骤，不因图片生成成功而自动确认。
@@ -114,13 +118,13 @@ Runtime 协调校验与持久化：Image Asset 引用 + 本次 State 更新
 - 广告 / 产品宣传：商品信息 → 卖点与创意 → 脚本与分镜 → 素材生成 → 配音与合成。
 - 口播：主题 / 文档 → 内容提炼 → 口播稿 → 人工审核 → TTS / 数字人 → 字幕与合成。
 
-这些是场景示意，不构成节点目录或实施承诺。Runtime 统一处理依赖、激活、状态和执行策略；“角色”“剧集”“商品卖点”等语义由领域层表达。
+这些是场景示意，不构成节点目录或实施承诺。图执行交给 LangGraph；“角色”“剧集”“商品卖点”等语义由领域层表达。
 
 允许视频生产的 Node、Tool、Schema 和 Asset Type 专业化，例如图生视频、首尾帧生成、拼接、裁剪、音视频合成、字幕和抽帧。它们可以有专用输入输出与执行语义，不必强行合成万能节点；生成能力通过 Capability 和用户明确选择的 Plugin 接入，避免与单一厂商绑定。整体保持 Runtime 通用、视频领域 Capability 专业化、上层模板场景化，分层细节见 [Node 模型](node-model.md#视频领域能力与厂商边界)。
 
 ```text
 Video Creation Platform
-= Workflow Engine + Node System
+= LangGraph Runtime + Workflow Compiler + Node System
 + Tool System + Plugin System + Middleware System
 + Asset System + AI / Agent + Domain Templates
 ```

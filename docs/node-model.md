@@ -1,20 +1,22 @@
 # Node 模型：③ 可调度执行单元
 
-**Node 是 Workflow 中最小的可调度执行单元。** 它可以使用模型、领域能力、工具或控制逻辑，不等同于一次 AI 调用。本文承接 [Workflow 模型](workflow-model.md)，维护 Node 的当前边界；实现范围见 [当前架构](architecture.md#node-基础库)，阶段与下一步见 [实施方案](implementation-plan.md)。
+**Node 是 Workflow 中最小的逻辑执行单元，由 LangGraph 调度。** 它可以使用模型、领域能力、工具或控制逻辑，不等同于一次 AI 调用。本文承接 [Workflow 模型](workflow-model.md) 与 [技术职责与编译边界](runtime-architecture.md)，维护 Node 的当前边界；实现范围见 [当前架构](architecture.md#node-基础库)，阶段与下一步见 [实施方案](implementation-plan.md)。
 
 ## 统一原则
 
 ```text
-WorkflowDefinition：NodeDefinition + Edge + InputBinding
-                            │
-                 Runtime 负责激活与组装输入
-                            ▼
-                     Input → Execute → Output
-                            │
-                 WorkflowRun 下的 NodeRun
+React Flow Node（编辑视图）
+    ↓
+NodeDefinition（平台 DSL）
+    ↓
+NodeRegistry → NodeCompiler + CompileContext（平台适配）
+    ↓
+LangGraph Node Function → StateGraph.compile() → LangGraph 执行
+    ↓
+WorkflowRun / NodeRun（未来的业务记录投影）
 ```
 
-Graph 表达关系，Runtime 组装输入，Node 执行器处理自身输入并返回自身结果。执行器不读取上游节点、整个 State、其他会话或完整图，也不调度下游。Definition 与 Run 分离；类型与 Preset 分层。
+平台 Compiler 把关系与契约映射到 LangGraph；LangGraph 负责图执行。编译生成的节点函数可接收 State，适配层按 Binding 取出明确输入，内部值操作只收到自身 inputs / config 及 LangChain RunnableConfig，不自动取得完整图、其他节点结果或聊天。Definition 与 Run 分离；类型与 Preset 分层。没有平台自建的 ready 轮询、暂停状态机或调度循环。
 
 ## 四个不同的对象
 
@@ -42,7 +44,7 @@ NodeDefinition 的 `config` 在序列化边界只接受 JSON 记录，随后必�
 
 来源键统一使用既有 Workflow 输出协议的 `outputKey`，不同时保留 `output` 别名。一个节点可以分别把 script、characters、style 绑定到多个上游，不接收“全部上游数据”。同一 target 不接受重复绑定；多结果收集或集合值必须以明确的数组 / 对象契约表达，不能靠覆盖顺序或自动拼接猜测。
 
-实例校验检查 target 是否属于有效输入契约；实际调用前检查已组装的输入值。上游引用存在性、输出键和类型兼容、绑定解析、就绪判定及失败传播在数据流模型中细化。缺少必填输入时调用边界拒绝执行，不隐式查询其他节点来补齐。
+实例校验检查 target 是否属于有效输入契约；实际调用前检查已组装的输入值。上游引用、输出键、类型兼容及绑定解析在数据流模型中细化；执行依赖与汇合要编译到 LangGraph 的边、条件路由和 fan-in，不另写平台就绪判定器。缺少必填值时校验失败，不轮询上游或隐式查询其他节点补齐。
 
 工作流输入、字面量、资产引用和子流程结果如何统一为来源，留到数据流步骤确定；本步不预设表达式语言或自动收集上下文。
 
@@ -62,27 +64,34 @@ NodeDefinition 的 `config` 在序列化边界只接受 JSON 记录，随后必�
 
 同一条可视化连线可以表达执行关系并携带数据映射，不要求现在拆成两套物理边结构。但两个职责仍要区分：执行关系决定是否激活，InputBinding 决定取哪个值。数据已经具备不意味着条件分支已经被选中，未选中分支仍须传播 `skipped`。
 
-`inputBindingFromEdge` 已提供从连线提取数据映射的纯转换，不激活目标节点。Edge 和 Node.inputs 的编辑权威来源、派生与一致性检查在数据流步骤统一确定，不能长期维护两套可独立冲突的映射。当前结构校验不等于已实现完整图校验、就绪策略或调度。
+`inputBindingFromEdge` 已提供从连线提取数据映射的纯转换，不激活目标节点。Edge 和 Node.inputs 的编辑权威来源、派生与一致性检查在数据流步骤统一确定，不能长期维护两套可独立冲突的映射。Edge Compiler 负责将已校验语义转换成 LangGraph 路由，当前尚未实现完整 DSL 图编译。
 
-## 单节点调用边界
+## NodeCompiler 是扩展边界
 
-```text
-所选有效 NodeTypeDefinition
-    ↓
-校验已组装 inputs 与 config
-    ↓
-executor({ inputs, config })
-    ↓
-校验 outputs
-    ↓
-把自身结果交回 Runtime
+```ts
+interface NodeCompiler<State extends object, Update extends object> {
+  readonly type: string;
+  readonly preset?: string;
+  compile(
+    definition: NodeDefinition,
+    context: CompileContext<State, Update>,
+  ): LangGraphNode<State, Update>;
+}
 ```
 
-`executeNode` 只接收有效契约、包含 inputs / config 的参数，以及显式传入的受信任执行函数。它拒绝额外图状态和未声明字段；输入、配置和输出必须是 JSON 对象，并分别通过对应 Schema。验证保留对象级约束，不以静默剥除字段隐藏错误。
+实际接口在 `packages/workflow/src/compiler.ts`。State / Update 是泛型，不提前规定平台 State 容器。`LangGraphNode` 复用官方 `LangGraphRunnableConfig` 与 `GraphNodeReturnValue`，产物可直接加入真实 StateGraph，也允许原生 Command；不另建 NodeExecutionResult 或成功 / 暂停包装协议。
 
-输入和结果与调用方对象隔离，执行器修改局部值不能污染外部运行数据。执行异常直接传播，输出不合约时拒绝作为成功结果返回；不会自动重试、替换插件或从其他节点寻找替代结果。
+`NodeRegistry` 只注册显式受信任编译器，按 type / preset 精确匹配，拒绝重复注册或不可用类型，不自动退回基础类型。`CompileContext.readInputs` 与 `writeOutputs` 只负责数据绑定及 State 增量适配，不决定节点何时执行。
 
-该函数不解决图激活、绑定解析、权限、Middleware、NodeRun 持久化、状态转换、取消或恢复，也没有注册任何模型、代码、HTTP 或视频执行器。它是未来 Runtime 可调用的单节点边界，不是另一套调度框架。
+`createOperationNodeCompiler` 已为普通值操作提供编译适配：编译时校验实例并捕获独立配置；LangGraph 调用产物时读取输入，使用 `invokeNodeOperation` 校验输入 / 配置、调用操作、校验输出，再返回 State 增量。RunnableConfig 单独传给内部 LangChain 调用，不混入 NodeDefinition.config。
+
+Definition 与 Preset 保留原始 JSON 配置，校验时不把 Schema 的转换或默认值回写到定义。实际操作从这份配置解析有效值，避免 Preset 应用、编译和运行之间累积转换；配置不能依靠有副作用的 Schema 转换来调用外部能力。
+
+`invokeNodeOperation` / `NodeOperation` 是 Compiler 内部可复用的值校验工具，不是平台节点扩展或 Workflow 执行入口。它们只接受明确值，拒绝额外图状态、未声明字段和非 JSON 值，保留对象级约束。
+
+输入和结果与调用方对象隔离，操作修改局部值不能污染外部运行数据。异常直接传播，输出不合约时拒绝作为成功结果返回；不会自动重试、替换插件或寻找替代结果。LangGraph 的 Interrupt 异常也必须传播，不能转成普通 failed 记录。
+
+审核、条件和子图等编译器可以直接生成使用 LangGraph interrupt / Command 的节点，不强制经过普通值操作包装。图调度、Checkpoint、Interrupt、Resume、Send 和条件路由均使用 LangGraph；平台只提供 DSL 编译、契约与业务服务适配。完整 State / Binding、整图 Compiler、生产节点及持久化 Checkpointer 尚未接入。
 
 ## Runtime 类型与 Preset
 
@@ -90,15 +99,15 @@ executor({ inputs, config })
 
 `NodeTypeDefinition` 表示选定类型或 Preset 后的有效契约。相同 type 可以为不同 preset 提供不同输入输出 Schema，并复用同一执行机制；实例的 type / preset 必须与该有效契约匹配，不能找不到 Preset 时静默退回基础类型。
 
-`applyNodePreset` 显式合并所选 Preset 配置与实例覆盖，再校验有效配置和目标端口。它不修改原对象、不自动执行、不选择厂商或凭证，也不是前端自动应用建议的授权。当前序列化 Preset 仅保存元数据与配置，有效 Schema 由调用方显式提供，尚无生产目录、安装或动态查找机制。
+`applyNodePreset` 显式合并所选 Preset 配置与实例覆盖，再校验有效配置和目标端口。它不修改原对象、不自动执行、不选择厂商或凭证，也不是前端自动应用建议的授权。当前序列化 Preset 仅保存元数据与配置，有效 Schema 由调用方显式提供；NodeRegistry 已提供静态精确查找，但没有生产编译器 / Preset 目录或动态安装机制。
 
 发布版本必须固定有效配置与输入输出契约，或绑定相应的不可变契约版本，不能运行时只按可变 Preset id 重新解析最新版。具体契约快照 / 版本引用协议随发布及数据模型补齐；现有内存快照函数不替代这一发布校验。
 
 ## NodeRun 与执行状态
 
-基础状态为 `pending`、`ready`、`running`、`waiting`、`completed`、`failed`、`skipped`、`cancelled`。其中 ready 表示允许进入执行的就绪状态，不能只根据输入字段齐全就忽略控制激活；waiting 表示同一次节点执行等待外部条件，skipped 表示该路径没有执行。
+基础状态为 `pending`、`ready`、`running`、`waiting`、`completed`、`failed`、`skipped`、`cancelled`。它们是未来基于 LangGraph 执行事实生成的业务投影，不是驱动另一套调度器的状态。不能由平台看到 ready 就自行派发，或把 waiting 当作自建 suspended 标志。
 
-当前 Schema 校验记录结构，输入输出为 JSON 记录，错误采用明确的 code / message，时间采用 ISO 字符串。不直接存原始 Error 或完整供应商响应，也不声称已经完成错误脱敏、状态机或恢复机制。实际值还须通过该节点契约，运行归属与版本关联由未来应用服务校验。
+当前 Schema 只校验记录结构，输入输出为 JSON 记录，错误采用明确的 code / message，时间采用 ISO 字符串。运行投影、归属校验和持久化尚未实现。人工介入使用 LangGraph interrupt 与 Command.resume；根 WorkflowRun.id 绑定 thread_id，恢复仍须加载原不可变版本。中断恢复会从节点函数开头重跑，生成副作用与审核必须分开，详见 [技术职责](runtime-architecture.md)。
 
 ## 视频领域能力与厂商边界
 

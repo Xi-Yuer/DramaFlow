@@ -6,6 +6,7 @@ import {
   type InputBinding,
   type NodeDefinition,
 } from '@dramaflow/contracts';
+import type { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
 
 // 执行侧的有效契约。相同 Runtime type 可以为不同 Preset 提供不同输入输出 Schema。
@@ -22,10 +23,10 @@ export interface NodeTypeDefinition<
   configSchema: ConfigSchema;
 }
 
-export type NodeExecutor<Inputs, Config> = (parameters: {
-  inputs: Inputs;
-  config: Config;
-}) => unknown | Promise<unknown>;
+export type NodeOperation<Inputs, Config> = (
+  parameters: { inputs: Inputs; config: Config },
+  runnableConfig?: RunnableConfig,
+) => unknown | Promise<unknown>;
 
 export class NodeContractError extends Error {
   constructor(
@@ -62,8 +63,10 @@ export function parseNodeDefinition(contract: NodeTypeDefinition, input: unknown
       throw new NodeContractError('unknown_input', `节点绑定了未声明的输入端口：${binding.target}`);
     }
   }
-  const config = parseRecord(contract.configSchema, node.config);
-  return { ...node, config: nodeDefinitionSchema.shape.config.parse(config) };
+  // Definition 保存 Schema 的原始输入；转换与默认值只用于验证，不回写到可再次解析的配置。
+  // 真正调用时再从这份独立 JSON 配置解析，避免编译 / Preset / 调用累积 transform。
+  parseRecord(contract.configSchema, node.config);
+  return node;
 }
 
 // 显式应用已选择的 Preset；实例配置覆盖 Preset 配置，不选择厂商或执行任务。
@@ -92,20 +95,21 @@ export function inputBindingFromEdge(input: unknown): InputBinding {
   };
 }
 
-// 单次调用边界，不调度图、不解析上游、不更新 NodeRun，不内置任何外部能力。
-export async function executeNode<
+// Compiler 内的值操作校验工具，不是节点扩展接口或独立 Runtime。
+export async function invokeNodeOperation<
   InputSchema extends z.ZodObject,
   OutputSchema extends z.ZodObject,
   ConfigSchema extends z.ZodObject,
 >(
   contract: NodeTypeDefinition<InputSchema, OutputSchema, ConfigSchema>,
   parameters: unknown,
-  executor: NodeExecutor<z.output<InputSchema>, z.output<ConfigSchema>>,
+  operation: NodeOperation<z.output<InputSchema>, z.output<ConfigSchema>>,
+  runnableConfig?: RunnableConfig,
 ): Promise<z.output<OutputSchema>> {
   validateContractIdentity(contract);
   const values = z.object({ inputs: z.json(), config: z.json() }).strict().parse(parameters);
   const inputs = parseRecord(contract.inputSchema, values.inputs);
   const config = parseRecord(contract.configSchema, values.config);
-  const result = await executor({ inputs, config });
+  const result = await operation({ inputs, config }, runnableConfig);
   return parseRecord(contract.outputSchema, result);
 }

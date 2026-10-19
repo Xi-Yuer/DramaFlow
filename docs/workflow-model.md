@@ -152,9 +152,9 @@ interface WorkflowRun {
 | `failed`    | 本次运行失败                                 |
 | `cancelled` | 本次运行被取消                               |
 
-`waiting` 覆盖等待人工审核、外部 API 回调、子流程或批量结果等情况。等待原因与恢复条件必须可区分，不能只凭一个状态字符串直接继续；具体等待记录、状态转换、并行分支聚合与恢复协议留到 Runtime、Interrupt 和长任务阶段。
+`waiting` 是等待人工审核、外部 API、子流程或批量结果等执行事实的业务投影，不能凭状态字符串驱动另一套暂停 / 恢复流程。人工介入使用 LangGraph interrupt / Command.resume；根 WorkflowRun.id 对应 thread_id，等待原因与业务记录映射随 State、持久化和长任务模型细化，技术边界见 [技术职责](runtime-architecture.md)。
 
-恢复继续使用原 Run 及其版本，不重新选择最新版。人工确认、生成和继续下游仍须遵守明确操作边界；恢复与用户主动重生成分离，供应商受理不明时不能借恢复盲目重试。
+恢复继续使用原 Run、thread_id 及其不可变版本，不重新选择最新版。Checkpoint 保存执行 State，不保存平台 DSL；应用必须按 Run 绑定的版本重新编译图，不能恢复最新草稿。人工确认、生成和继续下游仍须遵守明确操作边界；恢复与用户主动重生成分离，供应商受理不明时不能借恢复盲目重试。
 
 ## Workflow 组合与 SubWorkflow 边界
 
@@ -177,6 +177,6 @@ Workflow 的显式输入输出使它可以被其他 Workflow 作为完整单元�
 
 WorkflowDefinition 通过 nodes、edges 及控制节点表达串行、并行、条件与显式批量，不另设 `parallelNodes`、`sequentialNodes` 等独立列表，也不预先建立一个包含所有控制逻辑的固定 Pipeline。
 
-执行关系决定节点激活，数据绑定负责传值，联合依赖必须无环。具体激活、等待、跳过、汇合与调度由 Runtime 解释通用图契约，并交给 LangGraph 调度；WorkflowDefinition 不包含运行进度、队列任务或领域专用调度分支。
+执行关系决定节点激活，数据绑定负责传值，联合依赖必须无环。平台 Workflow Compiler 将已校验关系映射到 LangGraph 的边、条件路由、fan-in、Send 与子图，由 LangGraph 执行；不另写 ready 判断、调度器、Checkpoint 或暂停恢复状态机。WorkflowDefinition 不包含运行进度、队列任务或领域专用调度分支。
 
-本步确定静态定义与运行分离、完整契约版本化、显式输入输出、固定版本运行及流程可组合的边界。Node 内部、DataType 完整协议、图编译、状态机和持久化实现分别在相应步骤细化，不用占位契约将这些事项标成已完成。
+本步确定静态定义与运行分离、完整契约版本化、显式输入输出、固定版本运行及流程可组合的边界。Node 编译适配见 [Node 模型](node-model.md)；DataType、State / Binding、整图编译、执行事件投影和持久化实现分别在相应步骤细化，不用占位契约将这些事项标成已完成。

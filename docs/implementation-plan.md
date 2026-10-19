@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-2026-10-19：已记录 **① 平台、② Workflow、③ Node** 的边界，并实施 Workflow 基础库和 Node 定义、绑定、Edge、Preset、NodeRun 及单节点调用校验。实际范围见 [当前架构](architecture.md)。下一步为 **④ State / 数据流**，先解决 State、Input Binding 和 Output，再进入 Tool / Plugin；完整 DataType、生产节点目录、应用接口、持久化及图调度仍待补齐，其余步骤不视为已确认的详细方案或实施任务。
+2026-10-19：已记录 **① 平台、② Workflow、③ Node** 的边界，实施 Workflow / Node 基础库、单节点操作校验、NodeCompiler / NodeRegistry、根 Run 配置映射，并通过真实 LangGraph 测试验证基础适配。可视化编辑器使用 React Flow，LangGraph 是核心 Graph Runtime，LangChain 承载 AI 节点内部抽象，详见 [技术职责](runtime-architecture.md)。下一步为 **④ State / 数据流**；完整 DataType、State / Binding、整图 DSL 编译、生产节点、应用接口及运行持久化仍待补齐。实际范围见 [当前架构](architecture.md)，其余步骤不视为已确认的详细方案或实施任务。
 
 本文件集中维护当前阶段、下一步与待决策项；已实现能力与目录结构统一见 [当前架构](architecture.md)。推进时直接修订阶段与方案，不追加已被替代的旧计划或逐轮交付流水。文档整理方式见 [开发指南](development.md#文档维护)。
 
@@ -16,7 +16,7 @@
 | ②    | Workflow 工作流模型                       | 职责、结构、版本、输入输出，以及与 WorkflowRun 的关系 | 已记录边界并实施基础库 |
 | ③    | Node 节点模型                             | 最小编排单位、能力需求、配置与输入输出契约            | 已记录边界并实施基础库 |
 | ④    | State / 数据流模型                        | 单次运行状态、数据绑定、结果传递与隔离                | 下一步                 |
-| ⑤    | Runtime 执行模型                          | LangGraph 适配、调度、持久化、恢复与执行事件          | 待逐步设计             |
+| ⑤    | Runtime 执行模型                          | LangGraph 编译与服务接入、持久化适配、恢复及事件投影  | 待逐步设计             |
 | ⑥    | Tool 工具体系                             | 可调用操作、调用契约、权限及与 Node / Agent 的关系    | 待逐步设计             |
 | ⑦    | Plugin 外部能力体系                       | 能力声明、模型、凭证、版本与供应商适配                | 待逐步设计             |
 | ⑧    | Middleware 中间件体系                     | 日志、权限、成本、重试等策略的介入边界与顺序          | 待逐步设计             |
@@ -35,14 +35,14 @@ Workflow 的可组合性与被调用版本固定原则已在 [Workflow 模型](w
 
 先明确数据如何在节点间流动，不提前实现 Tool / Plugin 体系或以图调度掩盖未确定的数据语义：
 
-1. 单次 WorkflowRun 的 State 包含什么，怎样与定义、NodeRun、产物和模型上下文分离？
+1. 单次 WorkflowRun 的 State 包含什么，怎样与定义、NodeRun、产物和模型上下文分离，并映射到 LangGraph State Schema / reducer？
 2. DataType 如何描述基础值、复合结构、媒体及领域资料引用，并用于输入输出兼容校验？
 3. 工作流输入、节点输出、字面量和显式资产等来源如何统一绑定？
 4. Edge 与 Node.inputs 谁负责编辑、谁负责派生，如何保证同一端口映射一致且联合依赖无环？
-5. 如何区分缺失、尚未就绪、空值、可选值、失败与 skipped，并与控制激活联合判断执行条件？
-6. 多上游与多结果怎样收集，如何为并行、Batch、Human Review 和 Agent 留下明确的状态隔离边界？
+5. 如何区分缺失、尚未就绪、空值、可选值、失败与 skipped，并将控制激活与数据依赖联合编译为 LangGraph 原生边和条件路由？
+6. 多上游和多结果如何通过原生 fan-in、Send 与 reducer 收集，如何为并行、Batch、Human Review 和 Agent 明确状态隔离边界？
 
-已确定的约束继续适用：运行绑定不可变定义，草稿修改不影响已有运行；定义不携带密钥；contracts 不依赖 React Flow、NestJS、Prisma 或 LangGraph。现有 Node / Edge 结构和调用边界不替代完整数据协议、图校验、激活策略、状态机、发布接口或存储模型；候选 Runtime 类型清单也不视为已定目录。
+已确定的约束继续适用：运行绑定不可变定义，草稿修改不影响已有运行；定义不携带密钥；contracts 不依赖 React Flow、NestJS、Prisma 或 LangGraph。现有 Node / Edge 结构和编译接口不替代完整数据协议、图校验、发布接口或存储模型；候选 Runtime 类型清单也不视为已定目录。调度、Checkpoint、Interrupt / Resume 使用 LangGraph，Run / NodeRun 是业务投影，不另写 ready 轮询或暂停恢复状态机。
 
 ## 从设计进入代码
 

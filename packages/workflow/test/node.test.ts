@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   applyNodePreset,
-  executeNode,
+  invokeNodeOperation,
   inputBindingFromEdge,
   parseNodeDefinition,
   type NodeTypeDefinition,
@@ -110,7 +110,7 @@ describe('Input → Execute → Output 调用边界', () => {
     const executor = vi.fn(({ inputs }: { inputs: { script: string; characters: string[] } }) => ({
       shots: [{ text: `${inputs.script}：${inputs.characters.join('、')}` }],
     }));
-    const result = await executeNode(contract, values, executor);
+    const result = await invokeNodeOperation(contract, values, executor);
     expect(result).toEqual({ shots: [{ text: '剧本：角色甲' }] });
     expect(Object.keys(executor.mock.calls[0]![0])).toEqual(['inputs', 'config']);
   });
@@ -118,7 +118,7 @@ describe('Input → Execute → Output 调用边界', () => {
   it('缺失必填输入时不调用执行器，也不自动拼装上游数据', async () => {
     const executor = vi.fn();
     await expect(
-      executeNode(contract, { ...values, inputs: { script: '剧本' } }, executor),
+      invokeNodeOperation(contract, { ...values, inputs: { script: '剧本' } }, executor),
     ).rejects.toBeInstanceOf(z.ZodError);
     expect(executor).not.toHaveBeenCalled();
   });
@@ -130,7 +130,9 @@ describe('Input → Execute → Output 调用边界', () => {
       { ...values, inputs: { ...values.inputs, unrelated: '其他数据' } },
       { ...values, config: { ...values.config, temperature: 3 } },
     ])
-      await expect(executeNode(contract, parameters, executor)).rejects.toBeInstanceOf(z.ZodError);
+      await expect(invokeNodeOperation(contract, parameters, executor)).rejects.toBeInstanceOf(
+        z.ZodError,
+      );
     expect(executor).not.toHaveBeenCalled();
   });
 
@@ -140,7 +142,9 @@ describe('Input → Execute → Output 调用边界', () => {
       { shots: [], hidden: 'undeclared' },
       { shots: [{ text: new Date() }] },
     ]) {
-      await expect(executeNode(contract, values, () => result)).rejects.toBeInstanceOf(z.ZodError);
+      await expect(invokeNodeOperation(contract, values, () => result)).rejects.toBeInstanceOf(
+        z.ZodError,
+      );
     }
   });
 
@@ -149,14 +153,14 @@ describe('Input → Execute → Output 调用边界', () => {
     const executor = vi.fn(() => {
       throw error;
     });
-    await expect(executeNode(contract, values, executor)).rejects.toBe(error);
+    await expect(invokeNodeOperation(contract, values, executor)).rejects.toBe(error);
     expect(executor).toHaveBeenCalledTimes(1);
   });
 
   it('执行期间修改输入不污染调用方，返回结果也不共享执行器的可变对象', async () => {
     const input = structuredClone(values);
     const produced = { shots: [{ text: '原始结果' }] };
-    const result = await executeNode(contract, input, ({ inputs }) => {
+    const result = await invokeNodeOperation(contract, input, ({ inputs }) => {
       inputs.characters.push('新角色');
       return produced;
     });
@@ -181,10 +185,14 @@ describe('Input → Execute → Output 调用边界', () => {
       text: Object.values(inputs).join(' / '),
     });
     expect(
-      await executeNode(story, { inputs: { subject: '故事主题' }, config: {} }, executor),
+      await invokeNodeOperation(story, { inputs: { subject: '故事主题' }, config: {} }, executor),
     ).toEqual({ text: '故事主题' });
     expect(
-      await executeNode(advertisement, { inputs: { product: '商品' }, config: {} }, executor),
+      await invokeNodeOperation(
+        advertisement,
+        { inputs: { product: '商品' }, config: {} },
+        executor,
+      ),
     ).toEqual({ text: '商品' });
   });
 });

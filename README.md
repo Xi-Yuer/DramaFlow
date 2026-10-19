@@ -4,9 +4,11 @@ DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，�
 
 当前保留用户登录、平台鉴权、账户中心、项目管理与 React Flow 空白画布。每个项目一张画布，可保存项目名称、视口及 revision；项目按所有者隔离，列表支持分页。节点、连线、工作流编排和模型插件业务尚未实现。
 
-基础库已实现 Workflow 契约、版本快照，以及 Node 定义、绑定、Preset、NodeRun 和单节点调用校验；尚未接入应用接口、数据库或图调度。具体范围见 [当前架构](docs/architecture.md#workflow-基础库)。
+基础库已实现 Workflow 契约、版本快照，以及 Node 定义、绑定、Preset、NodeRun、单节点操作校验、NodeCompiler / NodeRegistry 与 LangGraph 基础适配；完整 State / Binding、WorkflowDefinition 整图编译、应用接口和运行持久化尚未接入。具体范围见 [当前架构](docs/architecture.md#workflow-基础库)。
 
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
+
+可视化编辑器使用 React Flow，平台 WorkflowDefinition 经 Compiler 转换为 LangGraph StateGraph。LangGraph 是核心 Graph Runtime，LangChain 负责模型、Tool 和 Agent 抽象，平台实现领域协议与编译适配；技术分工见 [Runtime 架构](docs/runtime-architecture.md)。
 
 ## 启动
 
@@ -35,7 +37,7 @@ pnpm dev
 | apps/worker        | 独立 NestJS 应用上下文，尚未注册业务任务                   |
 | packages/database  | Prisma、身份/资料/凭证/会话及基础项目模型、pgvector        |
 | packages/contracts | 身份、用户资料、项目及 Workflow / Node 基础 Schema         |
-| packages/workflow  | Workflow 契约、快照、Node 配置与 Preset 校验及调用边界     |
+| packages/workflow  | Workflow 契约、快照、Node 校验与 Compiler / Registry 适配  |
 | packages/plugins   | 插件包空入口，保留模型 SDK 依赖                            |
 | packages/context   | 上下文包空入口，待逐步定义                                 |
 
@@ -50,7 +52,7 @@ pnpm test:integration
 pnpm stack:up
 ```
 
-`test` 运行现有单元测试，包含 Workflow 基础库的契约与快照测试；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、会话、角色、来源校验、项目隔离、分页与版本冲突和基础设施，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。工作流执行和模型调用尚未实现。
+`test` 运行现有单元测试，包含 Workflow 基础库与 LangGraph 编译适配的集成验证；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、会话、角色、来源校验、项目隔离、分页与版本冲突和基础设施，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。测试中的图执行不代表完整工作流产品可运行；生产 checkpointer、运行接口和真实模型调用尚未接入。
 
 `stack:up` 构建镜像，启动基础设施、初始化存储桶、迁移和初始管理员，再启动 API、worker 和前端。已有数据卷不会因更新代码而自动删除。
 
@@ -62,6 +64,7 @@ pnpm stack:up
 - [平台核心模型](docs/platform-model.md)
 - [Workflow 模型](docs/workflow-model.md)
 - [Node 模型](docs/node-model.md)
+- [Runtime 架构与技术分工](docs/runtime-architecture.md)
 - [分步设计与实施方案](docs/implementation-plan.md)
 - [当前架构与目录职责](docs/architecture.md)
 - [认证实施与用户字段](docs/authentication.md)
