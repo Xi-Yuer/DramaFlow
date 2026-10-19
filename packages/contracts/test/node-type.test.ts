@@ -4,7 +4,7 @@ import {
   configFieldDefinitionSchema,
   dataTypeSchema,
   inputPortDefinitionSchema,
-  isDataTypeAssignable,
+  isTypeAssignable,
   nodeCategorySchema,
   nodeTypeIdSchema,
   nodeTypeManifestSchema,
@@ -16,6 +16,7 @@ function manifest() {
   return {
     type: 'video.image_to_video',
     version: 1,
+    executionKind: 'action',
     metadata: {
       name: '图生视频',
       description: '根据首帧和提示词生成视频',
@@ -27,13 +28,25 @@ function manifest() {
         key: 'image',
         name: '首帧',
         description: '图片资产引用',
-        dataType: { kind: 'image' },
+        dataType: { kind: 'named', name: 'media.image' },
         required: true,
       },
-      { key: 'prompt', name: '提示词', dataType: { kind: 'string' }, required: true },
-      { key: 'duration', name: '时长', dataType: { kind: 'number' } },
+      {
+        key: 'prompt',
+        name: '提示词',
+        dataType: { kind: 'primitive', name: 'string' },
+        required: true,
+      },
+      { key: 'duration', name: '时长', dataType: { kind: 'primitive', name: 'number' } },
     ],
-    outputs: [{ key: 'video', name: '视频', description: '生成结果', dataType: { kind: 'video' } }],
+    outputs: [
+      {
+        key: 'video',
+        name: '视频',
+        description: '生成结果',
+        dataType: { kind: 'named', name: 'media.video' },
+      },
+    ],
     config: [
       {
         key: 'resolution',
@@ -65,53 +78,59 @@ function manifest() {
 
 describe('可序列化 DataType 声明', () => {
   it('共用兼容检查只允许目标 any 放宽约束，递归数组仍遵守相同方向', () => {
-    expect(isDataTypeAssignable({ kind: 'any' }, { kind: 'image' })).toBe(false);
-    expect(isDataTypeAssignable({ kind: 'image' }, { kind: 'any' })).toBe(true);
+    expect(isTypeAssignable({ kind: 'any' }, { kind: 'named', name: 'media.image' })).toBe(false);
+    expect(isTypeAssignable({ kind: 'named', name: 'media.image' }, { kind: 'any' })).toBe(true);
     expect(
-      isDataTypeAssignable(
-        { kind: 'array', item: { kind: 'any' } },
-        { kind: 'array', item: { kind: 'image' } },
+      isTypeAssignable(
+        { kind: 'array', itemType: { kind: 'any' } },
+        { kind: 'array', itemType: { kind: 'named', name: 'media.image' } },
       ),
     ).toBe(false);
     expect(
-      isDataTypeAssignable(
-        { kind: 'array', item: { kind: 'image' } },
-        { kind: 'array', item: { kind: 'any' } },
+      isTypeAssignable(
+        { kind: 'array', itemType: { kind: 'named', name: 'media.image' } },
+        { kind: 'array', itemType: { kind: 'any' } },
       ),
     ).toBe(true);
   });
 
-  it('支持 any / json / file、基础媒体和递归领域集合，不使用 Zod 实例充当类型', () => {
-    for (const kind of [
-      'any',
-      'json',
-      'file',
-      'string',
-      'number',
-      'boolean',
-      'image',
-      'video',
-      'audio',
-    ]) {
-      expect(dataTypeSchema.parse({ kind })).toEqual({ kind });
-    }
+  it('支持基础、命名、结构及递归集合，不使用 Zod 实例充当类型', () => {
+    const types = [
+      { kind: 'any' },
+      { kind: 'named', name: 'system.json' },
+      { kind: 'named', name: 'media.file' },
+      { kind: 'named', name: 'media.image' },
+      { kind: 'primitive', name: 'string' },
+      { kind: 'primitive', name: 'number' },
+      { kind: 'primitive', name: 'boolean' },
+      { kind: 'primitive', name: 'null' },
+      { kind: 'object', properties: { title: { kind: 'primitive', name: 'string' } } },
+      {
+        kind: 'union',
+        types: [
+          { kind: 'primitive', name: 'string' },
+          { kind: 'primitive', name: 'null' },
+        ],
+      },
+    ];
+    for (const type of types) expect(dataTypeSchema.parse(type)).toEqual(type);
     const nested = {
       kind: 'array',
-      item: { kind: 'array', item: { kind: 'domain', name: 'shot' } },
+      itemType: { kind: 'array', itemType: { kind: 'named', name: 'story.shot' } },
     };
     expect(dataTypeSchema.parse(JSON.parse(JSON.stringify(nested)))).toEqual(nested);
     expect(dataTypeSchema.safeParse(z.string()).success).toBe(false);
   });
 
-  it('拒绝复杂类型扩展、额外字段、缺失元素类型和无效领域标识', () => {
+  it('拒绝不完整描述、旧式 kind、额外字段和无效命名空间', () => {
     for (const value of [
       { kind: 'union' },
       { kind: 'object' },
-      { kind: 'image', url: 'https://example.com/image.png' },
+      { kind: 'named', name: 'media.image', url: 'https://example.com/image.png' },
       { kind: 'array' },
-      { kind: 'array', item: { kind: 'unknown' } },
-      { kind: 'domain', name: '' },
-      { kind: 'domain', name: ' shot ' },
+      { kind: 'array', itemType: { kind: 'unknown' } },
+      { kind: 'named', name: '' },
+      { kind: 'named', name: ' shot ' },
     ])
       expect(dataTypeSchema.safeParse(value).success).toBe(false);
   });
@@ -213,6 +232,7 @@ describe('NodeTypeManifest 公开协议', () => {
     expect(
       nodeTypeManifestSchema.parse({
         ...source,
+        executionKind: 'action',
         metadata: { ...source.metadata, name: '生成镜头' },
       }).type,
     ).toBe(source.type);
@@ -222,6 +242,7 @@ describe('NodeTypeManifest 公开协议', () => {
     expect(
       nodeTypeManifestSchema.safeParse({
         ...source,
+        executionKind: 'action',
         metadata: { ...source.metadata, category: 'custom' },
       }).success,
     ).toBe(false);
@@ -255,7 +276,7 @@ describe('NodeTypeManifest 公开协议', () => {
     expect(
       nodeTypeManifestSchema.parse({
         ...source,
-        outputs: [{ key: 'image', name: '图片', dataType: { kind: 'image' } }],
+        outputs: [{ key: 'image', name: '图片', dataType: { kind: 'named', name: 'media.image' } }],
       }).outputs[0]?.key,
     ).toBe('image');
   });
@@ -264,15 +285,18 @@ describe('NodeTypeManifest 公开协议', () => {
     const source = manifest();
     for (const key of ['bad-handle', '', 'constructor']) {
       expect(
-        inputPortDefinitionSchema.safeParse({ key, name: '输入', dataType: { kind: 'string' } })
-          .success,
+        inputPortDefinitionSchema.safeParse({
+          key,
+          name: '输入',
+          dataType: { kind: 'primitive', name: 'string' },
+        }).success,
       ).toBe(false);
     }
     expect(
       inputPortDefinitionSchema.safeParse({
         key: 'duration',
         name: '时长',
-        dataType: { kind: 'number' },
+        dataType: { kind: 'primitive', name: 'number' },
         defaultValue: 5,
       }).success,
     ).toBe(false);
@@ -280,7 +304,7 @@ describe('NodeTypeManifest 公开协议', () => {
       inputPortDefinitionSchema.safeParse({
         key: 'duration',
         name: '时长',
-        dataType: { kind: 'number' },
+        dataType: { kind: 'primitive', name: 'number' },
         multiple: true,
       }).success,
     ).toBe(false);

@@ -12,12 +12,18 @@ import { toReactFlowNode, type WorkflowNode } from '../src/features/workflow/rea
 const manifest = nodeTypeManifestSchema.parse({
   type: 'video.image_to_video',
   version: 1,
+  executionKind: 'action',
   metadata: { name: '图生视频', category: 'video' },
   inputs: [
-    { key: 'image', name: '首帧图片', dataType: { kind: 'image' }, required: true },
-    { key: 'prompt', name: '视频提示词', dataType: { kind: 'string' } },
+    {
+      key: 'image',
+      name: '首帧图片',
+      dataType: { kind: 'named', name: 'media.image' },
+      required: true,
+    },
+    { key: 'prompt', name: '视频提示词', dataType: { kind: 'primitive', name: 'string' } },
   ],
-  outputs: [{ key: 'video', name: '成片', dataType: { kind: 'video' } }],
+  outputs: [{ key: 'video', name: '成片', dataType: { kind: 'named', name: 'media.video' } }],
   config: [
     {
       key: 'resolution',

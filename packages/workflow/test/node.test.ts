@@ -96,7 +96,7 @@ describe('节点类型、实例和 Preset', () => {
       ...definition(),
       inputs: {
         script: { type: 'constant', value: '用户文本' },
-        characters: { type: 'asset', assetId: 'test-asset' },
+        characters: { type: 'asset', assetId: 'test-asset', versionId: 'asset-version-1' },
         style: { type: 'workflow_input', key: 'style' },
       },
     };

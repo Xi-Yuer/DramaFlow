@@ -6,7 +6,7 @@ import { NodeTypesController } from './node-types.controller.js';
   providers: [
     {
       provide: NodeRegistry,
-      useFactory: () => new NodeRegistry<object, object>(),
+      useFactory: () => new NodeRegistry(),
     },
   ],
   controllers: [NodeTypesController],

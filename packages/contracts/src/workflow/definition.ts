@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { dataTypeSchema } from '../data-type.js';
+import { dataTypeSchema } from '../data/type.js';
 import { controlEdgeDefinitionSchema, nodeDefinitionSchema } from '../node/definition.js';
 import { createWorkflowSchemas } from './metadata.js';
 

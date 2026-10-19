@@ -1,59 +1,20 @@
 import {
-  nodeDefinitionSchema,
   nodeTypeIdSchema,
   nodeTypeVersionSchema,
-  type NodeDefinition,
   type NodeTypeManifest,
 } from '@dramaflow/contracts';
-import type { GraphNodeReturnValue, LangGraphRunnableConfig } from '@langchain/langgraph';
 import { z } from 'zod';
-import { invokeNodeOperation, parseNodeDefinition, type NodeOperation } from './operation.js';
+import type { NodeType, NodeDeclaration } from './type.js';
 import { assertNodeSchemas, parseNodeManifest, type NodeSchemas } from './schemas.js';
-
-// State/Binding 模型尚未确定；这些泛型接口只适配本节点，不提供 Graph builder 或调度器。
-export type LangGraphNode<State extends object, Update extends object> = (
-  state: State,
-  runnableConfig: LangGraphRunnableConfig<Record<string, unknown>>,
-) => GraphNodeReturnValue<Update>;
-
-export interface CompileContext<State extends object, Update extends object> {
-  readInputs(
-    state: State,
-    definition: NodeDefinition,
-    runnableConfig: LangGraphRunnableConfig<Record<string, unknown>>,
-  ): unknown;
-  writeOutputs(
-    definition: NodeDefinition,
-    outputs: Readonly<Record<string, z.JSONType>>,
-    runnableConfig: LangGraphRunnableConfig<Record<string, unknown>>,
-  ): Update;
-}
-
-export interface NodeCompiler<State extends object, Update extends object> {
-  compile(
-    definition: NodeDefinition,
-    context: CompileContext<State, Update>,
-  ): LangGraphNode<State, Update>;
-}
-
-export interface NodeType<
-  State extends object,
-  Update extends object,
-  InputSchema extends z.ZodObject = z.ZodObject,
-  OutputSchema extends z.ZodObject = z.ZodObject,
-  ConfigSchema extends z.ZodObject = z.ZodObject,
->
-  extends NodeCompiler<State, Update>, NodeSchemas<InputSchema, OutputSchema, ConfigSchema> {
-  readonly manifest: NodeTypeManifest;
-}
-
-export class NodeCompilationError extends Error {
+import type { NodeOperation } from './operation.js';
+import type { NodeExecutionContext } from '../runtime/node-executor.js';
+export class NodeRegistrationError extends Error {
   constructor(
     public readonly code: 'duplicate_type' | 'unavailable_type',
     message: string,
   ) {
     super(message);
-    this.name = 'NodeCompilationError';
+    this.name = 'NodeRegistrationError';
   }
 }
 function typeKey(type: string, version: number): string {
@@ -68,16 +29,11 @@ function freezeManifest(value: unknown): void {
   Object.freeze(value);
 }
 
-// 注册后将实现读取的 manifest 固定为只读快照，同时保留类实例的 this / 私有依赖。
-function lockManifest<State extends object, Update extends object>(
-  nodeType: NodeType<State, Update>,
-  manifest: NodeTypeManifest,
-): NodeTypeManifest {
+function lockManifest(nodeType: NodeDeclaration, manifest: NodeTypeManifest): NodeTypeManifest {
   const property = Object.getOwnPropertyDescriptor(nodeType, 'manifest');
   if (property?.configurable === false) {
-    if (!('value' in property) || property.writable !== false) {
+    if (!('value' in property) || property.writable !== false)
       throw new TypeError('节点实现的 manifest 必须是稳定的数据字段');
-    }
     freezeManifest(nodeType.manifest);
     return nodeType.manifest;
   }
@@ -91,74 +47,61 @@ function lockManifest<State extends object, Update extends object>(
   return manifest;
 }
 
-export class NodeRegistry<State extends object, Update extends object> {
-  private readonly types = new Map<string, NodeType<State, Update>>();
-  constructor(types: readonly NodeType<State, Update>[] = []) {
+export class NodeRegistry {
+  private readonly types = new Map<string, NodeDeclaration>();
+  constructor(types: readonly NodeDeclaration[] = []) {
     for (const nodeType of types) this.register(nodeType);
   }
-  register(nodeType: NodeType<State, Update>): void {
+  register(nodeType: NodeDeclaration): void {
     const manifest = parseNodeManifest(nodeType.manifest);
     assertNodeSchemas(manifest, nodeType);
+    if ((manifest.executionKind === 'action') !== (typeof nodeType.execute === 'function'))
+      throw new Error('action 必须提供 execute，其他执行种类使用独立编译策略');
     const key = typeKey(manifest.type, manifest.version);
-    if (this.types.has(key)) throw new NodeCompilationError('duplicate_type', '节点类型版本已注册');
+    if (this.types.has(key))
+      throw new NodeRegistrationError('duplicate_type', '节点类型版本已注册');
     this.types.set(key, {
       manifest: lockManifest(nodeType, manifest),
       inputSchema: nodeType.inputSchema,
       outputSchema: nodeType.outputSchema,
       configSchema: nodeType.configSchema,
-      compile: nodeType.compile.bind(nodeType),
+      ...(nodeType.execute ? { execute: nodeType.execute.bind(nodeType) } : {}),
     });
   }
-  get(type: string, version: number): NodeType<State, Update> {
+  get(type: string, version: number): NodeDeclaration {
     const nodeType = this.types.get(typeKey(type, version));
-    if (!nodeType) throw new NodeCompilationError('unavailable_type', '节点类型版本不可用');
+    if (!nodeType) throw new NodeRegistrationError('unavailable_type', '节点类型版本不可用');
     return { ...nodeType, manifest: parseNodeManifest(nodeType.manifest) };
+  }
+  getAction(type: string, version: number): NodeType {
+    const entry = this.get(type, version);
+    if (entry.manifest.executionKind !== 'action' || !entry.execute)
+      throw new Error('该类型不是普通操作节点');
+    return { ...entry, execute: entry.execute };
   }
   listManifests(): NodeTypeManifest[] {
     return [...this.types.values()].map((nodeType) => parseNodeManifest(nodeType.manifest));
   }
-  compile(input: unknown, context: CompileContext<State, Update>): LangGraphNode<State, Update> {
-    const definition = nodeDefinitionSchema.parse(input);
-    return this.get(definition.type, definition.typeVersion).compile(definition, context);
-  }
 }
 
-// 保留已验证的普通值操作适配；不会解析 Binding、选择插件或实现 WorkflowState。
+// 显式普通操作工厂；不编译图、不解析绑定、不存储产物。
 export function createOperationNodeType<
-  InputSchema extends z.ZodObject,
-  OutputSchema extends z.ZodObject,
-  ConfigSchema extends z.ZodObject,
+  I extends z.ZodObject,
+  O extends z.ZodObject,
+  C extends z.ZodObject,
 >(
-  manifestInput: NodeTypeManifest,
-  schemas: NodeSchemas<InputSchema, OutputSchema, ConfigSchema>,
-  operation: NodeOperation<z.output<InputSchema>, z.output<ConfigSchema>>,
+  input: NodeTypeManifest,
+  schemas: NodeSchemas<I, O, C>,
+  operation: NodeOperation<z.output<I>, z.output<C>>,
 ) {
-  const manifest = Object.freeze(parseNodeManifest(manifestInput));
+  const manifest = parseNodeManifest(input);
   assertNodeSchemas(manifest, schemas);
-  const contract = { type: manifest.type, version: manifest.version, ...schemas };
+  if (manifest.executionKind !== 'action') throw new Error('普通操作只支持 action');
   return {
     manifest,
-    inputSchema: schemas.inputSchema,
-    outputSchema: schemas.outputSchema,
-    configSchema: schemas.configSchema,
-    compile<State extends object, Update extends object>(
-      definition: NodeDefinition,
-      context: CompileContext<State, Update>,
-    ): LangGraphNode<State, Update> {
-      const node = parseNodeDefinition(contract, definition);
-      return async (state, runnableConfig) => {
-        const outputs = await invokeNodeOperation(
-          contract,
-          { inputs: context.readInputs(state, node, runnableConfig), config: node.config },
-          operation,
-          runnableConfig,
-        );
-        return context.writeOutputs(
-          node,
-          z.record(z.string(), z.json()).parse(outputs),
-          runnableConfig,
-        );
-      };
+    ...schemas,
+    async execute(inputs: z.output<I>, config: z.output<C>, context: NodeExecutionContext) {
+      return operation({ inputs, config }, context.runnableConfig);
     },
   };
 }

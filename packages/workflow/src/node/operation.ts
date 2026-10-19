@@ -8,7 +8,7 @@ import {
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
 
-// 执行侧的有效契约。相同 Runtime type 可以为不同 Preset 提供不同输入输出 Schema。
+// 执行侧的有效契约。同一 type / version 使用明确输入输出契约，Preset 仅配置模板。
 // 不包含执行器、插件适配器或可传往浏览器的服务端实例。
 export interface NodeContract<
   InputSchema extends z.ZodObject = z.ZodObject,
@@ -60,7 +60,7 @@ export function parseNodeDefinition(contract: NodeContract, input: unknown): Nod
   validateContractIdentity(contract);
   const node = nodeDefinitionSchema.parse(input);
   if (node.type !== contract.type || node.typeVersion !== contract.version) {
-    throw new NodeContractError('contract_mismatch', '节点与所选类型 / Preset 契约不匹配');
+    throw new NodeContractError('contract_mismatch', '节点与所选类型版本契约不匹配');
   }
   for (const target of Object.keys(node.inputs)) {
     if (!Object.hasOwn(contract.inputSchema.shape, target)) {
@@ -96,7 +96,7 @@ export function applyNodePreset(
   });
 }
 
-// Compiler 内的值操作校验工具，不是节点扩展接口或独立 Runtime。
+// 普通值操作校验工具，不是节点扩展接口或独立 Runtime。
 export async function invokeNodeOperation<
   InputSchema extends z.ZodObject,
   OutputSchema extends z.ZodObject,

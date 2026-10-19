@@ -26,7 +26,7 @@ function definition() {
       script: { type: 'connection', nodeId: 'script', outputKey: 'text' },
       style: { type: 'constant', value: '黑白' },
       novel: { type: 'workflow_input', key: 'novel' },
-      reference: { type: 'asset', assetId: 'image-v1' },
+      reference: { type: 'asset', assetId: 'image-v1', versionId: 'asset-version-1' },
     },
     config: { prompt: '生成分镜', reference: { colors: ['黑白'] } },
     ui: { position: { x: 120, y: -40 } },
@@ -35,7 +35,7 @@ function definition() {
 
 function workflow(): WorkflowDefinition {
   return {
-    inputs: [{ name: 'novel', type: { kind: 'string' } }],
+    inputs: [{ name: 'novel', type: { kind: 'primitive', name: 'string' } }],
     nodes: [
       nodeDefinitionSchema.parse({
         id: 'script',
@@ -58,17 +58,18 @@ function manifests(): NodeTypeManifest[] {
     {
       type: 'ai.llm',
       version: 1,
+      executionKind: 'action',
       metadata: { name: '文本', category: 'ai' },
       inputs: [
-        { key: 'script', name: '剧本', dataType: { kind: 'string' } },
-        { key: 'style', name: '风格', dataType: { kind: 'string' } },
-        { key: 'novel', name: '小说', dataType: { kind: 'string' } },
-        { key: 'reference', name: '参考', dataType: { kind: 'image' } },
+        { key: 'script', name: '剧本', dataType: { kind: 'primitive', name: 'string' } },
+        { key: 'style', name: '风格', dataType: { kind: 'primitive', name: 'string' } },
+        { key: 'novel', name: '小说', dataType: { kind: 'primitive', name: 'string' } },
+        { key: 'reference', name: '参考', dataType: { kind: 'named', name: 'media.image' } },
       ],
       outputs: [
-        { key: 'text', name: '文本', dataType: { kind: 'string' } },
-        { key: 'newText', name: '新文本', dataType: { kind: 'string' } },
-        { key: 'picture', name: '图片', dataType: { kind: 'image' } },
+        { key: 'text', name: '文本', dataType: { kind: 'primitive', name: 'string' } },
+        { key: 'newText', name: '新文本', dataType: { kind: 'primitive', name: 'string' } },
+        { key: 'picture', name: '图片', dataType: { kind: 'named', name: 'media.image' } },
       ],
       config: [],
     },
@@ -254,7 +255,7 @@ describe('React Flow 连线仅由绑定与控制边派生', () => {
     const compatible = manifests()[0];
     const conflicting: NodeTypeManifest = {
       ...compatible,
-      outputs: [{ key: 'text', name: '图片', dataType: { kind: 'image' } }],
+      outputs: [{ key: 'text', name: '图片', dataType: { kind: 'named', name: 'media.image' } }],
     };
     const input = workflow();
     const snapshot = structuredClone(input);
@@ -276,7 +277,7 @@ describe('React Flow 连线仅由绑定与控制边派生', () => {
       ...older,
       version: 2,
       inputs: older.inputs.map((port) =>
-        port.key === 'style' ? { ...port, dataType: { kind: 'image' } } : port,
+        port.key === 'style' ? { ...port, dataType: { kind: 'named', name: 'media.image' } } : port,
       ),
     };
     expect(() => connectWorkflowNodes(input, connection, [older, newer])).toThrow('端口类型不兼容');
@@ -296,11 +297,17 @@ describe('React Flow 连线仅由绑定与控制边派生', () => {
       nodeId: 'script',
       outputKey: 'text',
     });
-    catalog[0].outputs[0].dataType = { kind: 'array', item: { kind: 'any' } };
-    catalog[0].inputs[1].dataType = { kind: 'array', item: { kind: 'image' } };
+    catalog[0].outputs[0].dataType = { kind: 'array', itemType: { kind: 'any' } };
+    catalog[0].inputs[1].dataType = {
+      kind: 'array',
+      itemType: { kind: 'named', name: 'media.image' },
+    };
     expect(() => connectWorkflowNodes(workflow(), connection, catalog)).toThrow('端口类型不兼容');
-    catalog[0].outputs[0].dataType = { kind: 'array', item: { kind: 'image' } };
-    catalog[0].inputs[1].dataType = { kind: 'array', item: { kind: 'any' } };
+    catalog[0].outputs[0].dataType = {
+      kind: 'array',
+      itemType: { kind: 'named', name: 'media.image' },
+    };
+    catalog[0].inputs[1].dataType = { kind: 'array', itemType: { kind: 'any' } };
     expect(connectWorkflowNodes(workflow(), connection, catalog).nodes[1].inputs.style).toEqual({
       type: 'connection',
       nodeId: 'script',

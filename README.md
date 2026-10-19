@@ -4,7 +4,7 @@ DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，�
 
 当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录并注册通用 renderer；生产目录为空，没有添加节点、图编辑保存、工作流运行或模型调用。
 
-基础库已实现纯 JSON Manifest、四类输入 Binding、独立 ControlEdge、静态引用与联合 DAG 校验、版本精确注册及泛型 LangGraph 普通操作适配。Node.inputs 是数据绑定唯一来源，React Flow 数据边从它派生；WorkflowState 的核心职责已确定，最终值 / 引用协议、State、绑定求值、整图编译和运行持久化仍待实现，见 [State 边界](docs/workflow-state.md)。具体范围见 [当前架构](docs/architecture.md#node-基础库)。
+基础库已有正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及 execute 与统一编译包装的分层。Codec、BindingResolver、NodeExecutor 和内容 / 审计服务当前是接口，尚无完整生产管线，见 [数据模型](docs/data-model.md) 与 [当前架构](docs/architecture.md)。
 
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 
@@ -30,19 +30,19 @@ pnpm dev
 
 ## 保留的结构
 
-| 目录               | 当前内容                                                   |
-| ------------------ | ---------------------------------------------------------- |
-| apps/web           | 身份与项目画布、目录查询、通用节点 renderer 和协议适配     |
-| apps/api           | NestJS、Better Auth、资料、项目与受保护节点目录 API        |
-| apps/worker        | 独立 NestJS 应用上下文，尚未注册业务任务                   |
-| packages/database  | Prisma、身份/资料/凭证/会话及基础项目模型、pgvector        |
-| packages/server    | API 与 worker 共用的数据库、Redis、对象存储和凭证加密      |
-| packages/contracts | 身份、项目、Workflow / Node、DataType 及静态类型声明       |
-| packages/workflow  | 值契约、快照、服务端 NodeType / Registry 与 LangGraph 适配 |
-| packages/plugins   | 插件包空入口，保留模型 SDK 依赖                            |
-| packages/context   | 上下文包空入口，待逐步定义                                 |
+| 目录               | 当前内容                                                 |
+| ------------------ | -------------------------------------------------------- |
+| apps/web           | 身份与项目画布、目录查询、通用节点 renderer 和协议适配   |
+| apps/api           | NestJS、Better Auth、资料、项目与受保护节点目录 API      |
+| apps/worker        | 独立 NestJS 应用上下文，尚未注册业务任务                 |
+| packages/database  | Prisma、身份/资料/凭证/会话及基础项目模型、pgvector      |
+| packages/server    | API 与 worker 共用的数据库、Redis、对象存储和凭证加密    |
+| packages/contracts | 身份、项目、Workflow / Node、DataType 及静态类型声明     |
+| packages/workflow  | 值契约、类型 / 节点 Registry、运行接口和 action 编译包装 |
+| packages/plugins   | 插件包空入口，保留模型 SDK 依赖                          |
+| packages/context   | 上下文包空入口，待逐步定义                               |
 
-上述目录是当前工程结构，不为每个一级概念预建独立包。contracts 按 identity / project 协议与 workflow / node 分组，workflow 按 definition / node / run 分组；server 只承载服务端基础设施。具体职责见 [架构与目录职责](docs/architecture.md)。
+上述目录是当前工程结构，不为每个一级概念预建独立包。contracts 按 identity / project 协议与 workflow / node 分组，workflow 按 definition / data / node / runtime / compiler / run 分组；server 只承载服务端基础设施。具体职责见 [架构与目录职责](docs/architecture.md)。
 
 ## 检查与部署
 
@@ -64,6 +64,7 @@ pnpm stack:up
 - [协作规范](AGENTS.md)
 - [平台核心模型](docs/platform-model.md)
 - [Workflow 模型](docs/workflow-model.md)
+- [数据类型与运行值](docs/data-model.md)
 - [WorkflowState 边界](docs/workflow-state.md)
 - [Node 模型](docs/node-model.md)
 - [节点类型实施拆解](docs/node-type-implementation.md)

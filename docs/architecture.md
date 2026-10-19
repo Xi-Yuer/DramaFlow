@@ -24,23 +24,23 @@ contracts 的 `workflow/metadata.ts` 保留元数据、版本 / 运行元数据�
 
 workflow 包已有 parseWorkflowInputs、collectWorkflowOutputs、createWorkflowVersionSnapshot、assertWorkflowRunVersion：按显式 Zod 契约校验值、按声明来源收集最终结果、复制并冻结 JSON 快照、检查运行版本身份。这些函数不发布版本或创建运行；快照只保证内存隔离，不替代数据库不可变性、权限与并发控制。
 
-## Node 基础库
+## 数据与 Node 基础库
 
-`node/definition.ts` 提供四类 InputBinding、NodeDefinition、ControlEdgeDefinition、配置模板 Preset 与 NodeRun。Node.inputs 是安全端口键 record，connection / constant / workflow_input / asset 是唯一数据来源声明；constant 仅 JSON，asset 仅 assetId，尚无资产读取、权限或版本解析。实例固定 type / typeVersion，ui.position 必填。一个端口只保存一条绑定。
+contracts/data 提供正式 DataType、builtin 类型常量、共享 isTypeAssignable、DataTypeManifest、RuntimeValue 与 DataReference。primitive / named / array / object / union / any 描述语义类型；inline / reference 描述运行值承载。数组元素用 itemType；兼容规则包含递归数组、Union 全来源覆盖和对象结构子集，any 仅放宽目标。
 
-`node/manifest.ts` 提供纯 JSON NodeTypeManifest、八类 metadata 分类、输入输出端口、四种 ConfigFieldDefinition、FieldUI 及能力需求。配置默认值按类型、范围和选项校验；控件只声明提示。端口无默认值，也不声明多绑定。公开 Manifest 不含 Zod、JSON Schema、编译器或实际配置。
+contracts/content 提供 Artifact 与版本化 Asset 的共享协议；Artifact 引用不可变产物 ID，AssetReference / AssetBinding 固定 versionId。没有对应数据库表、上传、Promote 或引用读取服务。详细类型与生命周期见 [数据模型](data-model.md)。
 
-DataType 支持 any / json / file、基础媒体、domain 和递归 array。isDataTypeAssignable 只在目标端口为 any 时接受其他类型，any 来源只能接到 any；其余同种类、同领域名或递归数组匹配。json、file 不构成其他类型的基类，不执行媒体转换或真实值校验。
+服务端 DataTypeRegistry 按名称注册 Manifest + Zod，拒绝重复及未知名称；schemaFor / parse 递归检查实际 JSON 值。目录只返回独立 Manifest 副本，未注册虚构媒体实现，也未接入类型目录 API。
 
-服务端 NodeType 持 manifest、inputSchema、outputSchema、configSchema 和 compile。NodeRegistry 按 type / version 精确 register / get / compile；listManifests 白名单校验并返回独立 JSON，拒绝重复或不可用版本，不回退最新版。assertNodeSchemas 检查声明与三组 Zod 的字段集合及公开默认值，不推断完整类型等价。
+NodeTypeManifest 增加必填 executionKind：action / control / composite / interaction。NodeType 改为 execute(input, config, context)，不再自行 compile。NodeRegistry 仍精确匹配 type / version，并固定实现读取的 Manifest；普通 action 提供 execute，其他种类声明由独立结构策略处理，生产目录仍为空。
 
-parseNodeDefinition 检查类型版本、目标输入端口和实际配置；applyNodePreset 只合并同类型版本模板与实例配置，不改变 Runtime 身份。invokeNodeOperation 校验并隔离 inputs / config / outputs，透传 RunnableConfig，不解析 Binding、不调度、不自动重试。配置的 transform / 默认值不回写定义。
+createOperationNodeType 只组合 Manifest、三组 Zod 与 operation。parseNodeDefinition、applyNodePreset、invokeNodeOperation 保留独立值契约校验，Preset 不改变运行身份，转换与默认值不回写定义。assertNodeSchemas 检查字段集合和默认值，不证明任意 Schema 与语义类型完全等价。
 
-createOperationNodeType 保留泛型普通操作适配：编译产物可加入真实 StateGraph，CompileContext 只负责输入读取与输出更新边界，不给节点全图 builder。当前没有具体 WorkflowState、四类 Binding 求值器、完整 DSL Compiler、持久 checkpointer 或运行事件投影。
+ActionNodeCompilationStrategy 校验节点类型版本，复制定义并仅生成调用统一 NodeExecutor 的 LangGraph 包装。编译时不执行业务，不编译控制边，不管理调度或暂停恢复。完整 WorkflowCompiler 和结构策略尚未实现。
 
-createWorkflowRunConfig 检查 Run / Version 身份，使用必填 Run.threadId 绑定 LangGraph thread_id，允许它与 Run.id 不同，拒绝调用方覆盖为其他 thread，并保留并发、取消等配置；不自动分配 thread、不创建运行、检查权限、加载版本或选择 checkpointer。真实 LangGraph 测试验证独立 threadId 的中断恢复与线程隔离；MemorySaver 与测试类型不代表生产恢复或真实生成。
+runtime/ 已有 WorkflowState、RuntimeValueCodec、BindingResolver、NodeExecutor、内容 Store 和 NodeRunRecorder 接口。State.outputs 正式使用 NodeOutputMap（RuntimeValue），execution 暂不启用控制字段；没有生产通道、reducer、绑定解析、内容持久化或完整执行服务实现，不提供内存 / 本地存储降级。
 
-NodeRun 契约包含必填正整数 attempt、可选 inputSnapshot / outputSnapshot、八种业务状态、code / message 错误和 ISO 时间。尚未取得输入或输出时允许没有快照；快照仅接受 JSON 记录，不能据此声称已实现 RuntimeValue、内容大小控制或脱敏。恢复重入不会在契约中自动增加 attempt，不驱动图调度，也没有 Run Store / 数据库表。类型与编译边界见 [Manifest 实施说明](node-type-implementation.md)，State、历史与引用职责见 [State 边界](workflow-state.md)。
+createWorkflowRunConfig 使用显式 Run.threadId，不从 Run.id 推断或允许其他配置覆盖，不创建运行或 checkpointer。NodeRun 保留 attempt、可选 JSON 快照、状态、结构化错误和 ISO 时间契约；业务记录、权限与持久化仍待接入。
 
 ## React Flow 数据适配
 
@@ -52,20 +52,20 @@ GenericWorkflowNode 根据精确类型版本 Manifest 自动生成 Handle、显�
 
 ## 目录与依赖
 
-| 目录               | 当前职责                                             | 后续边界                                |
-| ------------------ | ---------------------------------------------------- | --------------------------------------- |
-| apps/web           | 身份、账户、项目画布、目录查询、通用 renderer 与适配 | 创作交互，不加载服务端插件或密钥        |
-| apps/api           | 认证、资料、项目和节点目录                           | 模块化业务入口、权限与应用服务          |
-| apps/worker        | 独立进程，只接入共享基础设施                         | 独立执行进程，不自建图调度语义          |
-| packages/server    | 数据库、Redis、对象存储和凭证加密                    | 不包含 HTTP、认证或业务流程             |
-| packages/contracts | 身份、项目、Workflow 与 Node 的中立 JSON 协议        | 不依赖前端、数据库或 Runtime 框架       |
-| packages/database  | Prisma 与身份、基础项目持久化                        | 模型、迁移按实际业务增加                |
-| packages/workflow  | 值契约、快照、NodeType / Registry 与 LangGraph 适配  | 先统一值与引用，再完成 State 和执行接入 |
-| packages/plugins   | 空入口，保留模型 SDK                                 | 受信任外部能力，无隐式供应商选择        |
-| packages/context   | 空入口                                               | 独立构建明确选择的上下文                |
+| 目录               | 当前职责                                             | 后续边界                               |
+| ------------------ | ---------------------------------------------------- | -------------------------------------- |
+| apps/web           | 身份、账户、项目画布、目录查询、通用 renderer 与适配 | 创作交互，不加载服务端插件或密钥       |
+| apps/api           | 认证、资料、项目和节点目录                           | 模块化业务入口、权限与应用服务         |
+| apps/worker        | 独立进程，只接入共享基础设施                         | 独立执行进程，不自建图调度语义         |
+| packages/server    | 数据库、Redis、对象存储和凭证加密                    | 不包含 HTTP、认证或业务流程            |
+| packages/contracts | 身份、项目、Workflow 与 Node 的中立 JSON 协议        | 不依赖前端、数据库或 Runtime 框架      |
+| packages/database  | Prisma 与身份、基础项目持久化                        | 模型、迁移按实际业务增加               |
+| packages/workflow  | 值契约、数据 / 节点 Registry、运行接口及编译包装     | 先确定 Graph Model，再接入执行与持久化 |
+| packages/plugins   | 空入口，保留模型 SDK                                 | 受信任外部能力，无隐式供应商选择       |
+| packages/context   | 空入口                                               | 独立构建明确选择的上下文               |
 
 不为附件目录示意重命名为 common / client，不为未来概念建立空壳执行器。API 与 worker 通过服务和契约协作；第三方类型在适配层转换，不进入 contracts。
 
-contracts/src 的 identity.ts 与 project.ts 分别承载身份与项目协议，workflow/ 和 node/ 承载工作流与节点协议。workflow/src 分为 definition/、node/、run/；server/src 分为 database/、redis/、storage/、secrets/。API 的 health/ 与 http/ 保留 HTTP 职责，基础设施不反向依赖 API，worker 不再依赖 API 应用包。
+contracts/src 的 identity.ts 与 project.ts 分别承载身份与项目协议，workflow/ 和 node/ 承载工作流与节点协议，data/ 和 content/ 承载值与内容协议。workflow/src 分为 definition/、data/、node/、runtime/、compiler/、run/；server/src 分为 database/、redis/、storage/、secrets/。API 的 health/ 与 http/ 保留 HTTP 职责，基础设施不反向依赖 API，worker 不再依赖 API 应用包。
 
 LangGraph 是核心 Runtime，平台不再建设图调度、Checkpoint 或暂停恢复状态机。Queue / Worker 后续处理长异步作业、跨运行与供应商限流，不决定图中下一个节点。一个项目一个逻辑 Workflow 的边界不变，子流程只引用其他项目固定版本；当前没有对应持久化、发布或运行应用接口。

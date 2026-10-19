@@ -180,8 +180,10 @@ Workflow 的显式输入输出使它可以被其他 Workflow 作为完整单元�
 
 WorkflowDefinition 仍保留 inputs、nodes、edges、outputs。Node.inputs 是按目标端口组织的四类 Binding record：connection、constant、workflow_input、asset；edges 只保存 ControlEdgeDefinition，不另存 Data Edge。React Flow 数据边由 connection 派生；控制边独立表达执行路由。
 
-正式 workflowDefinitionSchema 检查顶层唯一性、输出引用节点、控制边 ID 与端点、connection 来源节点、workflow_input 名称、自连接和控制 / 数据联合 DAG。它没有 Manifest，不能判断 outputKey 是否已声明、端口类型兼容或资源权限，也不解析 Binding。控制边没有路由端口。asset 只有 assetId，尚无资产读取或版本解析。
+正式 workflowDefinitionSchema 检查顶层唯一性、输出引用节点、控制边 ID 与端点、connection 来源节点、workflow_input 名称、自连接和控制 / 数据联合 DAG。它没有 Manifest，不能判断 outputKey 是否已声明、端口类型兼容或资源权限，也不解析 Binding。控制边没有路由端口。asset 显式保存 assetId 与 versionId，尚无资产读取或授权解析。
 
 串行、并行、条件和显式批量仍由图关系与控制节点表达，不增加 parallelNodes / sequentialNodes 等列表。平台完整 Compiler 将依赖映射到 LangGraph 边、条件路由、fan-in、Send 与子图，图调度、Checkpoint 和暂停恢复由 LangGraph 提供。
 
-WorkflowState 的五个核心分区、当前输出与历史分离、Send 局部输入和子工作流显式映射方向已在 [State 边界](workflow-state.md) 确定。先统一 DataType / RuntimeValue / Reference / Domain Object，再完成最终 State、Binding Resolver 与 Compiler。当前泛型适配不代表完整运行实现，项目保存协议也未接入 WorkflowDefinition。下一步见 [实施方案](implementation-plan.md)。
+WorkflowState.outputs 已使用携带 DataType 的 RuntimeValue，语义与承载规则见 [数据模型](data-model.md)。当前 Codec / Resolver / Executor 为服务接口，完整图编译和运行仍未接入。
+
+下一步先确定 Workflow Graph Model：数据依赖是否激活执行、控制 Handle、Branch 与 Join 的精确表达，以及到 LangGraph 的映射。当前 ControlEdge 只是最小草案，不将它锁定为最终路由协议。项目保存协议仍未接入 WorkflowDefinition，阶段统一见 [实施方案](implementation-plan.md)。

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { dataTypeSchema } from '../data-type.js';
+import { dataTypeSchema } from '../data/type.js';
 import { workflowIdentifierSchema, workflowPortNameSchema } from '../workflow/metadata.js';
 
 export const nodeTypeIdSchema = z
@@ -154,10 +154,14 @@ export const nodeUISchema = z
   .strict();
 
 // Manifest 是唯一公开类型说明书，所有字段均为 JSON，不持有 Zod、编译器或服务端实例。
+export const nodeExecutionKindSchema = z.enum(['action', 'control', 'composite', 'interaction']);
+export type NodeExecutionKind = z.infer<typeof nodeExecutionKindSchema>;
+
 export const nodeTypeManifestSchema = z
   .object({
     type: nodeTypeIdSchema,
     version: nodeTypeVersionSchema,
+    executionKind: nodeExecutionKindSchema,
     metadata: nodeMetadataSchema,
     inputs: z.array(inputPortDefinitionSchema),
     outputs: z.array(outputPortDefinitionSchema),

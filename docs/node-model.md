@@ -1,79 +1,39 @@
-# Node 模型：③ 可调度执行单元
+# Node 模型
 
-Node 是 Workflow 中最小的逻辑执行单元，由 LangGraph 调度。本模型区分公开类型声明、服务端实现和 React Flow 编辑视图；类型说明书见 [NodeType 实施说明](node-type-implementation.md)，技术分工见 [Runtime 架构](runtime-architecture.md)，当前能力见 [架构说明](architecture.md#node-基础库)。
+NodeDefinition 是流程实例，NodeTypeManifest 是可传输说明书，服务端 NodeType 是业务执行实现。React Flow 视图、平台定义、LangGraph 执行与 NodeRun 记录各有边界，数据语义见 [数据模型](data-model.md)。
 
-## 三层边界
+## 实例与编辑视图
 
-| 层次       | 对象                                                 | 职责                                                       |
-| ---------- | ---------------------------------------------------- | ---------------------------------------------------------- |
-| 共享定义   | NodeTypeManifest、NodeDefinition、WorkflowDefinition | 纯 JSON 协议，可传输和持久化，不包含 Zod 实例或执行代码    |
-| 服务端实现 | NodeType、NodeRegistry、NodeCompiler                 | 持有 Manifest、Input / Output / Config 三组 Zod 与 compile |
-| 编辑视图   | React Flow Node / Edge、GenericWorkflowNode          | 位置、选择、拖动、测量和受控组件，不成为运行状态           |
+NodeDefinition 固定 id、type、typeVersion、name、config、inputs 及 ui.position；preset 仅是配置模板元数据。Node.inputs record 是数据绑定唯一来源，每个输入对应一条 connection / constant / workflow_input / asset。asset 明确 assetId + versionId，不选择最新版本。
 
-现有 contracts、workflow、web 目录继续承载这些职责。类型使用 ai.llm、video.image_to_video 等稳定命名空间 ID；实例 typeVersion 固定正整数版本，展示名称不改变身份。Registry 仅按 `(type, version)` 精确匹配，不寻找最新版或默认类型。
+React Flow type 选择 workflowNode renderer，实际运行类型在 data.nodeType / data.typeVersion。selected、dragging、measured 等临时字段不进入定义。数据边从 connection 派生；显式连接对照唯一目录检查精确版本、端口与共享类型兼容规则，断连检查完整旧快照以防误删新绑定。
 
-## NodeDefinition 与输入来源
+ControlEdge 当前保留最小节点级关系，与数据绑定分离。该形状仍是待下一步 Graph Model 核定的草案，不视为已发布的最终条件路由协议，不提前增加分支、Join 或执行语义。
 
-```ts
-interface NodeDefinition {
-  id: string;
-  type: string;
-  typeVersion: number;
-  name: string;
-  config: Record<string, JSONValue>;
-  inputs: Record<string, InputBinding>;
-  preset?: string;
-  ui: { position: { x: number; y: number } };
-}
-```
+## Manifest 与端口
 
-示例中的 JSONValue 表示 JSON 值，实际类型由 contracts Schema 导出。ui.position 必填且坐标有限；config 保存实际执行参数，inputs 以安全端口 key 为键，每个端口只有一个 Binding。可选 preset 是配置模板元数据，不参与 Runtime 类型查找。
+Manifest 的 type / version 固定节点类型身份，executionKind 必填，支持 action、control、composite、interaction。metadata 分类仍是 input / ai / image / video / audio / flow / data / output。说明书只含 JSON，不包含 Zod、execute、编译器或私有服务依赖。
 
-| Binding.type   | 保存内容          | 当前边界                                             |
-| -------------- | ----------------- | ---------------------------------------------------- |
-| connection     | nodeId、outputKey | 引用上游节点输出，不嵌入实际结果                     |
-| constant       | value             | 只接受 JSON，保留 false、0、空字符串和 null          |
-| workflow_input | key               | 引用顶层 Workflow 输入                               |
-| asset          | assetId           | 只保存资产标识，尚不读取资产、解析版本或检查资产权限 |
+端口使用正式 DataType，key 与 Handle.id 对应，同方向唯一。required 表示是否可以不提供输入；null 由 union 描述。一个端口一条绑定，集合用 array.itemType，不声明 multiple。
 
-没有 Expression、Environment、Secret、State 或模板绑定。绑定结构已实现，运行求值尚未实现；不能把没有解析器的资产标识冒充可用媒体，也不能隐式读取整个 State 或聊天补齐输入。
+config 为 string / number / boolean / select 字段数组；默认值按字段类型、范围与选项校验。配置控件提示在 config[].ui，输入提示在 ui.inputs；Zod 与 UI 编辑提示不混用，默认值不自动注入定义或 State。
 
-输入是可参与工作流传递的数据，配置是执行参数，不按是否由用户手填划分。duration 等动态量可通过 constant 或 connection 表达；模型、供应商及凭证选择仍待 Plugin / Capability 设计，不固定到领域类型。
+## 服务端执行与编译
 
-## 数据绑定与控制关系
+NodeType 持 manifest、inputSchema、configSchema、outputSchema 和 execute(input, config, context)，不再提供 compile。NodeRegistry 按 type / version 精确查找，拒绝重复或缺失版本，listManifests 只返回副本；普通 action 必须提供 execute，其他 executionKind 仅声明契约，由独立结构策略处理。
 
-Node.inputs 是数据绑定的唯一真相。connection 派生 React Flow 数据边；新增连线先对照目录检查端口和静态类型，再更新目标节点对应输入。删除连线仅在旧快照仍匹配当前来源时移除绑定，避免过期事件误删新连接。数据边不另行保存到 Workflow.edges。
+assertNodeSchemas 核对公开输入、输出、配置字段集合和默认值，不声称已经证明 Manifest 与任意 Zod Schema 完全等价。真实运行须经过数据类型 Registry 与节点完整 Zod 校验。
 
-Workflow.edges 只保存 ControlEdgeDefinition：id、sourceNodeId、targetNodeId。控制边是节点级激活关系，条件路由端口尚未进入这条边。可视化统一使用 React Flow Edge，并以 data.kind 的 data / control 区分。执行激活和数据传值不同，二者联合依赖必须无环。
+ActionNodeCompilationStrategy 只生成调用统一 NodeExecutor 的 LangGraph 包装，不执行业务、不解析 Binding、不自行 addEdge。它拒绝不匹配的版本及非 action 类型。WorkflowCompiler / 其他结构策略待 Graph Model 明确后实施，不为每个 LLM、TTS 或图生视频类型创建独立编译策略。
 
-正式 workflowDefinitionSchema 检查节点、工作流输入和控制边引用、控制边 ID 唯一、自连接及联合 DAG。它不取得 Manifest，因此不检查 outputKey 是否已声明或端口类型兼容；也不检查资源权限、执行 Binding 或调度图。完整发布校验还需服务端类型与权限。
-
-## 端口类型与配置
-
-DataType 支持 any、string、number、boolean、json、image、video、audio、file、domain{name} 和递归 array{item}。它是端口类型描述，不等于 Zod 或媒体运行值协议。
-
-isDataTypeAssignable 的规则是：目标端口为 any 时接受任意来源，any 来源只能接到 any；其余基础种类相同，domain 名称相同，数组元素递归匹配。json 只匹配 json 或 any 目标，file 只匹配 file 或 any 目标，不引入继承、隐式类型提升或媒体转换。任何真实值仍须通过服务端 Zod。
-
-端口 key 对应 Handle.id，同方向唯一、输入输出可同名。输入端口可以声明 required。一个端口只保存一条绑定，Manifest 不提供 multiple。端口不保存 defaultValue；固定输入放在 constant Binding。配置字段是 string / number / boolean / select 四类纯 JSON 声明，携带类型正确的默认值、适用范围和控件提示；默认值不会自动写入实例或 State。
-
-## 服务端注册与编译
-
-NodeType 持有 manifest、inputSchema、outputSchema、configSchema 与 compile。NodeRegistry 的 register / get / compile 使用相同的 type / version；listManifests 返回经过 Schema 白名单校验的独立 JSON 副本，不包含 Zod、compile 或服务端私有属性。
-
-注册时 assertNodeSchemas 核对输入、输出及配置 key 集合，并验证公开配置默认值能被对应服务端字段接受；字段名相同不代表全部运行约束一致。Manifest 不由 Zod 自动转换生成，后端完整校验仍是实际值的权威。
-
-createOperationNodeType(manifest, schemas, operation) 保留已有普通操作适配。编译产物接收泛型 State，CompileContext 读取明确输入并写回该节点的 State 增量；普通操作只收到 inputs / config 及独立 RunnableConfig。当前只有 WorkflowState 的核心方向，没有最终 State / RuntimeValue 或 Binding 求值器，也没有完整 DSL Compiler，详见 [WorkflowState 边界](workflow-state.md)。
-
-Definition / Preset 保留原始 JSON 配置，Schema 转换和默认值不回写定义，防止编译、应用和执行间累积 transform。普通操作不重试、不更换插件；异常直接传播，LangGraph interrupt 控制异常不能记为普通 failed。节点只编译自身函数，不取得 Graph builder、修改其他节点或添加全图边。
+NodeExecutor 的职责与 Codec、Resolver、内容服务和 NodeRunRecorder 端口见 [数据模型](data-model.md)。这些执行服务当前只有接口；普通节点只知道业务输入、配置和调用上下文，不知道上下游、存储实现或 Checkpoint。
 
 ## Preset 与 NodeRun
 
-Preset 是所属 type / typeVersion 的配置模板，不是新的 Runtime 身份。applyNodePreset 检查类型版本、合并模板配置和实例覆盖并校验，不修改原对象、不运行节点，也不改变 Registry 查找。相近业务复用运行机制，不为剧本、广告文案等名称复制执行器。
+Preset 是所属 type / typeVersion 的配置模板，不是 Runtime 身份。applyNodePreset 检查归属、合并模板与实例覆盖，不执行节点。剧本、广告、口播等可复用机制，不按业务名称复制 Executor。
 
-NodeRun 契约保存 workflowRunId、nodeId、必填正整数 attempt、可选 inputSnapshot / outputSnapshot、结构化错误和时间，以及八种业务状态。快照是 JSON record，不是最终 RuntimeValue，也不保证大小、引用或脱敏策略；attempt 不在 Schema 中分配，不能把每次节点重入自动计为新 attempt。
-
-State outputs 只保留节点当前有效结果，执行历史由未来 NodeRun Store 承担；同 nodeId 的并发分支还需明确额外身份与汇总规则。Run / NodeRun 数据库、权限及投影一致性尚未实现。运行恢复使用明确的 Run.threadId、原不可变版本及兼容编译实现，不能从 Run.id 推断 thread。详细记录与 State 边界集中见 [WorkflowState](workflow-state.md)。
+NodeRun 契约包含 attempt、可选输入输出快照、八种状态、结构化错误和时间。它是业务历史，不驱动调度；运行服务、持久化及投影一致性尚未接入。State 只保存当前有效 RuntimeValue 输出，详细分工见 [WorkflowState](workflow-state.md)。
 
 ## 视频领域能力与厂商边界
 
-图生视频、合成、字幕、抽帧等可以是专业领域能力，保持契约明确且不绑定单一厂商。capabilities 目前只声明需求，不提供 Resolver、自动 Routing、模型或凭证选择。当前生产 Registry 为空，没有可调用的 LLM / 视频节点或生产 Preset 目录；前端展示与测试类型不代表真实生成能力。
+视频领域类型可以专业化，外部能力通过用户明确选择的受信任插件接入，不将节点与单一供应商绑定。当前没有生产模型节点、插件选择或真实生成能力。

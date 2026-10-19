@@ -6,7 +6,7 @@ import { Controller, Get, Header, Inject } from '@nestjs/common';
 export class NodeTypesController {
   constructor(
     @Inject(NodeRegistry)
-    private readonly registry: NodeRegistry<object, object>,
+    private readonly registry: NodeRegistry,
   ) {}
 
   @Get()

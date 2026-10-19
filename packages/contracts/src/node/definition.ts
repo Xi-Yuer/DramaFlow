@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { contentIdentifierSchema } from '../data/reference.js';
 import { nodeTypeIdSchema, nodeTypeVersionSchema } from './manifest.js';
 import { workflowIdentifierSchema, workflowPortNameSchema } from '../workflow/metadata.js';
 
@@ -18,9 +19,13 @@ export const workflowInputBindingSchema = z
   .object({ type: z.literal('workflow_input'), key: workflowPortNameSchema })
   .strict();
 
-// 只声明资产标识；不读取资产、不检查权限或构造媒体运行值。
+// 固定资产身份与版本；不读取资产、不检查权限或构造媒体运行值。
 export const assetBindingSchema = z
-  .object({ type: z.literal('asset'), assetId: workflowIdentifierSchema })
+  .object({
+    type: z.literal('asset'),
+    assetId: contentIdentifierSchema,
+    versionId: contentIdentifierSchema,
+  })
   .strict();
 
 export const inputBindingSchema = z.discriminatedUnion('type', [
@@ -107,5 +112,6 @@ export type InputBinding = z.infer<typeof inputBindingSchema>;
 export type NodeDefinition = z.infer<typeof nodeDefinitionSchema>;
 export type ControlEdgeDefinition = z.infer<typeof controlEdgeDefinitionSchema>;
 export type NodePreset = z.infer<typeof nodePresetSchema>;
+export type NodeRunError = z.infer<typeof nodeRunErrorSchema>;
 export type NodeRun = z.infer<typeof nodeRunSchema>;
 export type NodeRunStatus = z.infer<typeof nodeRunStatusSchema>;

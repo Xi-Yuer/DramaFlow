@@ -54,22 +54,25 @@ const metadataIcons = new Map([
   ...Object.entries(nodeIcons),
 ]);
 
-const dataTypeNames = {
+const dataTypeNames: Record<string, string> = {
   any: '任意',
   string: '文本',
   number: '数字',
   boolean: '布尔',
-  json: 'JSON',
-  image: '图片',
-  video: '视频',
-  audio: '音频',
-  file: '文件',
+  null: '空值',
+  'system.json': 'JSON',
+  'media.image': '图片',
+  'media.video': '视频',
+  'media.audio': '音频',
+  'media.file': '文件',
+  'media.document': '文档',
 };
-
-function dataTypeName(dataType: DataType): string {
-  if (dataType.kind === 'array') return `${dataTypeName(dataType.item)}[]`;
-  if (dataType.kind === 'domain') return dataType.name;
-  return dataTypeNames[dataType.kind];
+function dataTypeName(type: DataType): string {
+  if (type.kind === 'any') return dataTypeNames.any!;
+  if (type.kind === 'array') return `(${dataTypeName(type.itemType)})[]`;
+  if (type.kind === 'object') return '结构化对象';
+  if (type.kind === 'union') return type.types.map(dataTypeName).join(' | ');
+  return dataTypeNames[type.name] ?? type.name;
 }
 
 function configSummary(value: unknown) {

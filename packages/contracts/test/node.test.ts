@@ -22,7 +22,7 @@ function node() {
       characters: { type: 'connection', nodeId: 'characters', outputKey: 'items' },
       style: { type: 'constant', value: '黑白' },
       novel: { type: 'workflow_input', key: 'novel' },
-      reference: { type: 'asset', assetId: 'unread-asset' },
+      reference: { type: 'asset', assetId: 'unread-asset', versionId: 'asset-version-1' },
     },
     config: { prompt: '生成分镜', temperature: 0.5 },
     ui: { position: { x: 100, y: -50 } },
@@ -33,7 +33,11 @@ describe('Node 定义与绑定协议', () => {
   it('保存多个明确上游、配置与布局，类型标识不预设节点目录', () => {
     const parsed = nodeDefinitionSchema.parse({ ...node(), type: 'video.image_to_video' });
     expect(Object.keys(parsed.inputs)).toHaveLength(5);
-    expect(parsed.inputs.reference).toEqual({ type: 'asset', assetId: 'unread-asset' });
+    expect(parsed.inputs.reference).toEqual({
+      type: 'asset',
+      assetId: 'unread-asset',
+      versionId: 'asset-version-1',
+    });
     expect(parsed.type).toBe('video.image_to_video');
     expect(parsed.typeVersion).toBe(1);
     expect(parsed.ui?.position).toEqual({ x: 100, y: -50 });
@@ -69,9 +73,16 @@ describe('Node 定义与绑定协议', () => {
     expect(
       inputBindingSchema.parse({ type: 'constant', value: { nested: [null, false, 0, ''] } }),
     ).toEqual({ type: 'constant', value: { nested: [null, false, 0, ''] } });
-    expect(inputBindingSchema.parse({ type: 'asset', assetId: 'not-loaded' })).toEqual({
+    expect(
+      inputBindingSchema.parse({
+        type: 'asset',
+        assetId: 'not-loaded',
+        versionId: 'asset-version-1',
+      }),
+    ).toEqual({
       type: 'asset',
       assetId: 'not-loaded',
+      versionId: 'asset-version-1',
     });
     for (const binding of [
       { type: 'constant', value: undefined },
@@ -80,8 +91,8 @@ describe('Node 定义与绑定协议', () => {
       { type: 'constant', value: Infinity },
       { type: 'connection', nodeId: 'script', output: 'text' },
       { type: 'workflow_input', key: 'bad.key' },
-      { type: 'asset', assetId: '' },
-      { type: 'asset', assetId: 'a1', url: 'local://asset' },
+      { type: 'asset', assetId: '', versionId: 'asset-version-1' },
+      { type: 'asset', assetId: 'a1', versionId: 'asset-version-1', url: 'local://asset' },
       { type: 'expression', expression: 'state.x' },
     ])
       expect(inputBindingSchema.safeParse(binding).success).toBe(false);

@@ -12,7 +12,7 @@
 
 节点类型开发对照 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。分别验证纯 JSON Manifest 的配置类型 / 默认值、服务端三组 Zod 与声明字段一致、精确类型版本注册以及 listManifests 的白名单与数据隔离。Preset 只测试配置模板行为，不作为 Registry 身份；保留 transform 和默认值不回写定义的回归。
 
-正式 WorkflowDefinition 测试检查四类 Binding、引用、自连接及控制 / 数据联合 DAG；通用 factory 继续用独立自定义 Schema 测试，不强加正式 Node 协议。静态成功不证明端口存在、真实值有效或资产可访问，assetId 只是引用声明。
+正式 WorkflowDefinition 测试检查四类 Binding、引用、自连接及控制 / 数据联合 DAG；通用 factory 继续用独立自定义 Schema 测试，不强加正式 Node 协议。静态成功不证明端口存在、真实值有效或资产可访问，assetId / versionId 只是明确版本的引用声明。
 
 React Flow 测试检查 data / control 边派生、按 Manifest 校验端口和静态类型后的单目标绑定更新、过期断连不误删、临时字段剔除、类型版本匹配与 GenericWorkflowNode 的 Handle / 不可用状态。目录 API 使用真实默认鉴权与 no-store，前端处理加载、错误与空态；生产 Registry 为空，不用假类型填充。实际画布尚无添加、图编辑与工作流保存，项目保存继续只处理名称、视口和 revision。
 
@@ -52,3 +52,7 @@ React Flow 测试检查 data / control 边派生、按 Manifest 校验端口和�
 2. 原地替换过时方案和状态，合并重复内容；不再适用且没有独立价值的文档直接删除。同步修复导航、相对链接与锚点引用，不为保留旧文本增加兼容说明或另建一套并行方案。
 3. 历史过程交给 Git 追溯，不把逐轮交付记录、本机数据数量或一次性操作结果堆入长期指南。仍影响部署的数据变更范围、必要操作与风险继续保留；确有必要保留的决策背景明确标注历史用途及当前结论。
 4. 检查变更文档的格式、链接和状态一致性，在交付说明中简述更新、合并或删除的内容以及实际检查结果。不要把未执行的验证写成已通过。
+
+## 定向验证范围
+
+按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；Codec / Resolver / Executor 的接口不代表已运行整条管线。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。

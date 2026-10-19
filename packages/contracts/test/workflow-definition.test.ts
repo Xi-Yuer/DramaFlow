@@ -19,18 +19,22 @@ function node(id: string, inputs: NodeDefinition['inputs'] = {}): NodeDefinition
 
 function definition(): WorkflowDefinition {
   return {
-    inputs: [{ name: 'novel', type: { kind: 'string' } }],
+    inputs: [{ name: 'novel', type: { kind: 'primitive', name: 'string' } }],
     nodes: [
       node('a', { novel: { type: 'workflow_input', key: 'novel' } }),
       node('b', {
         text: { type: 'connection', nodeId: 'a', outputKey: 'text' },
-        reference: { type: 'asset', assetId: 'not-loaded' },
+        reference: { type: 'asset', assetId: 'not-loaded', versionId: 'asset-version-1' },
         count: { type: 'constant', value: 0 },
       }),
     ],
     edges: [{ id: 'control-1', sourceNodeId: 'a', targetNodeId: 'b' }],
     outputs: [
-      { name: 'text', type: { kind: 'string' }, source: { nodeId: 'b', outputKey: 'text' } },
+      {
+        name: 'text',
+        type: { kind: 'primitive', name: 'string' },
+        source: { nodeId: 'b', outputKey: 'text' },
+      },
     ],
   };
 }
@@ -141,7 +145,7 @@ describe('正式 WorkflowDefinition 静态校验', () => {
     source.outputs = [
       {
         name: 'text',
-        type: { kind: 'string' },
+        type: { kind: 'primitive', name: 'string' },
         source: { nodeId: 'b', outputKey: 'unknownResult' },
       },
     ];
@@ -160,15 +164,15 @@ describe('正式 WorkflowDefinition 静态校验', () => {
       { nodes: [node('a'), node('a'), node('b')] },
       {
         inputs: [
-          { name: 'novel', type: { kind: 'string' } },
-          { name: 'novel', type: { kind: 'string' } },
+          { name: 'novel', type: { kind: 'primitive', name: 'string' } },
+          { name: 'novel', type: { kind: 'primitive', name: 'string' } },
         ],
       },
       {
         outputs: [
           {
             name: 'text',
-            type: { kind: 'string' },
+            type: { kind: 'primitive', name: 'string' },
             source: { nodeId: 'missing', outputKey: 'text' },
           },
         ],

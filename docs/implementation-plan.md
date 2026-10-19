@@ -4,51 +4,49 @@
 
 ## 当前阶段
 
-2026-10-19：① 平台、② Workflow、③ Node 已有基础模型与实现；④ 已确定四类 Binding、控制 / 数据分离，以及 [WorkflowState 核心边界](workflow-state.md)：run / inputs 不可变、outputs 当前有效值与历史分离、variables 显式、execution 最小、存储分工和分支局部数据。
+2026-10-19：平台、Workflow 与 Node 基础已有实现；数据语义与承载已在 [数据模型](data-model.md) 明确。正式 DataType、RuntimeValue、版本化内容引用、Artifact / Asset 协议和类型 Registry 已实施。普通 NodeType 从 compile 改为 execute，action 编译包装调用统一 Executor 接口。
 
-运行记录契约包含独立 threadId、NodeRun 正整数 attempt 与可选 inputSnapshot / outputSnapshot。Run / NodeRun 持久化暂缓，Workflow 版本保存、权限、分支身份及投影一致性尚未定；JSON 快照不是最终 RuntimeValue，也未执行大小、内容引用或脱敏策略。实际代码能力统一见 [当前架构](architecture.md)。
+Codec、BindingResolver、NodeExecutor、内容 Store 与 NodeRunRecorder 已定义服务契约，尚未实现生产管线、大小预算、权限解析和业务持久化。State.outputs 已正式采用 RuntimeValue；生产 LangGraph 通道与 reducer 仍待 Graph Model 核定。项目保存与空节点目录保持当前边界。
 
-**下一步先确定 DataType + RuntimeValue + Reference + Domain Object，再完成 State、Binding Resolver 和完整 Compiler。** 不导出最终 State，不创建孤立空表或提前接入运行服务；生产目录仍为空，项目保存协议不变。
+**下一步是 Workflow Graph Model：先确定数据 / 控制边、Handle、激活依赖、Branch、Join 到 LangGraph 的映射，再实施完整 Compiler 与运行服务。** 当前 ControlEdge 是最小草案，不将它视为最终控制协议，不提前实现 Plugin、Batch 或生成流程。
 
 本文件是当前阶段、下一步与待决策项的唯一维护入口；推进时原地修订，不堆叠旧计划或逐轮交付流水。文档维护方式见 [开发指南](development.md#文档维护)。
 
 ## 设计顺序
 
-| 顺序 | 议题                                      | 本步需要回答的问题                               | 状态                             |
-| ---- | ----------------------------------------- | ------------------------------------------------ | -------------------------------- |
-| ①    | 平台是什么                                | 平台定位、一级概念、领域层与执行底座             | 已记录顶层决策                   |
-| ②    | Workflow 工作流模型                       | 静态定义、版本、输入输出及 WorkflowRun           | 已确定边界并实施基础库           |
-| ③    | Node 节点模型                             | Manifest、服务端实现、实例、端口、版本与编译边界 | 已实施基础设施与目录接入         |
-| ④    | State / 数据流模型                        | 单次状态、绑定求值、结果传递与并行隔离           | 核心边界已定，下一步统一值与引用 |
-| ⑤    | Runtime 执行模型                          | LangGraph 编译与服务接入、持久化、恢复及事件投影 | 待逐步设计                       |
-| ⑥    | Tool 工具体系                             | 可调用操作、调用契约、权限及 Node / Agent 关系   | 待逐步设计                       |
-| ⑦    | Plugin 外部能力体系                       | 能力声明、模型、凭证、版本与供应商适配           | 待逐步设计                       |
-| ⑧    | Middleware 中间件体系                     | 日志、权限、成本、重试的介入边界                 | 待逐步设计                       |
-| ⑨    | Human Review / Interrupt 人工介入         | 暂停、确认、恢复与生成副作用边界                 | 待逐步设计                       |
-| ⑩    | Asset 资产体系                            | 生产资料、媒体引用、版本、归属与生命周期         | 待逐步设计                       |
-| ⑪    | Batch / Parallel / SubWorkflow 长任务体系 | 显式批量、并行、结果收集及子流程生命周期         | 待逐步设计                       |
-| ⑫    | Agent 智能体体系                          | 模型、工具、上下文与人工确认边界                 | 待逐步设计                       |
-| ⑬    | 漫剧领域节点与模板                        | 在已确定底座上表达漫剧生产与领域资料             | 待逐步设计                       |
-| ⑭    | 广告 / 产品 / 口播等扩展                  | 复用底座并补充领域节点和模板                     | 待逐步设计                       |
+| 顺序 | 议题                                      | 本步需要回答的问题                               | 状态                                |
+| ---- | ----------------------------------------- | ------------------------------------------------ | ----------------------------------- |
+| ①    | 平台是什么                                | 平台定位、一级概念、领域层与执行底座             | 已记录顶层决策                      |
+| ②    | Workflow 工作流模型                       | 静态定义、版本、输入输出及 WorkflowRun           | 已确定边界并实施基础库              |
+| ③    | Node 节点模型                             | Manifest、服务端实现、实例、端口、版本与编译边界 | 已实施基础设施与目录接入            |
+| ④    | State / 数据流模型                        | 单次状态、绑定求值、结果传递与并行隔离           | 值协议已实施，下一步确定 Graph 映射 |
+| ⑤    | Runtime 执行模型                          | LangGraph 编译与服务接入、持久化、恢复及事件投影 | 待逐步设计                          |
+| ⑥    | Tool 工具体系                             | 可调用操作、调用契约、权限及 Node / Agent 关系   | 待逐步设计                          |
+| ⑦    | Plugin 外部能力体系                       | 能力声明、模型、凭证、版本与供应商适配           | 待逐步设计                          |
+| ⑧    | Middleware 中间件体系                     | 日志、权限、成本、重试的介入边界                 | 待逐步设计                          |
+| ⑨    | Human Review / Interrupt 人工介入         | 暂停、确认、恢复与生成副作用边界                 | 待逐步设计                          |
+| ⑩    | Asset 资产体系                            | 生产资料、媒体引用、版本、归属与生命周期         | 待逐步设计                          |
+| ⑪    | Batch / Parallel / SubWorkflow 长任务体系 | 显式批量、并行、结果收集及子流程生命周期         | 待逐步设计                          |
+| ⑫    | Agent 智能体体系                          | 模型、工具、上下文与人工确认边界                 | 待逐步设计                          |
+| ⑬    | 漫剧领域节点与模板                        | 在已确定底座上表达漫剧生产与领域资料             | 待逐步设计                          |
+| ⑭    | 广告 / 产品 / 口播等扩展                  | 复用底座并补充领域节点和模板                     | 待逐步设计                          |
 
 这是设计顺序，不要求逐个建设相互脱离的子系统；已经明确且能独立验证的内容同步落到代码。外部生成涉及的 Plugin、Asset、凭证和安全策略不能用占位实现跨过。后续路线不构成一次性实施授权。
 
 Workflow 的可组合性与固定被调用版本原则已在 [Workflow 模型](workflow-model.md#workflow-组合与-subworkflow-边界) 确定。第 ⑪ 步继续细化父子运行与批量生命周期，不授权任意循环、递归调用或项目下多个独立画布 / 工作流。
 
-## 下一步：DataType / RuntimeValue / Reference / Domain Object
+## 下一步：Workflow Graph Model
 
-State 的职责与结构方向已确定，集中维护在 [WorkflowState 边界](workflow-state.md)。先解决值和引用的两个维度，再将它们应用到最终 Schema、reducer 与执行适配：
+数据语义与承载的确定规则集中在 [数据模型](data-model.md)，状态职责见 [WorkflowState](workflow-state.md)。下一步明确以下问题，再接入整图编译：
 
-1. DataType 如何表达 Image、Character、Script、Shot[] 等语义，RuntimeValue 如何独立表达 inline / reference 承载，避免把 asset_ref 当作语义类型？
-2. 哪些小型值与领域元数据可以内联，哪些大型持久内容需要引用？Asset、Domain Object / Entity、Artifact 的身份、结构、生命周期如何区分？
-3. Reference 怎样固定版本、执行权限与解析内容；URL 怎样仅作为读取入口？现有 AssetBinding 只有 assetId，不能视为已经完成版本固定或资产读取。
-4. Node Input / Output、四类 Binding 与真实 Zod 值校验怎样共享同一约定；JSON record、DataType.any、快照和最终 RuntimeValue 各承担什么范围？
-5. 引用和领域对象明确后，怎样完成 State 的输出身份、同节点并发冲突、Send 局部输入及各通道 reducer，而不依赖更新顺序或隐式全局变量？
-6. 怎样为快照、Checkpoint、大文本与媒体定义大小、引用、安全和审计策略，并保持业务记录、状态投影与外部副作用一致？
+1. connection 数据依赖是否同时提供执行激活，何时需要额外 ControlEdge；数据与控制怎样避免双重调度或歧义？
+2. React Flow 的 Data / Control Handle 与 Edge 如何保存，条件路由的 Branch 身份、未选中分支和 skipped 如何表达？
+3. 静态并行、多上游、Join、可选输入和失败分支怎样映射 LangGraph fan-in，怎样确定等待哪些输入？
+4. Send 局部状态与结果身份如何隔离，相同 nodeId 的并发结果如何收集；哪些 reducer、命名空间和更新规则必须明确？
+5. 控制、交互和复合结构分别需要哪些 CompilationStrategy；Interrupt / Resume、SubGraph 如何保留版本、权限及副作用边界？
+6. 图校验、运行上下文、NodeRun、Artifact、Codec 与引用授权怎样组装成真实服务，怎样限制 Checkpoint 和内联值大小？
 
-本轮 asset_ref 示例不是最终协议；图片 / 视频版本化引用约束继续有效。审核回改示例不授权任意循环。State 只保存当前有效值，完整历史与审核审计由后续 Store 承担，不能从 Checkpoint 直接替代产品记录。
-
-之后再实现 Binding Resolver、最终 WorkflowState 和整图 Compiler；Plugin Resolver、Tool、Agent、Middleware、Batch、HumanReview、SubWorkflow 与生产 Run Store 继续按对应范围推进。调度、Checkpoint、Interrupt / Resume 均复用 LangGraph，不新增第二套执行状态机。
+不通过平台 ready 轮询或第二套状态机解决这些问题；继续使用 LangGraph 调度、Checkpoint、Send 和 Interrupt。不授权任意循环或项目下多个独立画布。现有 ControlEdge 可随明确 Graph Model 调整，不因开发期草案而添加兼容层。
 
 ## 从设计进入代码
 

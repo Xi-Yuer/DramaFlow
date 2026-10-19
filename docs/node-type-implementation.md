@@ -1,64 +1,31 @@
-# NodeType Manifest 与服务端实现
+# 节点类型实施说明
 
-节点体系分为纯 JSON 共享定义、服务端实现与 React Flow 编辑视图。本文维护 Manifest 与后端类型的边界，实例和绑定关系见 [Node 模型](node-model.md)，实际接入见 [当前架构](architecture.md)。
+NodeType 负责业务 execute，平台负责统一编译包装。节点元数据、数据值与运行服务的完整边界分别见 [Node 模型](node-model.md)、[数据模型](data-model.md) 与 [Runtime](runtime-architecture.md)。
 
-## 公开 Manifest
+## 共享说明书
 
-| 字段             | 职责                              | 当前约束                                                              |
-| ---------------- | --------------------------------- | --------------------------------------------------------------------- |
-| type / version   | 稳定类型身份与正整数版本          | 通过实例 type / typeVersion 精确引用                                  |
-| metadata         | name、description、category、icon | category 仅 input / ai / image / video / audio / flow / data / output |
-| inputs / outputs | 可见端口                          | key、name、可选 description、DataType，输入可声明 required            |
-| config           | 执行配置字段数组                  | string / number / boolean / select 四类                               |
-| capabilities     | 所需能力类型                      | 可选、无重复，不绑定供应商                                            |
-| ui               | 节点及输入的编辑提示              | 可选 color / inputs；配置控件只在 config[].ui                         |
+NodeTypeManifest 保存 type、version、必填 executionKind、metadata、输入输出端口、config 字段数组，以及可选 capabilities / ui。executionKind 区分 action / control / composite / interaction，不等于 UI category。
 
-Manifest 全部字段可 JSON 序列化，不含 Zod、JSON Schema、compile、实际参数值、服务端连接或密钥。端口与字段 key 发布后保持稳定，修改契约需明确类型版本；展示名称可调整。端口按方向检查唯一，配置 key 独立检查唯一。
+端口使用 primitive / named / array / object / union / any 描述。输入可声明 required；集合用 array.itemType，没有 multiple。FieldUI 只描述编辑方式，数值范围和配置默认值以对应字段声明为准。输入 UI 必须引用现有端口。
 
-配置默认值按字段类型校验；number 的 min / max 有效且默认值在范围内，select 选项值唯一且默认值属于选项。FieldUI 仅有受控 component 与可选 placeholder，slider 的数值边界来自对应 number 配置，不另存第二份范围。UI 输入引用必须属于输入端口。
+Manifest 与 DataTypeManifest 都可以 JSON 往返，不携带 Zod、execute 或 Schema 实例。媒体类型使用 media.image 等名字，不再给每种领域类型添加核心 kind。
 
-端口不包含默认值；用户固定输入通过 constant Binding 表达。配置默认值可以公开并供后续编辑初始化参考，当前不自动注入 NodeDefinition 或 LangGraph State。一个端口对应一条绑定，多来源聚合不在 Manifest 中声明。
+## 服务端实现
 
-## DataType 与真实值
+NodeType.execute(input, config, context) 只处理业务。NodeRegistry 按 manifest.type / manifest.version 精确注册与查找，保留实现的 this 依赖并固定 Manifest。getAction 拒绝控制、交互或复合声明；这些声明由独立编译策略处理，不伪装成普通操作。
 
-DataType 是稳定类型说明，包含 any、json、file、基础值、媒体、domain 和递归 array；不扩展 Union、Tuple、继承或复杂泛型。只有目标端口为 any 时接受其他类型，any 来源不能接到具体端口。json 不自动吸收其他基础种类，file 不作为媒体基类；领域名称相同、数组元素递归匹配。不做隐式转换，真实值仍用 Zod 校验。
+createOperationNodeType 仅组合 Manifest、三组 Zod 与业务 operation，返回 execute 实现，不生成 LangGraph 节点。invokeNodeOperation 仍是独立真实值校验工具；它不是另一套节点扩展接口或调度器。定义和 Preset 保留原始 JSON 配置，不把 transform / 默认值回写后再次累积转换。
 
-image / video / audio / file 声明不提供媒体读取或版本化 Asset 契约。asset Binding 目前仅有 assetId，不能由编辑器自行拼接 URL 或推断资产版本；资产读取、授权和版本解析尚未实现。
+NodeCompilationStrategy 接收节点、说明书、统一 Executor、执行上下文工厂及 addNode 边界。action 策略只添加一个调用 Executor 的函数，不接管边、暂停、并发或资产写入；结构、交互等策略及完整 WorkflowCompiler 待下一步设计。
 
-## 服务端 NodeType
+## 目录 API 与前端
 
-```text
-NodeTypeManifest（公开 JSON）
-+ inputSchema / outputSchema / configSchema（服务端 Zod）
-+ compile（仅生成本节点的 LangGraph 函数）
-    ↓
-NodeType
-    ↓ NodeRegistry.register / get(type, version)
-受信任的类型版本
-```
+GET /api/v1/workflow/node-types 默认认证，no-store。生产 Registry 仍为空，没有占位 LLM 或视频类型。目录查询与连线共用唯一性校验，不按数组顺序选择冲突的 type / version。
 
-注册时验证 Manifest，并用 assertNodeSchemas 检查端口及配置字段集合和公开默认值；Zod 保留完整复杂约束，不通过推断 Manifest 生成执行校验器。listManifests 只返回独立白名单 JSON，不能把完整后端对象发给浏览器。
+GenericWorkflowNode 按精确 Manifest 生成 Handle，显示正式 DataType 的中文摘要；缺少匹配版本显示不可用。React Flow renderer 已注册，项目仍只保存名称、视口和 revision，没有开放图编辑保存或运行按钮。
 
-Preset 仅是配置模板。它可以保留实例元数据，不能加入 Registry key，也不能让同一 type / version 的运行契约因 Preset 名称隐式变化。
+## 实施边界
 
-createOperationNodeType 保留泛型普通操作适配与已有真实 LangGraph 测试。CompileContext 的 State / Update 尚未具体化，不解析四类 Binding，不获取全图构建器。WorkflowState 已确定核心分区与存储边界；仍须先统一 DataType / RuntimeValue / Reference / Domain Object，再完成最终 State 与 Workflow Compiler，见 [State 边界](workflow-state.md)。If / Batch 等控制扩展另行设计。
+数据类型校验与共享兼容算法已实现；RuntimeValue、版本化引用、Artifact / Asset、State 及 Codec / Resolver / Executor / Store / Recorder 已有类型或协议。具体 Runtime、内容持久化、大小预算、权限解析与审计投影尚未接入，不使用测试替身提供生产降级。
 
-## 目录 API 与通用节点
-
-GET /api/v1/workflow/node-types 默认经真实 AuthGuard 认证，并设置 Cache-Control: no-store。NodeTypesModule 供服务端注册受信任类型，生产 Registry 当前为空，返回真实空数组，不注册占位 LLM / 视频节点。
-
-前端边界校验 Manifest 列表并拒绝重复类型版本。GenericWorkflowNode 按 `(type, typeVersion)` 精确查找声明，自动生成输入输出 Handle、显示配置摘要；缺少对应版本时显示不可用。Handle 使用端口 key，图标来自受信任映射，不执行远程 UI 代码。这复用 [React Flow 原生 Handles](https://reactflow.dev/learn/customization/handles)。
-
-画布已注册通用 renderer 并查询目录，显示加载、失败与真实空态；当前没有添加节点、完整配置面板、图编辑或工作流保存。项目保存仍只有名称、视口和 revision，不保存节点或控制边。
-
-## 静态对照与下一步
-
-| 维度       | LLM 示例                 | 图生视频示例                         |
-| ---------- | ------------------------ | ------------------------------------ |
-| 类型 ID    | ai.llm                   | video.image_to_video                 |
-| 输入方向   | prompt、明确选择的上下文 | image、prompt、可动态传入的 duration |
-| 输出方向   | text                     | video                                |
-| 运行值依赖 | 显式文本 Zod             | 尚需明确媒体 / Asset 运行值协议      |
-| 外部能力   | 受信任文本生成插件       | 受信任图生视频插件                   |
-
-上述是静态职责对照，没有对应生产注册。下一步先确定 DataType / RuntimeValue / Reference / Domain Object，再完成 State、Binding Resolver 与完整 Compiler；不能将 asset_ref 示例、JSON 快照或当前泛型适配当成最终值协议。Plugin Resolver、Tool、Agent、Middleware、Batch、HumanReview、SubWorkflow 与完整 Runtime 本轮不实施。
+下一步是 Workflow Graph Model：确定 Data / Control Edge、Handle、联合依赖、Branch、Join 与 LangGraph 映射；不先跳入 Plugin、Batch 或完整生成流程。当前 ControlEdge 只是最小草案，不增加需要未来补语义的字段。

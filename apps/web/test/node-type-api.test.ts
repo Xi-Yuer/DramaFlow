@@ -4,6 +4,7 @@ import { nodeTypeApi } from '../src/features/workflow/node-type-api';
 const manifest = {
   type: 'test.text',
   version: 1,
+  executionKind: 'action',
   metadata: { name: '文本样例', category: 'ai' },
   inputs: [],
   outputs: [],

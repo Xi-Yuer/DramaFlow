@@ -18,7 +18,7 @@ afterEach(async () => {
   app = undefined;
 });
 
-async function setup(registry?: NodeRegistry<object, object>) {
+async function setup(registry?: NodeRegistry) {
   // 只替换会话读取，保留真实全局 AuthGuard 与控制器路由。
   const requireSession = vi.fn(async () => ({ user: { role: 'user' } }));
   const builder = Test.createTestingModule({
@@ -42,7 +42,7 @@ async function setup(registry?: NodeRegistry<object, object>) {
   return {
     app,
     requireSession,
-    registry: module.get<NodeRegistry<object, object>>(NodeRegistry),
+    registry: module.get<NodeRegistry>(NodeRegistry),
   };
 }
 
@@ -74,30 +74,31 @@ describe('节点类型目录 API', () => {
     const manifest: NodeTypeManifest = {
       type: 'test.catalog',
       version: 1,
+      executionKind: 'action',
       metadata: { name: '测试节点', category: 'data' },
       inputs: [],
       outputs: [],
       config: [],
     };
-    const compile = vi.fn(() => async () => ({}));
+    const execute = vi.fn(async () => ({}));
     const nodeType = {
       manifest,
       configSchema: z.object({}),
       inputSchema: z.object({}),
       outputSchema: z.object({}),
-      compile,
+      execute,
       serverCredential: 'test-only-provider-key',
     };
-    const registry = new NodeRegistry<object, object>([nodeType]);
+    const registry = new NodeRegistry([nodeType]);
     const context = await setup(registry);
     const response = await request(context.app.getHttpServer())
       .get('/api/v1/workflow/node-types')
       .expect(200);
     expect(response.body).toEqual([manifest]);
     expect(JSON.stringify(response.body)).not.toMatch(
-      /configSchema|inputSchema|outputSchema|compile|serverCredential|test-only-provider-key/,
+      /configSchema|inputSchema|outputSchema|execute|serverCredential|test-only-provider-key/,
     );
-    expect(compile).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it('目录没有写入或执行接口', async () => {

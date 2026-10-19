@@ -1,6 +1,6 @@
 import {
   controlEdgeDefinitionSchema,
-  isDataTypeAssignable,
+  isTypeAssignable,
   nodeDefinitionSchema,
   nodeTypeManifestListSchema,
   workflowDefinitionSchema,
@@ -157,7 +157,7 @@ export function connectWorkflowNodes(
   if (!output) throw new Error('来源端口不存在');
   const inputPort = targetManifest.inputs.find((port) => port.key === connection.targetHandle);
   if (!inputPort) throw new Error('目标端口不存在');
-  if (!isDataTypeAssignable(output.dataType, inputPort.dataType)) {
+  if (!isTypeAssignable(output.dataType, inputPort.dataType)) {
     throw new Error('端口类型不兼容');
   }
   target.inputs[connection.targetHandle] = {
