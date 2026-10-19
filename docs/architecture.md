@@ -16,7 +16,7 @@ PostgreSQL/Prisma 保存身份、资料、凭证、会话、认证限流及基�
 
 worker 为独立 NestJS 应用上下文，只复用 infrastructure 模块，不引入 HTTP 认证模块，也不消费业务队列。plugins、context 保留空入口；LangGraph 节点编译适配已在基础库中验证，尚未接入 API / worker，LangChain 模型调用与供应商适配未实现。
 
-将来工作空间成员关系与平台角色分离，领域模块通过服务与契约协作；长期领域约束保留在 AGENTS.md，不表示相关功能已经交付。
+将来工作空间成员关系与平台角色分离，领域模块通过服务与契约协作；长期领域约束在对应专题文档维护，AGENTS.md 只保留简短规则与按需阅读入口，不表示相关功能已经交付。
 
 ## Workflow 基础库
 
@@ -29,36 +29,40 @@ worker 为独立 NestJS 应用上下文，只复用 infrastructure 模块，不�
 - `createWorkflowVersionSnapshot`：要求完整版本 Schema，校验后复制并递归冻结 JSON 快照，避免后续草稿或调用方修改影响该对象。
 - `assertWorkflowRunVersion`：检查运行绑定的版本身份及 Workflow 身份一致。
 
-这些函数不创建运行、调用插件或执行图。快照只保证内存对象隔离与只读，不替代发布权限、持久化不可变性或并发控制。运行状态是未来的业务投影，输入资产权限仍需由应用服务校验。完整 DataType、HTTP 发布和运行接口、数据库模型尚未实现；已有节点编译适配的范围见下文。
+这些函数不创建运行、调用插件或执行图。快照只保证内存对象隔离与只读，不替代发布权限、持久化不可变性或并发控制。运行状态是未来的业务投影，输入资产权限仍需由应用服务校验。HTTP 发布和运行接口、数据库模型及完整数据流语义尚未实现；DataType 与节点编译适配见下文。
 
 现有单元测试覆盖契约组合、边界校验、显式多结果收集、快照隔离及版本绑定；测试中的具体节点和类型 Schema 只用于测试，不作为生产适配器。
 
 ## Node 基础库
 
-`packages/contracts/src/node.ts` 已提供 NodeDefinition、InputBinding、带端口映射的 Edge、Preset、NodeRun 及八种节点状态 Schema。布局保存在 `ui.position`，不再接受顶层 `position`。绑定来源统一使用 `nodeId / outputKey`，同一目标输入禁止重复绑定；配置和运行值必须为 JSON，错误采用 code / message，时间采用 ISO 字符串。NodeRun 只校验记录结构，不处理状态转换或归属权限。
+`packages/contracts/src/node.ts` 已提供 NodeDefinition、InputBinding、带端口映射的 Edge、Preset、NodeRun 及八种节点状态 Schema。实例 / Preset 使用命名空间 type 和必填 typeVersion，布局保存在 `ui.position`，不接受顶层 `position`。绑定来源统一使用 `nodeId / outputKey`，同一目标输入禁止重复绑定；配置和运行值必须为 JSON，错误采用 code / message，时间采用 ISO 字符串。NodeRun 只校验记录结构，不处理状态转换或归属权限。
 
-`packages/contracts/src/node-type.ts` 提供 NodeTypeMetadata、纯数据 UI 字段描述与 NodeTypeManifest Schema。元数据包含 type、可选 preset、displayName、category 和 ui；UI 的图标、控件标识及选项不包含 React 组件或执行代码。manifest 的三个 Schema 字段保存 JSON Schema，不持有服务端 Zod 实例。
+`packages/contracts/src/data-type.ts` 提供纯 JSON DataType：string、number、boolean、image、video、audio、domain 和递归 array。它不生成媒体、领域资料或资产引用的运行校验器。workflow 的 isDataTypeAssignable 检查种类、domain 名称与数组元素结构，不做隐式转换，也不替代整图连线校验。
+
+`packages/contracts/src/node-type.ts` 提供 NodeTypeDeclaration、端口、metadata、能力需求和分离的 UI inputs / config。类型声明保存 type、version、metadata、inputs、outputs、可选 capabilities 与 ui；端口按方向拒绝重复 key，能力类型不可重复，UI 输入必须引用已声明端口。required / defaultValue / multiple 仅静态声明，不自动注入输入默认值或开放多连接。NodeTypeManifest 在声明上只增加配置 JSON Schema，不携带输入输出 Zod 或可执行代码。
 
 `packages/workflow/src/node.ts` 提供纯值契约 `NodeContract`、`NodeOperation` 类型和以下函数：
 
-- `parseNodeDefinition`：检查实例 type / preset 与有效契约匹配、绑定目标端口存在，以及配置满足具体 Schema。
+- `parseNodeDefinition`：检查实例 type / typeVersion / preset 与有效契约匹配、绑定目标端口存在，以及配置满足具体 Schema。
 - `applyNodePreset`：显式合并所选 Preset 配置和实例覆盖后校验，不修改原对象或执行任务。
 - `inputBindingFromEdge`：从完整端口映射提取数据绑定，不改变控制激活状态。
 - `invokeNodeOperation`：校验输入和配置后调用显式操作，再校验输出；业务参数只含 inputs / config，另行透传 LangChain RunnableConfig，拒绝额外字段和非 JSON 值，异常不自动重试。
 
 同一 Runtime type 可在不同 Preset 下使用不同有效输入输出契约。Node / Edge Schema 可以直接作为 `createWorkflowSchemas` 的显式参数，完整工作流发布仍需补齐引用、输出键、类型、联合依赖无环及 Preset 契约固定等校验。
 
-`packages/workflow/src/node-type.ts` 将 NodeContract 与元数据组合为完整 `NodeTypeDefinition`。`parseNodeTypeDefinition` 白名单复制元数据并检查 UI 字段属于配置契约；`createNodeTypeManifest` 使用 Zod 官方 JSON Schema 转换器，输入和配置采用 input 语义，输出采用 output 语义。转换使用独立空 metadata registry，避免全局 `.meta()` 进入 manifest；无法表示的 Schema 显式报错。Schema 默认值也属于公开数据，不能放密钥、模型或供应商实例；JSON Schema 无法表达的 refine 等约束仍由服务端验证。
+`packages/workflow/src/node-type.ts` 的 NodeTypeDefinition 是静态 NodeTypeDeclaration 加 configSchema，不继承内部 NodeContract。独立 NodeValueSchemas 提供 inputSchema / outputSchema；assertNodePortSchemas 比对字段名与端口 key 集合，不从 Zod 推断 DataType。parseNodeTypeDefinition 复制白名单声明并检查 ui.config 字段属于配置契约。
 
-`packages/workflow/src/compiler.ts` 已提供 `NodeType<State, Update>`、仅含 compile 的 `NodeCompiler`、`CompileContext`、`NodeRegistry` 和 `createOperationNodeType`。NodeType 统一持有 definition 与 compile；Registry 的 register / get / compile 使用 definition 的 type / preset 精确匹配，拒绝重复和未知类型，不隐式回退。普通操作工厂复用执行函数、校验并隔离实例配置，产物可直接加入真实 StateGraph；输入读取和 State 增量由 CompileContext 适配，没有预设平台 State 或完整绑定协议。Preset 保持场景配置，不复制执行器；控制与审核类型可直接使用原生 Command / interrupt。
+createNodeTypeManifest 输出静态声明及配置 JSON Schema，使用 Zod 原生转换器的 input 方向、独立空 metadata registry 和不可表示即失败策略。默认值、枚举及声明文本必须可公开；无法表达的 refine 等约束继续由服务端完整校验，不导出模型、插件或密钥。
+
+`packages/workflow/src/compiler.ts` 已提供 NodeType、仅含 compile 的 NodeCompiler、CompileContext、NodeRegistry 和 createOperationNodeType。NodeType 持有 definition、可选 preset 与 compile；Registry 按 `(type, version, preset)` 精确匹配，get 明确接收版本，不找最新版或隐式回退。普通操作工厂显式接收说明书、运行值 Schema 和 operation，组合内部 NodeContract 后进行操作校验。产物可直接加入真实 StateGraph；输入读取与 State 增量由 CompileContext 适配，没有预设完整 State 或 Binding。控制与审核类型可使用原生 Command / interrupt。
 
 `createWorkflowRunConfig` 校验 Run / Version 身份并将根 Run.id 绑定到 LangGraph thread_id，拒绝冲突 thread，保留调用方的并发、取消及其他配置。它不检查项目权限、加载版本、创建运行或选择 checkpointer。
 
-相关测试覆盖契约失败边界、配置转换与值隔离、类型注册、manifest 边界，以及原生图执行、interrupt / Command 恢复、thread 隔离和 Send / reducer。MemorySaver 和测试节点只用于测试，没有生产 LLM、HTTP、Code、视频节点或 Preset 目录；[节点类型实施拆解](node-type-implementation.md) 中的 LLMNode / ImageToVideo 仅作参考，不代表真实调用。完整 State / Binding、整图 Workflow Compiler、持久 checkpointer 和运行服务仍未接入，图调度和恢复继续交给 LangGraph。
+相关测试覆盖 DataType 与声明失败边界、结构兼容、精确版本注册、端口 / 值 Schema 字段一致性、UI 引用、配置转换、值隔离和 manifest，以及真实 LangGraph 执行、interrupt / Command 恢复、thread 隔离及 Send / reducer。MemorySaver 和测试节点仅用于测试；[NodeType 实施说明](node-type-implementation.md) 的 LLM / 图生视频仅作静态对照。完整 State / InputValue / Binding、整图 Compiler、生产节点、持久 checkpointer 和运行服务尚未接入。
 
 ## React Flow 数据适配
 
-`apps/web/src/features/workflow/react-flow-adapter.ts` 已提供 Node / Edge 双向白名单转换。React Flow `type` 固定为渲染器标识 `workflowNode`，Runtime 类型保存在 `data.nodeType`；inputs、config、preset 与 `ui.position` 显式转换。selected、dragging、measured 等临时状态不写回 DSL，缺少端口的临时连线不能导出为完整 Edge。
+`apps/web/src/features/workflow/react-flow-adapter.ts` 已提供 Node / Edge 双向白名单转换。React Flow type 固定为渲染器标识 workflowNode，领域类型 / 版本保存在 data.nodeType / data.typeVersion；inputs、config、preset 与 ui.position 显式转换。selected、dragging、measured 等临时状态不写回 DSL，缺少端口的临时连线不能导出为完整 Edge。
 
 转换函数尚未接入项目画布、保存协议或 API，也没有节点渲染器、表单生成器、节点目录或添加交互。当前项目页面继续显示空白画布。
 

@@ -4,3 +4,4 @@ export * from './node.js';
 export * from './compiler.js';
 export * from './run-config.js';
 export * from './node-type.js';
+export * from './data-type.js';

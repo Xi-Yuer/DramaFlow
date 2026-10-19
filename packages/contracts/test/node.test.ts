@@ -12,7 +12,8 @@ import {
 function node() {
   return {
     id: 'storyboard',
-    type: 'llm',
+    type: 'ai.llm',
+    typeVersion: 1,
     name: '生成分镜',
     preset: 'storyboard-generator',
     inputs: [
@@ -26,11 +27,24 @@ function node() {
 }
 
 describe('Node 定义与绑定协议', () => {
-  it('保存多个明确上游、配置与布局，类型字符串不预设节点目录', () => {
-    const parsed = nodeDefinitionSchema.parse({ ...node(), type: 'image_to_video' });
+  it('保存多个明确上游、配置与布局，类型标识不预设节点目录', () => {
+    const parsed = nodeDefinitionSchema.parse({ ...node(), type: 'video.image_to_video' });
     expect(parsed.inputs).toHaveLength(3);
-    expect(parsed.type).toBe('image_to_video');
+    expect(parsed.type).toBe('video.image_to_video');
+    expect(parsed.typeVersion).toBe(1);
     expect(parsed.ui?.position).toEqual({ x: 100, y: -50 });
+  });
+
+  it('要求命名空间类型与明确正整数版本，不猜测类型或版本', () => {
+    for (const value of [
+      { ...node(), type: 'llm' },
+      { ...node(), type: 'AI.llm' },
+      { ...node(), typeVersion: undefined },
+      { ...node(), typeVersion: 0 },
+      { ...node(), typeVersion: 1.5 },
+    ]) {
+      expect(nodeDefinitionSchema.safeParse(value).success).toBe(false);
+    }
   });
 
   it('拒绝同一输入端口被多个来源重复绑定', () => {
@@ -73,11 +87,14 @@ describe('Node 定义与绑定协议', () => {
   it('Preset 仅保存类型归属与显式配置，不保存可执行函数', () => {
     const preset = {
       id: 'storyboard-generator',
-      type: 'llm',
+      type: 'ai.llm',
+      typeVersion: 1,
       name: '生成分镜',
       config: { prompt: '分镜提示词' },
     };
     expect(nodePresetSchema.parse(preset)).toEqual(preset);
+    expect(nodePresetSchema.safeParse({ ...preset, typeVersion: undefined }).success).toBe(false);
+    expect(nodePresetSchema.safeParse({ ...preset, typeVersion: -1 }).success).toBe(false);
     expect(nodePresetSchema.safeParse({ ...preset, execute: () => ({}) }).success).toBe(false);
   });
 

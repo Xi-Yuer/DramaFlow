@@ -10,7 +10,8 @@ import {
 function definition() {
   return {
     id: 'storyboard',
-    type: 'llm',
+    type: 'ai.llm',
+    typeVersion: 1,
     name: '生成分镜',
     preset: 'storyboard-generator',
     inputs: [{ target: 'script', source: { nodeId: 'script', outputKey: 'text' } }],
@@ -33,7 +34,7 @@ describe('React Flow 节点协议适配', () => {
     const node = toReactFlowNode(input);
 
     expect(node.type).toBe('workflowNode');
-    expect(node.data.nodeType).toBe('llm');
+    expect(node.data.nodeType).toBe('ai.llm');
     expect(node.position).toEqual({ x: 120, y: -40 });
     expect(fromReactFlowNode(node)).toEqual(input);
   });
@@ -43,6 +44,7 @@ describe('React Flow 节点协议适配', () => {
     const input = {
       id: original.id,
       type: original.type,
+      typeVersion: original.typeVersion,
       name: original.name,
       inputs: original.inputs,
       config: original.config,

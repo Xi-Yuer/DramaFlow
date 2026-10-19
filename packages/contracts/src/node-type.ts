@@ -1,5 +1,45 @@
 import { z } from 'zod';
+import { dataTypeSchema } from './data-type.js';
 import { workflowIdentifierSchema, workflowPortNameSchema } from './workflow.js';
+
+export const nodeTypeIdSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/, '节点类型须使用稳定的英文命名空间标识');
+
+export const nodeTypeVersionSchema = z.number().int().positive();
+
+const portLabelSchema = z.string().trim().min(1).max(80);
+
+export const inputPortDefinitionSchema = z
+  .object({
+    key: workflowPortNameSchema,
+    name: portLabelSchema,
+    dataType: dataTypeSchema,
+    required: z.boolean().optional(),
+    multiple: z.boolean().optional(),
+    defaultValue: z.json().optional(),
+  })
+  .strict();
+
+export const outputPortDefinitionSchema = z
+  .object({
+    key: workflowPortNameSchema,
+    name: portLabelSchema,
+    dataType: dataTypeSchema,
+    multiple: z.boolean().optional(),
+  })
+  .strict();
+
+export const capabilityRequirementSchema = z.object({ type: nodeTypeIdSchema }).strict();
+
+export const nodeMetadataSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    description: z.string().max(500).optional(),
+    category: workflowIdentifierSchema,
+    icon: workflowIdentifierSchema.optional(),
+  })
+  .strict();
 
 const fieldLabel = {
   label: z.string().trim().min(1).max(80).optional(),
@@ -52,32 +92,73 @@ export const nodeFieldUISchema = z.discriminatedUnion('component', [
 
 export const nodeUISchema = z
   .object({
-    icon: workflowIdentifierSchema.optional(),
-    fields: z.record(workflowPortNameSchema, nodeFieldUISchema),
+    color: workflowIdentifierSchema.optional(),
+    inputs: z.record(workflowPortNameSchema, nodeFieldUISchema).optional(),
+    config: z.record(workflowPortNameSchema, nodeFieldUISchema).optional(),
   })
   .strict();
 
-export const nodeTypeMetadataSchema = z
+export const nodeTypeDeclarationSchema = z
   .object({
-    type: workflowIdentifierSchema,
-    preset: workflowIdentifierSchema.optional(),
-    displayName: z.string().trim().min(1).max(80),
-    category: workflowIdentifierSchema,
+    type: nodeTypeIdSchema,
+    version: nodeTypeVersionSchema,
+    metadata: nodeMetadataSchema,
+    inputs: z.array(inputPortDefinitionSchema),
+    outputs: z.array(outputPortDefinitionSchema),
+    capabilities: z.array(capabilityRequirementSchema).optional(),
     ui: nodeUISchema,
   })
+  .strict()
+  .superRefine((definition, context) => {
+    for (const direction of ['inputs', 'outputs'] as const) {
+      const keys = new Set<string>();
+      definition[direction].forEach((port, index) => {
+        if (keys.has(port.key)) {
+          context.addIssue({
+            code: 'custom',
+            path: [direction, index, 'key'],
+            message: '同一方向不能声明重复端口',
+          });
+        }
+        keys.add(port.key);
+      });
+    }
+
+    const capabilities = new Set<string>();
+    definition.capabilities?.forEach((capability, index) => {
+      if (capabilities.has(capability.type)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['capabilities', index, 'type'],
+          message: '不能重复声明同一能力类型',
+        });
+      }
+      capabilities.add(capability.type);
+    });
+
+    const inputKeys = new Set(definition.inputs.map((port) => port.key));
+    for (const key of Object.keys(definition.ui.inputs ?? {})) {
+      if (!inputKeys.has(key)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['ui', 'inputs', key],
+          message: 'UI 引用了未声明的输入端口',
+        });
+      }
+    }
+  });
+
+// 端口公开稳定的 DataType；仅配置使用服务端 Zod 官方转换生成的 JSON Schema。
+// 本协议不加载执行器，也不提供媒体或领域资料的运行值校验器。
+export const nodeTypeManifestSchema = nodeTypeDeclarationSchema
+  .safeExtend({ configSchema: z.record(z.string(), z.json()) })
   .strict();
 
-// JSON Schema 由服务端 Zod 官方转换器生成；本协议只校验可传输的 JSON 结构。
-// Schema 的语义、引用与端口兼容仍由后续数据模型及服务端契约负责。
-export const nodeTypeManifestSchema = nodeTypeMetadataSchema
-  .extend({
-    inputSchema: z.record(z.string(), z.json()),
-    outputSchema: z.record(z.string(), z.json()),
-    configSchema: z.record(z.string(), z.json()),
-  })
-  .strict();
-
+export type InputPortDefinition = z.infer<typeof inputPortDefinitionSchema>;
+export type OutputPortDefinition = z.infer<typeof outputPortDefinitionSchema>;
+export type CapabilityRequirement = z.infer<typeof capabilityRequirementSchema>;
+export type NodeMetadata = z.infer<typeof nodeMetadataSchema>;
 export type NodeFieldUI = z.infer<typeof nodeFieldUISchema>;
 export type NodeUI = z.infer<typeof nodeUISchema>;
-export type NodeTypeMetadata = z.infer<typeof nodeTypeMetadataSchema>;
+export type NodeTypeDeclaration = z.infer<typeof nodeTypeDeclarationSchema>;
 export type NodeTypeManifest = z.infer<typeof nodeTypeManifestSchema>;

@@ -2,6 +2,8 @@ import {
   edgeDefinitionSchema,
   nodeDefinitionSchema,
   nodePresetSchema,
+  nodeTypeIdSchema,
+  nodeTypeVersionSchema,
   workflowIdentifierSchema,
   type InputBinding,
   type NodeDefinition,
@@ -17,6 +19,7 @@ export interface NodeContract<
   ConfigSchema extends z.ZodObject = z.ZodObject,
 > {
   type: string;
+  version: number;
   preset?: string;
   inputSchema: InputSchema;
   outputSchema: OutputSchema;
@@ -31,7 +34,11 @@ export type NodeOperation<Inputs, Config> = (
 export class NodeContractError extends Error {
   constructor(
     public readonly code:
-      'contract_mismatch' | 'unknown_input' | 'preset_mismatch' | 'unknown_config_field',
+      | 'contract_mismatch'
+      | 'unknown_input'
+      | 'preset_mismatch'
+      | 'unknown_config_field'
+      | 'port_schema_mismatch',
     message: string,
   ) {
     super(message);
@@ -49,14 +56,19 @@ function parseRecord<Schema extends z.ZodObject>(schema: Schema, value: unknown)
 }
 
 function validateContractIdentity(contract: NodeContract): void {
-  workflowIdentifierSchema.parse(contract.type);
+  nodeTypeIdSchema.parse(contract.type);
+  nodeTypeVersionSchema.parse(contract.version);
   if (contract.preset !== undefined) workflowIdentifierSchema.parse(contract.preset);
 }
 
 export function parseNodeDefinition(contract: NodeContract, input: unknown): NodeDefinition {
   validateContractIdentity(contract);
   const node = nodeDefinitionSchema.parse(input);
-  if (node.type !== contract.type || node.preset !== contract.preset) {
+  if (
+    node.type !== contract.type ||
+    node.typeVersion !== contract.version ||
+    node.preset !== contract.preset
+  ) {
     throw new NodeContractError('contract_mismatch', '节点与所选类型 / Preset 契约不匹配');
   }
   for (const binding of node.inputs) {
@@ -78,7 +90,13 @@ export function applyNodePreset(
 ): NodeDefinition {
   const node = nodeDefinitionSchema.parse(input);
   const preset = nodePresetSchema.parse(presetInput);
-  if (node.type !== preset.type || contract.type !== preset.type || contract.preset !== preset.id) {
+  if (
+    node.type !== preset.type ||
+    node.typeVersion !== preset.typeVersion ||
+    contract.type !== preset.type ||
+    contract.version !== preset.typeVersion ||
+    contract.preset !== preset.id
+  ) {
     throw new NodeContractError('preset_mismatch', 'Preset 与节点类型或有效契约不匹配');
   }
   return parseNodeDefinition(contract, {

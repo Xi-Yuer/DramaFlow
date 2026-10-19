@@ -36,15 +36,15 @@ LangGraph Runtime
 
 Workflow Compiler 将已验证的领域 DSL 转为 LangGraph 构建器，LangGraph 的 `compile()` 生成可执行图；两者是不同层次。发布快照只冻结定义，不能隐式开始执行。平台负责权限、版本引用、联合依赖无环和输入输出契约检查，再把执行交给 LangGraph；原生图编译检查不能代替领域校验。[官方 Graph API](https://docs.langchain.com/oss/javascript/langgraph/graph-api) 说明了 State、节点、边与编译关系。
 
-NodeRegistry 注册受信任的完整 NodeType，由 definition 提供 type / preset 身份，以 register / get / compile 精确匹配；NodeCompiler 只声明 compile，不重复维护类型标识。不动态执行浏览器代码，也不在类型、Preset 或插件缺失时回退。相近业务通过 Preset 与有效契约复用执行机制，Preset 不复制执行器；视频领域能力可以专业化，编译器不与单一供应商绑定。
+NodeRegistry 注册受信任的 NodeType，按 definition 的 type / version 与注册对象的可选 preset 精确匹配；实例 / Preset 的 typeVersion 必须明确，get 不找最新版。NodeCompiler 只声明 compile，不重复维护类型身份。不动态执行浏览器代码，也不在类型、版本、Preset 或插件缺失时回退。相近业务通过 Preset 与有效契约复用执行机制；视频领域能力可以专业化，编译器不与单一供应商绑定。
 
 LangGraph 节点函数需要接收图 State，编译适配层因此可以读取 State、解析绑定并返回 State 更新。普通业务操作仍只收到自己的 `inputs / config`，不知道上下游节点或整个 State。控制、审核等 NodeCompiler 可以直接使用 LangGraph 原生 `Command`、条件路由或 `interrupt()`，不强制套进普通值操作接口。
 
-当前 `NodeType<State, Update>`、`NodeRegistry` 与 `createOperationNodeType` 为这条链提供基础接口。完整 NodeTypeDefinition 将 NodeContract 的服务端 Zod 与公开 metadata / UI 组合；`CompileContext.readInputs / writeOutputs` 是适配边界，没有预设完整 WorkflowState。`invokeNodeOperation` 只校验普通操作的输入、配置和输出，透传 LangChain runnable 配置，不负责 ready 判断、调度、暂停、恢复或重试。
+当前 NodeType、NodeRegistry 与 createOperationNodeType 为这条链提供基础接口。NodeTypeDefinition 是静态 NodeTypeDeclaration 加服务端 configSchema，端口使用 DataType；独立 NodeValueSchemas 提供输入输出 Zod，普通操作工厂组合内部 NodeContract，不从类型声明猜测真实值校验器。CompileContext.readInputs / writeOutputs 没有预设完整 WorkflowState；invokeNodeOperation 只校验操作输入、配置和输出，透传 runnable 配置，不负责 ready 判断、调度、暂停、恢复或重试。
 
-浏览器读取 `createNodeTypeManifest` 输出的白名单元数据、纯数据 UI 描述与 JSON Schema，不接收完整 NodeTypeDefinition 或 compile。输入与配置 Schema 按 input 语义转换，输出按 output 语义转换；不导出全局 `.meta()`，无法表示的 Schema 明确报错。默认值必须可以公开，服务端仍执行完整 Zod 约束；manifest 不包含厂商密钥、模型或插件实例。具体声明与实现拆解见 [Node 模型](node-model.md) 与 [节点类型实施拆解](node-type-implementation.md)。
+浏览器读取 createNodeTypeManifest 输出的静态声明与配置 JSON Schema，不接收完整 NodeTypeDefinition、输入输出 Zod 或 compile。配置按 input 语义转换，不导出全局 .meta()，无法表示的 Schema 明确报错。声明与默认值必须可公开，服务端仍执行完整 Zod 约束；manifest 不包含密钥、模型或插件实例。DataType 只做类型结构声明与兼容判断，capabilities 不实现 Resolver；具体边界见 [Node 模型](node-model.md) 与 [NodeType 实施说明](node-type-implementation.md)。
 
-React Flow Node 的 type 是前端渲染器标识 `workflowNode`，Runtime 类型在 `data.nodeType`，布局经 `NodeDefinition.ui.position` 转换。前端适配层只转换白名单字段，不把 selected、dragging 或测量状态变成执行定义；当前转换尚未接入画布和 API。
+React Flow Node 的 type 是前端渲染器标识 workflowNode，领域类型与版本在 data.nodeType / data.typeVersion，布局经 NodeDefinition.ui.position 转换。前端适配层只转换白名单字段，不把 selected、dragging 或测量状态变成执行定义；当前转换尚未接入画布和 API。ui.inputs 与 ui.config 是分开的编辑提示，不承担输入来源解析。
 
 完整 WorkflowState、并行更新 reducer、Binding 解析、控制激活与数据就绪的编译规则，以及 WorkflowDefinition 到整张 StateGraph 的转换，仍须在第 ④ 步明确。不能把当前通用接口标为已实现整图 Compiler。
 

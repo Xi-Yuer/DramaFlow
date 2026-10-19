@@ -4,7 +4,7 @@ DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，�
 
 当前保留用户登录、平台鉴权、账户中心、项目管理与 React Flow 空白画布。每个项目一张画布，可保存项目名称、视口及 revision；项目按所有者隔离，列表支持分页。画布尚不编辑节点或连线，没有工作流运行和模型插件业务。
 
-基础库已实现 Workflow 契约与版本快照、Node 定义与操作校验、NodeType / NodeRegistry、UI 元数据与安全 manifest，以及 LangGraph 基础适配。前端已有独立 Node / Edge 双向转换，尚未接入画布或 API；完整 State / Binding、整图编译和运行持久化仍待实现。具体范围见 [当前架构](docs/architecture.md#node-基础库)。
+基础库已实现 Workflow 契约与版本快照、NodeType 静态说明书、DataType 声明与结构兼容判断、版本精确注册、操作值校验、安全 manifest 及 LangGraph 基础适配。前端 Node / Edge 双向转换保留类型版本，尚未接入画布或 API；完整 State / InputValue / Binding、整图编译和运行持久化仍待实现。具体范围见 [当前架构](docs/architecture.md#node-基础库)。
 
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 
@@ -36,7 +36,7 @@ pnpm dev
 | apps/api           | NestJS、Better Auth、默认鉴权、用户资料、项目与基础服务   |
 | apps/worker        | 独立 NestJS 应用上下文，尚未注册业务任务                  |
 | packages/database  | Prisma、身份/资料/凭证/会话及基础项目模型、pgvector       |
-| packages/contracts | 身份、项目、Workflow / Node Schema 及安全 manifest 协议   |
+| packages/contracts | 身份、项目、Workflow / Node、DataType 及静态类型声明      |
 | packages/workflow  | Workflow 契约、快照、NodeType / Registry 与 manifest 转换 |
 | packages/plugins   | 插件包空入口，保留模型 SDK 依赖                           |
 | packages/context   | 上下文包空入口，待逐步定义                                |

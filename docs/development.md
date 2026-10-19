@@ -1,6 +1,6 @@
 # 开发指南
 
-按 README 初始化环境，根任务自动加载根目录 .env。前端端口 3000，API 3001；直接启动单个应用时需自行传入环境变量，不复制秘密文件。
+按 README 初始化环境，根任务自动加载根目录 .env。前端端口 3000，API 3001；直接启动单个应用时需自行传入环境变量，不复制秘密文件。不提交真实凭证及本地环境文件，密钥规则见 [认证与安全](authentication.md)。
 
 已实现能力与目录职责见 [当前架构](architecture.md)，平台设计边界见 [平台核心模型](platform-model.md)，当前阶段与下一步见 [分步设计与实施方案](implementation-plan.md)。开始新模块前对照当轮具体范围，不自动恢复旧业务或一次性实施整个路线图。
 
@@ -10,9 +10,9 @@
 
 工作流基础开发先阅读 [Runtime 架构](runtime-architecture.md)。复用 LangGraph 的 StateGraph、Checkpoint、Interrupt / Resume、Send 和条件路由，使用真实 LangGraph 测试编译适配；MemorySaver 仅显式用于测试，不作为未接入生产持久化的兜底。普通节点操作的值校验测试与图执行测试分开，不能用单节点成功证明整个 WorkflowDefinition 已可执行。
 
-节点类型开发对照 [Node 模型](node-model.md) 与 [节点类型实施拆解](node-type-implementation.md)。测试完整 NodeType 注册与元数据隔离、UI 字段和配置契约一致、安全 manifest 的 JSON 边界及无法表示的 Schema；保留非幂等 transform、默认值与 Preset 重复调用回归。Schema 默认值只允许公开数据，服务端 Zod 始终是完整校验入口。
+节点类型开发对照 [Node 模型](node-model.md) 与 [NodeType 实施说明](node-type-implementation.md)。测试静态声明、DataType 结构兼容、端口 key / 值 Schema 集合一致、精确类型版本及 Preset 注册；UI 的 inputs / config 分别核对端口与配置字段。manifest 只输出声明与配置 JSON Schema，验证元数据隔离和无法表示的 Schema 失败边界。保留非幂等 transform、默认值与 Preset 重复调用回归；默认值必须可公开，服务端 Zod 是完整值校验入口。
 
-React Flow 转换测试覆盖 Runtime 类型与渲染器类型分离、inputs / preset / ui.position 保留、临时字段剔除及不完整连线被拒绝。纯转换测试不代表画布已支持编辑或保存 Workflow；修改实际页面交互时再执行对应浏览器检查。
+React Flow 转换测试覆盖领域类型与渲染器分离、必填 typeVersion、inputs / preset / ui.position 保留、临时字段剔除及不完整连线被拒绝。端口默认值、多连接或来源 UI 只有声明时，不写成已验证运行行为。纯转换测试不代表画布已支持编辑或保存 Workflow；修改实际页面交互时再执行浏览器检查。
 
 数据库模型在 packages/database/prisma/schema.prisma 定义。执行迁移前核对 DATABASE_URL 仅指向本项目开发库，再运行 pnpm db:migrate。迁移影响范围与操作方式统一见 [部署与数据库](deployment.md)。
 
@@ -28,19 +28,21 @@ React Flow 转换测试覆盖 Runtime 类型与渲染器类型分离、inputs / 
 
 文档是随实施修订的当前说明。每个主题保留一个主要维护入口，其他位置仅保留必要摘要与链接，避免同一阶段或方案存在多份独立维护的正文。
 
-| 入口                               | 主要维护内容                                             |
-| ---------------------------------- | -------------------------------------------------------- |
-| `AGENTS.md`                        | 稳定的协作约束、领域边界与阅读入口                       |
-| `README.md`                        | 项目简介、启动入口、简要能力说明与文档导航               |
-| `docs/architecture.md`             | 已实现能力、当前结构和实际依赖边界                       |
-| `docs/platform-model.md`           | 仍有效的平台定位、概念与顶层设计边界                     |
-| `docs/workflow-model.md`           | Workflow 静态定义、版本、输入输出及运行关系              |
-| `docs/node-model.md`               | Node 实例、有效类型契约、Preset、调用和运行记录边界      |
-| `docs/node-type-implementation.md` | LLMNode / ImageToVideo 的类型、UI、契约与编译参考拆解    |
-| `docs/runtime-architecture.md`     | 技术职责、Workflow / Node 编译、LangGraph 执行及恢复边界 |
-| `docs/implementation-plan.md`      | 当前阶段、设计顺序、下一步与待决策项                     |
-| 认证、存储、部署、前端等专题文档   | 对应主题的当前实现、操作方式或有效规范                   |
-| 应用与包的 README                  | 本目录职责、局部限制及相关文档链接                       |
+根 AGENTS.md 只保留稳定约束和按任务选读的入口，不复制实现清单、字段定义、路线图或专题正文。更新功能时直接修改对应 docs；只有跨任务长期适用的协作规则才加入 AGENTS.md。开始任务按需读取相关主题，不为一次局部改动自动加载全部 docs 或新增同样冗长的子目录规范。
+
+| 入口                               | 主要维护内容                                                 |
+| ---------------------------------- | ------------------------------------------------------------ |
+| `AGENTS.md`                        | 简短的稳定协作约束与按任务选读入口                           |
+| `README.md`                        | 项目简介、启动入口、简要能力说明与文档导航                   |
+| `docs/architecture.md`             | 已实现能力、当前结构和实际依赖边界                           |
+| `docs/platform-model.md`           | 仍有效的平台定位、概念与顶层设计边界                         |
+| `docs/workflow-model.md`           | Workflow 静态定义、版本、输入输出及运行关系                  |
+| `docs/node-model.md`               | Node 实例、有效类型契约、Preset、调用和运行记录边界          |
+| `docs/node-type-implementation.md` | NodeType 八项声明、DataType、运行值契约、UI 与 manifest 边界 |
+| `docs/runtime-architecture.md`     | 技术职责、Workflow / Node 编译、LangGraph 执行及恢复边界     |
+| `docs/implementation-plan.md`      | 当前阶段、设计顺序、下一步与待决策项                         |
+| 认证、存储、部署、前端等专题文档   | 对应主题的当前实现、操作方式或有效规范                       |
+| 应用与包的 README                  | 本目录职责、局部限制及相关文档链接                           |
 
 每轮实施在交付前完成以下维护：
 

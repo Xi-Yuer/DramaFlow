@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 export type WorkflowNodeData = {
   nodeType: NodeDefinition['type'];
+  typeVersion: NodeDefinition['typeVersion'];
   name: NodeDefinition['name'];
   inputs: NodeDefinition['inputs'];
   config: NodeDefinition['config'];
@@ -24,6 +25,7 @@ const reactFlowNodeSchema = z.object({
   position: nodeDefinitionSchema.shape.ui.unwrap().shape.position,
   data: z.object({
     nodeType: nodeDefinitionSchema.shape.type,
+    typeVersion: nodeDefinitionSchema.shape.typeVersion,
     name: nodeDefinitionSchema.shape.name,
     inputs: nodeDefinitionSchema.shape.inputs,
     config: nodeDefinitionSchema.shape.config,
@@ -48,6 +50,7 @@ export function toReactFlowNode(input: unknown): WorkflowNode {
     position: definition.ui?.position ?? { x: 0, y: 0 },
     data: {
       nodeType: definition.type,
+      typeVersion: definition.typeVersion,
       name: definition.name,
       inputs: definition.inputs,
       config: definition.config,
@@ -62,6 +65,7 @@ export function fromReactFlowNode(input: unknown): NodeDefinition {
   return nodeDefinitionSchema.parse({
     id: node.id,
     type: node.data.nodeType,
+    typeVersion: node.data.typeVersion,
     name: node.data.name,
     inputs: node.data.inputs,
     config: node.data.config,

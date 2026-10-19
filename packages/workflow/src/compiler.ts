@@ -1,12 +1,19 @@
 import {
   nodeDefinitionSchema,
+  nodeTypeIdSchema,
+  nodeTypeVersionSchema,
   workflowIdentifierSchema,
   type NodeDefinition,
 } from '@dramaflow/contracts';
 import type { GraphNodeReturnValue, LangGraphRunnableConfig } from '@langchain/langgraph';
 import { z } from 'zod';
 import { invokeNodeOperation, parseNodeDefinition, type NodeOperation } from './node.js';
-import { parseNodeTypeDefinition, type NodeTypeDefinition } from './node-type.js';
+import {
+  assertNodePortSchemas,
+  parseNodeTypeDefinition,
+  type NodeTypeDefinition,
+  type NodeValueSchemas,
+} from './node-type.js';
 
 // 不预设第四步的 State 结构；使用 LangGraph 的配置及返回值协议，允许原生 Command。
 export type LangGraphNode<State extends object, Update extends object> = (
@@ -39,6 +46,7 @@ export interface NodeType<State extends object, Update extends object> extends N
   Update
 > {
   readonly definition: NodeTypeDefinition;
+  readonly preset?: string;
 }
 
 export class NodeCompilationError extends Error {
@@ -51,10 +59,11 @@ export class NodeCompilationError extends Error {
   }
 }
 
-function compilerKey(type: string, preset?: string): string {
-  workflowIdentifierSchema.parse(type);
+function compilerKey(type: string, version: number, preset?: string): string {
+  nodeTypeIdSchema.parse(type);
+  nodeTypeVersionSchema.parse(version);
   if (preset !== undefined) workflowIdentifierSchema.parse(preset);
-  return JSON.stringify([type, preset ?? null]);
+  return JSON.stringify([type, version, preset ?? null]);
 }
 
 // 显式受信任类型目录；身份只来自 definition，不加载浏览器代码或隐式回退。
@@ -67,21 +76,26 @@ export class NodeRegistry<State extends object, Update extends object> {
 
   register(nodeType: NodeType<State, Update>): void {
     const definition = parseNodeTypeDefinition(nodeType.definition);
-    const key = compilerKey(definition.type, definition.preset);
+    const key = compilerKey(definition.type, definition.version, nodeType.preset);
     if (this.types.has(key)) {
       throw new NodeCompilationError('duplicate_compiler', `节点类型重复：${definition.type}`);
     }
-    this.types.set(key, { definition: Object.freeze(definition), compile: nodeType.compile });
+    this.types.set(key, {
+      definition: Object.freeze(definition),
+      preset: nodeType.preset,
+      compile: nodeType.compile.bind(nodeType),
+    });
   }
 
-  get(type: string, preset?: string): NodeType<State, Update> {
-    const nodeType = this.types.get(compilerKey(type, preset));
+  get(type: string, version: number, preset?: string): NodeType<State, Update> {
+    const nodeType = this.types.get(compilerKey(type, version, preset));
     if (!nodeType) {
       throw new NodeCompilationError('unavailable_compiler', '节点类型或 Preset 不可用');
     }
     return {
       definition: parseNodeTypeDefinition(nodeType.definition),
-      compile: nodeType.compile.bind(nodeType),
+      preset: nodeType.preset,
+      compile: nodeType.compile,
     };
   }
 
@@ -90,7 +104,10 @@ export class NodeRegistry<State extends object, Update extends object> {
     context: CompileContext<State, Update>,
   ): LangGraphNode<State, Update> {
     const definition = nodeDefinitionSchema.parse(definitionInput);
-    return this.get(definition.type, definition.preset).compile(definition, context);
+    return this.get(definition.type, definition.typeVersion, definition.preset).compile(
+      definition,
+      context,
+    );
   }
 }
 
@@ -100,20 +117,31 @@ export function createOperationNodeType<
   OutputSchema extends z.ZodObject,
   ConfigSchema extends z.ZodObject,
 >(
-  contract: NodeTypeDefinition<InputSchema, OutputSchema, ConfigSchema>,
+  definitionInput: NodeTypeDefinition<ConfigSchema>,
+  schemas: NodeValueSchemas<InputSchema, OutputSchema> & { preset?: string },
   operation: NodeOperation<z.output<InputSchema>, z.output<ConfigSchema>>,
 ) {
-  const definition = Object.freeze(parseNodeTypeDefinition(contract));
+  const definition = Object.freeze(parseNodeTypeDefinition(definitionInput));
+  assertNodePortSchemas(definition, schemas);
+  const contract = {
+    type: definition.type,
+    version: definition.version,
+    preset: schemas.preset,
+    inputSchema: schemas.inputSchema,
+    outputSchema: schemas.outputSchema,
+    configSchema: definition.configSchema,
+  };
   return {
     definition,
+    preset: schemas.preset,
     compile<State extends object, Update extends object>(
       nodeDefinition: NodeDefinition,
       context: CompileContext<State, Update>,
     ): LangGraphNode<State, Update> {
-      const node = parseNodeDefinition(definition, nodeDefinition);
+      const node = parseNodeDefinition(contract, nodeDefinition);
       return async (state, runnableConfig) => {
         const outputs = await invokeNodeOperation(
-          definition,
+          contract,
           { inputs: context.readInputs(state, node, runnableConfig), config: node.config },
           operation,
           runnableConfig,

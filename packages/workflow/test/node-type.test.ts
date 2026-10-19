@@ -4,35 +4,39 @@ import { z } from 'zod';
 import {
   createNodeTypeManifest,
   createOperationNodeType,
+  isDataTypeAssignable,
   NodeRegistry,
   parseNodeTypeDefinition,
   type CompileContext,
   type NodeTypeDefinition,
+  type NodeValueSchemas,
 } from '../src/index.js';
 
 function definition() {
   return {
-    type: 'test-text',
-    preset: 'test-preset',
-    displayName: '测试文本操作',
-    category: 'test',
-    inputSchema: z.object({ text: z.string() }),
-    outputSchema: z.object({ text: z.string() }),
+    type: 'test.text',
+    version: 1,
+    metadata: { name: '测试文本操作', category: 'test', icon: 'text' },
+    inputs: [{ key: 'text', name: '文本', dataType: { kind: 'string' }, required: true }],
+    outputs: [{ key: 'text', name: '结果', dataType: { kind: 'string' } }],
     configSchema: z.object({
       prefix: z.string(),
       temperature: z.number().min(0).max(2).default(0.5),
     }),
     ui: {
-      icon: 'test-text-icon',
-      fields: {
+      inputs: { text: { component: 'textarea' } },
+      config: {
         prefix: { component: 'text', label: '前缀' },
-        temperature: { component: 'slider', label: '温度', min: 0, max: 2, step: 0.1 },
+        temperature: { component: 'slider', min: 0, max: 2, step: 0.1 },
       },
     },
   } satisfies NodeTypeDefinition;
 }
-
-// 显式测试 State，仅验证 Registry 产物可交给原生 LangGraph。
+const values = {
+  inputSchema: z.object({ text: z.string() }),
+  outputSchema: z.object({ text: z.string() }),
+};
+// 显式测试图，不注册生产模型或领域能力。
 const TestState = Annotation.Root({
   inputs: Annotation<Record<string, unknown>>(),
   output: Annotation<z.JSONType>(),
@@ -43,295 +47,270 @@ const context: CompileContext<TestValue, TestUpdate> = {
   readInputs: (state) => state.inputs,
   writeOutputs: (_node, outputs) => ({ output: outputs }),
 };
+function instance(version = 1, preset?: string) {
+  return {
+    id: 'text',
+    type: 'test.text',
+    typeVersion: version,
+    preset,
+    name: '测试实例',
+    inputs: [],
+    config: { prefix: '测试：' },
+  };
+}
+function graph(registry: NodeRegistry<TestValue, TestUpdate>, node = instance()) {
+  return new StateGraph(TestState)
+    .addNode('operation', registry.compile(node, context))
+    .addEdge(START, 'operation')
+    .addEdge('operation', END)
+    .compile();
+}
 
-describe('NodeTypeDefinition 与独立 UI Schema', () => {
-  it('UI 必须引用真实配置字段，不能把输入字段当作配置字段', () => {
-    const source = definition();
+describe('静态说明书与执行值契约分离', () => {
+  it('UI 输入与配置分别校验，不能跨作用域引用字段', () => {
+    expect(() =>
+      parseNodeTypeDefinition({ ...definition(), ui: { config: { text: { component: 'text' } } } }),
+    ).toThrow(expect.objectContaining({ code: 'unknown_config_field' }));
     expect(() =>
       parseNodeTypeDefinition({
-        ...source,
-        ui: { fields: { text: { component: 'text' } } },
+        ...definition(),
+        ui: { inputs: { prefix: { component: 'text' } } },
       }),
-    ).toThrow(expect.objectContaining({ code: 'unknown_config_field' }));
+    ).toThrow(z.ZodError);
   });
-
-  it('类型端口遵守工作流绑定名称规则，不能注册无法保存的 Handle', () => {
-    const unavailable: NodeTypeDefinition[] = [
-      { ...definition(), inputSchema: z.object({ 'bad-handle': z.string() }) },
-      { ...definition(), outputSchema: z.object({ constructor: z.string() }) },
-    ];
-    for (const contract of unavailable) {
-      expect(() => parseNodeTypeDefinition(contract)).toThrow(z.ZodError);
-    }
-  });
-
-  it('拒绝倒置范围、非法步长和非有限数值的滑块描述', () => {
-    for (const slider of [
-      { component: 'slider' as const, min: 2, max: 1 },
-      { component: 'slider' as const, min: 0, max: 2, step: 0 },
-      { component: 'slider' as const, min: 0, max: 2, step: -1 },
-      { component: 'slider' as const, min: 0, max: Infinity },
-    ]) {
-      expect(() =>
-        parseNodeTypeDefinition({ ...definition(), ui: { fields: { temperature: slider } } }),
-      ).toThrow(z.ZodError);
-    }
-  });
-
-  it('UI 描述不接受脚本等额外属性', () => {
-    const unsafe = {
-      ...definition(),
-      ui: {
-        fields: {
-          prefix: { component: 'text' as const, execute: () => '不应传往浏览器' },
-        },
+  it('声明端口与显式 Zod 值契约必须拥有相同的字段集合', () => {
+    const invalid: NodeValueSchemas[] = [
+      { inputSchema: z.object({ other: z.string() }), outputSchema: values.outputSchema },
+      {
+        inputSchema: values.inputSchema,
+        outputSchema: z.object({ text: z.string(), extra: z.string() }),
       },
-    };
-    expect(() => parseNodeTypeDefinition(unsafe)).toThrow(z.ZodError);
+    ];
+    for (const schemas of invalid) {
+      expect(() =>
+        createOperationNodeType(definition(), schemas, () => ({ text: '测试' })),
+      ).toThrow(expect.objectContaining({ code: 'port_schema_mismatch' }));
+    }
   });
-
-  it('只复制公开元数据，保留可继续执行校验的服务端 Zod 实例', () => {
+  it('声明复制隔离嵌套编辑数据，Zod 配置仍留在服务端', () => {
     const source = definition();
     const parsed = parseNodeTypeDefinition(source);
-    parsed.displayName = '修改后的名称';
-    parsed.ui.fields.prefix!.label = '修改后的标签';
-    expect(source.displayName).toBe('测试文本操作');
-    expect(source.ui.fields.prefix.label).toBe('前缀');
+    parsed.metadata.name = '修改';
+    parsed.inputs[0]!.name = '修改';
+    parsed.ui.config!.prefix!.label = '修改';
+    expect(source.metadata.name).toBe('测试文本操作');
+    expect(source.inputs[0]!.name).toBe('文本');
+    expect(source.ui.config.prefix.label).toBe('前缀');
     expect(parsed.configSchema).toBe(source.configSchema);
-    expect(parsed.configSchema.parse({ prefix: '测试' })).toEqual({
-      prefix: '测试',
-      temperature: 0.5,
-    });
+  });
+  it('端口默认值只保留声明，不自动注入实例或替代尚未设计的 Binding', async () => {
+    const descriptor: NodeTypeDefinition = {
+      ...definition(),
+      inputs: [
+        { key: 'text', name: '文本', dataType: { kind: 'string' }, defaultValue: '声明默认' },
+      ],
+    };
+    const invoke = vi.fn(({ inputs }: { inputs: { text: string } }) => ({ text: inputs.text }));
+    const registry = new NodeRegistry<TestValue, TestUpdate>([
+      createOperationNodeType(descriptor, values, invoke),
+    ]);
+    await expect(graph(registry).invoke({ inputs: {} })).rejects.toBeInstanceOf(z.ZodError);
+    expect(invoke).not.toHaveBeenCalled();
+    expect(instance().inputs).toEqual([]);
   });
 });
 
-describe('浏览器安全 NodeType manifest', () => {
-  it('显式投影可传输 JSON，不泄露执行属性或全局及嵌套 Schema 元数据', () => {
+describe('公开 manifest 以端口 DataType 描述连线', () => {
+  it('只投影静态声明及配置 JSON Schema，剔除执行属性和 Schema 私有元数据', () => {
     const source = definition();
-    const serverDefinition = {
+    const server = {
       ...source,
-      inputSchema: source.inputSchema.meta({
-        type: 'number',
-        privateMetadata: 'synthetic-server-only-metadata',
-      }),
-      configSchema: source.configSchema.extend({
-        prefix: z.string().meta({ privateMetadata: 'synthetic-field-only-metadata' }),
-      }),
+      configSchema: source.configSchema
+        .extend({
+          prefix: z.string().meta({ privateMetadata: 'synthetic-field-secret', type: 'number' }),
+        })
+        .meta({ privateMetadata: 'synthetic-object-secret' }),
+      inputSchema: z.object({ text: z.date() }),
       compile: vi.fn(),
-      operation: vi.fn(),
-      serverSecret: 'synthetic-server-only-property',
+      serverSecret: 'synthetic-server-secret',
     };
-    const manifest = createNodeTypeManifest(serverDefinition);
-    const serialized = JSON.stringify(manifest);
-    expect(z.record(z.string(), z.json()).parse(manifest)).toEqual(manifest);
+    const manifest = createNodeTypeManifest(server);
+    const json = JSON.stringify(manifest);
     expect(Object.keys(manifest).sort()).toEqual(
-      [
-        'type',
-        'preset',
-        'displayName',
-        'category',
-        'ui',
-        'inputSchema',
-        'outputSchema',
-        'configSchema',
-      ].sort(),
+      ['type', 'version', 'metadata', 'inputs', 'outputs', 'ui', 'configSchema'].sort(),
     );
-    expect(manifest.inputSchema).toMatchObject({ type: 'object' });
-    expect(manifest.configSchema).toMatchObject({
-      properties: { prefix: { type: 'string' } },
-    });
-    for (const privateValue of [
+    expect(manifest.inputs[0]!.dataType).toEqual({ kind: 'string' });
+    expect(manifest.configSchema).toMatchObject({ properties: { prefix: { type: 'string' } } });
+    for (const value of [
+      'inputSchema',
+      'outputSchema',
       'compile',
-      'operation',
       'serverSecret',
       'privateMetadata',
-      'synthetic-server-only',
-      'synthetic-field-only',
-    ]) {
-      expect(serialized).not.toContain(privateValue);
-    }
-    expect(serverDefinition.compile).not.toHaveBeenCalled();
-    expect(serverDefinition.operation).not.toHaveBeenCalled();
-
-    manifest.ui.fields.prefix!.label = '客户端修改';
-    expect(source.ui.fields.prefix.label).toBe('前缀');
+      'synthetic-',
+    ])
+      expect(json).not.toContain(value);
+    expect(server.compile).not.toHaveBeenCalled();
+    manifest.metadata.name = '客户端修改';
+    expect(source.metadata.name).toBe('测试文本操作');
   });
-
-  it('输入和配置描述原始输入，输出描述转换后的值，并区分默认字段的必填性', () => {
+  it('配置使用原始输入方向保留公开默认值，不能从它推断端口类型', () => {
     const manifest = createNodeTypeManifest({
       ...definition(),
-      inputSchema: z.object({
-        amount: z.string().transform(Number),
-        note: z.string().default('输入默认值'),
-      }),
       configSchema: z.object({
-        prefix: z.string().default('默认前缀'),
+        prefix: z.string().default('公开默认'),
         temperature: z.string().transform(Number),
       }),
-      outputSchema: z.object({
-        amount: z.string().transform(Number).pipe(z.number()),
-        note: z.string().default('输出默认值'),
-      }),
-    });
-    expect(manifest.inputSchema).toMatchObject({
-      properties: { amount: { type: 'string' }, note: { type: 'string', default: '输入默认值' } },
-      required: ['amount'],
-      additionalProperties: false,
     });
     expect(manifest.configSchema).toMatchObject({
-      properties: { prefix: { default: '默认前缀' }, temperature: { type: 'string' } },
+      properties: { prefix: { default: '公开默认' }, temperature: { type: 'string' } },
       required: ['temperature'],
       additionalProperties: false,
     });
-    expect(manifest.outputSchema).toMatchObject({
-      properties: { amount: { type: 'number' }, note: { type: 'string', default: '输出默认值' } },
-      required: ['amount', 'note'],
-      additionalProperties: false,
-    });
+    expect(manifest.outputs).toEqual(definition().outputs);
   });
-
-  it('无法表达的输入、配置或输出 Schema 明确报错，不替换为空契约', () => {
+  it('配置无法转换时明确失败，业务 refine 仍由服务端完整校验', () => {
     const source = definition();
-    for (const unavailable of [
-      { ...source, inputSchema: z.object({ text: z.date() }) },
-      { ...source, configSchema: source.configSchema.extend({ count: z.bigint() }) },
-      { ...source, outputSchema: z.object({ text: z.string().transform(Number) }) },
-    ]) {
-      expect(() => createNodeTypeManifest(unavailable)).toThrow();
-    }
-  });
-
-  it('JSON Schema 不代替未被完整投影的服务端业务校验', () => {
-    const source = {
-      ...definition(),
-      configSchema: definition().configSchema.refine(
-        (config) => config.prefix !== '禁止值',
-        '测试业务限制',
-      ),
+    expect(() =>
+      createNodeTypeManifest({
+        ...source,
+        configSchema: source.configSchema.extend({ counter: z.bigint() }),
+      }),
+    ).toThrow();
+    const refined = {
+      ...source,
+      configSchema: source.configSchema.refine((value) => value.prefix !== '禁止值'),
     };
-    expect(createNodeTypeManifest(source).configSchema).toMatchObject({ type: 'object' });
-    expect(() => source.configSchema.parse({ prefix: '禁止值' })).toThrow(z.ZodError);
+    expect(createNodeTypeManifest(refined).configSchema).toMatchObject({ type: 'object' });
+    expect(() => refined.configSchema.parse({ prefix: '禁止值' })).toThrow(z.ZodError);
+  });
+  it('能力需求与端口默认值可公开，声明不触发任何 Capability 选择或调用', () => {
+    const manifest = createNodeTypeManifest({
+      ...definition(),
+      capabilities: [{ type: 'ai.text_generation' }],
+    });
+    expect(manifest.capabilities).toEqual([{ type: 'ai.text_generation' }]);
+    expect(manifest).not.toHaveProperty('provider');
+    expect(manifest).not.toHaveProperty('model');
   });
 });
 
-describe('NodeType 注册与复用', () => {
-  it('注册和读取均隔离元数据修改，不改变原目录中的名称或 UI', () => {
+describe('类型版本、Preset 与注册扩展', () => {
+  it('多个版本并存，实例精确绑定版本，不隐式选最新或基础 Preset', async () => {
+    const registry = new NodeRegistry<TestValue, TestUpdate>();
+    for (const version of [1, 2])
+      registry.register(
+        createOperationNodeType({ ...definition(), version }, values, ({ inputs }) => ({
+          text: `${version}:${inputs.text}`,
+        })),
+      );
+    for (const version of [1, 2])
+      expect(
+        (await graph(registry, instance(version)).invoke({ inputs: { text: '内容' } })).output,
+      ).toEqual({ text: `${version}:内容` });
+    for (const node of [instance(3), instance(1, 'unavailable')])
+      expect(() => registry.compile(node, context)).toThrow(
+        expect.objectContaining({ code: 'unavailable_compiler' }),
+      );
+    expect(() => registry.get('test.text', 0)).toThrow(z.ZodError);
+    expect(() =>
+      registry.register(createOperationNodeType(definition(), values, () => ({ text: '' }))),
+    ).toThrow(expect.objectContaining({ code: 'duplicate_compiler' }));
+  });
+  it('注册与读取隔离元数据修改，公开名称不能改变类型身份', () => {
     const source = definition();
-    const nodeType = createOperationNodeType(source, ({ inputs }) => ({ text: inputs.text }));
-    const registry = new NodeRegistry<TestValue, TestUpdate>();
-    registry.register(nodeType);
-
-    source.displayName = '源对象修改';
-    source.ui.fields.prefix.label = '源对象 UI 修改';
-    expect(Reflect.set(nodeType.definition, 'displayName', '注册后修改')).toBe(false);
-    nodeType.definition.ui.fields.prefix!.label = '注册后 UI 修改';
-    const first = registry.get('test-text', 'test-preset');
-    expect(first.definition.displayName).toBe('测试文本操作');
-    expect(first.definition.ui.fields.prefix!.label).toBe('前缀');
-
-    first.definition.displayName = '读取结果修改';
-    first.definition.ui.fields.prefix!.label = '读取结果 UI 修改';
-    const second = registry.get('test-text', 'test-preset');
-    expect(second.definition.displayName).toBe('测试文本操作');
-    expect(second.definition.ui.fields.prefix!.label).toBe('前缀');
-    expect(() => registry.get('missing-type')).toThrow(
-      expect.objectContaining({ code: 'unavailable_compiler' }),
-    );
-  });
-
-  it('空目录可以注册新类型并直接执行，无需修改中央分派逻辑', async () => {
-    const registry = new NodeRegistry<TestValue, TestUpdate>();
-    const invoke = vi.fn(({ inputs }: { inputs: { text: string } }) => ({
-      text: inputs.text.toUpperCase(),
+    const nodeType = createOperationNodeType(source, values, ({ inputs }) => ({
+      text: inputs.text,
     }));
-    registry.register(
-      createOperationNodeType(
-        { ...definition(), type: 'test-uppercase', preset: undefined, displayName: '测试转大写' },
-        invoke,
-      ),
-    );
-    const registered = registry.get('test-uppercase');
-    expect(registered.definition.displayName).toBe('测试转大写');
-    expect(invoke).not.toHaveBeenCalled();
-    const graph = new StateGraph(TestState)
-      .addNode(
-        'registered',
-        registry.compile(
-          {
-            id: 'uppercase',
-            type: 'test-uppercase',
-            name: '测试节点',
-            inputs: [],
-            config: { prefix: '' },
-          },
-          context,
-        ),
-      )
-      .addEdge(START, 'registered')
-      .addEdge('registered', END)
-      .compile();
-
-    expect((await graph.invoke({ inputs: { text: 'hello' } })).output).toEqual({ text: 'HELLO' });
-    expect(invoke).toHaveBeenCalledTimes(1);
+    const registry = new NodeRegistry<TestValue, TestUpdate>([nodeType]);
+    source.metadata.name = '源修改';
+    nodeType.definition.metadata.name = '注册对象修改';
+    const first = registry.get('test.text', 1);
+    first.definition.metadata.name = '读取修改';
+    first.definition.inputs[0]!.name = '端口修改';
+    expect(registry.get('test.text', 1).definition.metadata.name).toBe('测试文本操作');
+    expect(registry.get('test.text', 1).definition.inputs[0]!.name).toBe('文本');
+    expect(Reflect.set(nodeType.definition, 'type', 'test.changed')).toBe(false);
   });
-
-  it('不同 Preset 可以声明各自契约并共用同一个值操作', async () => {
-    const invoke = vi.fn(
-      ({ inputs, config }: { inputs: Record<string, unknown>; config: { prefix: string } }) => ({
-        text: config.prefix + Object.values(inputs).join('、'),
-      }),
-    );
-    const registry = new NodeRegistry<TestValue, TestUpdate>();
-    registry.register(
-      createOperationNodeType(
-        { ...definition(), preset: 'story', inputSchema: z.object({ subject: z.string() }) },
-        invoke,
-      ),
-    );
-    registry.register(
-      createOperationNodeType(
-        {
-          ...definition(),
-          preset: 'advertisement',
-          inputSchema: z.object({ product: z.string() }),
-        },
-        invoke,
-      ),
-    );
-
-    for (const selection of [
-      { preset: 'story', inputs: { subject: '故事主题' }, expected: 'story：故事主题' },
-      {
-        preset: 'advertisement',
-        inputs: { product: '测试商品' },
-        expected: 'advertisement：测试商品',
+  it('保留受信任自定义编译器的 this 上下文', async () => {
+    const custom = {
+      definition: definition(),
+      marker: '自定义依赖',
+      compile() {
+        const text = this.marker;
+        return () => ({ output: { text } });
       },
-    ]) {
-      const graph = new StateGraph(TestState)
-        .addNode(
-          'operation',
-          registry.compile(
-            {
-              id: selection.preset,
-              type: 'test-text',
-              preset: selection.preset,
-              name: '测试预设节点',
-              inputs: [],
-              config: { prefix: `${selection.preset}：` },
-            },
-            context,
-          ),
-        )
-        .addEdge(START, 'operation')
-        .addEdge('operation', END)
-        .compile();
-      expect((await graph.invoke({ inputs: selection.inputs })).output).toEqual({
-        text: selection.expected,
-      });
+    };
+    const registry = new NodeRegistry<TestValue, TestUpdate>([custom]);
+    expect((await graph(registry).invoke({ inputs: {} })).output).toEqual({ text: '自定义依赖' });
+  });
+  it('不同有效 Preset 复用同一操作实现，各自声明真实端口和校验契约', async () => {
+    const operation = vi.fn(({ inputs }: { inputs: Record<string, unknown> }) => ({
+      text: Object.values(inputs).join('、'),
+    }));
+    const registry = new NodeRegistry<TestValue, TestUpdate>();
+    for (const key of ['subject', 'product']) {
+      registry.register(
+        createOperationNodeType(
+          {
+            ...definition(),
+            inputs: [{ key, name: key, dataType: { kind: 'string' } }],
+            ui: { config: definition().ui.config },
+          },
+          {
+            preset: key,
+            inputSchema: z.object({ [key]: z.string() }),
+            outputSchema: values.outputSchema,
+          },
+          operation,
+        ),
+      );
+      expect(
+        (await graph(registry, instance(1, key)).invoke({ inputs: { [key]: key } })).output,
+      ).toEqual({ text: key });
     }
-    expect(invoke).toHaveBeenCalledTimes(2);
-    expect(() => registry.get('test-text')).toThrow(
+    expect(operation).toHaveBeenCalledTimes(2);
+    expect(() => registry.get('test.text', 1)).toThrow(
       expect.objectContaining({ code: 'unavailable_compiler' }),
     );
+  });
+});
+
+describe('静态 DataType 兼容与真实值校验职责', () => {
+  it('基础类型和媒体类型仅同种兼容，不进行隐式转换', () => {
+    for (const kind of ['string', 'number', 'boolean', 'image', 'video', 'audio'] as const)
+      expect(isDataTypeAssignable({ kind }, { kind })).toBe(true);
+    expect(isDataTypeAssignable({ kind: 'video' }, { kind: 'image' })).toBe(false);
+    expect(isDataTypeAssignable({ kind: 'string' }, { kind: 'image' })).toBe(false);
+    expect(isDataTypeAssignable({ kind: 'number' }, { kind: 'string' })).toBe(false);
+  });
+  it('领域名称精确匹配，数组递归比较元素类型', () => {
+    expect(isDataTypeAssignable({ kind: 'domain', name: 'character' }, { kind: 'image' })).toBe(
+      false,
+    );
+    expect(
+      isDataTypeAssignable(
+        { kind: 'domain', name: 'character' },
+        { kind: 'domain', name: 'scene' },
+      ),
+    ).toBe(false);
+    expect(
+      isDataTypeAssignable(
+        { kind: 'array', item: { kind: 'video' } },
+        { kind: 'array', item: { kind: 'video' } },
+      ),
+    ).toBe(true);
+    expect(
+      isDataTypeAssignable(
+        { kind: 'array', item: { kind: 'video' } },
+        { kind: 'array', item: { kind: 'image' } },
+      ),
+    ).toBe(false);
+    expect(
+      isDataTypeAssignable(
+        { kind: 'array', item: { kind: 'domain', name: 'character' } },
+        { kind: 'array', item: { kind: 'domain', name: 'character' } },
+      ),
+    ).toBe(true);
   });
 });

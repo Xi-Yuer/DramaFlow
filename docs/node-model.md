@@ -1,65 +1,55 @@
 # Node 模型：③ 可调度执行单元
 
-**Node 是 Workflow 中最小的逻辑执行单元，由 LangGraph 调度。** 它可以使用模型、领域能力、工具或控制逻辑，不等同于一次 AI 调用。本文承接 [Workflow 模型](workflow-model.md) 与 [技术职责与编译边界](runtime-architecture.md)，维护 Node 的当前边界；实现范围见 [当前架构](architecture.md#node-基础库)，阶段与下一步见 [实施方案](implementation-plan.md)。
+**Node 是 Workflow 中最小的逻辑执行单元，由 LangGraph 调度。** 它可以使用模型、视频领域能力、工具或控制逻辑。本文维护实例、类型、Preset、编译与运行记录的关系；静态说明书的八项职责见 [NodeType 实施说明](node-type-implementation.md)，技术分工见 [Runtime 架构](runtime-architecture.md)，实际能力见 [当前架构](architecture.md#node-基础库)。
 
 ## 统一原则
 
 ```text
 React Flow Node（编辑视图）
     ↓
-NodeDefinition（平台 DSL）
+NodeDefinition（平台 DSL，固定 type + typeVersion）
     ↓
-NodeRegistry → NodeType（definition + compile）+ CompileContext
+NodeRegistry → NodeType（definition + 可选 preset + compile）
     ↓
 LangGraph Node Function → StateGraph.compile() → LangGraph 执行
     ↓
 WorkflowRun / NodeRun（未来的业务记录投影）
 ```
 
-平台 Compiler 把关系与契约映射到 LangGraph；LangGraph 负责图执行。编译生成的节点函数可接收 State，适配层按 Binding 取出明确输入，内部值操作只收到自身 inputs / config 及 LangChain RunnableConfig，不自动取得完整图、其他节点结果或聊天。Definition 与 Run 分离；类型与 Preset 分层。没有平台自建的 ready 轮询、暂停状态机或调度循环。
+平台 Compiler 把关系与契约映射到 LangGraph。编译生成的节点函数可以接收 State，适配层按 Binding 取出明确输入；普通值操作只收到自身 inputs / config 及 LangChain RunnableConfig，不自动取得完整图、其他节点结果或聊天。平台不自建 ready 轮询、暂停恢复状态机或图调度循环。
 
 ## 实例、类型、预设与执行记录
 
-| 对象                 | 职责                                 | 当前代码边界                                                                    |
-| -------------------- | ------------------------------------ | ------------------------------------------------------------------------------- |
-| `NodeDefinition`     | 一个工作流内的静态节点实例           | 保存 id、type、name、inputs、config，以及可选 preset、ui.position               |
-| `NodeTypeDefinition` | 节点类型的元数据、有效契约与编辑描述 | type、可选 preset、displayName、category、三个 Zod 对象 Schema 和独立 UI Schema |
-| `NodeType`           | 服务端可编译能力                     | 将 definition 与 compile 方法组合，作为 NodeRegistry 的注册对象                 |
-| `NodePreset`         | 为某类 Runtime 节点提供场景配置      | 保存 id、type、name、description 和 config；不包含执行器                        |
-| `NodeRun`            | 某次 WorkflowRun 中该节点的执行记录  | 保存输入、输出、结构化错误、时间与八种基础状态，不混入静态配置                  |
+| 对象                  | 职责                            | 当前代码边界                                                              |
+| --------------------- | ------------------------------- | ------------------------------------------------------------------------- |
+| `NodeDefinition`      | 工作流内的静态节点实例          | id、type、typeVersion、name、inputs、config，以及可选 preset、ui.position |
+| `NodeTypeDeclaration` | 可序列化的静态类型声明          | type、version、metadata、inputs、outputs、可选 capabilities、ui           |
+| `NodeTypeDefinition`  | 服务端节点类型说明书            | NodeTypeDeclaration 加 configSchema；输入输出按端口 DataType 描述         |
+| `NodeValueSchemas`    | 真实输入输出值校验              | 独立的 inputSchema / outputSchema，不充当公开端口类型                     |
+| `NodeContract`        | 普通操作的内部有效契约          | type、version、可选 preset 与 Input / Output / Config 三组 Zod            |
+| `NodeType`            | 服务端可编译能力                | definition、可选 preset 与 compile，作为 Registry 注册对象                |
+| `NodePreset`          | 某个 Runtime 类型版本的场景配置 | id、type、typeVersion、name、可选 description 和 config，无执行器         |
+| `NodeRun`             | 某次运行中的节点执行记录        | 输入、输出、结构化错误、时间与八种业务状态                                |
 
-NodeDefinition 的 `config` 在序列化边界只接受 JSON 记录，随后必须通过所选类型的 `configSchema` 校验；不是把任意配置交给执行器。`ui.position` 是编辑信息，不影响激活或节点业务语义。不保留旧顶层 position 或 React Flow Node JSON 作为另一套保存协议。
+类型使用 `ai.llm`、`video.image_to_video` 等稳定命名空间标识。类型声明的 `version` 是正整数，实例与 Preset 通过必填 `typeVersion` 固定引用；展示名称修改不改变类型身份。节点实例 ID、WorkflowVersion ID 与节点类型版本各有职责，不互相替代。
 
-React Flow 原生 Node / Edge 继续用于前端交互，不另建画布引擎。`node.type` 表示 React 组件渲染器，普通节点使用 workflowNode；业务类型放在 `node.data.nodeType`。现有双向适配将 data 映射为平台 NodeDefinition，保留绑定、Preset 和配置，只保存白名单字段。多个业务类型可以共享同一个组件，适配器不等于已实现节点 UI 或保存接口。
+NodeDefinition 的 config 在序列化边界只接受 JSON 记录，调用前再经所选类型的 configSchema 校验。布局只保存在 ui.position，不接收旧顶层 position。React Flow 的 type 是渲染器标识 workflowNode，领域类型及版本在 data.nodeType / data.typeVersion；双向转换保留绑定、Preset 和配置，剔除 selected、dragging、measured 等临时字段。当前没有节点渲染器、配置表单或画布保存接入。
 
-## NodeTypeDefinition 与公开 manifest
+## 端口类型、真实值与配置
 
-服务端定义既包含数据契约，也包含独立的编辑提示：
+Input / Output Port 以 key 对应 React Flow Handle.id，并分别检查同方向 key 唯一；同名输入与输出可以并存。DataType 是稳定的 JSON 类型声明，覆盖 string、number、boolean、image、video、audio、domain 和递归 array；它不等于 Zod，也不内含媒体文件、资产引用或校验函数。
 
-```ts
-const definition = {
-  type: 'example-text',
-  displayName: '示例文本类型',
-  category: 'ai',
-  inputSchema: z.object({ prompt: z.string() }),
-  outputSchema: z.object({ text: z.string() }),
-  configSchema: z.object({ systemPrompt: z.string() }),
-  ui: {
-    icon: 'text',
-    fields: { systemPrompt: { component: 'prompt-editor', label: '系统提示词' } },
-  },
-} satisfies NodeTypeDefinition;
-```
+isDataTypeAssignable 进行显式结构匹配：基础种类相同、domain 名称相同、array 元素递归匹配，不做隐式转换。这只是独立兼容判断，完整连线检查仍需结合节点版本、端口引用与图定义。真实值继续由显式 Zod 校验，不能从 image 类型猜成 URL 或伪造资产协议。
 
-这只展示声明结构，不注册可用 LLM 节点。输入输出对象的顶层字段声明端口并遵守平台端口命名规则；configSchema 描述可接受的数据，UI Schema 描述这些配置字段怎样编辑，二者不能混为同一套校验。UI 字段必须真实存在，不允许组件函数、脚本或服务端实例。
+输入表示可参与工作流传递的数据；配置表示执行参数，不能按是否由用户手填来划分。duration 等可能动态变化的量可以声明为 Input；模型和供应商选择的最终位置留待 Plugin / Capability 设计，不在领域类型中写死厂商。
 
-NodeTypeDefinition 的 Zod 实例只在服务端持有；`createNodeTypeManifest` 通过白名单元数据和 Zod 原生 JSON Schema 转换输出浏览器协议，输入 / 配置使用 input 方向，输出使用 output 方向。全局 Schema 元数据不自动导出，不可表示的 Schema 明确失败，不能静默变为任意 JSON。Schema 本身的默认值等必须是公开数据，服务端 Zod 仍承担最终校验。
+端口 required、defaultValue、multiple 目前只提供静态声明；默认值限定 JSON，不代表已按 DataType 校验或自动注入固定输入。multiple 不等于 array，也不授权同一目标端口多连接。UI 的 inputs / config 分开描述控件，分别引用输入端口和配置字段，不能以 UI 默认值或控件范围替代运行校验。
 
-当前 manifest 是声明基础，没有配置表单、模型 / 资产选择器或完整 DataType；字段提示不代表相应交互已经可用。实现与 LLM / 图生视频的逐项验证方案见 [NodeType 实施说明](node-type-implementation.md)。
+公开 manifest 由静态声明加配置 JSON Schema 构成，不导出输入输出 Zod、compile、模型实例或密钥。详细声明、配置转换及公开默认值边界集中在 [NodeType 实施说明](node-type-implementation.md)。
 
-## InputBinding 与多上游
+## InputBinding 与 Edge
 
-当前来源明确表示一个上游节点的输出键：
+当前实例 inputs 仍是 InputBinding 数组，一个绑定明确指向一个上游输出键：
 
 ```ts
 {
@@ -68,90 +58,36 @@ NodeTypeDefinition 的 Zod 实例只在服务端持有；`createNodeTypeManifest
 }
 ```
 
-来源键统一使用既有 Workflow 输出协议的 `outputKey`，不同时保留 `output` 别名。一个节点可以分别把 script、characters、style 绑定到多个上游，不接收“全部上游数据”。同一 target 不接受重复绑定；多结果收集或集合值必须以明确的数组 / 对象契约表达，不能靠覆盖顺序或自动拼接猜测。
+来源键统一使用 outputKey，不保留 output 别名。节点可以分别将 script、characters、style 绑定到不同上游，不接收全部上游数据；同一 target 禁止重复绑定。InputValue 与固定值、Workflow Input、Asset、变量等多来源协议留给下一步，本轮不改为没有语义的任意记录。
 
-实例校验检查 target 是否属于有效输入契约；实际调用前检查已组装的输入值。上游引用、输出键、类型兼容及绑定解析在数据流模型中细化；执行依赖与汇合要编译到 LangGraph 的边、条件路由和 fan-in，不另写平台就绪判定器。缺少必填值时校验失败，不轮询上游或隐式查询其他节点补齐。
+Edge 保存 id、sourceNodeId、sourceHandle、targetNodeId、targetHandle。React Flow 原生连线经过适配变成这个平台协议；缺少端口时拒绝导出，不猜测映射。inputBindingFromEdge 仅提取数据投影，不激活下游。
 
-工作流输入、字面量、资产引用和子流程结果如何统一为来源，留到数据流步骤确定；本步不预设表达式语言或自动收集上下文。
+执行关系决定激活，Binding 决定取值；数据具备不意味着条件分支已被选中，未选中分支应传播 skipped。Edge 与 Node.inputs 的编辑权威来源、派生规则、映射一致性、联合依赖无环，以及 fan-in / Send / reducer 的组合，在数据流步骤确定。当前类型兼容函数不替代这些规则。
 
-## Edge 与绑定的关系
+## NodeCompiler 与普通操作
 
-第一版 Edge 按完整端口映射保存：
+NodeCompiler 只声明 compile，NodeType 将说明书、可选 Preset 选择与编译方法组合。NodeRegistry 的 register / get / compile 按 `(type, version, preset)` 精确匹配，get 接受 type、version、可选 preset；不寻找最新版、不回退基础类型。类型身份来自 definition.type / definition.version，Preset 标识留在注册对象上，不混入类型说明书。
 
-```ts
-{
-  id: 'edge-script-storyboard',
-  sourceNodeId: 'script',
-  sourceHandle: 'text',
-  targetNodeId: 'storyboard',
-  targetHandle: 'script'
-}
-```
+普通操作通过 createOperationNodeType(definition, valueSchemas, operation) 注册。valueSchemas 显式提供 inputSchema / outputSchema 和可选 preset；工厂将其与 configSchema 组合为内部 NodeContract。assertNodePortSchemas 只检查输入输出字段名与端口 key 集合一致，不从 Zod 推断 DataType，也不生成媒体值校验器。
 
-同一条可视化连线可以表达执行关系并携带数据映射，不要求现在拆成两套物理边结构。但两个职责仍要区分：执行关系决定是否激活，InputBinding 决定取哪个值。数据已经具备不意味着条件分支已经被选中，未选中分支仍须传播 `skipped`。
+编译时校验实例身份、目标端口和配置；LangGraph 调用节点函数时，CompileContext.readInputs 读取已组装值，invokeNodeOperation 校验输入 / 配置、调用操作、校验输出，再经 writeOutputs 返回 State 增量。接口保留 State / Update 泛型，不提前规定整个运行状态。
 
-`inputBindingFromEdge` 已提供从连线提取数据映射的纯转换，不激活目标节点。Edge 和 Node.inputs 的编辑权威来源、派生与一致性检查在数据流步骤统一确定，不能长期维护两套可独立冲突的映射。Edge Compiler 负责将已校验语义转换成 LangGraph 路由，当前尚未实现完整 DSL 图编译。
+Definition / Preset 保留原始 JSON 配置；Schema 转换和默认值不回写定义，实际操作重新解析有效值，避免重复解析累积 transform。值与外部对象隔离，异常直接传播，不自动重试或替换插件；LangGraph interrupt 控制异常不能转成普通 failed。控制与审核类型可直接返回原生 Command / interrupt，不强制套用普通值操作工厂。
 
-## NodeCompiler 是扩展边界
+## Preset 与类型版本
 
-```ts
-interface NodeCompiler<State extends object, Update extends object> {
-  compile(
-    definition: NodeDefinition,
-    context: CompileContext<State, Update>,
-  ): LangGraphNode<State, Update>;
-}
+相近的故事、剧本、广告文案等场景可以复用 Runtime 类型及执行机制，由 Preset、端口和配置表达差异，不为业务名称复制执行器。当前 Preset 显式保存所属 type / typeVersion 与配置；有效说明书、输入输出校验仍须由受信任注册对象提供。
 
-interface NodeType<State extends object, Update extends object> extends NodeCompiler<
-  State,
-  Update
-> {
-  readonly definition: NodeTypeDefinition;
-}
-```
+applyNodePreset 检查类型版本和 Preset 身份，合并配置与实例覆盖后校验，不修改原对象、不运行节点、不选择厂商或凭证。找不到明确的类型版本或 Preset 时失败。
 
-实际接口在 `packages/workflow/src/compiler.ts`。State / Update 是泛型，不提前规定平台 State 容器。`LangGraphNode` 复用官方 `LangGraphRunnableConfig` 与 `GraphNodeReturnValue`，产物可直接加入真实 StateGraph，也允许原生 Command；不另建 NodeExecutionResult 或成功 / 暂停包装协议。
+发布必须固定类型版本、有效端口契约、Preset 配置及所需编译实现；类型 version 不等于已有跨部署代码兼容管理。完整发布快照、Preset 不可变版本与编译实现保留策略仍需随持久化设计落实，不能运行时按可变 Preset ID 解析最新版。
 
-`NodeRegistry` 只注册显式受信任的 NodeType，身份只从 definition 读取，register / get / compile 共用同一目录。按 type / preset 精确匹配，拒绝重复注册或不可用类型，不自动退回基础类型。新增类型通过注册对象扩展，不在中央 Compiler 增加业务 switch。`CompileContext.readInputs` 与 `writeOutputs` 只负责数据绑定及 State 增量适配，不决定节点何时执行。
+## NodeRun 与领域边界
 
-`createOperationNodeType` 将完整定义和普通值操作组合为 NodeType：编译时校验实例并捕获独立配置；LangGraph 调用产物时读取输入，使用 `invokeNodeOperation` 校验输入 / 配置、调用操作、校验输出，再返回 State 增量。RunnableConfig 单独传给内部 LangChain 调用，不混入 NodeDefinition.config。`NodeContract` 仅保留这些内部值操作所需的身份和三个 Schema，不承担公开目录。
+NodeRun 状态为 pending、ready、running、waiting、completed、failed、skipped、cancelled，是未来基于 LangGraph 执行事实生成的业务投影。当前只校验 JSON 输入输出、结构化 code / message、ISO 时间及记录形状，不处理调度、归属权限或持久化。
 
-Definition 与 Preset 保留原始 JSON 配置，校验时不把 Schema 的转换或默认值回写到定义。实际操作从这份配置解析有效值，避免 Preset 应用、编译和运行之间累积转换；配置不能依靠有副作用的 Schema 转换来调用外部能力。
-
-`invokeNodeOperation` / `NodeOperation` 是 Compiler 内部可复用的值校验工具，不是平台节点扩展或 Workflow 执行入口。它们只接受明确值，拒绝额外图状态、未声明字段和非 JSON 值，保留对象级约束。
-
-输入和结果与调用方对象隔离，操作修改局部值不能污染外部运行数据。异常直接传播，输出不合约时拒绝作为成功结果返回；不会自动重试、替换插件或寻找替代结果。LangGraph 的 Interrupt 异常也必须传播，不能转成普通 failed 记录。
-
-审核、条件和子图等编译器可以直接生成使用 LangGraph interrupt / Command 的节点，不强制经过普通值操作包装。图调度、Checkpoint、Interrupt、Resume、Send 和条件路由均使用 LangGraph；平台只提供 DSL 编译、契约与业务服务适配。完整 State / Binding、整图 Compiler、生产节点及持久化 Checkpointer 尚未接入。
-
-## Runtime 类型与 Preset
-
-故事、剧本、广告文案、角色设定、分镜描述和口播稿可能复用同一个 LLM Runtime 类型，通过 Prompt、输入输出约束和配置表达差异，不为每个文案场景创建新执行器。
-
-`NodeTypeDefinition` 表示选定类型或 Preset 后的有效契约。相同 type 可以为不同 preset 提供不同输入输出 Schema，并复用同一执行机制；实例的 type / preset 必须与该有效契约匹配，不能找不到 Preset 时静默退回基础类型。
-
-`applyNodePreset` 显式合并所选 Preset 配置与实例覆盖，再校验有效配置和目标端口。它不修改原对象、不自动执行、不选择厂商或凭证，也不是前端自动应用建议的授权。当前序列化 Preset 仅保存元数据与配置，有效 Schema 由调用方显式提供；NodeRegistry 已提供静态精确查找，但没有生产编译器 / Preset 目录或动态安装机制。
-
-发布版本必须固定有效配置与输入输出契约，或绑定相应的不可变契约版本，不能运行时只按可变 Preset id 重新解析最新版。具体契约快照 / 版本引用协议随发布及数据模型补齐；现有内存快照函数不替代这一发布校验。
-
-## NodeRun 与执行状态
-
-基础状态为 `pending`、`ready`、`running`、`waiting`、`completed`、`failed`、`skipped`、`cancelled`。它们是未来基于 LangGraph 执行事实生成的业务投影，不是驱动另一套调度器的状态。不能由平台看到 ready 就自行派发，或把 waiting 当作自建 suspended 标志。
-
-当前 Schema 只校验记录结构，输入输出为 JSON 记录，错误采用明确的 code / message，时间采用 ISO 字符串。运行投影、归属校验和持久化尚未实现。人工介入使用 LangGraph interrupt 与 Command.resume；根 WorkflowRun.id 绑定 thread_id，恢复仍须加载原不可变版本。中断恢复会从节点函数开头重跑，生成副作用与审核必须分开，详见 [技术职责](runtime-architecture.md)。
+人工介入使用 LangGraph interrupt / Command.resume；根 WorkflowRun.id 绑定 thread_id，恢复加载原不可变版本并从节点函数开头重跑，生成副作用与审核分离。详细运行边界见 [Runtime 架构](runtime-architecture.md)。
 
 ## 视频领域能力与厂商边界
 
-允许 Node、Tool、Schema 和 Asset Type 与视频生产领域强相关，无需把所有能力压成万能节点。
-
-| 层次           | 例子                                                   | 边界                                                                          |
-| -------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| 场景业务层     | 分镜生成、漫剧镜头生成、广告视频生成                   | 以业务模板、Preset 或确有独立语义的领域节点组合生产过程                       |
-| 视频领域能力层 | ImageToVideo、TextToVideo、VideoCompose、TTS、Subtitle | 保留专业输入输出契约，不绑定单一厂商；是否独立成为 Runtime 类型按执行语义决定 |
-| 基础设施层     | LLM、HTTP、Code、Storage、Queue                        | 提供基础机制，不定义漫剧或广告流程，也不能让 Queue 替代 LangGraph 调度        |
-
-例如图生视频需要 ImageToVideo Capability，供应商通过用户明确配置的 Plugin 适配。抽帧、拼接、裁剪、音频混合等 Tool 可以专业化；模型生成仍遵守插件、模型和凭证显式选择的边界。
-
-Start、End、LLM、Tool、Agent、Code、HTTP、If、Switch、Iteration、Batch、Join、HumanReview、SubWorkflow、Asset、Plugin 只是待评估候选，不是已确认的固定枚举或可用节点目录。Tool / Plugin / LLM / HTTP 的分类继续按后续职责设计判断；Iteration 仅考虑明确集合处理，不授权任意循环或递归。
-
-目标是：**底层 Runtime 通用，视频领域 Capability 专业化，上层业务模板场景化。**
+允许视频领域 Node、Tool、Schema 与 Asset Type 专业化。图生视频、字幕、合成、抽帧等能力可以有明确契约，用户选择的 Plugin 提供外部能力，不与单一厂商绑定。Runtime 通用、视频领域 Capability 专业化、上层模板场景化；当前不存在生产节点目录或固定 Runtime 类型枚举。

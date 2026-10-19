@@ -1,81 +1,86 @@
-# NodeType 的实现与首个节点验证方案
+# NodeType 静态说明书与实施边界
 
-本文是 [Node 模型](node-model.md) 的代码落地说明，先用 LLM，再用图生视频检查同一套边界。基础接口和 React Flow 适配已实现；文中的模型选择、媒体引用和生产节点方案仍需后续确认，不表示已有可调用节点、插件或运行服务。
+NodeTypeDefinition 描述节点类型的静态能力和契约，不保存某次工作流的输入值、参数值、执行状态或服务连接。本文维护八项声明及代码适配；实例、Preset 与 NodeRun 的关系见 [Node 模型](node-model.md)，下一步统一见 [实施方案](implementation-plan.md)。
 
-## 一个类型注册对象连接元数据与编译
+## 八项职责
 
-服务端 `NodeTypeDefinition` 包含 type、可选 preset、displayName、category、独立 UI 描述，以及 Input / Output / Config 三个 Zod 对象 Schema。`NodeType` 将它与 compile 方法组合：
+| 字段         | 回答的问题         | 当前边界                                                           |
+| ------------ | ------------------ | ------------------------------------------------------------------ |
+| type         | 这是什么节点类型   | 稳定命名空间 ID，例如 ai.llm、video.image_to_video，不能使用展示名 |
+| version      | 使用哪个类型版本   | 正整数；实例 / Preset 的 typeVersion 必须明确引用                  |
+| metadata     | 如何向用户介绍     | name、可选 description、category、可选 icon，无执行逻辑            |
+| inputs       | 接收哪些工作流数据 | key、name、DataType 及可选 required / multiple / defaultValue      |
+| outputs      | 产生哪些工作流数据 | key、name、DataType 及可选 multiple                                |
+| configSchema | 哪些执行配置合法   | 服务端 Zod 对象 Schema，不包含实例实际值                           |
+| capabilities | 需要什么外部能力   | 可选稳定能力类型列表，不能重复，不包含厂商或凭证选择               |
+| ui           | 如何表达编辑提示   | 可选 color、inputs、config；控件由前端受控映射                     |
 
-```ts
-interface NodeType<State extends object, Update extends object> {
-  readonly definition: NodeTypeDefinition;
-  compile(
-    node: NodeDefinition,
-    context: CompileContext<State, Update>,
-  ): LangGraphNode<State, Update>;
-}
-```
+contracts 的 NodeTypeDeclaration 保存除 configSchema 外的纯 JSON 声明；workflow 的 NodeTypeDefinition 在它之上加入服务端 configSchema。这个说明书不继承内部 NodeContract，也不包含 inputSchema / outputSchema 或 Preset ID。
 
-`NodeRegistry.register(nodeType)` 从 definition 读取唯一的 type / preset 身份；`get` 和 `compile` 使用同一份注册信息。不存在另一套独立维护的 UI 类型目录或按业务名称增加的 Compiler switch。`NodeContract` 是内部值校验所需的三个 Schema 与身份，完整 NodeTypeDefinition 在它之上补齐公开元数据。
+metadata.name 可以随展示文案调整，type 保持稳定。metadata.icon 和 ui.color 只是安全标识，不是 React 组件或执行代码。命名空间规则仅约束类型与能力 ID，不收紧工作流、节点或运行记录的实例 ID。
 
-普通操作使用 `createOperationNodeType(definition, operation)`，沿用输入校验、操作调用、输出校验和 RunnableConfig 透传。审核等控制节点可自己实现 compile，直接返回原生 LangGraph 节点函数，不强制经过普通操作工厂。
+## DataType 与运行校验
 
-## 浏览器只读取可序列化声明
+DataType 的当前集合为 string、number、boolean、image、video、audio、domain{name}、array{item}。领域名称使用稳定标识，数组递归描述元素；不包含 Zod 实例、文件内容或服务连接。
 
-`createNodeTypeManifest` 白名单输出公开元数据、UI 描述和 Zod 原生生成的 JSON Schema。输入和配置明确使用 `io: 'input'`，输出使用 `io: 'output'`；不可表示的类型明确报错，不降成任意 JSON。使用独立的空 metadata registry，防止全局 `.meta()` 混入私有字段或覆盖生成的校验类型。[Zod 官方 JSON Schema 文档](https://zod.dev/json-schema) 说明了方向、元数据与转换限制。
+isDataTypeAssignable 只做结构兼容判断，不做类型转换：Image → Image 可以，Video → Image 不可以，domain 名称必须一致，数组元素逐层匹配。它不检查整张图，也不校验真实媒体值或资产权限。
 
-Schema 的默认值和枚举仍可能出现在 JSON Schema 中，因此类型作者只能在 Schema 中声明公开的静态数据，不能嵌入账号、密钥或服务端连接配置。此函数不接收用户节点配置，不导出 compile、operation、模型实例或适配器；它不是对任意含密钥对象的自动脱敏器。JSON Schema 也不能表达所有 refine，服务端 Zod 校验仍是权威。
+运行输入输出由独立 NodeValueSchemas 显式提供 Zod 对象 Schema。assertNodePortSchemas 检查它们的字段名与说明书端口 key 集合一致，不能从两个同名字段推断类型或约束完全一致。媒体及领域资料的运行契约还依赖 Asset 等模型，不提供 URL、任意对象或测试结果兜底。
 
-UI Schema 使用 component 字符串说明如何编辑字段。例如 prompt-editor、slider、model-selector 或 asset-picker；这些是声明协议，当前没有相应表单渲染器或选择器服务。UI 字段必须对应 configSchema 的真实顶层字段，滑块范围等自身也需校验。组件名称由前端受控映射，不能作为动态代码或远程模块地址执行。
+端口 required / defaultValue / multiple 是当前静态声明。defaultValue 只验证 JSON 形状，不自动解析为固定输入或注入 LangGraph State；required 的运行校验仍来自显式值 Schema，后续需统一声明与运行语义。multiple 不等于数组类型，也不启用多来源绑定；集合值用 array 描述，多连接、收集与排序留给数据流设计。
 
-React Flow 使用 `type: 'workflowNode'` 选择通用组件，真正的 Runtime 类型在 `data.nodeType`；Handle 对应声明的输入输出字段，不要求每个 Runtime 类型注册一个 React 组件。这符合 [React Flow 自定义节点机制](https://reactflow.dev/learn/customization/custom-nodes)。适配器保留绑定与 Preset，只导出白名单领域字段和 `ui.position`，不保存 selected、dragging、measured 等临时状态。当前尚未接入画布节点编辑和保存接口。
+## 输入与配置分开编辑
 
-## 下一步的 LLMNode：先限定为文本输入与文本输出
+输入以是否参与工作流数据传递划分，不能按是否由用户手填来判断。prompt、首帧图片和可能动态传入的 duration 可以是 Input；节点执行参数由 configSchema 声明。模型、provider 和凭证选择的最终归属尚未确定，留待 Plugin / Capability 设计。
 
-第一个生产节点建议先采用以下职责划分，不同时引入 Agent、工具调用、结构化业务生成或全部聊天历史：
+ui.inputs 的键必须属于输入端口，ui.config 的键必须属于 configSchema 的顶层字段；两份描述不能共用 ui.fields。组件可使用 textarea、prompt-editor、slider 等受控标识，slider 范围、select 选项等须满足声明校验。控件存在不意味着已有配置表单、资产选择器或模型选择服务。
 
-| 契约   | 字段方向                                                    | 边界                                                                 |
-| ------ | ----------------------------------------------------------- | -------------------------------------------------------------------- |
-| Input  | `prompt: string`、可选 `context: string`                    | 只接收明确绑定的本次输入；不自动加入整个 State 或项目聊天            |
-| Output | `text: string`                                              | 模型结果必须转换并校验，不能把 SDK Message 实例直接写入 JSON State   |
-| Config | 显式模型选择引用、可选 systemPrompt 与受支持的模型参数      | 系统提示词属于配置，本次 prompt 属于输入；厂商支持范围还要由插件校验 |
-| UI     | 模型选择器、systemPrompt 的 prompt-editor、已支持参数的控件 | UI 描述不承担模型访问权限或后端参数校验                              |
+InputPort.key 对应 target Handle.id，OutputPort.key 对应 source Handle.id；同方向拒绝重名，输入输出可以同名并通过 Handle 的方向区分。[React Flow Handles](https://reactflow.dev/learn/customization/handles) 提供原生端口和连线机制，平台不再实现另一套画布。
 
-模型选择必须能定位用户明确选中的 Plugin、Model 和 Credential。可以设计非敏感的 `{ pluginId, modelId, credentialId }`，也可以引用一个已版本化的选择记录；具体持久化形式留待插件与凭证边界确认。不能只保存一个有歧义的模型名称，再自动推断厂商或补上默认凭证。
+当前 NodeDefinition.inputs 仍是节点输出来源的 Binding 数组。固定值、Workflow Input、Asset、变量等 InputValue 尚未定义，本轮不把这些来源塞入 config，也不改成无约束的输入记录。实例布局继续位于 ui.position。
 
-“不保存 OpenAI / DeepSeek 模型信息”应理解为**不绑定厂商 SDK、连接实例或密钥**，并不意味着不能保存明确、非敏感的插件和模型标识。实例、密钥、解密结果、API 客户端与 BaseChatModel 都留在受信任服务端；凭证引用仍需按项目权限解析，知道引用不等于有调用权限。Run 的模型选择也必须固定，不能在恢复时自动换成最新版或其他厂商。
+## 服务端注册与编译
 
-LLM 编译产物的具体链路为：
+普通操作注册链为：
 
 ```text
-NodeDefinition + 已固定的有效 NodeTypeDefinition
-  → CompileContext 解析已选择的输入
-  → Zod 校验 inputs / config
-  → 受信任服务端插件校验选择、权限和模型参数
-  → 取得 LangChain BaseChatModel
-  → 显式构建 Messages 并传递 RunnableConfig / 取消信号
-  → model.invoke(...)
-  → 将支持的文本结果转换并按 outputSchema 校验
-  → CompileContext 写出该节点的 State 增量
+NodeTypeDefinition（声明 + configSchema）
++ NodeValueSchemas（inputSchema + outputSchema，可选 preset）
++ operation
+    ↓ createOperationNodeType
+NodeType（definition + 可选 preset + compile）
+    ↓ NodeRegistry，按 type / version / preset 精确查找
+NodeDefinition（type + typeVersion + 可选 preset）
+    ↓ compile + CompileContext
+LangGraph 节点函数
 ```
 
-内部复用官方 [BaseChatModel](https://reference.langchain.com/javascript/langchain-core/language_models/chat_models/BaseChatModel) 和 Message 抽象，不新建一套 LLM.chat 接口。普通文本结果、内容块、工具调用和结构化输出必须明确处理；不能使用 String(message) 或静默丢弃未知结果来凑出 text。暂不支持的结果应明确失败。
+工厂将说明书的 type / version / configSchema 与显式运行值 Schema 组合成内部 NodeContract。Preset 选择属于注册对象与实例，不混入说明书；Registry 不自动选择最新版、默认 Preset 或替代类型。审核和控制类型可以直接实现 compile 并使用原生 LangGraph 机制。
 
-生产 LLMNode 的实施前置项是模型选择引用、受信任插件解析、参数兼容和凭证权限。当前不注册返回固定文本的“可用 LLM 节点”，也不为缺少真实模型接入提供默认供应商。下一轮可先确定这些最小引用与依赖，再沿现有 NodeType 工厂接入 LangChain。
+CompileContext 负责读取输入与写出 State 更新，普通操作只处理自身值。完整 State / Binding、输入来源解析、Edge 派生规则及整图编译尚未实现；节点操作校验与注册成功不表示工作流已经可执行。
 
-## 用图生视频复核抽象
+## 浏览器 manifest
 
-图生视频仍复用同一个 NodeType 对象和通用 React Flow 组件，改变的是领域契约与操作实现：
+createNodeTypeManifest 白名单输出 NodeTypeDeclaration 加 configSchema 的 JSON Schema。端口继续使用 DataType，不再导出输入输出 Zod 的 JSON Schema。
 
-| 维度     | LLM                                          | 图生视频                                            |
-| -------- | -------------------------------------------- | --------------------------------------------------- |
-| 输入     | prompt、显式 context                         | 版本化 Image Asset 引用、prompt                     |
-| 输出     | text                                         | 版本化 Video Asset 引用                             |
-| 配置     | 显式模型选择、受支持的文本参数               | 显式 Capability / Plugin 选择、时长等受支持视频参数 |
-| UI       | 模型选择器、提示词、参数控件                 | 模型选择器、时长等参数；输入图由 Handle 绑定        |
-| 内部调用 | LangChain BaseChatModel                      | Plugin 提供 ImageToVideo 能力                       |
-| 执行适配 | 返回本节点输出，由 CompileContext 映射 State | 相同输出边界；异步受理、回调及 Queue 需要另行接入   |
+配置转换采用 Zod 原生 toJSONSchema、input 方向、独立空 metadata registry 和不可表示即失败的策略；全局 .meta() 不进入 manifest，不能静默降为任意 JSON。[Zod JSON Schema 文档](https://zod.dev/json-schema) 说明转换方向及限制。JSON Schema 无法表达的 refine 等约束仍由服务端完整校验。
 
-图生视频可以是专门的 Runtime 类型，不必伪装成 LLM 或万能 HTTP 节点；Kling、Veo 等是可选择的提供方，不是节点类型本身。耗时异步任务不能靠节点内轮询、内存计时器或假视频地址冒充接入。媒体引用依赖 Asset 模型，异步等待依赖原生 LangGraph 恢复与作业服务，当前都不通过占位实现提前固定。
+Schema 默认值、端口默认值、枚举及声明文本均可能公开，不能放入密钥、账号连接配置或供应商实例。manifest 不接收节点实际配置，不导出 operation / compile；它不是任意私有对象的自动脱敏器。前端只读取声明并使用受信任组件映射，不加载服务端 Zod。
 
-本轮确认 NodeType 的组合和序列化边界，先细化 LLMNode 并用图生视频交叉验证，再进入完整 State / Binding。`nodeOutputs[nodeId]` 是可讨论的状态方向；其 reducer、批量调用身份和并行冲突规则未定，不能简单对象覆盖或据此宣称已实现数据流。
+React Flow 的渲染器 type 固定为 workflowNode，领域类型 / 版本在 data.nodeType / data.typeVersion。现有适配只转换白名单字段、绑定、Preset 和布局，未接入节点目录、UI 渲染、画布保存或 API。
+
+## LLM 与图生视频的静态对照
+
+以下仅用于检查声明职责，不定义生产类型目录或承诺下一步接入真实模型：
+
+| 维度       | LLM                         | 图生视频                                      |
+| ---------- | --------------------------- | --------------------------------------------- |
+| type 示例  | ai.llm                      | video.image_to_video                          |
+| 输入方向   | prompt 及显式选择的上下文   | 首帧图片、prompt，以及可能动态传入的 duration |
+| 输出方向   | text                        | video                                         |
+| DataType   | string 或明确的 domain 声明 | image、string、number、video 等声明           |
+| 值校验依赖 | 显式文本 Zod 契约           | 尚需明确版本化媒体 / Asset 引用契约           |
+| capability | 可声明文本生成能力          | 可声明图生视频能力                            |
+| 插件边界   | 不固定模型厂商、连接或凭证  | 不固定 Kling、Veo 等供应商                    |
+
+Capability 当前只是一份需求声明，没有 Resolver、自动 Routing、插件选择或模型调用。下一步聚焦 InputValue、State、Binding 与 Output 的数据流关系；生产节点、模型选择、资产和异步服务按后续明确范围推进。

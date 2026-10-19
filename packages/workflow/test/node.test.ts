@@ -10,7 +10,8 @@ import {
 
 // 显式测试契约与纯函数，不注册 LLM、供应商适配器或生产 Preset。
 const contract = {
-  type: 'llm',
+  type: 'ai.llm',
+  version: 1,
   preset: 'storyboard-generator',
   inputSchema: z.object({
     script: z.string().min(1),
@@ -26,7 +27,8 @@ const contract = {
 function definition() {
   return {
     id: 'storyboard',
-    type: 'llm',
+    type: 'ai.llm',
+    typeVersion: 1,
     preset: 'storyboard-generator',
     name: '生成分镜',
     inputs: [
@@ -55,7 +57,7 @@ describe('节点类型、实例和 Preset', () => {
 
   it('类型或 Preset 不匹配时拒绝使用其他有效契约', () => {
     for (const node of [
-      { ...definition(), type: 'http' },
+      { ...definition(), type: 'net.http' },
       { ...definition(), preset: 'advertisement' },
     ]) {
       expect(() => parseNodeDefinition(contract, node)).toThrow(
@@ -68,7 +70,8 @@ describe('节点类型、实例和 Preset', () => {
     const node = { ...definition(), config: { temperature: 1 } };
     const preset = {
       id: 'storyboard-generator',
-      type: 'llm',
+      type: 'ai.llm',
+      typeVersion: 1,
       name: '生成分镜',
       config: { prompt: 'Preset 提示词', temperature: 0.2 },
     };
@@ -76,7 +79,7 @@ describe('节点类型、实例和 Preset', () => {
     expect(applied.config).toEqual({ prompt: 'Preset 提示词', temperature: 1 });
     expect(node.config).toEqual({ temperature: 1 });
     expect(preset.config.temperature).toBe(0.2);
-    expect(() => applyNodePreset(contract, node, { ...preset, type: 'http' })).toThrow(
+    expect(() => applyNodePreset(contract, node, { ...preset, type: 'net.http' })).toThrow(
       expect.objectContaining({ code: 'preset_mismatch' }),
     );
   });
@@ -171,7 +174,8 @@ describe('Input → Execute → Output 调用边界', () => {
 
   it('同一 Runtime type 和执行函数可以服务不同有效 Preset 契约', async () => {
     const base = {
-      type: 'llm',
+      type: 'ai.llm',
+      version: 1,
       outputSchema: z.object({ text: z.string() }),
       configSchema: z.object({}),
     };

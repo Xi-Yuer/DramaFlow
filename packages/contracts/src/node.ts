@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { nodeTypeIdSchema, nodeTypeVersionSchema } from './node-type.js';
 import {
   workflowIdentifierSchema,
   workflowOutputSourceSchema,
@@ -12,7 +13,8 @@ export const inputBindingSchema = z
 export const nodeDefinitionSchema = z
   .object({
     id: workflowIdentifierSchema,
-    type: workflowIdentifierSchema,
+    type: nodeTypeIdSchema,
+    typeVersion: nodeTypeVersionSchema,
     name: z.string().trim().min(1).max(80),
     inputs: z.array(inputBindingSchema),
     config: z.record(z.string(), z.json()),
@@ -53,7 +55,8 @@ export const edgeDefinitionSchema = z
 export const nodePresetSchema = z
   .object({
     id: workflowIdentifierSchema,
-    type: workflowIdentifierSchema,
+    type: nodeTypeIdSchema,
+    typeVersion: nodeTypeVersionSchema,
     name: z.string().trim().min(1).max(80),
     description: z.string().optional(),
     config: z.record(z.string(), z.json()),
