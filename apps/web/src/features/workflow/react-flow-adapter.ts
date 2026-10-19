@@ -1,12 +1,12 @@
 import {
-  controlEdgeDefinitionSchema,
+  dataEdgeDefinitionSchema,
   isTypeAssignable,
   nodeDefinitionSchema,
   nodeTypeManifestListSchema,
   workflowDefinitionSchema,
   workflowIdentifierSchema,
   workflowPortNameSchema,
-  type ControlEdgeDefinition,
+  type DataEdgeDefinition,
   type NodeDefinition,
   type NodeTypeManifest,
   type WorkflowDefinition,
@@ -24,7 +24,7 @@ export type WorkflowNodeData = {
 };
 
 export type WorkflowNode = Node<WorkflowNodeData, 'workflowNode'>;
-export type WorkflowEdgeData = { kind: 'data' } | { kind: 'control' };
+export type WorkflowEdgeData = { kind: 'data' };
 export type WorkflowEdge = Edge<WorkflowEdgeData>;
 
 const reactFlowNodeSchema = z.object({
@@ -48,23 +48,12 @@ const connectionSchema = z.object({
   targetHandle: workflowPortNameSchema,
 });
 
-const reactFlowEdgeSchema = z.object({
-  id: z.string(),
-  source: workflowIdentifierSchema,
-  sourceHandle: workflowPortNameSchema.nullish(),
-  target: workflowIdentifierSchema,
-  targetHandle: workflowPortNameSchema.nullish(),
-  data: z.object({ kind: z.enum(['data', 'control']) }),
+const reactFlowEdgeSchema = connectionSchema.extend({
+  id: workflowIdentifierSchema,
+  data: z.object({ kind: z.literal('data') }),
 });
 
-// 独立命名空间和 JSON 元组避免控制边 ID、端口分隔符与数据边 ID 碰撞。
-function dataEdgeId(source: string, sourceHandle: string, target: string, targetHandle: string) {
-  return `data:${JSON.stringify([source, sourceHandle, target, targetHandle])}`;
-}
-
-function controlEdgeId(id: string) {
-  return `control:${JSON.stringify(id)}`;
-}
+type WorkflowConnection = z.infer<typeof connectionSchema>;
 
 // React Flow 的 type 是渲染器标识；平台运行类型只放在 data.nodeType。
 export function toReactFlowNode(input: unknown): WorkflowNode {
@@ -103,53 +92,48 @@ export function toReactFlowNodes(input: unknown): WorkflowNode[] {
   return workflowDefinitionSchema.parse(input).nodes.map(toReactFlowNode);
 }
 
-export function toReactFlowControlEdge(input: unknown): WorkflowEdge {
-  const edge = controlEdgeDefinitionSchema.parse(input);
+// ID 与 Handle 直接映射；领域 edges 是连接关系的唯一来源。
+export function toReactFlowEdge(input: unknown): WorkflowEdge {
+  const edge = dataEdgeDefinitionSchema.parse(input);
   return {
-    id: controlEdgeId(edge.id),
-    source: edge.sourceNodeId,
-    target: edge.targetNodeId,
-    data: { kind: 'control' },
+    id: edge.id,
+    source: edge.source.nodeId,
+    sourceHandle: edge.source.portKey,
+    target: edge.target.nodeId,
+    targetHandle: edge.target.portKey,
+    data: { kind: edge.kind },
   };
 }
 
+export function fromReactFlowEdge(input: unknown): DataEdgeDefinition {
+  const edge = reactFlowEdgeSchema.parse(input);
+  return dataEdgeDefinitionSchema.parse({
+    id: edge.id,
+    kind: edge.data.kind,
+    source: { nodeId: edge.source, portKey: edge.sourceHandle },
+    target: { nodeId: edge.target, portKey: edge.targetHandle },
+  });
+}
+
 export function toReactFlowEdges(input: unknown): WorkflowEdge[] {
-  const workflow = workflowDefinitionSchema.parse(input);
-  const dataEdges: WorkflowEdge[] = workflow.nodes.flatMap((node) =>
-    Object.entries(node.inputs).flatMap(([targetHandle, binding]) => {
-      if (binding.type !== 'connection') return [];
-      return [
-        {
-          id: dataEdgeId(binding.nodeId, binding.outputKey, node.id, targetHandle),
-          source: binding.nodeId,
-          sourceHandle: binding.outputKey,
-          target: node.id,
-          targetHandle,
-          data: { kind: 'data' as const },
-        },
-      ];
-    }),
-  );
-  return [...dataEdges, ...workflow.edges.map(toReactFlowControlEdge)];
+  return workflowDefinitionSchema.parse(input).edges.map(toReactFlowEdge);
 }
 
 function manifestFor(manifests: readonly NodeTypeManifest[], type: string, version: number) {
   return manifests.find((manifest) => manifest.type === type && manifest.version === version);
 }
 
-// 用户明确连线时才替换该输入端口的原绑定；端口和类型必须能在传入的目录里对上。
-export function connectWorkflowNodes(
-  input: unknown,
-  connectionInput: unknown,
-  manifestsInput: unknown,
+function addDataEdge(
+  workflow: WorkflowDefinition,
+  connection: WorkflowConnection,
+  manifests: readonly NodeTypeManifest[],
+  id: string,
 ): WorkflowDefinition {
-  const workflow = workflowDefinitionSchema.parse(input);
-  const connection = connectionSchema.parse(connectionInput);
-  const manifests = nodeTypeManifestListSchema.parse(manifestsInput);
   const source = workflow.nodes.find((node) => node.id === connection.source);
   if (!source) throw new Error('连线的来源节点不存在');
   const target = workflow.nodes.find((node) => node.id === connection.target);
   if (!target) throw new Error('连线的目标节点不存在');
+  if (source.id === target.id) throw new Error('数据边不能连接自身');
   const sourceManifest = manifestFor(manifests, source.type, source.typeVersion);
   const targetManifest = manifestFor(manifests, target.type, target.typeVersion);
   if (!sourceManifest || !targetManifest) throw new Error('节点类型不可用');
@@ -160,51 +144,73 @@ export function connectWorkflowNodes(
   if (!isTypeAssignable(output.dataType, inputPort.dataType)) {
     throw new Error('端口类型不兼容');
   }
-  target.inputs[connection.targetHandle] = {
-    type: 'connection',
-    nodeId: connection.source,
-    outputKey: connection.sourceHandle,
-  };
+  if (
+    workflow.edges.some(
+      (edge) =>
+        edge.target.nodeId === connection.target && edge.target.portKey === connection.targetHandle,
+    )
+  ) {
+    throw new Error('目标输入端口已经存在连接');
+  }
+  // 显式连线替换该端口的静态来源，不在 inputs 重复保存连接。
+  delete target.inputs[connection.targetHandle];
+  workflow.edges.push({
+    id,
+    kind: 'data',
+    source: { nodeId: connection.source, portKey: connection.sourceHandle },
+    target: { nodeId: connection.target, portKey: connection.targetHandle },
+  });
   return workflowDefinitionSchema.parse(workflow);
 }
 
-function matchesControlEdge(
-  edge: ControlEdgeDefinition,
-  snapshot: z.infer<typeof reactFlowEdgeSchema>,
-) {
+export function connectWorkflowNodes(
+  input: unknown,
+  connectionInput: unknown,
+  manifestsInput: unknown,
+): WorkflowDefinition {
+  return addDataEdge(
+    workflowDefinitionSchema.parse(input),
+    connectionSchema.parse(connectionInput),
+    nodeTypeManifestListSchema.parse(manifestsInput),
+    `edge_${globalThis.crypto.randomUUID()}`,
+  );
+}
+
+function matchesDataEdge(edge: DataEdgeDefinition, snapshot: DataEdgeDefinition) {
   return (
-    controlEdgeId(edge.id) === snapshot.id &&
-    edge.sourceNodeId === snapshot.source &&
-    edge.targetNodeId === snapshot.target &&
-    snapshot.sourceHandle == null &&
-    snapshot.targetHandle == null
+    edge.id === snapshot.id &&
+    edge.kind === snapshot.kind &&
+    edge.source.nodeId === snapshot.source.nodeId &&
+    edge.source.portKey === snapshot.source.portKey &&
+    edge.target.nodeId === snapshot.target.nodeId &&
+    edge.target.portKey === snapshot.target.portKey
   );
 }
 
 // 删除事件可能来自旧视图；只删除 ID 与完整端点仍匹配的那条关系。
 export function disconnectWorkflowEdge(input: unknown, edgeInput: unknown): WorkflowDefinition {
   const workflow = workflowDefinitionSchema.parse(input);
-  const edge = reactFlowEdgeSchema.parse(edgeInput);
-  if (edge.data.kind === 'control') {
-    workflow.edges = workflow.edges.filter((item) => !matchesControlEdge(item, edge));
-    return workflow;
-  }
-  if (
-    !edge.sourceHandle ||
-    !edge.targetHandle ||
-    edge.id !== dataEdgeId(edge.source, edge.sourceHandle, edge.target, edge.targetHandle)
-  ) {
-    return workflow;
-  }
-  const target = workflow.nodes.find((node) => node.id === edge.target);
-  const binding = target?.inputs[edge.targetHandle];
-  if (
-    target &&
-    binding?.type === 'connection' &&
-    binding.nodeId === edge.source &&
-    binding.outputKey === edge.sourceHandle
-  ) {
-    delete target.inputs[edge.targetHandle];
-  }
+  const snapshot = fromReactFlowEdge(edgeInput);
+  workflow.edges = workflow.edges.filter((edge) => !matchesDataEdge(edge, snapshot));
   return workflow;
+}
+
+// 重连先移除匹配的旧边再统一校验；失败不修改调用方，成功保留领域边 ID。
+export function reconnectWorkflowEdge(
+  input: unknown,
+  edgeInput: unknown,
+  connectionInput: unknown,
+  manifestsInput: unknown,
+): WorkflowDefinition {
+  const workflow = workflowDefinitionSchema.parse(input);
+  const snapshot = fromReactFlowEdge(edgeInput);
+  const index = workflow.edges.findIndex((edge) => matchesDataEdge(edge, snapshot));
+  if (index === -1) return workflow;
+  workflow.edges.splice(index, 1);
+  return addDataEdge(
+    workflow,
+    connectionSchema.parse(connectionInput),
+    nodeTypeManifestListSchema.parse(manifestsInput),
+    snapshot.id,
+  );
 }

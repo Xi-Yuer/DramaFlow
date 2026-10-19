@@ -1,18 +1,20 @@
 import { z } from 'zod';
 import { dataTypeSchema } from '../data/type.js';
-import { controlEdgeDefinitionSchema, nodeDefinitionSchema } from '../node/definition.js';
+import { nodeDefinitionSchema } from '../node/definition.js';
+import { workflowEdgeSchema } from './edge-definition.js';
 import { createWorkflowSchemas } from './metadata.js';
 
 const schemas = createWorkflowSchemas({
   dataType: dataTypeSchema,
   node: nodeDefinitionSchema,
-  edge: controlEdgeDefinitionSchema,
+  edge: workflowEdgeSchema,
 });
 
-// 仅校验静态引用与联合 DAG，不解释运行值、不查询资产，也不推断声明端口。
+// 仅校验静态引用与数据 DAG，不解释运行值、不查询资产，也不推断声明端口。
 export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
   (definition, context) => {
     const nodes = new Set(definition.nodes.map((node) => node.id));
+    const nodeDefinitions = new Map(definition.nodes.map((node) => [node.id, node]));
     const inputs = new Set(definition.inputs.map((input) => input.name));
     const dependents = new Map<string, Set<string>>();
     const incoming = new Map<string, number>();
@@ -30,23 +32,7 @@ export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
 
     definition.nodes.forEach((node, index) => {
       for (const [key, binding] of Object.entries(node.inputs)) {
-        if (binding.type === 'connection') {
-          if (!nodes.has(binding.nodeId)) {
-            context.addIssue({
-              code: 'custom',
-              path: ['nodes', index, 'inputs', key, 'nodeId'],
-              message: '数据绑定引用了不存在的节点',
-            });
-          } else if (binding.nodeId === node.id) {
-            context.addIssue({
-              code: 'custom',
-              path: ['nodes', index, 'inputs', key, 'nodeId'],
-              message: '数据绑定不能引用自身',
-            });
-          } else {
-            addDependency(binding.nodeId, node.id);
-          }
-        } else if (binding.type === 'workflow_input' && !inputs.has(binding.key)) {
+        if (binding.type === 'workflow_input' && !inputs.has(binding.key)) {
           context.addIssue({
             code: 'custom',
             path: ['nodes', index, 'inputs', key, 'key'],
@@ -57,32 +43,53 @@ export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
     });
 
     const edgeIds = new Set<string>();
+    const connectedInputs = new Map<string, Set<string>>();
     definition.edges.forEach((edge, index) => {
       if (edgeIds.has(edge.id)) {
         context.addIssue({
           code: 'custom',
           path: ['edges', index, 'id'],
-          message: '控制边标识不能重复',
+          message: '数据边标识不能重复',
         });
       }
       edgeIds.add(edge.id);
-      for (const key of ['sourceNodeId', 'targetNodeId'] as const) {
-        if (!nodes.has(edge[key])) {
+      for (const key of ['source', 'target'] as const) {
+        if (!nodes.has(edge[key].nodeId)) {
           context.addIssue({
             code: 'custom',
-            path: ['edges', index, key],
-            message: '控制边引用了不存在的节点',
+            path: ['edges', index, key, 'nodeId'],
+            message: '数据边引用了不存在的节点',
           });
         }
       }
-      if (edge.sourceNodeId === edge.targetNodeId) {
+      if (edge.source.nodeId === edge.target.nodeId) {
         context.addIssue({
           code: 'custom',
-          path: ['edges', index, 'targetNodeId'],
-          message: '控制边不能连接自身',
+          path: ['edges', index, 'target', 'nodeId'],
+          message: '数据边不能连接自身',
         });
       } else {
-        addDependency(edge.sourceNodeId, edge.targetNodeId);
+        addDependency(edge.source.nodeId, edge.target.nodeId);
+      }
+
+      const targetPorts = connectedInputs.get(edge.target.nodeId) ?? new Set<string>();
+      if (targetPorts.has(edge.target.portKey)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['edges', index, 'target', 'portKey'],
+          message: '每个输入端口最多连接一条数据边',
+        });
+      }
+      targetPorts.add(edge.target.portKey);
+      connectedInputs.set(edge.target.nodeId, targetPorts);
+
+      const targetNode = nodeDefinitions.get(edge.target.nodeId);
+      if (targetNode && Object.hasOwn(targetNode.inputs, edge.target.portKey)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['edges', index, 'target', 'portKey'],
+          message: '数据边目标端口不能同时保存静态输入绑定',
+        });
       }
     });
 
@@ -101,8 +108,8 @@ export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
     if (visited !== nodes.size) {
       context.addIssue({
         code: 'custom',
-        path: ['nodes'],
-        message: '控制关系与数据依赖联合必须无环',
+        path: ['edges'],
+        message: '数据依赖必须无环',
       });
     }
   },

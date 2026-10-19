@@ -4,7 +4,7 @@ DramaFlow 是面向团队自部署的 AI 视频生产工作流平台，漫剧优
 
 ## 已实现的基础工程
 
-应用已有登录、平台鉴权、账户中心、项目管理和 React Flow 画布。画布注册通用节点 renderer 并查询真实节点目录，目前目录为空；没有添加节点、图编辑保存、模型生成、工作流运行或业务对话。
+应用已有登录、平台鉴权、账户中心、项目管理和 React Flow 画布。画布注册通用节点 renderer、查询真实节点目录，并接入 Data Edge 连线、重连与删除事件。目前目录为空，没有添加节点、Workflow 持久化、模型生成、工作流运行或业务对话。
 
 Next.js 使用 App Router、Ant Design 深色主题和 TanStack Query。认证通过同源代理接入 NestJS Better Auth 白名单入口，业务 API 默认受真实全局 AuthGuard 保护。PostgreSQL / Prisma 保存身份、资料、凭证、会话、认证限流及基础项目；Redis 与 RustFS 提供基础服务。会话与角色边界见 [认证实施](authentication.md)。
 
@@ -18,9 +18,9 @@ worker 仍是独立 NestJS 应用上下文，通过 `@dramaflow/server` 复用�
 
 contracts 的 `workflow/metadata.ts` 保留元数据、版本 / 运行元数据、六种运行状态、输出来源与显式 createWorkflowSchemas 工厂。调用方提供 DataType、Node、Edge Schema，组合器检查顶层字段、名称 / 节点 ID 唯一及最终输出来源节点；不强迫通用调用方采用具体节点协议。
 
-`workflow/definition.ts` 的正式 workflowDefinitionSchema 使用当前 DataType、NodeDefinition 与 ControlEdgeDefinition 组合，保留 inputs / nodes / edges / outputs。它检查控制边 ID 唯一、来源 / 目标节点、connection 来源节点、workflow_input 名称、自连接与控制加数据依赖的联合 DAG。
+正式 workflowDefinitionSchema 使用当前 DataType、NodeDefinition 与 WorkflowEdge 组合，保留 inputs / nodes / edges / outputs。WorkflowEdge 当前仅包含 DataEdgeDefinition，以 id、kind:data 和 source / target 的 nodeId / portKey 保存节点间连接。它检查数据边 ID 唯一、两端节点、workflow_input 名称、自连接、目标端口单连接、静态 Binding 冲突与数据 DAG。
 
-正式静态校验不访问 Registry，因此不判断 outputKey、类型端口或配置契约是否存在，不做类型兼容、资源权限或资产访问，也不解析运行值。控制边只保存节点到节点的关系，条件路由端口不在这条边上。完整发布 / 执行校验尚未接入。
+Node.inputs 只接受 constant / workflow_input / asset 三类 StaticInputBinding，不保存 ConnectionBinding。正式静态校验不访问 Registry，因此不判断端口或配置契约是否存在，不做类型兼容、资源权限或资产访问，也不解析运行值。当前没有 Control Edge 协议；完整发布 / 执行校验尚未接入。
 
 workflow 包已有 parseWorkflowInputs、collectWorkflowOutputs、createWorkflowVersionSnapshot、assertWorkflowRunVersion：按显式 Zod 契约校验值、按声明来源收集最终结果、复制并冻结 JSON 快照、检查运行版本身份。这些函数不发布版本或创建运行；快照只保证内存隔离，不替代数据库不可变性、权限与并发控制。
 
@@ -46,9 +46,9 @@ createWorkflowRunConfig 使用显式 Run.threadId，不从 Run.id 推断或允�
 
 react-flow-adapter.ts 提供整图转换与节点白名单映射。React Flow type 使用 workflowNode renderer，领域类型版本在 data.nodeType / data.typeVersion，位置对应必填 ui.position；selected、dragging、measured 不回写 DSL。
 
-Node.inputs.connection 派生 data.kind=data 的可视化边，Workflow.edges 独立转换为 data.kind=control 的边。新增连接只替换目标端口 Binding，并对照传入的 Manifest 检查精确类型版本、端口存在和静态类型；目录查询与显式连线共用目录 Schema，拒绝重复 type / version，避免按数组顺序选择冲突声明。断连检查当前来源与完整旧快照，避免过期事件误删新连接，不生成持久化数据边。连接辅助函数不做运行值校验。
+Workflow.edges 是节点间数据连接的唯一来源。Data Edge 的 id、source.nodeId / portKey、target.nodeId / portKey 与 React Flow 的 id、source / sourceHandle、target / targetHandle 无损往返；Handle.id 必须等于对应 Manifest 端口 key。新增连接对照 Manifest 检查精确类型版本、节点与端口存在、共享 isTypeAssignable、自连接及目标已有边，再创建 DataEdgeDefinition；显式连接可移除目标静态 Binding，连接关系只保留在 edges。数组输入同样至多一条边，不自动聚合多连接。目录查询与显式连线共用目录 Schema，拒绝重复 type / version。断连和重连核对完整旧边快照，防止过期事件修改新连接；连接辅助函数不做运行值校验。
 
-GenericWorkflowNode 根据精确类型版本 Manifest 自动生成 Handle、显示端口类型与配置摘要；缺失版本显示不可用，图标采用受控映射。画布已注册 renderer、加载目录并处理加载 / 错误 / 空态；当前没有添加节点或图编辑 / 保存。项目保存按钮仍只处理名称、视口及 revision。
+GenericWorkflowNode 根据精确类型版本 Manifest 自动生成 Handle、显示端口类型与配置摘要；缺失版本显示不可用，图标采用受控映射。画布以本地 WorkflowDefinition 派生 React Flow nodes / edges，onConnect / onReconnect / onEdgesDelete 使用上述适配操作；已注册 renderer、加载目录并处理加载 / 错误 / 空态。生产目录仍为空，没有节点添加和 Workflow 持久化。项目保存按钮仍只处理名称、视口及 revision。
 
 ## 目录与依赖
 

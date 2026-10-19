@@ -3,14 +3,6 @@ import { contentIdentifierSchema } from '../data/reference.js';
 import { nodeTypeIdSchema, nodeTypeVersionSchema } from './manifest.js';
 import { workflowIdentifierSchema, workflowPortNameSchema } from '../workflow/metadata.js';
 
-export const connectionBindingSchema = z
-  .object({
-    type: z.literal('connection'),
-    nodeId: workflowIdentifierSchema,
-    outputKey: workflowPortNameSchema,
-  })
-  .strict();
-
 export const constantBindingSchema = z
   .object({ type: z.literal('constant'), value: z.json() })
   .strict();
@@ -28,8 +20,7 @@ export const assetBindingSchema = z
   })
   .strict();
 
-export const inputBindingSchema = z.discriminatedUnion('type', [
-  connectionBindingSchema,
+export const staticInputBindingSchema = z.discriminatedUnion('type', [
   constantBindingSchema,
   workflowInputBindingSchema,
   assetBindingSchema,
@@ -41,7 +32,7 @@ export const nodeDefinitionSchema = z
     type: nodeTypeIdSchema,
     typeVersion: nodeTypeVersionSchema,
     name: z.string().trim().min(1).max(80),
-    inputs: z.record(workflowPortNameSchema, inputBindingSchema),
+    inputs: z.record(workflowPortNameSchema, staticInputBindingSchema),
     config: z.record(z.string(), z.json()),
     preset: workflowIdentifierSchema.optional(),
     ui: z
@@ -49,15 +40,6 @@ export const nodeDefinitionSchema = z
         position: z.object({ x: z.number().finite(), y: z.number().finite() }).strict(),
       })
       .strict(),
-  })
-  .strict();
-
-// Workflow.edges 只保存节点级控制关系。条件路由尚未进入这条边，避免无执行语义的端口被保存下来。
-export const controlEdgeDefinitionSchema = z
-  .object({
-    id: workflowIdentifierSchema,
-    sourceNodeId: workflowIdentifierSchema,
-    targetNodeId: workflowIdentifierSchema,
   })
   .strict();
 
@@ -104,13 +86,11 @@ export const nodeRunSchema = z
   })
   .strict();
 
-export type ConnectionBinding = z.infer<typeof connectionBindingSchema>;
 export type ConstantBinding = z.infer<typeof constantBindingSchema>;
 export type WorkflowInputBinding = z.infer<typeof workflowInputBindingSchema>;
 export type AssetBinding = z.infer<typeof assetBindingSchema>;
-export type InputBinding = z.infer<typeof inputBindingSchema>;
+export type StaticInputBinding = z.infer<typeof staticInputBindingSchema>;
 export type NodeDefinition = z.infer<typeof nodeDefinitionSchema>;
-export type ControlEdgeDefinition = z.infer<typeof controlEdgeDefinitionSchema>;
 export type NodePreset = z.infer<typeof nodePresetSchema>;
 export type NodeRunError = z.infer<typeof nodeRunErrorSchema>;
 export type NodeRun = z.infer<typeof nodeRunSchema>;

@@ -9,6 +9,7 @@ export * from './data/runtime-value.js';
 export * from './content/artifact.js';
 export * from './content/asset.js';
 export * from './workflow/metadata.js';
+export * from './workflow/edge-definition.js';
 export * from './workflow/definition.js';
 export * from './node/definition.js';
 export * from './node/manifest.js';

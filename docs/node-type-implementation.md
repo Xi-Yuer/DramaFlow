@@ -22,10 +22,10 @@ NodeCompilationStrategy 接收节点、说明书、统一 Executor、执行上�
 
 GET /api/v1/workflow/node-types 默认认证，no-store。生产 Registry 仍为空，没有占位 LLM 或视频类型。目录查询与连线共用唯一性校验，不按数组顺序选择冲突的 type / version。
 
-GenericWorkflowNode 按精确 Manifest 生成 Handle，显示正式 DataType 的中文摘要；缺少匹配版本显示不可用。React Flow renderer 已注册，项目仍只保存名称、视口和 revision，没有开放图编辑保存或运行按钮。
+GenericWorkflowNode 按精确 Manifest 生成 Handle，Handle.id 必须等于对应端口 key，显示正式 DataType 的中文摘要；缺少匹配版本显示不可用。React Flow renderer 与 Data Edge 连线、重连、删除事件已接入画布；生产目录仍为空，没有节点添加与 Workflow 持久化，项目仍只保存名称、视口和 revision，没有运行按钮。
 
 ## 实施边界
 
 数据类型校验与共享兼容算法已实现；RuntimeValue、版本化引用、Artifact / Asset、State 及 Codec / Resolver / Executor / Store / Recorder 已有类型或协议。具体 Runtime、内容持久化、大小预算、权限解析与审计投影尚未接入，不使用测试替身提供生产降级。
 
-下一步是 Workflow Graph Model：确定 Data / Control Edge、Handle、联合依赖、Branch、Join 与 LangGraph 映射；不先跳入 Plugin、Batch 或完整生成流程。当前 ControlEdge 只是最小草案，不增加需要未来补语义的字段。
+Data Edge 只表达端口间数据关系，不在本步决定控制路由与执行激活。后续议题统一见 [实施方案](implementation-plan.md)，不先跳入 Plugin、Batch 或完整生成流程。

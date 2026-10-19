@@ -2,7 +2,7 @@
 
 DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，以漫剧生产为核心场景，同时支持广告、产品宣传、口播等视频生产流程**，面向团队自部署。
 
-当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录并注册通用 renderer；生产目录为空，没有添加节点、图编辑保存、工作流运行或模型调用。
+当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录、注册通用 renderer，并接入 Data Edge 连线、重连与删除事件；生产目录为空，没有添加节点、Workflow 持久化、工作流运行或模型调用。
 
 基础库已有正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及 execute 与统一编译包装的分层。Codec、BindingResolver、NodeExecutor 和内容 / 审计服务当前是接口，尚无完整生产管线，见 [数据模型](docs/data-model.md) 与 [当前架构](docs/architecture.md)。
 

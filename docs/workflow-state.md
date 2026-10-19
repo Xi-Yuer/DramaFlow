@@ -24,7 +24,7 @@ NodeOutputMap 已明确为 Record<string, Record<string, RuntimeValue>>，不再
 
 不同节点的 outputs 应按节点键合并，不能默认整对象覆盖。相同 nodeId 的并发分支必须明确分支身份和结果收集规则，不能依靠最后完成者覆盖；最终通道与 reducer 交给下一步 Graph Model 核定。[官方并行说明](https://docs.langchain.com/oss/javascript/langgraph/use-graph-api#run-graph-nodes-in-parallel) 介绍原生更新机制。
 
-State 只保留当前有效值。旧版本、失败记录、模型、耗时与成本进入 NodeRun 等业务记录。attempt 不等于函数重入次数；Send 分支也不能仅靠 nodeId 标识。审核回改的讨论不授权任意循环，也不绕过当前联合 DAG 校验。
+State 只保留当前有效值。旧版本、失败记录、模型、耗时与成本进入 NodeRun 等业务记录。attempt 不等于函数重入次数；Send 分支也不能仅靠 nodeId 标识。审核回改的讨论不授权任意循环，也不绕过当前数据 DAG 校验。
 
 ## Thread、审核与子流程
 

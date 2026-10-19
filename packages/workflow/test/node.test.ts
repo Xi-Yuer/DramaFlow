@@ -30,8 +30,8 @@ function definition() {
     preset: 'storyboard-generator',
     name: '生成分镜',
     inputs: {
-      script: { type: 'connection', nodeId: 'script', outputKey: 'text' },
-      characters: { type: 'connection', nodeId: 'characters', outputKey: 'items' },
+      script: { type: 'workflow_input', key: 'script' },
+      characters: { type: 'workflow_input', key: 'characters' },
     },
     ui: { position: { x: 0, y: 0 } },
     config: { prompt: '分镜提示词', temperature: 0.5 },
@@ -49,7 +49,7 @@ describe('节点类型、实例和 Preset', () => {
     expect(() =>
       parseNodeDefinition(contract, {
         ...definition(),
-        inputs: { unknown: { type: 'connection', nodeId: 'a', outputKey: 'text' } },
+        inputs: { unknown: { type: 'workflow_input', key: 'text' } },
       }),
     ).toThrow(expect.objectContaining({ code: 'unknown_input' }));
   });

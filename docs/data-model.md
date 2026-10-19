@@ -27,7 +27,7 @@ isTypeAssignable 是前后端共用的纯函数：
 - object 采用结构兼容：来源必须具备目标的全部字段，字段类型递归兼容；允许来源有额外字段。
 - 任意类型可以赋给 any；any 来源不能直接赋给具体类型。
 
-string | null 通过 union 表达。输入 required:false（或未声明 required）表示可省略绑定，与值可为 null 不同。一个端口仍只保存一条绑定；数组描述集合，不恢复 multiple 标志。
+string | null 通过 union 表达。输入 required:false（或未声明 required）表示可省略输入，与值可为 null 不同。一个输入端口至多由一条 Data Edge 或一条静态 Binding 提供值；数组描述集合，不赋予多条边自动聚合的语义，也不恢复 multiple 标志。
 
 ## Named Type Registry
 
@@ -68,7 +68,7 @@ RuntimeValueContext 明确 projectId、workflowRunId 和可选 nodeRunId。Runti
 
 媒体解析应返回 ResolvedMediaObject：明确引用、MIME、可选尺寸/时长与临时 access.url，不机械下载成 Buffer，也不把临时 URL 写回持久 RuntimeValue。ArtifactStore / AssetStore 的所有访问都带项目运行上下文，不能仅凭知道引用 ID 就获得读取权限。
 
-BindingResolver.resolveValue 保留本次绑定使用的 RuntimeValue，供执行管线 decode 和记录输入快照；resolve(binding, expectedType, context) 接收包含 WorkflowState 的上下文，解析 connection / workflow_input / constant / asset，再经 Codec 返回节点实际输入。这样不必把含临时访问 URL 的已解析媒体对象重新 encode 成快照。Codec、Resolver 与内容 Store 当前是服务接口，尚无生产实现；不会悄悄把绑定描述当作已解析值。
+BindingResolver 接收 StaticInputBinding，只解析 workflow_input / constant / asset。resolveValue 保留本次绑定使用的 RuntimeValue，供执行管线 decode 和记录输入快照；resolve(binding, expectedType, context) 接收包含 WorkflowState 的上下文，再经 Codec 返回节点实际输入。这样不必把含临时访问 URL 的已解析媒体对象重新 encode 成快照。Data Edge 连接的上游结果读取属于后续执行适配，不再编码为 ConnectionBinding。Codec、Resolver 与内容 Store 当前是服务接口，尚无生产实现；不会悄悄把绑定描述当作已解析值。
 
 NodeExecutor 的统一管线契约是：解析绑定、decode、输入/配置 Zod 校验、NodeType.execute、输出校验、encode、持久化 Artifact、记录 NodeRun，最后返回本节点的 outputs 增量。NodeRunRecorder 的 begin / complete / fail 与 Checkpoint 分离，输入输出快照使用 RuntimeValue，不能把凭证或临时访问 URL 写入快照。attempt 不等于节点函数重入次数。
 

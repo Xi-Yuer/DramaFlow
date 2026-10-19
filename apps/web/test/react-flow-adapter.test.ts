@@ -2,14 +2,18 @@ import { describe, expect, it } from 'vitest';
 import {
   connectWorkflowNodes,
   disconnectWorkflowEdge,
+  fromReactFlowEdge,
   fromReactFlowNode,
-  toReactFlowControlEdge,
+  reconnectWorkflowEdge,
+  toReactFlowEdge,
   toReactFlowEdges,
   toReactFlowNode,
   toReactFlowNodes,
 } from '../src/features/workflow/react-flow-adapter';
 import {
   nodeDefinitionSchema,
+  workflowDefinitionSchema,
+  type DataEdgeDefinition,
   type NodeTypeManifest,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
@@ -23,7 +27,6 @@ function definition() {
     name: '生成分镜',
     preset: 'storyboard-generator',
     inputs: {
-      script: { type: 'connection', nodeId: 'script', outputKey: 'text' },
       style: { type: 'constant', value: '黑白' },
       novel: { type: 'workflow_input', key: 'novel' },
       reference: { type: 'asset', assetId: 'image-v1', versionId: 'asset-version-1' },
@@ -48,7 +51,14 @@ function workflow(): WorkflowDefinition {
       }),
       definition(),
     ],
-    edges: [{ id: 'route', sourceNodeId: 'script', targetNodeId: 'storyboard' }],
+    edges: [
+      {
+        id: 'script-edge',
+        kind: 'data',
+        source: { nodeId: 'script', portKey: 'text' },
+        target: { nodeId: 'storyboard', portKey: 'script' },
+      },
+    ],
     outputs: [],
   };
 }
@@ -83,8 +93,12 @@ const connection = {
   targetHandle: 'style',
 };
 
+function styleEdge(input: WorkflowDefinition) {
+  return toReactFlowEdges(input).find((edge) => edge.targetHandle === 'style')!;
+}
+
 describe('React Flow 节点协议适配', () => {
-  it('区分渲染器与运行类型，往返保留四种绑定、Preset、配置和坐标', () => {
+  it('区分渲染器与运行类型，往返保留三种静态绑定、Preset、配置和坐标', () => {
     const input = definition();
     const node = toReactFlowNode(input);
     expect(node.type).toBe('workflowNode');
@@ -122,27 +136,19 @@ describe('React Flow 节点协议适配', () => {
     expect(() => fromReactFlowNode({ ...node, type: undefined })).toThrow('节点渲染器');
   });
 
-  it('转换隔离嵌套配置与绑定，视图编辑不改变领域快照', () => {
+  it('转换隔离嵌套配置与静态绑定，视图编辑不改变领域快照', () => {
     const input = definition();
     const node = toReactFlowNode(input);
-    input.inputs.script = { type: 'connection', nodeId: 'other-script', outputKey: 'text' };
+    input.inputs.style = { type: 'constant', value: '青色' };
     input.config.reference = { colors: ['青色'] };
     input.ui.position.x = 900;
-    expect(node.data.inputs.script).toEqual({
-      type: 'connection',
-      nodeId: 'script',
-      outputKey: 'text',
-    });
+    expect(node.data.inputs.style).toEqual({ type: 'constant', value: '黑白' });
     expect(node.data.config.reference).toEqual({ colors: ['黑白'] });
     const exported = fromReactFlowNode(node);
-    node.data.inputs.script = { type: 'constant', value: '另一剧本' };
+    node.data.inputs.style = { type: 'constant', value: '彩色' };
     node.data.config.prompt = '另一提示词';
     node.position.y = 500;
-    expect(exported.inputs.script).toEqual({
-      type: 'connection',
-      nodeId: 'script',
-      outputKey: 'text',
-    });
+    expect(exported.inputs.style).toEqual({ type: 'constant', value: '黑白' });
     expect(exported.config.prompt).toBe('生成分镜');
     expect(exported.ui.position.y).toBe(-40);
   });
@@ -154,16 +160,14 @@ describe('React Flow 节点协议适配', () => {
     ).toThrow();
   });
 
-  it('导出前校验绑定与 JSON 配置', () => {
+  it('导出拒绝旧 connection 绑定与非 JSON 配置', () => {
     const node = toReactFlowNode(definition());
     expect(() =>
       fromReactFlowNode({
         ...node,
         data: {
           ...node.data,
-          inputs: {
-            script: { type: 'connection', nodeId: 'script' },
-          },
+          inputs: { script: { type: 'connection', nodeId: 'script', outputKey: 'text' } },
         },
       }),
     ).toThrow();
@@ -173,47 +177,102 @@ describe('React Flow 节点协议适配', () => {
   });
 });
 
-describe('React Flow 连线仅由绑定与控制边派生', () => {
-  it('只为 connection 派生数据边，控制边保持独立语义', () => {
-    const edges = toReactFlowEdges(workflow());
-    expect(edges).toHaveLength(2);
-    expect(edges[0]).toMatchObject({
-      source: 'script',
-      sourceHandle: 'text',
-      target: 'storyboard',
-      targetHandle: 'script',
-      data: { kind: 'data' },
-    });
-    expect(edges[1]).toMatchObject({
-      source: 'script',
-      target: 'storyboard',
-      data: { kind: 'control' },
-    });
-    expect(edges[1].sourceHandle).toBeUndefined();
-    expect(edges[1].targetHandle).toBeUndefined();
-  });
-
-  it('控制边和数据边使用不同 ID 命名空间，恶意相同原始 ID 也不冲突', () => {
+describe('React Flow 与一等 Data Edge 无损适配', () => {
+  it('边只从 Workflow.edges 映射，保留领域 ID 与两端 portKey', () => {
     const input = workflow();
-    input.edges[0].id = toReactFlowEdges(input)[0].id;
     const edges = toReactFlowEdges(input);
-    expect(new Set(edges.map((edge) => edge.id)).size).toBe(edges.length);
-    expect(toReactFlowControlEdge(input.edges[0])).toEqual(edges[1]);
+    expect(edges).toEqual([
+      {
+        id: 'script-edge',
+        source: 'script',
+        sourceHandle: 'text',
+        target: 'storyboard',
+        targetHandle: 'script',
+        data: { kind: 'data' },
+      },
+    ]);
+    expect(edges.map(fromReactFlowEdge)).toEqual(input.edges);
+    expect(input.nodes[1].inputs).not.toHaveProperty('script');
+    expect(toReactFlowEdges({ ...input, edges: [] })).toEqual([]);
   });
 
-  it('显式连线仅替换目标端口，不存第二份数据边，不修改原对象', () => {
+  it('边导出剔除临时字段并拒绝缺失 Handle 和旧控制边', () => {
+    const edge = toReactFlowEdges(workflow())[0];
+    expect(fromReactFlowEdge({ ...edge, selected: true, animated: true, style: {} })).toEqual(
+      workflow().edges[0],
+    );
+    for (const extra of [
+      { id: '' },
+      { sourceHandle: null },
+      { targetHandle: undefined },
+      { sourceHandle: 'bad-port' },
+      { data: { kind: 'control' } },
+    ]) {
+      expect(() => fromReactFlowEdge({ ...edge, ...extra })).toThrow();
+    }
+  });
+
+  it('图片生成.image → 图生视频.image 序列化仅保存一条 edges 关系', () => {
+    const input = workflow();
+    input.nodes[0].id = 'image-generator';
+    input.nodes[0].type = 'image.generate';
+    input.nodes[1].id = 'image-to-video';
+    input.nodes[1].type = 'video.image_to_video';
+    input.nodes[1].inputs = {};
+    input.edges = [];
+    const catalog: NodeTypeManifest[] = [
+      {
+        ...manifests()[0],
+        type: 'image.generate',
+        inputs: [],
+        outputs: [{ key: 'image', name: '图片', dataType: { kind: 'named', name: 'media.image' } }],
+      },
+      {
+        ...manifests()[0],
+        type: 'video.image_to_video',
+        inputs: [{ key: 'image', name: '图片', dataType: { kind: 'named', name: 'media.image' } }],
+        outputs: [],
+      },
+    ];
+    const connected = connectWorkflowNodes(
+      input,
+      {
+        source: 'image-generator',
+        sourceHandle: 'image',
+        target: 'image-to-video',
+        targetHandle: 'image',
+      },
+      catalog,
+    );
+    const saved = workflowDefinitionSchema.parse(JSON.parse(JSON.stringify(connected)));
+    expect(saved.edges).toEqual([
+      {
+        id: expect.any(String),
+        kind: 'data',
+        source: { nodeId: 'image-generator', portKey: 'image' },
+        target: { nodeId: 'image-to-video', portKey: 'image' },
+      },
+    ]);
+    expect(saved.nodes[1].inputs).not.toHaveProperty('image');
+    expect(toReactFlowEdges(saved).map(fromReactFlowEdge)).toEqual(saved.edges);
+  });
+});
+
+describe('Data Edge 连线校验', () => {
+  it('显式连线写入 edges 并替换该端口静态来源，不修改原对象或其他输入', () => {
     const input = workflow();
     const result = connectWorkflowNodes(input, connection, manifests());
-    expect(result.nodes[1].inputs.style).toEqual({
-      type: 'connection',
-      nodeId: 'script',
-      outputKey: 'text',
-    });
-    expect(result.nodes[1].inputs.script).toEqual(input.nodes[1].inputs.script);
+    expect(result.nodes[1].inputs).not.toHaveProperty('style');
+    expect(result.nodes[1].inputs.novel).toEqual(input.nodes[1].inputs.novel);
     expect(input.nodes[1].inputs.style).toEqual({ type: 'constant', value: '黑白' });
-    expect(result.edges).toEqual(input.edges);
-    expect(toReactFlowEdges(result).filter((edge) => edge.data?.kind === 'data')).toHaveLength(2);
-    expect(connectWorkflowNodes(result, connection, manifests())).toEqual(result);
+    expect(result.edges).toHaveLength(2);
+    expect(result.edges[1]).toMatchObject({
+      kind: 'data',
+      source: { nodeId: 'script', portKey: 'text' },
+      target: { nodeId: 'storyboard', portKey: 'style' },
+    });
+    expect(new Set(result.edges.map((edge) => edge.id)).size).toBe(2);
+    expect(() => connectWorkflowNodes(result, connection, manifests())).toThrow('已经存在连接');
   });
 
   it.each([undefined, null, '', 'bad-handle'])('连接拒绝缺失或非法端口 %s', (handle) => {
@@ -225,13 +284,16 @@ describe('React Flow 连线仅由绑定与控制边派生', () => {
     ).toThrow();
   });
 
-  it('连接拒绝不存在的端点', () => {
+  it('连接拒绝不存在的端点和自连接', () => {
     expect(() =>
       connectWorkflowNodes(workflow(), { ...connection, source: 'missing' }, manifests()),
     ).toThrow('来源节点');
     expect(() =>
       connectWorkflowNodes(workflow(), { ...connection, target: 'missing' }, manifests()),
     ).toThrow('目标节点');
+    expect(() =>
+      connectWorkflowNodes(workflow(), { ...connection, target: 'script' }, manifests()),
+    ).toThrow('不能连接自身');
   });
 
   it('连接拒绝未声明的端口和不兼容的类型', () => {
@@ -283,8 +345,8 @@ describe('React Flow 连线仅由绑定与控制边派生', () => {
     expect(() => connectWorkflowNodes(input, connection, [older, newer])).toThrow('端口类型不兼容');
     expect(
       connectWorkflowNodes(input, { ...connection, sourceHandle: 'picture' }, [older, newer])
-        .nodes[1].inputs.style,
-    ).toEqual({ type: 'connection', nodeId: 'script', outputKey: 'picture' });
+        .edges[1],
+    ).toMatchObject({ source: { nodeId: 'script', portKey: 'picture' } });
   });
 
   it('显式连接遵守 any 的单向及数组元素兼容规则', () => {
@@ -292,11 +354,7 @@ describe('React Flow 连线仅由绑定与控制边派生', () => {
     catalog[0].outputs[0].dataType = { kind: 'any' };
     expect(() => connectWorkflowNodes(workflow(), connection, catalog)).toThrow('端口类型不兼容');
     catalog[0].inputs[1].dataType = { kind: 'any' };
-    expect(connectWorkflowNodes(workflow(), connection, catalog).nodes[1].inputs.style).toEqual({
-      type: 'connection',
-      nodeId: 'script',
-      outputKey: 'text',
-    });
+    expect(connectWorkflowNodes(workflow(), connection, catalog).edges).toHaveLength(2);
     catalog[0].outputs[0].dataType = { kind: 'array', itemType: { kind: 'any' } };
     catalog[0].inputs[1].dataType = {
       kind: 'array',
@@ -308,48 +366,139 @@ describe('React Flow 连线仅由绑定与控制边派生', () => {
       itemType: { kind: 'named', name: 'media.image' },
     };
     catalog[0].inputs[1].dataType = { kind: 'array', itemType: { kind: 'any' } };
-    expect(connectWorkflowNodes(workflow(), connection, catalog).nodes[1].inputs.style).toEqual({
-      type: 'connection',
-      nodeId: 'script',
-      outputKey: 'text',
-    });
+    const result = connectWorkflowNodes(workflow(), connection, catalog);
+    expect(result.edges).toHaveLength(2);
+    catalog[0].outputs[1].dataType = catalog[0].outputs[0].dataType;
+    expect(() =>
+      connectWorkflowNodes(result, { ...connection, sourceHandle: 'newText' }, catalog),
+    ).toThrow('已经存在连接');
   });
 
-  it('断开数据边只删除对应绑定，保留其余输入和控制边', () => {
+  it('标量不能接入数组端口，不隐式聚合；数据边不能形成环', () => {
+    const catalog = manifests();
+    catalog[0].inputs[1].dataType = {
+      kind: 'array',
+      itemType: { kind: 'primitive', name: 'string' },
+    };
+    expect(() => connectWorkflowNodes(workflow(), connection, catalog)).toThrow('端口类型不兼容');
+    expect(() =>
+      connectWorkflowNodes(
+        workflow(),
+        { ...connection, source: 'storyboard', target: 'script' },
+        manifests(),
+      ),
+    ).toThrow('数据依赖必须无环');
+  });
+});
+
+describe('Data Edge 删除与重连', () => {
+  it('断连只删除对应 edges 关系，不改变节点静态输入', () => {
     const input = connectWorkflowNodes(workflow(), connection, manifests());
-    const edge = toReactFlowEdges(input).find((item) => item.targetHandle === 'style');
-    const result = disconnectWorkflowEdge(input, edge);
-    expect(result.nodes[1].inputs).not.toHaveProperty('style');
-    expect(result.nodes[1].inputs.script).toEqual(input.nodes[1].inputs.script);
-    expect(result.edges).toEqual(input.edges);
-    expect(input.nodes[1].inputs.style).toHaveProperty('type', 'connection');
+    const result = disconnectWorkflowEdge(input, styleEdge(input));
+    expect(result.edges).toEqual(workflow().edges);
+    expect(result.nodes).toEqual(input.nodes);
+    expect(input.edges).toHaveLength(2);
   });
 
-  it('过期断开事件不能删除已重新绑定的值，伪造 ID 不能误删其他输入', () => {
+  it('重连保留领域 ID，旧删除/重连事件不影响新关系', () => {
     const input = workflow();
     const edge = toReactFlowEdges(input)[0];
-    input.nodes[1].inputs.script = { type: 'constant', value: '用户输入' };
-    expect(disconnectWorkflowEdge(input, edge)).toEqual(input);
-    const updated = connectWorkflowNodes(
+    const updated = reconnectWorkflowEdge(
       input,
-      {
-        ...connection,
-        targetHandle: 'script',
-        sourceHandle: 'newText',
-      },
+      edge,
+      { ...connection, targetHandle: 'script', sourceHandle: 'newText' },
       manifests(),
     );
+    expect(updated.edges).toEqual([
+      {
+        ...input.edges[0],
+        source: { nodeId: 'script', portKey: 'newText' },
+      },
+    ]);
     expect(disconnectWorkflowEdge(updated, edge)).toEqual(updated);
-    const valid = toReactFlowEdges(updated)[0];
-    expect(disconnectWorkflowEdge(updated, { ...valid, id: 'wrong-id' })).toEqual(updated);
+    expect(reconnectWorkflowEdge(updated, edge, connection, manifests())).toEqual(updated);
+    expect(input).toEqual(workflow());
+    expect(
+      disconnectWorkflowEdge(updated, { ...toReactFlowEdges(updated)[0], id: 'wrong-id' }),
+    ).toEqual(updated);
   });
 
-  it('删除控制边只删除匹配路由，保留相同端点的数据关系', () => {
+  it('删除后重新连接相同端点有新 ID，过期事件不能删除新边', () => {
     const input = workflow();
-    const edge = toReactFlowEdges(input).find((item) => item.data?.kind === 'control');
-    const result = disconnectWorkflowEdge(input, edge);
-    expect(result.edges).toEqual([]);
-    expect(result.nodes[1].inputs).toEqual(input.nodes[1].inputs);
-    expect(disconnectWorkflowEdge(input, { ...edge, sourceHandle: 'otherBranch' })).toEqual(input);
+    const edge = toReactFlowEdges(input)[0];
+    const removed = disconnectWorkflowEdge(input, edge);
+    const updated = connectWorkflowNodes(
+      removed,
+      { ...connection, targetHandle: 'script' },
+      manifests(),
+    );
+    expect(updated.edges[0].id).not.toBe(edge.id);
+    expect(disconnectWorkflowEdge(updated, edge)).toEqual(updated);
+  });
+
+  it('重连替换新目标的静态来源，保留其他输入与旧目标空态', () => {
+    const input = workflow();
+    const result = reconnectWorkflowEdge(
+      input,
+      toReactFlowEdges(input)[0],
+      connection,
+      manifests(),
+    );
+    expect(result.edges[0].id).toBe(input.edges[0].id);
+    expect(result.edges[0].target.portKey).toBe('style');
+    expect(result.nodes[1].inputs).not.toHaveProperty('style');
+    expect(result.nodes[1].inputs).not.toHaveProperty('script');
+    expect(result.nodes[1].inputs.novel).toEqual(input.nodes[1].inputs.novel);
+    expect(input.nodes[1].inputs.style).toEqual({ type: 'constant', value: '黑白' });
+  });
+
+  it('重连失败保留旧边及静态输入，不因先断连而丢失数据', () => {
+    const input = connectWorkflowNodes(workflow(), connection, manifests());
+    const snapshot = structuredClone(input);
+    const edge = toReactFlowEdges(input)[0];
+    expect(() => reconnectWorkflowEdge(input, edge, connection, manifests())).toThrow(
+      '已经存在连接',
+    );
+    const catalog = manifests();
+    catalog[0].outputs[2].dataType = { kind: 'primitive', name: 'number' };
+    expect(() =>
+      reconnectWorkflowEdge(
+        input,
+        edge,
+        { ...connection, sourceHandle: 'picture', targetHandle: 'novel' },
+        catalog,
+      ),
+    ).toThrow('端口类型不兼容');
+    expect(() =>
+      reconnectWorkflowEdge(
+        input,
+        edge,
+        { ...connection, source: 'storyboard', target: 'script', targetHandle: 'style' },
+        manifests(),
+      ),
+    ).toThrow('数据依赖必须无环');
+    expect(input).toEqual(snapshot);
+    expect(input.nodes[1].inputs.novel).toEqual({ type: 'workflow_input', key: 'novel' });
+  });
+
+  it('无改动重连保持同一关系，重连无效旧快照不会新增边', () => {
+    const input = workflow();
+    const edge = toReactFlowEdges(input)[0];
+    expect(
+      reconnectWorkflowEdge(input, edge, { ...connection, targetHandle: 'script' }, manifests()),
+    ).toEqual(input);
+    expect(
+      reconnectWorkflowEdge(input, { ...edge, targetHandle: 'novel' }, connection, manifests()),
+    ).toEqual(input);
+  });
+
+  it('端点快照和领域对象相互隔离', () => {
+    const domain: DataEdgeDefinition = workflow().edges[0];
+    const edge = toReactFlowEdge(domain);
+    domain.source.portKey = 'newText';
+    expect(edge.sourceHandle).toBe('text');
+    const exported = fromReactFlowEdge(edge);
+    edge.targetHandle = 'style';
+    expect(exported.target.portKey).toBe('script');
   });
 });
