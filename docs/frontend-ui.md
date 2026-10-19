@@ -6,6 +6,10 @@
 
 当前使用 Ant Design、Next.js Registry 和 TanStack Query，主题入口为 `apps/web/src/app/theme.ts`。登录页和账户中心已应用石墨灰与青色主题，通用表单、密码输入、选择器、页签、菜单、提示和弹窗复用组件库。定制样式集中在页面布局与少量装饰；后续按具体模块继续遵守下方提示词。
 
+节点界面只读取安全 NodeTypeManifest 中的 displayName、category、纯数据 ui 和 JSON Schema；字段组件、图标通过前端受信任映射选择，不加载服务端 Zod、compile 或模型实例。UI 描述表达编辑提示，配置与输入的完整校验仍由服务端负责；现有控件标识不代表相应表单或能力已实现。
+
+`features/workflow/react-flow-adapter.ts` 仅提供独立转换：React Flow type 是 `workflowNode` 渲染器，Runtime type 放在 `data.nodeType`，坐标对应 DSL 的 `ui.position`，临时交互状态不持久化。当前画布未接入这组转换，也没有生产节点渲染器或配置表单；相关边界见 [Node 模型](node-model.md)。
+
 ## 可直接用于后续实施的样式提示词
 
 为 DramaFlow 设计一个面向 AI 漫剧及多媒体创作的专业创作空间。整体气质应当安静、精致、现代、有沉浸感，像供创作者长期使用的画布与内容编辑工具。让作品、画面、提示词和正在进行的创作成为视觉中心，界面框架保持轻盈。风格关键词：深色中性、石墨质感、柔和圆角、精细层级、少量电光青、浮动操作、内容优先。

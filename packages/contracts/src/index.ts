@@ -43,3 +43,4 @@ export type ProfileInput = z.infer<typeof profileInputSchema>;
 export * from './project.js';
 export * from './workflow.js';
 export * from './node.js';
+export * from './node-type.js';

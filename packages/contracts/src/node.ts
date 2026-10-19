@@ -17,7 +17,12 @@ export const nodeDefinitionSchema = z
     inputs: z.array(inputBindingSchema),
     config: z.record(z.string(), z.json()),
     preset: workflowIdentifierSchema.optional(),
-    position: z.object({ x: z.number().finite(), y: z.number().finite() }).strict().optional(),
+    ui: z
+      .object({
+        position: z.object({ x: z.number().finite(), y: z.number().finite() }).strict(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((node, context) => {

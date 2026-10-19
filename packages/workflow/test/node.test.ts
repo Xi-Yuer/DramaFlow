@@ -5,7 +5,7 @@ import {
   invokeNodeOperation,
   inputBindingFromEdge,
   parseNodeDefinition,
-  type NodeTypeDefinition,
+  type NodeContract,
 } from '../src/index.js';
 
 // 显式测试契约与纯函数，不注册 LLM、供应商适配器或生产 Preset。
@@ -21,7 +21,7 @@ const contract = {
   configSchema: z
     .object({ prompt: z.string().min(1), temperature: z.number().min(0).max(2) })
     .refine((config) => config.prompt.trim().length > 0, '提示词不能为空白'),
-} satisfies NodeTypeDefinition;
+} satisfies NodeContract;
 
 function definition() {
   return {

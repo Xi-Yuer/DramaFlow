@@ -23,7 +23,7 @@ React Flow 编辑视图
     ↓ 前端适配
 平台 WorkflowDefinition / 不可变 WorkflowVersion
     ↓ Workflow Compiler
-    ├── NodeRegistry → NodeCompiler → LangGraph 节点函数
+    ├── NodeRegistry → NodeType（definition + compile）→ LangGraph 节点函数
     ├── Edge Compiler → 原生边 / 条件路由 / Send 等
     └── State Schema / Binding / 输出收集适配
     ↓
@@ -36,11 +36,15 @@ LangGraph Runtime
 
 Workflow Compiler 将已验证的领域 DSL 转为 LangGraph 构建器，LangGraph 的 `compile()` 生成可执行图；两者是不同层次。发布快照只冻结定义，不能隐式开始执行。平台负责权限、版本引用、联合依赖无环和输入输出契约检查，再把执行交给 LangGraph；原生图编译检查不能代替领域校验。[官方 Graph API](https://docs.langchain.com/oss/javascript/langgraph/graph-api) 说明了 State、节点、边与编译关系。
 
-NodeRegistry 显式选择受信任的 NodeCompiler，不动态执行浏览器传来的代码，也不在类型、Preset 或插件缺失时回退到其他实现。相近业务通过 Preset 与有效契约复用执行机制；视频领域能力可以专业化，编译器不与单一供应商绑定。
+NodeRegistry 注册受信任的完整 NodeType，由 definition 提供 type / preset 身份，以 register / get / compile 精确匹配；NodeCompiler 只声明 compile，不重复维护类型标识。不动态执行浏览器代码，也不在类型、Preset 或插件缺失时回退。相近业务通过 Preset 与有效契约复用执行机制，Preset 不复制执行器；视频领域能力可以专业化，编译器不与单一供应商绑定。
 
 LangGraph 节点函数需要接收图 State，编译适配层因此可以读取 State、解析绑定并返回 State 更新。普通业务操作仍只收到自己的 `inputs / config`，不知道上下游节点或整个 State。控制、审核等 NodeCompiler 可以直接使用 LangGraph 原生 `Command`、条件路由或 `interrupt()`，不强制套进普通值操作接口。
 
-当前 `NodeCompiler<State, Update>`、`NodeRegistry` 与 `createOperationNodeCompiler` 为这条链提供基础接口；`CompileContext.readInputs / writeOutputs` 是适配边界，没有预设完整 WorkflowState。`invokeNodeOperation` 只校验普通操作的输入、配置和输出，透传 LangChain runnable 配置；它不负责 ready 判断、调度、暂停、恢复或重试。
+当前 `NodeType<State, Update>`、`NodeRegistry` 与 `createOperationNodeType` 为这条链提供基础接口。完整 NodeTypeDefinition 将 NodeContract 的服务端 Zod 与公开 metadata / UI 组合；`CompileContext.readInputs / writeOutputs` 是适配边界，没有预设完整 WorkflowState。`invokeNodeOperation` 只校验普通操作的输入、配置和输出，透传 LangChain runnable 配置，不负责 ready 判断、调度、暂停、恢复或重试。
+
+浏览器读取 `createNodeTypeManifest` 输出的白名单元数据、纯数据 UI 描述与 JSON Schema，不接收完整 NodeTypeDefinition 或 compile。输入与配置 Schema 按 input 语义转换，输出按 output 语义转换；不导出全局 `.meta()`，无法表示的 Schema 明确报错。默认值必须可以公开，服务端仍执行完整 Zod 约束；manifest 不包含厂商密钥、模型或插件实例。具体声明与实现拆解见 [Node 模型](node-model.md) 与 [节点类型实施拆解](node-type-implementation.md)。
+
+React Flow Node 的 type 是前端渲染器标识 `workflowNode`，Runtime 类型在 `data.nodeType`，布局经 `NodeDefinition.ui.position` 转换。前端适配层只转换白名单字段，不把 selected、dragging 或测量状态变成执行定义；当前转换尚未接入画布和 API。
 
 完整 WorkflowState、并行更新 reducer、Binding 解析、控制激活与数据就绪的编译规则，以及 WorkflowDefinition 到整张 StateGraph 的转换，仍须在第 ④ 步明确。不能把当前通用接口标为已实现整图 Compiler。
 
@@ -76,6 +80,6 @@ Queue / Worker 完成作业或收到回调后唤醒对应运行，图的后续�
 
 ## 当前交付边界
 
-基础库已有平台 Workflow / Node Schema、版本快照与值契约，现已增加 NodeCompiler / NodeRegistry、普通节点操作适配及根 Run 配置映射。真实 LangGraph 测试覆盖基础编译适配与原生运行行为；测试中的节点和 MemorySaver 仅用于显式测试，不作为生产类型目录或运行服务。
+基础库已有平台 Workflow / Node Schema、版本快照与值契约、完整 NodeType / NodeRegistry、普通操作适配、公开 manifest 转换及根 Run 配置映射。前端 Node / Edge 双向转换独立于画布。真实 LangGraph 测试覆盖基础编译适配与原生运行行为，测试中的节点和 MemorySaver 不作为生产类型目录或运行服务；具体实现范围统一见 [当前架构](architecture.md)。
 
 当前 Web 仍是 React Flow 空白画布，API 不保存或执行 WorkflowDefinition。生产节点、Plugin、LangChain 模型调用、整图 Compiler、持久 checkpointer、运行接口、Queue 作业及人工审核产品流程均未接入。后续实现继续按已确认范围逐步推进，不能用基础适配测试替代这些能力的交付验证。

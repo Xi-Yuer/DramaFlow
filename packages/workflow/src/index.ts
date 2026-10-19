@@ -3,3 +3,4 @@ export * from './version.js';
 export * from './node.js';
 export * from './compiler.js';
 export * from './run-config.js';
+export * from './node-type.js';

@@ -6,7 +6,7 @@
 
 - 以清理后的基础工程为起点，按 [平台核心模型](docs/platform-model.md) 和 [分步设计与实施方案](docs/implementation-plan.md) 逐层重新建模。当前阶段、下一步与待决策项统一在实施方案中维护。已明确且能独立验证的需求应同步落到代码，不等待全部设计完成或用户再次要求实施；未确定部分保留边界，设计路线不授权一次性实施所有能力。
 - 当前保留身份、账户中心、项目管理和 React Flow 空白画布；每个项目恰好一张画布，仅保存名称、视口及 revision。新增业务以当轮明确范围为准，不自动恢复旧节点库、编排逻辑、模型插件、运行任务或对话业务。
-- contracts 已提供 Workflow、NodeDefinition、InputBinding、Edge、Preset、NodeRun 基础 Schema；workflow 已提供值契约、输出收集、版本快照、运行版本检查、单节点操作校验及面向 LangGraph 的 NodeCompiler / NodeRegistry 基础适配。完整 State、Binding 与 WorkflowDefinition 整图编译、DataType、生产节点与 Preset 目录、工作流应用接口及持久化尚未实现。plugins、context 仍为空入口，模型 SDK 依赖不代表已接入外部调用。当前能力见 [架构说明](docs/architecture.md)，技术分工见 [Runtime 架构](docs/runtime-architecture.md)。下文长期领域规则是后续设计约束，不授权主动实现所有功能。
+- contracts 已提供 Workflow / Node 基础 Schema、Node 类型元数据与安全 manifest 协议；workflow 已提供值契约、快照、NodeType / NodeRegistry、manifest 转换及 LangGraph 基础适配；前端已有独立的 Node / Edge 双向转换，尚未接入画布或 API。完整 State / Binding、DataType、整图编译、生产节点与 Preset 目录、工作流应用接口及持久化尚未实现。plugins、context 仍为空入口，模型 SDK 依赖不代表已接入外部调用。当前能力见 [架构说明](docs/architecture.md)，技术分工见 [Runtime 架构](docs/runtime-architecture.md)。下文长期领域规则是后续设计约束，不授权主动实现所有功能。
 - 业务包和目录允许保留明确的空入口及 .gitkeep，但不能以占位实现冒充可用功能。启动、检查和文档必须与当前基础工程一致。
 
 ## 产品与交付边界
@@ -21,7 +21,7 @@
 ## 工程与依赖方向
 
 - 使用官方脚手架和成熟组件：Next.js、NestJS、React Flow、LangGraph、LangChain。不要重复实现认证、画布或任务调度框架。
-- React Flow 是工作流可视化编辑器；其节点、连线类型留在前端适配层，经平台 WorkflowDefinition 与 Workflow Compiler 编译到 LangGraph StateGraph，不直接把 React Flow 数据作为运行定义。LangChain 复用 Model、Tool、Agent、Message、Runnable 等抽象，Zod 校验 Node Input / Output / Config；职责边界见 [Runtime 架构](docs/runtime-architecture.md)。
+- React Flow 是工作流可视化编辑器；其节点、连线类型留在前端适配层，渲染器 type 与平台 Runtime type 分离，临时交互状态不进入 DSL，布局保存为 NodeDefinition.ui.position。平台 WorkflowDefinition 经 Workflow Compiler 编译到 LangGraph StateGraph。LangChain 复用 Model、Tool、Agent、Message、Runnable 等抽象，Zod 校验 Node Input / Output / Config；职责边界见 [Runtime 架构](docs/runtime-architecture.md)。
 - PostgreSQL（含 pgvector）和 Redis 使用 Docker Compose，保留默认端口 5432 / 6379；不要未经要求更改默认端口。向量检索继续使用 PostgreSQL pgvector，不增加独立向量数据库。
 - 对象存储统一使用 RustFS，通过 S3 接口访问；使用官方固定版本 Docker 镜像及持久化卷。所有新素材写入对象存储；不得静默回退到本地存储。开发阶段不要求兼容历史本地素材，按下述数据变更约束处理。详见 docs/object-storage.md。
 - TypeScript 严格模式；禁止用无依据的 any、@ts-ignore、关闭检查或空 catch 隐藏问题。外部数据必须在边界校验。
@@ -58,7 +58,8 @@
 - Workflow 输出显式绑定来源节点及输出键，不取任意最后节点结果。并行、条件与显式批量通过图拓扑及控制节点表达，不增加 parallelNodes / sequentialNodes 等独立列表。
 - Workflow 可以组合调用另一个项目的明确 WorkflowVersion，调用方版本固定其引用并检查目标项目权限；不动态选择最新版，不通过直接或间接递归绕过 DAG 约束。子流程不在同一项目下引入多工作流编辑层级，运行调度与父子生命周期按后续设计实施。
 - 执行连线决定激活；数据绑定负责传值。二者联合依赖必须无环。未选中分支传播 skipped，不调用模型。
-- Node 是最小可调度执行单元，NodeDefinition、有效 NodeTypeDefinition、Preset 与 NodeRun 分离。NodeRegistry / NodeCompiler 生成 LangGraph 节点函数，编译适配层处理 State 与 Binding；普通业务操作只接收自身已组装输入和配置并返回自身输出，不读取上下游或整个 State。Edge 可携带完整端口映射，但不能把数据就绪等同于控制激活。结构与当前实现见 [Node 模型](docs/node-model.md)。
+- Node 是最小可调度执行单元，NodeDefinition、NodeContract、完整 NodeTypeDefinition、Preset 与 NodeRun 分离。NodeType 统一持有 definition 与 compile，NodeRegistry 以 definition 的 type / preset 精确注册，不维护另一份可漂移的类型身份。编译适配层处理 State 与 Binding，普通操作只接收自身已组装输入和配置并返回自身输出。Preset 复用执行机制，不复制执行器；Edge 的数据就绪不等于控制激活。结构见 [Node 模型](docs/node-model.md)，具体类型的拆解方法见 [节点类型实施拆解](docs/node-type-implementation.md)。
+- 服务端 NodeTypeDefinition 的 Zod Schema、compile、模型与插件实例不能发送到浏览器。前端只读取白名单元数据、纯数据 UI 描述及 JSON Schema manifest；Schema 默认值也必须仅含公开数据，JSON Schema 不替代服务端完整校验。UI 组件与图标使用前端受信任映射，不执行 manifest 中的代码。
 - LangGraph 负责图调度、State 更新、Checkpoint、Interrupt / Resume、Send 和条件路由；平台负责 DSL 校验、编译、权限、领域契约与业务记录，不建立另一套 ready 轮询或暂停恢复状态机。WorkflowRun / NodeRun 状态是业务投影，不替代 LangGraph 的执行状态。队列与 worker 负责跨运行、跨进程和供应商配额的并发控制、限流、长异步作业及唤醒，不决定图中下一个节点。
 - 根 WorkflowRun.id 映射 LangGraph thread_id；恢复使用同一 thread_id、原不可变 WorkflowVersion 及兼容的编译实现。Checkpoint 不替代 Workflow 定义数据库；生产使用持久化 checkpointer，未接入时不得静默降级 MemorySaver。interrupt 控制异常必须交还 LangGraph，不能记为普通 failed；恢复会从节点函数开头重跑，审核与生成副作用必须分离。细节见 [Runtime 架构](docs/runtime-architecture.md)。
 - 文本、图片、视频和对话能力全部由受信任插件提供。节点必须由用户明确选择插件、模型与凭证；禁止隐藏默认厂商和自动替换插件。

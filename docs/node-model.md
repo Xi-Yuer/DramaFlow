@@ -9,7 +9,7 @@ React Flow Node（编辑视图）
     ↓
 NodeDefinition（平台 DSL）
     ↓
-NodeRegistry → NodeCompiler + CompileContext（平台适配）
+NodeRegistry → NodeType（definition + compile）+ CompileContext
     ↓
 LangGraph Node Function → StateGraph.compile() → LangGraph 执行
     ↓
@@ -18,18 +18,44 @@ WorkflowRun / NodeRun（未来的业务记录投影）
 
 平台 Compiler 把关系与契约映射到 LangGraph；LangGraph 负责图执行。编译生成的节点函数可接收 State，适配层按 Binding 取出明确输入，内部值操作只收到自身 inputs / config 及 LangChain RunnableConfig，不自动取得完整图、其他节点结果或聊天。Definition 与 Run 分离；类型与 Preset 分层。没有平台自建的 ready 轮询、暂停状态机或调度循环。
 
-## 四个不同的对象
+## 实例、类型、预设与执行记录
 
-| 对象                 | 职责                                | 当前代码边界                                                                       |
-| -------------------- | ----------------------------------- | ---------------------------------------------------------------------------------- |
-| `NodeDefinition`     | 一个工作流内的静态节点实例          | 保存 id、type、name、inputs、config，以及可选 preset、position                     |
-| `NodeTypeDefinition` | 执行侧有效的输入、输出、配置契约    | 显式提供三个 Zod 对象 Schema；type 标识 Runtime 类型，可选 preset 标识所选有效契约 |
-| `NodePreset`         | 为某类 Runtime 节点提供场景配置     | 保存 id、type、name、description 和 config；不包含执行器                           |
-| `NodeRun`            | 某次 WorkflowRun 中该节点的执行记录 | 保存输入、输出、结构化错误、时间与八种基础状态，不混入静态配置                     |
+| 对象                 | 职责                                 | 当前代码边界                                                                    |
+| -------------------- | ------------------------------------ | ------------------------------------------------------------------------------- |
+| `NodeDefinition`     | 一个工作流内的静态节点实例           | 保存 id、type、name、inputs、config，以及可选 preset、ui.position               |
+| `NodeTypeDefinition` | 节点类型的元数据、有效契约与编辑描述 | type、可选 preset、displayName、category、三个 Zod 对象 Schema 和独立 UI Schema |
+| `NodeType`           | 服务端可编译能力                     | 将 definition 与 compile 方法组合，作为 NodeRegistry 的注册对象                 |
+| `NodePreset`         | 为某类 Runtime 节点提供场景配置      | 保存 id、type、name、description 和 config；不包含执行器                        |
+| `NodeRun`            | 某次 WorkflowRun 中该节点的执行记录  | 保存输入、输出、结构化错误、时间与八种基础状态，不混入静态配置                  |
 
-NodeDefinition 的 `config` 在序列化边界只接受 JSON 记录，随后必须通过所选类型的 `configSchema` 校验；不是把任意配置交给执行器。`position` 是编辑信息，不影响激活或节点业务语义。
+NodeDefinition 的 `config` 在序列化边界只接受 JSON 记录，随后必须通过所选类型的 `configSchema` 校验；不是把任意配置交给执行器。`ui.position` 是编辑信息，不影响激活或节点业务语义。不保留旧顶层 position 或 React Flow Node JSON 作为另一套保存协议。
 
-当前 `NodeTypeDefinition` 持有执行侧 Zod 实例，不是浏览器 JSON 协议。输入输出对象的顶层字段声明端口；字段结构、可选性、约束与配置验证复用成熟 Schema 能力。前端安全声明、完整 DataType 和端口展示适配在相应步骤补齐，不把服务端执行器或 Schema 实例直接传给浏览器。
+React Flow 原生 Node / Edge 继续用于前端交互，不另建画布引擎。`node.type` 表示 React 组件渲染器，普通节点使用 workflowNode；业务类型放在 `node.data.nodeType`。现有双向适配将 data 映射为平台 NodeDefinition，保留绑定、Preset 和配置，只保存白名单字段。多个业务类型可以共享同一个组件，适配器不等于已实现节点 UI 或保存接口。
+
+## NodeTypeDefinition 与公开 manifest
+
+服务端定义既包含数据契约，也包含独立的编辑提示：
+
+```ts
+const definition = {
+  type: 'example-text',
+  displayName: '示例文本类型',
+  category: 'ai',
+  inputSchema: z.object({ prompt: z.string() }),
+  outputSchema: z.object({ text: z.string() }),
+  configSchema: z.object({ systemPrompt: z.string() }),
+  ui: {
+    icon: 'text',
+    fields: { systemPrompt: { component: 'prompt-editor', label: '系统提示词' } },
+  },
+} satisfies NodeTypeDefinition;
+```
+
+这只展示声明结构，不注册可用 LLM 节点。输入输出对象的顶层字段声明端口并遵守平台端口命名规则；configSchema 描述可接受的数据，UI Schema 描述这些配置字段怎样编辑，二者不能混为同一套校验。UI 字段必须真实存在，不允许组件函数、脚本或服务端实例。
+
+NodeTypeDefinition 的 Zod 实例只在服务端持有；`createNodeTypeManifest` 通过白名单元数据和 Zod 原生 JSON Schema 转换输出浏览器协议，输入 / 配置使用 input 方向，输出使用 output 方向。全局 Schema 元数据不自动导出，不可表示的 Schema 明确失败，不能静默变为任意 JSON。Schema 本身的默认值等必须是公开数据，服务端 Zod 仍承担最终校验。
+
+当前 manifest 是声明基础，没有配置表单、模型 / 资产选择器或完整 DataType；字段提示不代表相应交互已经可用。实现与 LLM / 图生视频的逐项验证方案见 [NodeType 实施说明](node-type-implementation.md)。
 
 ## InputBinding 与多上游
 
@@ -70,20 +96,25 @@ NodeDefinition 的 `config` 在序列化边界只接受 JSON 记录，随后必�
 
 ```ts
 interface NodeCompiler<State extends object, Update extends object> {
-  readonly type: string;
-  readonly preset?: string;
   compile(
     definition: NodeDefinition,
     context: CompileContext<State, Update>,
   ): LangGraphNode<State, Update>;
 }
+
+interface NodeType<State extends object, Update extends object> extends NodeCompiler<
+  State,
+  Update
+> {
+  readonly definition: NodeTypeDefinition;
+}
 ```
 
 实际接口在 `packages/workflow/src/compiler.ts`。State / Update 是泛型，不提前规定平台 State 容器。`LangGraphNode` 复用官方 `LangGraphRunnableConfig` 与 `GraphNodeReturnValue`，产物可直接加入真实 StateGraph，也允许原生 Command；不另建 NodeExecutionResult 或成功 / 暂停包装协议。
 
-`NodeRegistry` 只注册显式受信任编译器，按 type / preset 精确匹配，拒绝重复注册或不可用类型，不自动退回基础类型。`CompileContext.readInputs` 与 `writeOutputs` 只负责数据绑定及 State 增量适配，不决定节点何时执行。
+`NodeRegistry` 只注册显式受信任的 NodeType，身份只从 definition 读取，register / get / compile 共用同一目录。按 type / preset 精确匹配，拒绝重复注册或不可用类型，不自动退回基础类型。新增类型通过注册对象扩展，不在中央 Compiler 增加业务 switch。`CompileContext.readInputs` 与 `writeOutputs` 只负责数据绑定及 State 增量适配，不决定节点何时执行。
 
-`createOperationNodeCompiler` 已为普通值操作提供编译适配：编译时校验实例并捕获独立配置；LangGraph 调用产物时读取输入，使用 `invokeNodeOperation` 校验输入 / 配置、调用操作、校验输出，再返回 State 增量。RunnableConfig 单独传给内部 LangChain 调用，不混入 NodeDefinition.config。
+`createOperationNodeType` 将完整定义和普通值操作组合为 NodeType：编译时校验实例并捕获独立配置；LangGraph 调用产物时读取输入，使用 `invokeNodeOperation` 校验输入 / 配置、调用操作、校验输出，再返回 State 增量。RunnableConfig 单独传给内部 LangChain 调用，不混入 NodeDefinition.config。`NodeContract` 仅保留这些内部值操作所需的身份和三个 Schema，不承担公开目录。
 
 Definition 与 Preset 保留原始 JSON 配置，校验时不把 Schema 的转换或默认值回写到定义。实际操作从这份配置解析有效值，避免 Preset 应用、编译和运行之间累积转换；配置不能依靠有副作用的 Schema 转换来调用外部能力。
 

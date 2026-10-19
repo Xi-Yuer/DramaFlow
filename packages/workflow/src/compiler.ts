@@ -5,12 +5,8 @@ import {
 } from '@dramaflow/contracts';
 import type { GraphNodeReturnValue, LangGraphRunnableConfig } from '@langchain/langgraph';
 import { z } from 'zod';
-import {
-  invokeNodeOperation,
-  parseNodeDefinition,
-  type NodeOperation,
-  type NodeTypeDefinition,
-} from './node.js';
+import { invokeNodeOperation, parseNodeDefinition, type NodeOperation } from './node.js';
+import { parseNodeTypeDefinition, type NodeTypeDefinition } from './node-type.js';
 
 // 不预设第四步的 State 结构；使用 LangGraph 的配置及返回值协议，允许原生 Command。
 export type LangGraphNode<State extends object, Update extends object> = (
@@ -32,12 +28,17 @@ export interface CompileContext<State extends object, Update extends object> {
 }
 
 export interface NodeCompiler<State extends object, Update extends object> {
-  readonly type: string;
-  readonly preset?: string;
   compile(
     definition: NodeDefinition,
     context: CompileContext<State, Update>,
   ): LangGraphNode<State, Update>;
+}
+
+export interface NodeType<State extends object, Update extends object> extends NodeCompiler<
+  State,
+  Update
+> {
+  readonly definition: NodeTypeDefinition;
 }
 
 export class NodeCompilationError extends Error {
@@ -56,18 +57,32 @@ function compilerKey(type: string, preset?: string): string {
   return JSON.stringify([type, preset ?? null]);
 }
 
-// 显式受信任编译器目录；不加载浏览器代码，不提供默认类型或 Preset 回退。
+// 显式受信任类型目录；身份只来自 definition，不加载浏览器代码或隐式回退。
 export class NodeRegistry<State extends object, Update extends object> {
-  private readonly compilers = new Map<string, NodeCompiler<State, Update>>();
+  private readonly types = new Map<string, NodeType<State, Update>>();
 
-  constructor(compilers: readonly NodeCompiler<State, Update>[]) {
-    for (const compiler of compilers) {
-      const key = compilerKey(compiler.type, compiler.preset);
-      if (this.compilers.has(key)) {
-        throw new NodeCompilationError('duplicate_compiler', `节点编译器重复：${compiler.type}`);
-      }
-      this.compilers.set(key, compiler);
+  constructor(types: readonly NodeType<State, Update>[] = []) {
+    for (const nodeType of types) this.register(nodeType);
+  }
+
+  register(nodeType: NodeType<State, Update>): void {
+    const definition = parseNodeTypeDefinition(nodeType.definition);
+    const key = compilerKey(definition.type, definition.preset);
+    if (this.types.has(key)) {
+      throw new NodeCompilationError('duplicate_compiler', `节点类型重复：${definition.type}`);
     }
+    this.types.set(key, { definition: Object.freeze(definition), compile: nodeType.compile });
+  }
+
+  get(type: string, preset?: string): NodeType<State, Update> {
+    const nodeType = this.types.get(compilerKey(type, preset));
+    if (!nodeType) {
+      throw new NodeCompilationError('unavailable_compiler', '节点类型或 Preset 不可用');
+    }
+    return {
+      definition: parseNodeTypeDefinition(nodeType.definition),
+      compile: nodeType.compile.bind(nodeType),
+    };
   }
 
   compile(
@@ -75,16 +90,12 @@ export class NodeRegistry<State extends object, Update extends object> {
     context: CompileContext<State, Update>,
   ): LangGraphNode<State, Update> {
     const definition = nodeDefinitionSchema.parse(definitionInput);
-    const compiler = this.compilers.get(compilerKey(definition.type, definition.preset));
-    if (!compiler) {
-      throw new NodeCompilationError('unavailable_compiler', '节点类型或 Preset 编译器不可用');
-    }
-    return compiler.compile(definition, context);
+    return this.get(definition.type, definition.preset).compile(definition, context);
   }
 }
 
 // 普通值操作的适配工厂。控制、审核等编译器可直接返回原生 interrupt / Command 节点。
-export function createOperationNodeCompiler<
+export function createOperationNodeType<
   InputSchema extends z.ZodObject,
   OutputSchema extends z.ZodObject,
   ConfigSchema extends z.ZodObject,
@@ -92,17 +103,17 @@ export function createOperationNodeCompiler<
   contract: NodeTypeDefinition<InputSchema, OutputSchema, ConfigSchema>,
   operation: NodeOperation<z.output<InputSchema>, z.output<ConfigSchema>>,
 ) {
+  const definition = Object.freeze(parseNodeTypeDefinition(contract));
   return {
-    type: contract.type,
-    preset: contract.preset,
+    definition,
     compile<State extends object, Update extends object>(
-      definition: NodeDefinition,
+      nodeDefinition: NodeDefinition,
       context: CompileContext<State, Update>,
     ): LangGraphNode<State, Update> {
-      const node = parseNodeDefinition(contract, definition);
+      const node = parseNodeDefinition(definition, nodeDefinition);
       return async (state, runnableConfig) => {
         const outputs = await invokeNodeOperation(
-          contract,
+          definition,
           { inputs: context.readInputs(state, node, runnableConfig), config: node.config },
           operation,
           runnableConfig,

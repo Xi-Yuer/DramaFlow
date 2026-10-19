@@ -6,6 +6,8 @@ Workflow 已提供元数据、版本元数据、运行元数据、六种运行�
 
 Node 已提供静态实例、输入绑定、端口映射 Edge、Preset、NodeRun 及八种状态 Schema。来源统一为 nodeId / outputKey；同一目标端口不能重复绑定；配置、输入输出必须为 JSON，错误采用 code / message。NodeRun 是记录结构，不内置状态转换或权限检查。
 
+NodeDefinition 的布局在 `ui.position`，严格拒绝旧顶层 position。`node-type.ts` 提供 NodeTypeMetadata、纯数据 UI 描述及 NodeTypeManifest 协议：displayName / category / ui 用于安全展示，manifest 的三个 Schema 字段是 JSON Schema。控件与图标使用字符串标识，不包含 React 组件、服务端 Zod 实例、compile、模型或密钥。服务端完整 NodeTypeDefinition 与 manifest 转换在 workflow 包；此包不负责生成表单或调用节点。
+
 `createWorkflowSchemas({ dataType, node, edge })` 要求显式传入三个具体 Zod Schema，可以使用现有 `nodeDefinitionSchema` 与 `edgeDefinitionSchema`。已检查顶层额外字段、名称和节点标识重复、输出来源节点存在；具体边引用、来源输出键、类型兼容、映射一致性与无环校验仍待接入，组合器不能独立充当完整发布校验。DataType 不提供宽松默认值。
 
 项目保存协议仍只有基础元数据与视口，不接收 Workflow 定义。`revision` 仅用于并发保存，不等同于不可变工作流版本。

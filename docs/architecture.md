@@ -10,7 +10,7 @@ Next.js 使用 App Router、Ant Design 深色主题和 TanStack Query。认证�
 
 PostgreSQL/Prisma 保存身份、资料、凭证、会话、认证限流及基础项目；Redis 与 RustFS 保留基础服务。会话 Cookie 不使用 localStorage，服务端每次重新校验用户是否停用及其平台角色。详细身份结构、接口与安全边界见 [认证实施](authentication.md)。
 
-一个项目恰好一张画布，项目记录保存所有者、名称、视口、revision 及时间字段，不保存节点或工作流定义。项目列表、读取与保存均按所有者隔离；列表使用游标分页，保存将所有者与 revision 一并约束原子更新，版本过期返回 409，其他用户的项目不可读写。前端只把中立视口协议转换为 React Flow 类型，contracts 不依赖 React Flow、NestJS、Prisma 或 LangGraph。
+一个项目恰好一张画布，项目记录保存所有者、名称、视口、revision 及时间字段，不保存节点或工作流定义。项目列表、读取与保存均按所有者隔离；列表使用游标分页，保存将所有者与 revision 一并约束原子更新，版本过期返回 409，其他用户的项目不可读写。画布当前只接入中立视口协议；独立 Node / Edge 转换尚未接入界面。contracts 不依赖 React Flow、NestJS、Prisma 或 LangGraph。
 
 项目接口为 `GET /api/v1/projects`、`POST /api/v1/projects`、`GET /api/v1/projects/:id` 和 `PUT /api/v1/projects/:id`；写入在边界校验字段及请求来源。节点目录与模型插件接口已移除，旧工作流或插件字段不再属于项目保存协议。
 
@@ -35,9 +35,11 @@ worker 为独立 NestJS 应用上下文，只复用 infrastructure 模块，不�
 
 ## Node 基础库
 
-`packages/contracts/src/node.ts` 已提供 NodeDefinition、InputBinding、带端口映射的 Edge、Preset、NodeRun 及八种节点状态 Schema。绑定来源统一使用 `nodeId / outputKey`，同一目标输入禁止重复绑定；配置和运行值必须为 JSON，错误采用 code / message，时间采用 ISO 字符串。NodeRun 只校验记录结构，不处理状态转换或归属权限。
+`packages/contracts/src/node.ts` 已提供 NodeDefinition、InputBinding、带端口映射的 Edge、Preset、NodeRun 及八种节点状态 Schema。布局保存在 `ui.position`，不再接受顶层 `position`。绑定来源统一使用 `nodeId / outputKey`，同一目标输入禁止重复绑定；配置和运行值必须为 JSON，错误采用 code / message，时间采用 ISO 字符串。NodeRun 只校验记录结构，不处理状态转换或归属权限。
 
-`packages/workflow/src/node.ts` 已提供执行侧的 `NodeTypeDefinition`、`NodeOperation` 类型和以下函数：
+`packages/contracts/src/node-type.ts` 提供 NodeTypeMetadata、纯数据 UI 字段描述与 NodeTypeManifest Schema。元数据包含 type、可选 preset、displayName、category 和 ui；UI 的图标、控件标识及选项不包含 React 组件或执行代码。manifest 的三个 Schema 字段保存 JSON Schema，不持有服务端 Zod 实例。
+
+`packages/workflow/src/node.ts` 提供纯值契约 `NodeContract`、`NodeOperation` 类型和以下函数：
 
 - `parseNodeDefinition`：检查实例 type / preset 与有效契约匹配、绑定目标端口存在，以及配置满足具体 Schema。
 - `applyNodePreset`：显式合并所选 Preset 配置和实例覆盖后校验，不修改原对象或执行任务。
@@ -46,11 +48,19 @@ worker 为独立 NestJS 应用上下文，只复用 infrastructure 模块，不�
 
 同一 Runtime type 可在不同 Preset 下使用不同有效输入输出契约。Node / Edge Schema 可以直接作为 `createWorkflowSchemas` 的显式参数，完整工作流发布仍需补齐引用、输出键、类型、联合依赖无环及 Preset 契约固定等校验。
 
-`packages/workflow/src/compiler.ts` 已提供 `NodeCompiler<State, Update>`、`CompileContext`、`NodeRegistry` 和 `createOperationNodeCompiler`。注册表按 type / preset 精确选择显式受信任编译器，拒绝重复、未知类型及未知 Preset，不隐式回退。普通操作编译器校验并隔离实例配置，产物可直接加入真实 StateGraph；输入读取和 State 增量由调用方提供的 CompileContext 适配，没有预设平台 State 或绑定解析协议。控制与审核编译器可使用原生 Command / interrupt，无需自建暂停结果协议。
+`packages/workflow/src/node-type.ts` 将 NodeContract 与元数据组合为完整 `NodeTypeDefinition`。`parseNodeTypeDefinition` 白名单复制元数据并检查 UI 字段属于配置契约；`createNodeTypeManifest` 使用 Zod 官方 JSON Schema 转换器，输入和配置采用 input 语义，输出采用 output 语义。转换使用独立空 metadata registry，避免全局 `.meta()` 进入 manifest；无法表示的 Schema 显式报错。Schema 默认值也属于公开数据，不能放密钥、模型或供应商实例；JSON Schema 无法表达的 refine 等约束仍由服务端验证。
+
+`packages/workflow/src/compiler.ts` 已提供 `NodeType<State, Update>`、仅含 compile 的 `NodeCompiler`、`CompileContext`、`NodeRegistry` 和 `createOperationNodeType`。NodeType 统一持有 definition 与 compile；Registry 的 register / get / compile 使用 definition 的 type / preset 精确匹配，拒绝重复和未知类型，不隐式回退。普通操作工厂复用执行函数、校验并隔离实例配置，产物可直接加入真实 StateGraph；输入读取和 State 增量由 CompileContext 适配，没有预设平台 State 或完整绑定协议。Preset 保持场景配置，不复制执行器；控制与审核类型可直接使用原生 Command / interrupt。
 
 `createWorkflowRunConfig` 校验 Run / Version 身份并将根 Run.id 绑定到 LangGraph thread_id，拒绝冲突 thread，保留调用方的并发、取消及其他配置。它不检查项目权限、加载版本、创建运行或选择 checkpointer。
 
-测试覆盖契约失败边界、配置与值隔离、原生图执行、interrupt / Command 恢复、thread 隔离，以及 Send / reducer 和实际图内并发上限。MemorySaver 和测试节点只用于测试，没有生产 LLM、HTTP、Code、视频节点或 Preset 目录；完整 State / Binding、整图 Workflow Compiler、持久 checkpointer 和运行服务仍未接入。图调度和恢复交给 LangGraph，不建设平台自己的 ready 判定循环或运行状态机。
+相关测试覆盖契约失败边界、配置转换与值隔离、类型注册、manifest 边界，以及原生图执行、interrupt / Command 恢复、thread 隔离和 Send / reducer。MemorySaver 和测试节点只用于测试，没有生产 LLM、HTTP、Code、视频节点或 Preset 目录；[节点类型实施拆解](node-type-implementation.md) 中的 LLMNode / ImageToVideo 仅作参考，不代表真实调用。完整 State / Binding、整图 Workflow Compiler、持久 checkpointer 和运行服务仍未接入，图调度和恢复继续交给 LangGraph。
+
+## React Flow 数据适配
+
+`apps/web/src/features/workflow/react-flow-adapter.ts` 已提供 Node / Edge 双向白名单转换。React Flow `type` 固定为渲染器标识 `workflowNode`，Runtime 类型保存在 `data.nodeType`；inputs、config、preset 与 `ui.position` 显式转换。selected、dragging、measured 等临时状态不写回 DSL，缺少端口的临时连线不能导出为完整 Edge。
+
+转换函数尚未接入项目画布、保存协议或 API，也没有节点渲染器、表单生成器、节点目录或添加交互。当前项目页面继续显示空白画布。
 
 ## 现有目录如何承载后续模型
 
@@ -58,12 +68,12 @@ worker 为独立 NestJS 应用上下文，只复用 infrastructure 模块，不�
 
 | 目录                 | 当前实现                                                  | 后续承载边界                                                                      |
 | -------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `apps/web`           | 登录、账户中心、项目列表、React Flow 空白画布             | 创作交互、编辑视图与前端适配；不加载服务端插件适配器或密钥                        |
+| `apps/web`           | 登录、账户中心、空白画布及独立 Node / Edge 转换           | 创作交互、编辑视图与前端适配；不加载服务端插件适配器或密钥                        |
 | `apps/api`           | 认证、用户资料、项目 API 与基础设施服务                   | 模块化业务入口、权限、定义与运行管理、资产等应用服务；模块通过服务及契约协作      |
 | `apps/worker`        | NestJS 应用上下文，仅接入基础设施                         | 承载独立执行进程，调用运行时；不另建一套工作流调度语义                            |
-| `packages/contracts` | 身份、资料、项目及 Workflow / Node 基础 Schema            | 经逐步设计确定的平台中立协议与边界校验，不依赖框架或数据库模型                    |
+| `packages/contracts` | 身份、项目、Workflow / Node Schema 及安全 manifest 协议   | 经逐步设计确定的平台中立协议与边界校验，不依赖框架或数据库模型                    |
 | `packages/database`  | Prisma 与身份、基础项目持久化                             | 数据访问及迁移；数据库结构随真实领域模型设计，不以概念表直接生成数据表            |
-| `packages/workflow`  | Workflow 契约、快照、Node 校验与 Compiler / Registry 适配 | 领域 DSL 编译与 LangGraph 执行适配；不另建图调度器                                |
+| `packages/workflow`  | Workflow 契约、快照、NodeType / Registry 与 manifest 转换 | 领域 DSL 编译与 LangGraph 执行适配；不另建图调度器                                |
 | `packages/plugins`   | 空入口，保留模型 SDK 依赖                                 | 受信任的外部能力适配；不承担工作流调度或隐式供应商选择                            |
 | `packages/context`   | 空入口                                                    | 独立上下文构建职责；只使用明确选择或绑定的数据，不把整个 State 自动变成模型上下文 |
 

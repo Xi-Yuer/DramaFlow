@@ -11,7 +11,7 @@ import { z } from 'zod';
 
 // 执行侧的有效契约。相同 Runtime type 可以为不同 Preset 提供不同输入输出 Schema。
 // 不包含执行器、插件适配器或可传往浏览器的服务端实例。
-export interface NodeTypeDefinition<
+export interface NodeContract<
   InputSchema extends z.ZodObject = z.ZodObject,
   OutputSchema extends z.ZodObject = z.ZodObject,
   ConfigSchema extends z.ZodObject = z.ZodObject,
@@ -30,7 +30,8 @@ export type NodeOperation<Inputs, Config> = (
 
 export class NodeContractError extends Error {
   constructor(
-    public readonly code: 'contract_mismatch' | 'unknown_input' | 'preset_mismatch',
+    public readonly code:
+      'contract_mismatch' | 'unknown_input' | 'preset_mismatch' | 'unknown_config_field',
     message: string,
   ) {
     super(message);
@@ -47,12 +48,12 @@ function parseRecord<Schema extends z.ZodObject>(schema: Schema, value: unknown)
   return structuredClone(parsed);
 }
 
-function validateContractIdentity(contract: NodeTypeDefinition): void {
+function validateContractIdentity(contract: NodeContract): void {
   workflowIdentifierSchema.parse(contract.type);
   if (contract.preset !== undefined) workflowIdentifierSchema.parse(contract.preset);
 }
 
-export function parseNodeDefinition(contract: NodeTypeDefinition, input: unknown): NodeDefinition {
+export function parseNodeDefinition(contract: NodeContract, input: unknown): NodeDefinition {
   validateContractIdentity(contract);
   const node = nodeDefinitionSchema.parse(input);
   if (node.type !== contract.type || node.preset !== contract.preset) {
@@ -71,7 +72,7 @@ export function parseNodeDefinition(contract: NodeTypeDefinition, input: unknown
 
 // 显式应用已选择的 Preset；实例配置覆盖 Preset 配置，不选择厂商或执行任务。
 export function applyNodePreset(
-  contract: NodeTypeDefinition,
+  contract: NodeContract,
   input: unknown,
   presetInput: unknown,
 ): NodeDefinition {
@@ -101,7 +102,7 @@ export async function invokeNodeOperation<
   OutputSchema extends z.ZodObject,
   ConfigSchema extends z.ZodObject,
 >(
-  contract: NodeTypeDefinition<InputSchema, OutputSchema, ConfigSchema>,
+  contract: NodeContract<InputSchema, OutputSchema, ConfigSchema>,
   parameters: unknown,
   operation: NodeOperation<z.output<InputSchema>, z.output<ConfigSchema>>,
   runnableConfig?: RunnableConfig,

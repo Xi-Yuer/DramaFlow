@@ -21,7 +21,7 @@ function node() {
       { target: 'style', source: { nodeId: 'style', outputKey: 'text' } },
     ],
     config: { prompt: '生成分镜', temperature: 0.5 },
-    position: { x: 100, y: -50 },
+    ui: { position: { x: 100, y: -50 } },
   };
 }
 
@@ -30,7 +30,7 @@ describe('Node 定义与绑定协议', () => {
     const parsed = nodeDefinitionSchema.parse({ ...node(), type: 'image_to_video' });
     expect(parsed.inputs).toHaveLength(3);
     expect(parsed.type).toBe('image_to_video');
-    expect(parsed.position).toEqual({ x: 100, y: -50 });
+    expect(parsed.ui?.position).toEqual({ x: 100, y: -50 });
   });
 
   it('拒绝同一输入端口被多个来源重复绑定', () => {
@@ -51,7 +51,8 @@ describe('Node 定义与绑定协议', () => {
       { ...node(), status: 'running' },
       { ...node(), inputs: [{ target: 'script', source: { nodeId: 'script', output: 'text' } }] },
       { ...node(), config: { invalid: new Date() } },
-      { ...node(), position: { x: Infinity, y: 0 } },
+      { ...node(), ui: { position: { x: Infinity, y: 0 } } },
+      { ...node(), position: { x: 0, y: 0 } },
     ])
       expect(nodeDefinitionSchema.safeParse(value).success).toBe(false);
   });

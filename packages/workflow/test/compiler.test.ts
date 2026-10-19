@@ -18,12 +18,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   applyNodePreset,
-  createOperationNodeCompiler,
+  createOperationNodeType,
   createWorkflowRunConfig,
   NodeRegistry,
   parseNodeDefinition,
   type CompileContext,
-  type NodeCompiler,
+  type NodeType,
   type NodeOperation,
 } from '../src/index.js';
 
@@ -41,6 +41,9 @@ type TestStateUpdate = typeof TestState.Update;
 const contract = {
   type: 'test-operation',
   preset: 'test-preset',
+  displayName: '测试值操作',
+  category: 'test',
+  ui: { fields: {} },
   inputSchema: z.object({ value: z.number().int() }),
   outputSchema: z.object({ value: z.number(), label: z.string() }),
   configSchema: z.object({
@@ -76,7 +79,7 @@ const operation: TestOperation = ({ inputs, config }) => ({
 
 function operationGraph(nodeOperation: TestOperation, node = definition()) {
   const registry = new NodeRegistry<TestStateValue, TestStateUpdate>([
-    createOperationNodeCompiler(contract, nodeOperation),
+    createOperationNodeType(contract, nodeOperation),
   ]);
   return new StateGraph(TestState)
     .addNode('operation', registry.compile(node, context))
@@ -103,10 +106,10 @@ describe('NodeCompiler 与原生 LangGraph 的适配', () => {
   });
 
   it('未知类型和未知 Preset 均拒绝编译，不回退到已注册的基础类型', () => {
-    const baseCompiler = createOperationNodeCompiler({ ...contract, preset: undefined }, operation);
+    const baseCompiler = createOperationNodeType({ ...contract, preset: undefined }, operation);
     const registry = new NodeRegistry<TestStateValue, TestStateUpdate>([
       baseCompiler,
-      createOperationNodeCompiler(contract, operation),
+      createOperationNodeType(contract, operation),
     ]);
     expect(() => registry.compile({ ...definition(), preset: undefined }, context)).not.toThrow();
     for (const node of [
@@ -118,7 +121,7 @@ describe('NodeCompiler 与原生 LangGraph 的适配', () => {
       );
     }
     const presetOnly = new NodeRegistry<TestStateValue, TestStateUpdate>([
-      createOperationNodeCompiler(contract, operation),
+      createOperationNodeType(contract, operation),
     ]);
     expect(() => presetOnly.compile({ ...definition(), preset: undefined }, context)).toThrow(
       expect.objectContaining({ code: 'unavailable_compiler' }),
@@ -126,7 +129,7 @@ describe('NodeCompiler 与原生 LangGraph 的适配', () => {
   });
 
   it('同一类型及 Preset 的重复编译器不能覆盖已有注册', () => {
-    const compiler = createOperationNodeCompiler(contract, operation);
+    const compiler = createOperationNodeType(contract, operation);
     expect(() => new NodeRegistry<TestStateValue, TestStateUpdate>([compiler, compiler])).toThrow(
       expect.objectContaining({ code: 'duplicate_compiler' }),
     );
@@ -135,7 +138,7 @@ describe('NodeCompiler 与原生 LangGraph 的适配', () => {
   it('编译时拒绝非法配置，调用时拒绝非法输入，均不调用值操作', async () => {
     const invoke = vi.fn(operation);
     const registry = new NodeRegistry<TestStateValue, TestStateUpdate>([
-      createOperationNodeCompiler(contract, invoke),
+      createOperationNodeType(contract, invoke),
     ]);
     expect(() =>
       registry.compile({ ...definition(), config: { multiplier: '2' } }, context),
@@ -171,7 +174,7 @@ describe('NodeCompiler 与原生 LangGraph 的适配', () => {
     const writeOutputs = vi.fn(context.writeOutputs);
     const invoke = vi.fn(operation);
     const registry = new NodeRegistry<TestStateValue, TestStateUpdate>([
-      createOperationNodeCompiler(contract, invoke),
+      createOperationNodeType(contract, invoke),
     ]);
     const node = registry.compile(definition(), { readInputs, writeOutputs });
 
@@ -208,6 +211,9 @@ describe('序列化配置与操作有效值的转换边界', () => {
   const transformedContract = {
     type: 'test-transform',
     preset: 'test-transform-preset',
+    displayName: '测试配置转换',
+    category: 'test',
+    ui: { fields: {} },
     inputSchema: z.object({ value: z.number() }),
     outputSchema: z.object({
       value: z.number(),
@@ -246,7 +252,7 @@ describe('序列化配置与操作有效值的转换边界', () => {
     expect(parsed.config).not.toBe(node.config);
     const invoke = vi.fn(transformOperation);
     const registry = new NodeRegistry<TestStateValue, TestStateUpdate>([
-      createOperationNodeCompiler(transformedContract, invoke),
+      createOperationNodeType(transformedContract, invoke),
     ]);
     const graph = new StateGraph(TestState)
       .addNode('transform', registry.compile(parsed, context))
@@ -289,7 +295,7 @@ describe('序列化配置与操作有效值的转换边界', () => {
     expect(applied.config).toEqual({ factor: '3', offset: 20 });
     const invoke = vi.fn(transformOperation);
     const registry = new NodeRegistry<TestStateValue, TestStateUpdate>([
-      createOperationNodeCompiler(transformedContract, invoke),
+      createOperationNodeType(transformedContract, invoke),
     ]);
     const graph = new StateGraph(TestState)
       .addNode('transform', registry.compile(applied, context))
@@ -315,8 +321,16 @@ describe('序列化配置与操作有效值的转换边界', () => {
 describe('原生 Interrupt、Command 和 Checkpoint', () => {
   it('显式测试编译器直接中断并用同一 thread 恢复，其他 thread 保持隔离', async () => {
     const entered = vi.fn();
-    const reviewCompiler: NodeCompiler<TestStateValue, TestStateUpdate> = {
-      type: 'test-review',
+    const reviewCompiler: NodeType<TestStateValue, TestStateUpdate> = {
+      definition: {
+        type: 'test-review',
+        displayName: '测试审核',
+        category: 'test',
+        ui: { fields: {} },
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ approved: z.boolean(), value: z.number() }),
+        configSchema: z.object({}),
+      },
       compile: (node) => (state) => {
         entered();
         const feedback = z
@@ -402,7 +416,7 @@ describe('原生 Send 和 State reducer', () => {
       return output;
     });
     const registry = new NodeRegistry<typeof BatchTestState.State, typeof BatchTestState.Update>([
-      createOperationNodeCompiler(contract, invoke),
+      createOperationNodeType(contract, invoke),
     ]);
     const graph = new StateGraph(BatchTestState)
       .addNode('dispatch', () => ({}))
