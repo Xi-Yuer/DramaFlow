@@ -9,7 +9,7 @@ pnpm env:init 为新环境生成随机凭证，已有环境只补齐缺少的存
 - 登录凭证：本机 .env 的 S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY
 - 本机应用端点：http://localhost:9000；Docker 内部：http://rustfs:9000
 
-apps/api/src/infrastructure/storage.service.ts 仅提供 ping、put 和 get 基础操作，不包含素材业务、权限或版本化逻辑；不再提供本地存储兼容。已有对象及旧本地文件未删除。
+apps/api/src/infrastructure/storage.service.ts 仅提供 ping、put 和 get 基础操作，不包含素材业务、权限或版本化逻辑，不提供本地存储回退。
 
 pnpm test:storage 使用真实 RustFS 随机测试桶验证二进制一致性、MIME、对象缺失、匿名访问拒绝及配置缺失报错，结束后清理自己的测试对象。不会清空业务桶。
 

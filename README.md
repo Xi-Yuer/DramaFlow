@@ -1,6 +1,10 @@
 # DramaFlow
 
-当前保留用户登录、平台鉴权、账户中心、项目管理与 React Flow 空白画布，供后续重新规划实施方案。每个项目一张画布，可保存项目名称、视口及 revision；项目按所有者隔离，列表支持分页。节点、连线、工作流编排和模型插件业务已清除，后续按用户指导逐步新增。
+DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，以漫剧生产为核心场景，同时支持广告、产品宣传、口播等视频生产流程**，面向团队自部署。
+
+当前保留用户登录、平台鉴权、账户中心、项目管理与 React Flow 空白画布。每个项目一张画布，可保存项目名称、视口及 revision；项目按所有者隔离，列表支持分页。节点、连线、工作流编排和模型插件业务尚未实现。
+
+[平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 
 ## 启动
 
@@ -33,6 +37,8 @@ pnpm dev
 | packages/plugins   | 插件包空入口，保留模型 SDK 依赖                            |
 | packages/context   | 上下文包空入口，待逐步定义                                 |
 
+上述目录是当前工程结构，不为每个一级概念预建独立包。未来职责的承载边界见 [架构与目录职责](docs/architecture.md)。
+
 ## 检查与部署
 
 ```sh
@@ -42,19 +48,20 @@ pnpm test:integration
 pnpm stack:up
 ```
 
-`test` 运行现有单元测试；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、会话、角色、来源校验、项目隔离、分页与版本冲突和基础设施，不清空业务库。当前验证结果见 [验证范围](docs/verification.md)。工作流和模型功能尚未实现。
+`test` 运行现有单元测试；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、会话、角色、来源校验、项目隔离、分页与版本冲突和基础设施，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。工作流和模型功能尚未实现。
 
-`stack:up` 构建镜像，启动基础设施、初始化存储桶、迁移和初始管理员，再启动 API、worker 和前端。已有数据卷不会因代码清理而自动删除；旧应用镜像需要重新构建后才包含当前代码。
+`stack:up` 构建镜像，启动基础设施、初始化存储桶、迁移和初始管理员，再启动 API、worker 和前端。已有数据卷不会因更新代码而自动删除。
 
-本轮数据库迁移删除旧工作流定义、节点计数及插件安装表；保留项目记录、名称、视口、revision 和全部身份数据，不清空 Redis 或 RustFS。迁移范围及应用方式见 [部署与数据库](docs/deployment.md)。
+数据库迁移、部署与数据操作边界见 [部署与数据库](docs/deployment.md)。文档随实施更新，过时内容及时合并或删除，维护约定见 [开发指南](docs/development.md#文档维护)。
 
 ## 参与开发
 
 - [协作规范](AGENTS.md)
-- [基础架构](docs/architecture.md)
+- [平台核心模型](docs/platform-model.md)
+- [分步设计与实施方案](docs/implementation-plan.md)
+- [当前架构与目录职责](docs/architecture.md)
 - [认证实施与用户字段](docs/authentication.md)
 - [开发指南](docs/development.md)
 - [部署与数据库](docs/deployment.md)
 - [RustFS 存储](docs/object-storage.md)
 - [前端基础](docs/frontend-ui.md)
-- [当前验证范围](docs/verification.md)
