@@ -10,6 +10,7 @@ import {
   projectSchema,
 } from '@dramaflow/contracts';
 import { createAuth } from '../src/auth/auth.factory.js';
+import { authBaseUrl } from '../src/auth/trusted-origin.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
@@ -23,7 +24,7 @@ if (
 const db = createDatabase();
 const auth = createAuth(db);
 const base = 'http://127.0.0.1:3101';
-const origin = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
+const origin = new URL(authBaseUrl()).origin;
 const password = randomBytes(24).toString('hex');
 const newPassword = randomBytes(24).toString('hex');
 const email = `auth-${randomUUID()}@example.com`;

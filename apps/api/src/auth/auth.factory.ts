@@ -4,10 +4,11 @@ import { createAuthMiddleware } from 'better-auth/api';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { admin } from 'better-auth/plugins';
 import type { PrismaClient } from '@dramaflow/database';
+import { authBaseUrl } from './trusted-origin.js';
 
 export function createAuth(db: PrismaClient) {
   const secret = process.env.BETTER_AUTH_SECRET;
-  const baseURL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3000';
+  const baseURL = authBaseUrl();
   if (!secret || secret.length < 32)
     throw new Error('BETTER_AUTH_SECRET 至少需要 32 个字符');
   return betterAuth({

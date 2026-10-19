@@ -10,6 +10,10 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { AuthService, type AuthActor } from './auth.service.js';
+import {
+  invalidOriginMessage,
+  isUntrustedWriteOrigin,
+} from './trusted-origin.js';
 
 export const Public = () => SetMetadata('auth:public', true);
 export const PlatformAdmin = () => SetMetadata('auth:role', 'admin');
@@ -38,13 +42,8 @@ export class AuthGuard implements CanActivate {
       return true;
     const request = context.switchToHttp().getRequest<AuthRequest>();
     request.actor = await this.auth.requireSession(request);
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
-      const expectedOrigin = new URL(
-        process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
-      ).origin;
-      if (request.headers.origin !== expectedOrigin)
-        throw new ForbiddenException('请求来源无效，请刷新页面后重试');
-    }
+    if (isUntrustedWriteOrigin(request.method, request.headers.origin))
+      throw new ForbiddenException(invalidOriginMessage);
     if (
       this.reflector.getAllAndOverride<string>('auth:role', [
         context.getHandler(),

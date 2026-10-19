@@ -2,6 +2,10 @@ import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { toNodeHandler } from 'better-auth/node';
 import type { Express } from 'express';
 import type { AuthService } from './auth.service.js';
+import {
+  invalidOriginMessage,
+  isUntrustedWriteOrigin,
+} from './trusted-origin.js';
 
 // 不公开管理员插件、注册、账号删除、模拟登录等尚未授权的 HTTP 能力。
 const exposed = new Set([
@@ -27,17 +31,12 @@ export function mountAuth(server: Express, service: AuthService) {
         });
         return;
       }
-      if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
-        const expectedOrigin = new URL(
-          process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
-        ).origin;
-        if (request.headers.origin !== expectedOrigin) {
-          response.status(403).json({
-            code: 'INVALID_ORIGIN',
-            message: '请求来源无效，请刷新页面后重试',
-          });
-          return;
-        }
+      if (isUntrustedWriteOrigin(request.method, request.headers.origin)) {
+        response.status(403).json({
+          code: 'INVALID_ORIGIN',
+          message: invalidOriginMessage,
+        });
+        return;
       }
       request.headers['x-real-ip'] =
         request.ip ?? request.socket.remoteAddress ?? 'unknown';
