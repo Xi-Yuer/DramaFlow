@@ -4,6 +4,8 @@ DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，�
 
 当前保留用户登录、平台鉴权、账户中心、项目管理与 React Flow 空白画布。每个项目一张画布，可保存项目名称、视口及 revision；项目按所有者隔离，列表支持分页。节点、连线、工作流编排和模型插件业务尚未实现。
 
+Workflow 基础库已实现元数据与组合 Schema、运行输入校验、显式输出收集、只读版本快照及运行版本一致性检查；尚未接入应用接口、数据库或调度。具体范围见 [当前架构](docs/architecture.md#workflow-基础库)。
+
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 
 ## 启动
@@ -32,8 +34,8 @@ pnpm dev
 | apps/api           | NestJS、Better Auth、默认鉴权、用户资料、项目与基础服务    |
 | apps/worker        | 独立 NestJS 应用上下文，尚未注册业务任务                   |
 | packages/database  | Prisma、身份/资料/凭证/会话及基础项目模型、pgvector        |
-| packages/contracts | 身份、用户资料及基础项目协议，不依赖第三方框架类型         |
-| packages/workflow  | 工作流包空入口，保留 LangChain / LangGraph 依赖            |
+| packages/contracts | 身份、用户资料、基础项目协议及 Workflow 基础 Schema        |
+| packages/workflow  | Workflow 值契约、输出收集、只读快照及运行版本检查          |
 | packages/plugins   | 插件包空入口，保留模型 SDK 依赖                            |
 | packages/context   | 上下文包空入口，待逐步定义                                 |
 
@@ -48,7 +50,7 @@ pnpm test:integration
 pnpm stack:up
 ```
 
-`test` 运行现有单元测试；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、会话、角色、来源校验、项目隔离、分页与版本冲突和基础设施，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。工作流和模型功能尚未实现。
+`test` 运行现有单元测试，包含 Workflow 基础库的契约与快照测试；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、会话、角色、来源校验、项目隔离、分页与版本冲突和基础设施，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。工作流执行和模型调用尚未实现。
 
 `stack:up` 构建镜像，启动基础设施、初始化存储桶、迁移和初始管理员，再启动 API、worker 和前端。已有数据卷不会因更新代码而自动删除。
 
@@ -58,6 +60,7 @@ pnpm stack:up
 
 - [协作规范](AGENTS.md)
 - [平台核心模型](docs/platform-model.md)
+- [Workflow 模型](docs/workflow-model.md)
 - [分步设计与实施方案](docs/implementation-plan.md)
 - [当前架构与目录职责](docs/architecture.md)
 - [认证实施与用户字段](docs/authentication.md)

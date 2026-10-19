@@ -6,7 +6,7 @@
 
 共享包通过 dist 暴露；根 Turbo 任务先构建依赖。前后端业务目录保留 .gitkeep，加入实际文件后可删除该占位文件。空包入口只标识预留结构，不可当作可用功能。
 
-修改基础服务后运行相关 typecheck、lint、build；需要真实基础设施时运行 pnpm test:storage 或 pnpm test:integration。没有测试的空业务包不设置虚假的通过测试任务。
+修改基础服务后运行相关 typecheck、lint、build；需要真实基础设施时运行 pnpm test:storage 或 pnpm test:integration。contracts 与 workflow 的契约、值校验和快照测试已接入 pnpm test，pnpm check 同时检查源码与新增测试的类型。没有测试的空业务包不设置虚假的通过测试任务。
 
 数据库模型在 packages/database/prisma/schema.prisma 定义。执行迁移前核对 DATABASE_URL 仅指向本项目开发库，再运行 pnpm db:migrate。迁移影响范围与操作方式统一见 [部署与数据库](deployment.md)。
 
@@ -22,15 +22,16 @@
 
 文档是随实施修订的当前说明。每个主题保留一个主要维护入口，其他位置仅保留必要摘要与链接，避免同一阶段或方案存在多份独立维护的正文。
 
-| 入口                             | 主要维护内容                               |
-| -------------------------------- | ------------------------------------------ |
-| `AGENTS.md`                      | 稳定的协作约束、领域边界与阅读入口         |
-| `README.md`                      | 项目简介、启动入口、简要能力说明与文档导航 |
-| `docs/architecture.md`           | 已实现能力、当前结构和实际依赖边界         |
-| `docs/platform-model.md`         | 仍有效的平台定位、概念与顶层设计边界       |
-| `docs/implementation-plan.md`    | 当前阶段、设计顺序、下一步与待决策项       |
-| 认证、存储、部署、前端等专题文档 | 对应主题的当前实现、操作方式或有效规范     |
-| 应用与包的 README                | 本目录职责、局部限制及相关文档链接         |
+| 入口                             | 主要维护内容                                |
+| -------------------------------- | ------------------------------------------- |
+| `AGENTS.md`                      | 稳定的协作约束、领域边界与阅读入口          |
+| `README.md`                      | 项目简介、启动入口、简要能力说明与文档导航  |
+| `docs/architecture.md`           | 已实现能力、当前结构和实际依赖边界          |
+| `docs/platform-model.md`         | 仍有效的平台定位、概念与顶层设计边界        |
+| `docs/workflow-model.md`         | Workflow 静态定义、版本、输入输出及运行关系 |
+| `docs/implementation-plan.md`    | 当前阶段、设计顺序、下一步与待决策项        |
+| 认证、存储、部署、前端等专题文档 | 对应主题的当前实现、操作方式或有效规范      |
+| 应用与包的 README                | 本目录职责、局部限制及相关文档链接          |
 
 每轮实施在交付前完成以下维护：
 

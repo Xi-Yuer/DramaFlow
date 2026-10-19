@@ -41,3 +41,4 @@ export type CurrentUser = z.infer<typeof currentUserSchema>;
 export type ProfileInput = z.infer<typeof profileInputSchema>;
 
 export * from './project.js';
+export * from './workflow.js';

@@ -15,8 +15,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint src"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
+    "lint": "eslint src test",
+    "test": "vitest run test"
   },
   "dependencies": {
     "zod": "^4.6.7"
