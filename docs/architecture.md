@@ -1,92 +1,68 @@
 # 当前架构与目录职责
 
-DramaFlow 是面向 AI 视频内容生产、以漫剧为核心场景的可编排工作流平台，面向团队自部署。一级概念见 [平台核心模型](platform-model.md)，静态定义与版本见 [Workflow 模型](workflow-model.md)，节点、有效契约与 Preset 见 [Node 模型](node-model.md)，技术分工见 [Runtime 架构](runtime-architecture.md)，进度见 [分步设计与实施方案](implementation-plan.md)。
+DramaFlow 是面向团队自部署的 AI 视频生产工作流平台，漫剧优先。顶层概念见 [平台模型](platform-model.md)，定义与运行见 [Workflow](workflow-model.md)，节点见 [Node](node-model.md)，技术职责见 [Runtime 架构](runtime-architecture.md)，下一步见 [实施方案](implementation-plan.md)。本文只维护实际能力与目录边界。
 
 ## 已实现的基础工程
 
-当前应用保留用户登录、平台鉴权、账户中心、项目管理及 React Flow 空白画布，没有节点编辑、生成、运行和业务对话能力。共享包已开始实现 Workflow 契约及纯函数基础能力，尚未接入应用接口或数据库。
+应用已有登录、平台鉴权、账户中心、项目管理和 React Flow 画布。画布注册通用节点 renderer 并查询真实节点目录，目前目录为空；没有添加节点、图编辑保存、模型生成、工作流运行或业务对话。
 
-Next.js 使用 App Router、Ant Design 深色主题和 TanStack Query。认证请求同源代理到 NestJS 的 Better Auth HTTP 白名单入口；业务 API 默认受全局 Guard 保护，只有显式 Public 端点可匿名访问。
+Next.js 使用 App Router、Ant Design 深色主题和 TanStack Query。认证通过同源代理接入 NestJS Better Auth 白名单入口，业务 API 默认受真实全局 AuthGuard 保护。PostgreSQL / Prisma 保存身份、资料、凭证、会话、认证限流及基础项目；Redis 与 RustFS 提供基础服务。会话与角色边界见 [认证实施](authentication.md)。
 
-PostgreSQL/Prisma 保存身份、资料、凭证、会话、认证限流及基础项目；Redis 与 RustFS 保留基础服务。会话 Cookie 不使用 localStorage，服务端每次重新校验用户是否停用及其平台角色。详细身份结构、接口与安全边界见 [认证实施](authentication.md)。
+每项目恰好一张画布。项目保存所有者、名称、视口、revision 和时间，不保存节点、绑定或 WorkflowDefinition；读取与写入按所有者隔离，列表游标分页，原子更新检查 revision，冲突返回 409。目录与渲染器接入没有改变这个协议或数据库。
 
-一个项目恰好一张画布，项目记录保存所有者、名称、视口、revision 及时间字段，不保存节点或工作流定义。项目列表、读取与保存均按所有者隔离；列表使用游标分页，保存将所有者与 revision 一并约束原子更新，版本过期返回 409，其他用户的项目不可读写。画布当前只接入中立视口协议；独立 Node / Edge 转换尚未接入界面。contracts 不依赖 React Flow、NestJS、Prisma 或 LangGraph。
+项目 API 为 GET / POST /api/v1/projects、GET / PUT /api/v1/projects/:id。新增 GET /api/v1/workflow/node-types 默认认证，响应 Cache-Control: no-store。NodeTypesModule 导出服务端 Registry 供后续显式注册；当前返回真实空数组，没有注册占位 LLM / 视频类型。
 
-项目接口为 `GET /api/v1/projects`、`POST /api/v1/projects`、`GET /api/v1/projects/:id` 和 `PUT /api/v1/projects/:id`；写入在边界校验字段及请求来源。节点目录与模型插件接口已移除，旧工作流或插件字段不再属于项目保存协议。
-
-worker 为独立 NestJS 应用上下文，只复用 infrastructure 模块，不引入 HTTP 认证模块，也不消费业务队列。plugins、context 保留空入口；LangGraph 节点编译适配已在基础库中验证，尚未接入 API / worker，LangChain 模型调用与供应商适配未实现。
-
-将来工作空间成员关系与平台角色分离，领域模块通过服务与契约协作；长期领域约束在对应专题文档维护，AGENTS.md 只保留简短规则与按需阅读入口，不表示相关功能已经交付。
+worker 仍是仅复用基础设施的独立 NestJS 应用上下文，不消费业务队列；plugins、context 保留空入口。LangGraph 普通节点适配在基础库验证，未接入运行 API / worker，LangChain 模型调用与供应商适配未实现。
 
 ## Workflow 基础库
 
-`packages/contracts/src/workflow.ts` 提供 Workflow、版本和运行元数据 Schema、六种运行状态、输出来源及契约名称校验。`createWorkflowSchemas` 要求调用方显式传入 DataType、Node、Edge Schema，再组合静态定义、草稿及版本 Schema；已校验顶层字段、输入输出名称与节点标识唯一、输出引用的节点存在。没有宽松的默认节点或类型协议，具体边关系、输出键存在性、类型兼容及联合依赖无环校验仍待相关模型接入。
+contracts 的 workflow.ts 保留元数据、版本 / 运行元数据、六种运行状态、输出来源与显式 createWorkflowSchemas 工厂。调用方提供 DataType、Node、Edge Schema，组合器检查顶层字段、名称 / 节点 ID 唯一及最终输出来源节点；不强迫通用调用方采用具体节点协议。
 
-`packages/workflow` 已提供：
+workflow-definition.ts 的正式 workflowDefinitionSchema 使用当前 DataType、NodeDefinition 与 ControlEdgeDefinition 组合，保留 inputs / nodes / edges / outputs。它检查控制边 ID 唯一、来源 / 目标节点、connection 来源节点、workflow_input 名称、自连接与控制加数据依赖的联合 DAG。
 
-- `parseWorkflowInputs`：依据已编译的具体 Zod 值契约校验运行输入，拒绝未声明字段，返回经过 JSON 校验的独立值。
-- `collectWorkflowOutputs`：按声明的节点和输出键收集并校验最终结果，拒绝缺失来源、继承属性或类型不符，只暴露声明的输出。
-- `createWorkflowVersionSnapshot`：要求完整版本 Schema，校验后复制并递归冻结 JSON 快照，避免后续草稿或调用方修改影响该对象。
-- `assertWorkflowRunVersion`：检查运行绑定的版本身份及 Workflow 身份一致。
+正式静态校验不访问 Registry，因此不判断 outputKey、sourcePort、类型端口或配置契约是否存在，不做类型兼容、资源权限或资产访问，也不解析运行值。完整发布 / 执行校验尚未接入。
 
-这些函数不创建运行、调用插件或执行图。快照只保证内存对象隔离与只读，不替代发布权限、持久化不可变性或并发控制。运行状态是未来的业务投影，输入资产权限仍需由应用服务校验。HTTP 发布和运行接口、数据库模型及完整数据流语义尚未实现；DataType 与节点编译适配见下文。
-
-现有单元测试覆盖契约组合、边界校验、显式多结果收集、快照隔离及版本绑定；测试中的具体节点和类型 Schema 只用于测试，不作为生产适配器。
+workflow 包已有 parseWorkflowInputs、collectWorkflowOutputs、createWorkflowVersionSnapshot、assertWorkflowRunVersion：按显式 Zod 契约校验值、按声明来源收集最终结果、复制并冻结 JSON 快照、检查运行版本身份。这些函数不发布版本或创建运行；快照只保证内存隔离，不替代数据库不可变性、权限与并发控制。
 
 ## Node 基础库
 
-`packages/contracts/src/node.ts` 已提供 NodeDefinition、InputBinding、带端口映射的 Edge、Preset、NodeRun 及八种节点状态 Schema。实例 / Preset 使用命名空间 type 和必填 typeVersion，布局保存在 `ui.position`，不接受顶层 `position`。绑定来源统一使用 `nodeId / outputKey`，同一目标输入禁止重复绑定；配置和运行值必须为 JSON，错误采用 code / message，时间采用 ISO 字符串。NodeRun 只校验记录结构，不处理状态转换或归属权限。
+contracts/node.ts 提供四类 InputBinding、NodeDefinition、ControlEdgeDefinition、配置模板 Preset 与 NodeRun。Node.inputs 是安全端口键 record，connection / constant / workflow_input / asset 是唯一数据来源声明；constant 仅 JSON，asset 仅 assetId，尚无资产读取、权限或版本解析。实例固定 type / typeVersion，ui.position 必填。
 
-`packages/contracts/src/data-type.ts` 提供纯 JSON DataType：string、number、boolean、image、video、audio、domain 和递归 array。它不生成媒体、领域资料或资产引用的运行校验器。workflow 的 isDataTypeAssignable 检查种类、domain 名称与数组元素结构，不做隐式转换，也不替代整图连线校验。
+contracts/node-type.ts 提供纯 JSON NodeTypeManifest、八类 metadata 分类、输入输出端口、四种 ConfigFieldDefinition、FieldUI 及能力需求。配置默认值按类型、范围和选项校验；控件只声明提示。端口无默认值，multiple 尚未启用多绑定。公开 Manifest 不含 Zod、JSON Schema、编译器或实际配置。
 
-`packages/contracts/src/node-type.ts` 提供 NodeTypeDeclaration、端口、metadata、能力需求和分离的 UI inputs / config。类型声明保存 type、version、metadata、inputs、outputs、可选 capabilities 与 ui；端口按方向拒绝重复 key，能力类型不可重复，UI 输入必须引用已声明端口。required / defaultValue / multiple 仅静态声明，不自动注入输入默认值或开放多连接。NodeTypeManifest 在声明上只增加配置 JSON Schema，不携带输入输出 Zod 或可执行代码。
+DataType 支持 any / json / file、基础媒体、domain 和递归 array。isDataTypeAssignable 允许 any 双向静态匹配，其余同种类、同领域名或递归数组匹配；json、file 不构成其他类型的基类，不执行媒体转换或真实值校验。
 
-`packages/workflow/src/node.ts` 提供纯值契约 `NodeContract`、`NodeOperation` 类型和以下函数：
+服务端 NodeType 持 manifest、inputSchema、outputSchema、configSchema 和 compile。NodeRegistry 按 type / version 精确 register / get / compile；listManifests 白名单校验并返回独立 JSON，拒绝重复或不可用版本，不回退最新版。assertNodeSchemas 检查声明与三组 Zod 的字段集合及公开默认值，不推断完整类型等价。
 
-- `parseNodeDefinition`：检查实例 type / typeVersion / preset 与有效契约匹配、绑定目标端口存在，以及配置满足具体 Schema。
-- `applyNodePreset`：显式合并所选 Preset 配置和实例覆盖后校验，不修改原对象或执行任务。
-- `inputBindingFromEdge`：从完整端口映射提取数据绑定，不改变控制激活状态。
-- `invokeNodeOperation`：校验输入和配置后调用显式操作，再校验输出；业务参数只含 inputs / config，另行透传 LangChain RunnableConfig，拒绝额外字段和非 JSON 值，异常不自动重试。
+parseNodeDefinition 检查类型版本、目标输入端口和实际配置；applyNodePreset 只合并同类型版本模板与实例配置，不改变 Runtime 身份。invokeNodeOperation 校验并隔离 inputs / config / outputs，透传 RunnableConfig，不解析 Binding、不调度、不自动重试。配置的 transform / 默认值不回写定义。
 
-同一 Runtime type 可在不同 Preset 下使用不同有效输入输出契约。Node / Edge Schema 可以直接作为 `createWorkflowSchemas` 的显式参数，完整工作流发布仍需补齐引用、输出键、类型、联合依赖无环及 Preset 契约固定等校验。
+createOperationNodeType 保留泛型普通操作适配：编译产物可加入真实 StateGraph，CompileContext 只负责输入读取与输出更新边界，不给节点全图 builder。当前没有具体 WorkflowState、四类 Binding 求值器、完整 DSL Compiler、持久 checkpointer 或运行事件投影。
 
-`packages/workflow/src/node-type.ts` 的 NodeTypeDefinition 是静态 NodeTypeDeclaration 加 configSchema，不继承内部 NodeContract。独立 NodeValueSchemas 提供 inputSchema / outputSchema；assertNodePortSchemas 比对字段名与端口 key 集合，不从 Zod 推断 DataType。parseNodeTypeDefinition 复制白名单声明并检查 ui.config 字段属于配置契约。
+createWorkflowRunConfig 检查 Run / Version 身份，绑定根 Run.id 为 LangGraph thread_id 并保留并发、取消等配置；不创建运行、检查权限、加载版本或选择 checkpointer。真实 LangGraph 测试保留原生执行、interrupt / Command、Send / reducer 及并发验证，MemorySaver 与测试类型不代表生产恢复或真实生成。
 
-createNodeTypeManifest 输出静态声明及配置 JSON Schema，使用 Zod 原生转换器的 input 方向、独立空 metadata registry 和不可表示即失败策略。默认值、枚举及声明文本必须可公开；无法表达的 refine 等约束继续由服务端完整校验，不导出模型、插件或密钥。
-
-`packages/workflow/src/compiler.ts` 已提供 NodeType、仅含 compile 的 NodeCompiler、CompileContext、NodeRegistry 和 createOperationNodeType。NodeType 持有 definition、可选 preset 与 compile；Registry 按 `(type, version, preset)` 精确匹配，get 明确接收版本，不找最新版或隐式回退。普通操作工厂显式接收说明书、运行值 Schema 和 operation，组合内部 NodeContract 后进行操作校验。产物可直接加入真实 StateGraph；输入读取与 State 增量由 CompileContext 适配，没有预设完整 State 或 Binding。控制与审核类型可使用原生 Command / interrupt。
-
-`createWorkflowRunConfig` 校验 Run / Version 身份并将根 Run.id 绑定到 LangGraph thread_id，拒绝冲突 thread，保留调用方的并发、取消及其他配置。它不检查项目权限、加载版本、创建运行或选择 checkpointer。
-
-相关测试覆盖 DataType 与声明失败边界、结构兼容、精确版本注册、端口 / 值 Schema 字段一致性、UI 引用、配置转换、值隔离和 manifest，以及真实 LangGraph 执行、interrupt / Command 恢复、thread 隔离及 Send / reducer。MemorySaver 和测试节点仅用于测试；[NodeType 实施说明](node-type-implementation.md) 的 LLM / 图生视频仅作静态对照。完整 State / InputValue / Binding、整图 Compiler、生产节点、持久 checkpointer 和运行服务尚未接入。
+NodeRun 只校验 JSON 输入输出、八种业务状态、code / message 错误和 ISO 时间，不驱动图调度或提供持久化。类型与编译边界见 [Manifest 实施说明](node-type-implementation.md)。
 
 ## React Flow 数据适配
 
-`apps/web/src/features/workflow/react-flow-adapter.ts` 已提供 Node / Edge 双向白名单转换。React Flow type 固定为渲染器标识 workflowNode，领域类型 / 版本保存在 data.nodeType / data.typeVersion；inputs、config、preset 与 ui.position 显式转换。selected、dragging、measured 等临时状态不写回 DSL，缺少端口的临时连线不能导出为完整 Edge。
+react-flow-adapter.ts 提供整图转换与节点白名单映射。React Flow type 使用 workflowNode renderer，领域类型版本在 data.nodeType / data.typeVersion，位置对应必填 ui.position；selected、dragging、measured 不回写 DSL。
 
-转换函数尚未接入项目画布、保存协议或 API，也没有节点渲染器、表单生成器、节点目录或添加交互。当前项目页面继续显示空白画布。
+Node.inputs.connection 派生 data.kind=data 的可视化边，Workflow.edges 独立转换为 data.kind=control 的边。新增连接只替换目标端口 Binding；断连检查当前来源与完整旧快照，避免过期事件误删新连接，不生成持久化数据边。连接辅助函数只检查静态定义，不做 Manifest 端口或运行值校验。
 
-## 现有目录如何承载后续模型
+GenericWorkflowNode 根据精确类型版本 Manifest 自动生成 Handle、显示端口类型与配置摘要；缺失版本显示不可用，图标采用受控映射。画布已注册 renderer、加载目录并处理加载 / 错误 / 空态；当前没有添加节点或图编辑 / 保存。项目保存按钮仍只处理名称、视口及 revision。
 
-继续采用模块化单体与独立 worker。下表的后续职责是边界约束，具体接口与目录拆分随相应设计步骤确定；不表示已存在这些业务实现。
+## 目录与依赖
 
-| 目录                 | 当前实现                                                  | 后续承载边界                                                                      |
-| -------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `apps/web`           | 登录、账户中心、空白画布及独立 Node / Edge 转换           | 创作交互、编辑视图与前端适配；不加载服务端插件适配器或密钥                        |
-| `apps/api`           | 认证、用户资料、项目 API 与基础设施服务                   | 模块化业务入口、权限、定义与运行管理、资产等应用服务；模块通过服务及契约协作      |
-| `apps/worker`        | NestJS 应用上下文，仅接入基础设施                         | 承载独立执行进程，调用运行时；不另建一套工作流调度语义                            |
-| `packages/contracts` | 身份、项目、Workflow / Node Schema 及安全 manifest 协议   | 经逐步设计确定的平台中立协议与边界校验，不依赖框架或数据库模型                    |
-| `packages/database`  | Prisma 与身份、基础项目持久化                             | 数据访问及迁移；数据库结构随真实领域模型设计，不以概念表直接生成数据表            |
-| `packages/workflow`  | Workflow 契约、快照、NodeType / Registry 与 manifest 转换 | 领域 DSL 编译与 LangGraph 执行适配；不另建图调度器                                |
-| `packages/plugins`   | 空入口，保留模型 SDK 依赖                                 | 受信任的外部能力适配；不承担工作流调度或隐式供应商选择                            |
-| `packages/context`   | 空入口                                                    | 独立上下文构建职责；只使用明确选择或绑定的数据，不把整个 State 自动变成模型上下文 |
+| 目录               | 当前职责                                             | 后续边界                               |
+| ------------------ | ---------------------------------------------------- | -------------------------------------- |
+| apps/web           | 身份、账户、项目画布、目录查询、通用 renderer 与适配 | 创作交互，不加载服务端插件或密钥       |
+| apps/api           | 认证、资料、项目、节点目录和基础设施                 | 模块化业务入口、权限与应用服务         |
+| apps/worker        | 仅基础设施的 NestJS 上下文                           | 独立执行进程，不自建图调度语义         |
+| packages/contracts | 中立 JSON 协议和静态校验                             | 不依赖前端、数据库或 Runtime 框架      |
+| packages/database  | Prisma 与身份、基础项目持久化                        | 模型、迁移按实际业务增加               |
+| packages/workflow  | 值契约、快照、NodeType / Registry 与 LangGraph 适配  | 先确定 State，再实现领域编译与执行接入 |
+| packages/plugins   | 空入口，保留模型 SDK                                 | 受信任外部能力，无隐式供应商选择       |
+| packages/context   | 空入口                                               | 独立构建明确选择的上下文               |
 
-`apps/api/src/workflows`、`runtime`、`runs`、`plugins`、`assets` 等目前只有 `.gitkeep` 的目录只是预留位置。Tool、Middleware、Agent、领域节点与模板暂不新增独立包或空壳类；等职责和真实依赖明确后再决定承载位置。
+不为附件目录示意重命名为 common / client，不为未来概念建立空壳执行器。API 与 worker 通过服务和契约协作；第三方类型在适配层转换，不进入 contracts。
 
-## 依赖与适配边界
-
-前端通过平台协议调用 API，React Flow 编辑类型在前端转换。API 和 worker 在服务端协调业务、运行与基础设施；LangGraph、供应商 SDK 和 Prisma 类型在各自适配层转换，不进入 contracts。
-
-领域节点与模板组合工作流底座。平台 Compiler 将已校验的 WorkflowDefinition 转为 LangGraph StateGraph，LangGraph 负责实际图执行，不包含“如果是漫剧 / 广告 / 口播”的业务调度分支；LangChain 进入 AI 节点内部。Queue / Worker 处理长异步作业、跨运行和供应商共享限流，不决定图的下一个节点。Tool、Capability 与 Plugin 的协作不是强制逐级调用链，详细职责见 [平台核心模型](platform-model.md) 与 [Runtime 架构](runtime-architecture.md)。
-
-一个项目仍恰好一张画布，未来对应一个逻辑 Workflow；多个版本与多次运行不意味着多个独立工作流。组合调用的设计引用另一个项目的固定 WorkflowVersion，并检查其权限，不增加同项目多工作流层级。当前项目协议与数据库尚未加入 Workflow，现有 `revision` 仅作并发保存检查，不能作为不可变工作流版本使用。
+LangGraph 是核心 Runtime，平台不再建设图调度、Checkpoint 或暂停恢复状态机。Queue / Worker 后续处理长异步作业、跨运行与供应商限流，不决定图中下一个节点。一个项目一个逻辑 Workflow 的边界不变，子流程只引用其他项目固定版本；当前没有对应持久化、发布或运行应用接口。

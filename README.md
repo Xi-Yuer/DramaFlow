@@ -2,9 +2,9 @@
 
 DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，以漫剧生产为核心场景，同时支持广告、产品宣传、口播等视频生产流程**，面向团队自部署。
 
-当前保留用户登录、平台鉴权、账户中心、项目管理与 React Flow 空白画布。每个项目一张画布，可保存项目名称、视口及 revision；项目按所有者隔离，列表支持分页。画布尚不编辑节点或连线，没有工作流运行和模型插件业务。
+当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录并注册通用 renderer；生产目录为空，没有添加节点、图编辑保存、工作流运行或模型调用。
 
-基础库已实现 Workflow 契约与版本快照、NodeType 静态说明书、DataType 声明与结构兼容判断、版本精确注册、操作值校验、安全 manifest 及 LangGraph 基础适配。前端 Node / Edge 双向转换保留类型版本，尚未接入画布或 API；完整 State / InputValue / Binding、整图编译和运行持久化仍待实现。具体范围见 [当前架构](docs/architecture.md#node-基础库)。
+基础库已实现纯 JSON Manifest、四类输入 Binding、独立 ControlEdge、静态引用与联合 DAG 校验、版本精确注册及泛型 LangGraph 普通操作适配。Node.inputs 是数据绑定唯一来源，React Flow 数据边从它派生；完整 WorkflowState、绑定求值、整图编译和运行持久化仍待实现。具体范围见 [当前架构](docs/architecture.md#node-基础库)。
 
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 
@@ -30,16 +30,16 @@ pnpm dev
 
 ## 保留的结构
 
-| 目录               | 当前内容                                                  |
-| ------------------ | --------------------------------------------------------- |
-| apps/web           | Next.js、登录、账户中心、空白画布及独立 Node / Edge 转换  |
-| apps/api           | NestJS、Better Auth、默认鉴权、用户资料、项目与基础服务   |
-| apps/worker        | 独立 NestJS 应用上下文，尚未注册业务任务                  |
-| packages/database  | Prisma、身份/资料/凭证/会话及基础项目模型、pgvector       |
-| packages/contracts | 身份、项目、Workflow / Node、DataType 及静态类型声明      |
-| packages/workflow  | Workflow 契约、快照、NodeType / Registry 与 manifest 转换 |
-| packages/plugins   | 插件包空入口，保留模型 SDK 依赖                           |
-| packages/context   | 上下文包空入口，待逐步定义                                |
+| 目录               | 当前内容                                                   |
+| ------------------ | ---------------------------------------------------------- |
+| apps/web           | 身份与项目画布、目录查询、通用节点 renderer 和协议适配     |
+| apps/api           | NestJS、Better Auth、资料、项目与受保护节点目录 API        |
+| apps/worker        | 独立 NestJS 应用上下文，尚未注册业务任务                   |
+| packages/database  | Prisma、身份/资料/凭证/会话及基础项目模型、pgvector        |
+| packages/contracts | 身份、项目、Workflow / Node、DataType 及静态类型声明       |
+| packages/workflow  | 值契约、快照、服务端 NodeType / Registry 与 LangGraph 适配 |
+| packages/plugins   | 插件包空入口，保留模型 SDK 依赖                            |
+| packages/context   | 上下文包空入口，待逐步定义                                 |
 
 上述目录是当前工程结构，不为每个一级概念预建独立包。未来职责的承载边界见 [架构与目录职责](docs/architecture.md)。
 

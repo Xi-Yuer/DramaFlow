@@ -8,23 +8,45 @@ export const nodeTypeIdSchema = z
 
 export const nodeTypeVersionSchema = z.number().int().positive();
 
-const portLabelSchema = z.string().trim().min(1).max(80);
+const displayNameSchema = z.string().trim().min(1).max(80);
+const descriptionSchema = z.string().max(500);
+
+export const nodeCategorySchema = z.enum([
+  'input',
+  'ai',
+  'image',
+  'video',
+  'audio',
+  'flow',
+  'data',
+  'output',
+]);
+
+export const nodeMetadataSchema = z
+  .object({
+    name: displayNameSchema,
+    description: descriptionSchema.optional(),
+    category: nodeCategorySchema,
+    icon: workflowIdentifierSchema.optional(),
+  })
+  .strict();
 
 export const inputPortDefinitionSchema = z
   .object({
     key: workflowPortNameSchema,
-    name: portLabelSchema,
+    name: displayNameSchema,
+    description: descriptionSchema.optional(),
     dataType: dataTypeSchema,
     required: z.boolean().optional(),
     multiple: z.boolean().optional(),
-    defaultValue: z.json().optional(),
   })
   .strict();
 
 export const outputPortDefinitionSchema = z
   .object({
     key: workflowPortNameSchema,
-    name: portLabelSchema,
+    name: displayNameSchema,
+    description: descriptionSchema.optional(),
     dataType: dataTypeSchema,
     multiple: z.boolean().optional(),
   })
@@ -32,100 +54,135 @@ export const outputPortDefinitionSchema = z
 
 export const capabilityRequirementSchema = z.object({ type: nodeTypeIdSchema }).strict();
 
-export const nodeMetadataSchema = z
+// 控件只保留公开提示；数值范围、选项与默认值统一由配置字段声明。
+export const fieldUISchema = z
   .object({
-    name: z.string().trim().min(1).max(80),
-    description: z.string().max(500).optional(),
-    category: workflowIdentifierSchema,
-    icon: workflowIdentifierSchema.optional(),
+    component: z.enum([
+      'text',
+      'textarea',
+      'prompt-editor',
+      'number',
+      'switch',
+      'select',
+      'slider',
+      'asset-picker',
+      'model-selector',
+    ]),
+    placeholder: z.string().max(500).optional(),
   })
   .strict();
 
-const fieldLabel = {
-  label: z.string().trim().min(1).max(80).optional(),
-  description: z.string().max(500).optional(),
+const configFieldBase = {
+  key: workflowPortNameSchema,
+  name: displayNameSchema,
+  ui: fieldUISchema.optional(),
 };
 
-// 仅描述编辑提示，不携带 React 组件、脚本、密钥或服务端实例。
-export const nodeFieldUISchema = z.discriminatedUnion('component', [
+export const configFieldDefinitionSchema = z.discriminatedUnion('type', [
   z
     .object({
-      ...fieldLabel,
-      component: z.enum([
-        'text',
-        'textarea',
-        'prompt-editor',
-        'number',
-        'switch',
-        'asset-picker',
-        'model-selector',
-      ]),
+      ...configFieldBase,
+      type: z.literal('string'),
+      defaultValue: z.string().optional(),
+      required: z.boolean().optional(),
     })
     .strict(),
   z
     .object({
-      ...fieldLabel,
-      component: z.literal('slider'),
-      min: z.number().finite(),
-      max: z.number().finite(),
-      step: z.number().positive().finite().optional(),
+      ...configFieldBase,
+      type: z.literal('number'),
+      defaultValue: z.number().finite().optional(),
+      required: z.boolean().optional(),
+      min: z.number().finite().optional(),
+      max: z.number().finite().optional(),
     })
     .strict()
-    .refine((field) => field.min <= field.max, '滑块最小值不能大于最大值'),
+    .superRefine((field, context) => {
+      if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
+        context.addIssue({ code: 'custom', path: ['max'], message: '配置最小值不能大于最大值' });
+      }
+      if (
+        field.defaultValue !== undefined &&
+        ((field.min !== undefined && field.defaultValue < field.min) ||
+          (field.max !== undefined && field.defaultValue > field.max))
+      ) {
+        context.addIssue({ code: 'custom', path: ['defaultValue'], message: '默认值超出配置范围' });
+      }
+    }),
   z
     .object({
-      ...fieldLabel,
-      component: z.literal('select'),
-      options: z
-        .array(
-          z
-            .object({
-              label: z.string().trim().min(1).max(80),
-              value: z.union([z.string(), z.number().finite(), z.boolean()]),
-            })
-            .strict(),
-        )
-        .min(1),
+      ...configFieldBase,
+      type: z.literal('boolean'),
+      defaultValue: z.boolean().optional(),
     })
     .strict(),
+  z
+    .object({
+      ...configFieldBase,
+      type: z.literal('select'),
+      options: z.array(z.object({ label: displayNameSchema, value: z.string() }).strict()).min(1),
+      defaultValue: z.string().optional(),
+      required: z.boolean().optional(),
+    })
+    .strict()
+    .superRefine((field, context) => {
+      const values = new Set<string>();
+      field.options.forEach((option, index) => {
+        if (values.has(option.value)) {
+          context.addIssue({
+            code: 'custom',
+            path: ['options', index, 'value'],
+            message: '选项值不能重复',
+          });
+        }
+        values.add(option.value);
+      });
+      if (field.defaultValue !== undefined && !values.has(field.defaultValue)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['defaultValue'],
+          message: '默认值不属于配置选项',
+        });
+      }
+    }),
 ]);
 
 export const nodeUISchema = z
   .object({
     color: workflowIdentifierSchema.optional(),
-    inputs: z.record(workflowPortNameSchema, nodeFieldUISchema).optional(),
-    config: z.record(workflowPortNameSchema, nodeFieldUISchema).optional(),
+    inputs: z.record(workflowPortNameSchema, fieldUISchema).optional(),
   })
   .strict();
 
-export const nodeTypeDeclarationSchema = z
+// Manifest 是唯一公开类型说明书，所有字段均为 JSON，不持有 Zod、编译器或服务端实例。
+export const nodeTypeManifestSchema = z
   .object({
     type: nodeTypeIdSchema,
     version: nodeTypeVersionSchema,
     metadata: nodeMetadataSchema,
     inputs: z.array(inputPortDefinitionSchema),
     outputs: z.array(outputPortDefinitionSchema),
+    config: z.array(configFieldDefinitionSchema),
     capabilities: z.array(capabilityRequirementSchema).optional(),
-    ui: nodeUISchema,
+    ui: nodeUISchema.optional(),
   })
   .strict()
-  .superRefine((definition, context) => {
-    for (const direction of ['inputs', 'outputs'] as const) {
+  .superRefine((manifest, context) => {
+    for (const group of ['inputs', 'outputs', 'config'] as const) {
       const keys = new Set<string>();
-      definition[direction].forEach((port, index) => {
-        if (keys.has(port.key)) {
+      manifest[group].forEach((item, index) => {
+        if (keys.has(item.key)) {
           context.addIssue({
             code: 'custom',
-            path: [direction, index, 'key'],
-            message: '同一方向不能声明重复端口',
+            path: [group, index, 'key'],
+            message: '同组字段 key 不能重复',
           });
         }
-        keys.add(port.key);
+        keys.add(item.key);
       });
     }
-
     const capabilities = new Set<string>();
-    definition.capabilities?.forEach((capability, index) => {
+    manifest.capabilities?.forEach((capability, index) => {
       if (capabilities.has(capability.type)) {
         context.addIssue({
           code: 'custom',
@@ -135,10 +192,9 @@ export const nodeTypeDeclarationSchema = z
       }
       capabilities.add(capability.type);
     });
-
-    const inputKeys = new Set(definition.inputs.map((port) => port.key));
-    for (const key of Object.keys(definition.ui.inputs ?? {})) {
-      if (!inputKeys.has(key)) {
+    const inputs = new Set(manifest.inputs.map((port) => port.key));
+    for (const key of Object.keys(manifest.ui?.inputs ?? {})) {
+      if (!inputs.has(key)) {
         context.addIssue({
           code: 'custom',
           path: ['ui', 'inputs', key],
@@ -148,17 +204,12 @@ export const nodeTypeDeclarationSchema = z
     }
   });
 
-// 端口公开稳定的 DataType；仅配置使用服务端 Zod 官方转换生成的 JSON Schema。
-// 本协议不加载执行器，也不提供媒体或领域资料的运行值校验器。
-export const nodeTypeManifestSchema = nodeTypeDeclarationSchema
-  .safeExtend({ configSchema: z.record(z.string(), z.json()) })
-  .strict();
-
+export type NodeCategory = z.infer<typeof nodeCategorySchema>;
+export type NodeMetadata = z.infer<typeof nodeMetadataSchema>;
 export type InputPortDefinition = z.infer<typeof inputPortDefinitionSchema>;
 export type OutputPortDefinition = z.infer<typeof outputPortDefinitionSchema>;
 export type CapabilityRequirement = z.infer<typeof capabilityRequirementSchema>;
-export type NodeMetadata = z.infer<typeof nodeMetadataSchema>;
-export type NodeFieldUI = z.infer<typeof nodeFieldUISchema>;
+export type FieldUI = z.infer<typeof fieldUISchema>;
+export type ConfigFieldDefinition = z.infer<typeof configFieldDefinitionSchema>;
 export type NodeUI = z.infer<typeof nodeUISchema>;
-export type NodeTypeDeclaration = z.infer<typeof nodeTypeDeclarationSchema>;
 export type NodeTypeManifest = z.infer<typeof nodeTypeManifestSchema>;

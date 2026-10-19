@@ -1,14 +1,34 @@
 import { z } from 'zod';
 import { nodeTypeIdSchema, nodeTypeVersionSchema } from './node-type.js';
-import {
-  workflowIdentifierSchema,
-  workflowOutputSourceSchema,
-  workflowPortNameSchema,
-} from './workflow.js';
+import { workflowIdentifierSchema, workflowPortNameSchema } from './workflow.js';
 
-export const inputBindingSchema = z
-  .object({ target: workflowPortNameSchema, source: workflowOutputSourceSchema })
+export const connectionBindingSchema = z
+  .object({
+    type: z.literal('connection'),
+    nodeId: workflowIdentifierSchema,
+    outputKey: workflowPortNameSchema,
+  })
   .strict();
+
+export const constantBindingSchema = z
+  .object({ type: z.literal('constant'), value: z.json() })
+  .strict();
+
+export const workflowInputBindingSchema = z
+  .object({ type: z.literal('workflow_input'), key: workflowPortNameSchema })
+  .strict();
+
+// 只声明资产标识；不读取资产、不检查权限或构造媒体运行值。
+export const assetBindingSchema = z
+  .object({ type: z.literal('asset'), assetId: workflowIdentifierSchema })
+  .strict();
+
+export const inputBindingSchema = z.discriminatedUnion('type', [
+  connectionBindingSchema,
+  constantBindingSchema,
+  workflowInputBindingSchema,
+  assetBindingSchema,
+]);
 
 export const nodeDefinitionSchema = z
   .object({
@@ -16,39 +36,24 @@ export const nodeDefinitionSchema = z
     type: nodeTypeIdSchema,
     typeVersion: nodeTypeVersionSchema,
     name: z.string().trim().min(1).max(80),
-    inputs: z.array(inputBindingSchema),
+    inputs: z.record(workflowPortNameSchema, inputBindingSchema),
     config: z.record(z.string(), z.json()),
     preset: workflowIdentifierSchema.optional(),
     ui: z
       .object({
         position: z.object({ x: z.number().finite(), y: z.number().finite() }).strict(),
       })
-      .strict()
-      .optional(),
+      .strict(),
   })
-  .strict()
-  .superRefine((node, context) => {
-    const targets = new Set<string>();
-    node.inputs.forEach((binding, index) => {
-      if (targets.has(binding.target)) {
-        context.addIssue({
-          code: 'custom',
-          path: ['inputs', index, 'target'],
-          message: '同一输入端口不能重复绑定；集合输入需使用明确的集合契约',
-        });
-      }
-      targets.add(binding.target);
-    });
-  });
+  .strict();
 
-// 保留连线的完整端口映射；是否激活节点与如何读取数据仍是不同语义。
-export const edgeDefinitionSchema = z
+// Workflow.edges 只保存控制关系；数据边由 Node.inputs.connection 派生。
+export const controlEdgeDefinitionSchema = z
   .object({
     id: workflowIdentifierSchema,
     sourceNodeId: workflowIdentifierSchema,
-    sourceHandle: workflowPortNameSchema,
+    sourcePort: workflowPortNameSchema.optional(),
     targetNodeId: workflowIdentifierSchema,
-    targetHandle: workflowPortNameSchema,
   })
   .strict();
 
@@ -93,9 +98,13 @@ export const nodeRunSchema = z
   })
   .strict();
 
+export type ConnectionBinding = z.infer<typeof connectionBindingSchema>;
+export type ConstantBinding = z.infer<typeof constantBindingSchema>;
+export type WorkflowInputBinding = z.infer<typeof workflowInputBindingSchema>;
+export type AssetBinding = z.infer<typeof assetBindingSchema>;
 export type InputBinding = z.infer<typeof inputBindingSchema>;
 export type NodeDefinition = z.infer<typeof nodeDefinitionSchema>;
-export type EdgeDefinition = z.infer<typeof edgeDefinitionSchema>;
+export type ControlEdgeDefinition = z.infer<typeof controlEdgeDefinitionSchema>;
 export type NodePreset = z.infer<typeof nodePresetSchema>;
 export type NodeRun = z.infer<typeof nodeRunSchema>;
 export type NodeRunStatus = z.infer<typeof nodeRunStatusSchema>;

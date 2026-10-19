@@ -23,7 +23,7 @@
 | WorkflowVersion    | 发布后的完整定义快照                                 | 输入输出契约与图一起冻结，发布不触发执行                          |
 | Node               | Workflow 中最小的可调度执行单元                      | Input → Execute → Output；不读取上下游、不自行调度整个工作流      |
 | Node Preset        | 同一 Runtime 类型下的场景配置与有效契约选择          | 业务名称不直接等同于新 Runtime 类型，不复制相近业务执行器         |
-| Edge               | 表达节点之间的控制或数据关系                         | 执行激活与数据传值的语义必须区分，具体表达方式留待后续设计        |
+| Edge               | 编辑器中显示节点关系                                 | 数据边从 Node.inputs 派生；Workflow.edges 只保存 ControlEdge      |
 | State              | 一次 WorkflowRun 的运行状态                          | 不成为跨项目共享状态、工作流定义或自动收集全部聊天的容器          |
 | Runtime            | LangGraph 执行编译后的图，推进 State 并支持恢复      | 平台提供领域 DSL 与编译适配，不自建调度器或领域专用调度分支       |
 | Capability         | 描述节点所需的能力类别，例如图像生成                 | 表达能力需求，不指定厂商；具体协议随 Node、Plugin 阶段设计        |
@@ -62,7 +62,7 @@ Project、Canvas、Workflow 的职责不同，不据此新增“项目 → 多�
 
 Workflow 定义与 WorkflowRun / State 分离，草稿修改不能改变已有运行。State 以单次运行为边界；跨运行复用生产资料通过显式 Asset 引用表达，不能靠复用可变运行状态实现。
 
-执行关系决定节点激活，数据绑定负责传值，二者联合依赖必须无环。未选中分支传播 `skipped`，不调用模型；具体图结构与数据协议留到后续步骤定义。
+控制关系决定节点激活，Node.inputs 是数据绑定的唯一真相，Workflow.edges 只保存控制边。可视化数据边从 connection Binding 派生，控制与数据联合依赖必须无环；正式静态 Schema 已检查引用与无环，Binding 运行求值和依赖编译尚待 WorkflowState 设计。未选中分支应传播 skipped，不调用模型。
 
 所有新素材对象写入 RustFS，通过 S3 接口访问，不静默回退本地文件，存储实施说明见 [RustFS 存储](object-storage.md)。资产的领域元数据、版本、权限及生命周期在第 ⑩ 步设计。角色等生产资料不能简单等同于一张图片；其描述与媒体关联留到资产和领域模型阶段确定。
 

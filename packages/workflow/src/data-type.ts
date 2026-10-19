@@ -1,6 +1,8 @@
 import { dataTypeSchema, type DataType } from '@dramaflow/contracts';
 
 function matches(source: DataType, target: DataType): boolean {
+  // any 只放宽编辑器静态连线检查；实际值仍必须通过服务端 Zod。
+  if (source.kind === 'any' || target.kind === 'any') return true;
   if (source.kind === 'array') {
     return target.kind === 'array' && matches(source.item, target.item);
   }

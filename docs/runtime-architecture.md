@@ -23,7 +23,7 @@ React Flow 编辑视图
     ↓ 前端适配
 平台 WorkflowDefinition / 不可变 WorkflowVersion
     ↓ Workflow Compiler
-    ├── NodeRegistry → NodeType（definition + compile）→ LangGraph 节点函数
+    ├── NodeRegistry → NodeType（manifest + Zod + compile）→ LangGraph 节点函数
     ├── Edge Compiler → 原生边 / 条件路由 / Send 等
     └── State Schema / Binding / 输出收集适配
     ↓
@@ -36,17 +36,17 @@ LangGraph Runtime
 
 Workflow Compiler 将已验证的领域 DSL 转为 LangGraph 构建器，LangGraph 的 `compile()` 生成可执行图；两者是不同层次。发布快照只冻结定义，不能隐式开始执行。平台负责权限、版本引用、联合依赖无环和输入输出契约检查，再把执行交给 LangGraph；原生图编译检查不能代替领域校验。[官方 Graph API](https://docs.langchain.com/oss/javascript/langgraph/graph-api) 说明了 State、节点、边与编译关系。
 
-NodeRegistry 注册受信任的 NodeType，按 definition 的 type / version 与注册对象的可选 preset 精确匹配；实例 / Preset 的 typeVersion 必须明确，get 不找最新版。NodeCompiler 只声明 compile，不重复维护类型身份。不动态执行浏览器代码，也不在类型、版本、Preset 或插件缺失时回退。相近业务通过 Preset 与有效契约复用执行机制；视频领域能力可以专业化，编译器不与单一供应商绑定。
+NodeRegistry 注册受信任的服务端 NodeType，按 manifest.type / manifest.version 精确匹配，get 不寻找最新版。实例 typeVersion 必须明确，Preset 只是配置模板，不参与注册身份。NodeCompiler 只声明 compile，不重复维护类型身份，不在版本或插件缺失时回退；视频领域能力可以专业化，编译器不与单一供应商绑定。
 
 LangGraph 节点函数需要接收图 State，编译适配层因此可以读取 State、解析绑定并返回 State 更新。普通业务操作仍只收到自己的 `inputs / config`，不知道上下游节点或整个 State。控制、审核等 NodeCompiler 可以直接使用 LangGraph 原生 `Command`、条件路由或 `interrupt()`，不强制套进普通值操作接口。
 
-当前 NodeType、NodeRegistry 与 createOperationNodeType 为这条链提供基础接口。NodeTypeDefinition 是静态 NodeTypeDeclaration 加服务端 configSchema，端口使用 DataType；独立 NodeValueSchemas 提供输入输出 Zod，普通操作工厂组合内部 NodeContract，不从类型声明猜测真实值校验器。CompileContext.readInputs / writeOutputs 没有预设完整 WorkflowState；invokeNodeOperation 只校验操作输入、配置和输出，透传 runnable 配置，不负责 ready 判断、调度、暂停、恢复或重试。
+当前 NodeType 持有纯 JSON manifest、三组服务端 Zod 与 compile，createOperationNodeType 保留泛型普通操作适配。CompileContext.readInputs / writeOutputs 没有预设具体 WorkflowState，不解析四类 Binding；invokeNodeOperation 仅校验实际输入、配置和输出并透传 runnable 配置，不负责 ready 判断、调度、暂停、恢复或重试。普通节点只生成自身函数，不持有全图 builder 或增加其他节点的边。
 
-浏览器读取 createNodeTypeManifest 输出的静态声明与配置 JSON Schema，不接收完整 NodeTypeDefinition、输入输出 Zod 或 compile。配置按 input 语义转换，不导出全局 .meta()，无法表示的 Schema 明确报错。声明与默认值必须可公开，服务端仍执行完整 Zod 约束；manifest 不包含密钥、模型或插件实例。DataType 只做类型结构声明与兼容判断，capabilities 不实现 Resolver；具体边界见 [Node 模型](node-model.md) 与 [NodeType 实施说明](node-type-implementation.md)。
+浏览器经受保护目录 API 读取 listManifests 的纯 JSON 副本；Manifest.config 是公开字段数组，不携带 Zod、JSON Schema、compile 或服务端实例。公开默认值和声明文本不得含密钥，后端实际值仍按完整 Zod 校验。DataType 只做静态匹配，capabilities 不提供 Resolver；具体边界见 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。
 
-React Flow Node 的 type 是前端渲染器标识 workflowNode，领域类型与版本在 data.nodeType / data.typeVersion，布局经 NodeDefinition.ui.position 转换。前端适配层只转换白名单字段，不把 selected、dragging 或测量状态变成执行定义；当前转换尚未接入画布和 API。ui.inputs 与 ui.config 是分开的编辑提示，不承担输入来源解析。
+React Flow renderer 使用 workflowNode，领域类型与版本在 data.nodeType / data.typeVersion，布局对应必填 ui.position。数据边从 Node.inputs.connection 派生，Workflow.edges 只保存控制关系；临时交互状态不进入 DSL。画布已注册 GenericWorkflowNode 并查询目录，尚无图编辑保存。输入控件提示在 ui.inputs，配置控件提示只在 config[].ui，不承担 Binding 运行求值。
 
-完整 WorkflowState、并行更新 reducer、Binding 解析、控制激活与数据就绪的编译规则，以及 WorkflowDefinition 到整张 StateGraph 的转换，仍须在第 ④ 步明确。不能把当前通用接口标为已实现整图 Compiler。
+正式 WorkflowDefinition 已校验静态引用与控制 / 数据联合 DAG；完整 WorkflowState、并行 reducer、Binding 求值和依赖编译尚未明确。下一步先确定 State，再实现整图 Compiler，不能用已有泛型接口代替这些设计。
 
 ## State、运行记录与 Checkpoint
 
@@ -80,6 +80,6 @@ Queue / Worker 完成作业或收到回调后唤醒对应运行，图的后续�
 
 ## 当前交付边界
 
-基础库已有平台 Workflow / Node Schema、版本快照与值契约、完整 NodeType / NodeRegistry、普通操作适配、公开 manifest 转换及根 Run 配置映射。前端 Node / Edge 双向转换独立于画布。真实 LangGraph 测试覆盖基础编译适配与原生运行行为，测试中的节点和 MemorySaver 不作为生产类型目录或运行服务；具体实现范围统一见 [当前架构](architecture.md)。
+基础库已有纯 JSON Manifest、四类 Binding、ControlEdge、静态引用及联合 DAG 校验、NodeType / Registry、版本快照和普通操作适配。目录 API 与通用 renderer 已接入，生产 Registry 为空。真实 LangGraph 测试保留泛型适配与原生运行验证，测试类型和 MemorySaver 不作为生产能力；具体范围统一见 [当前架构](architecture.md)。
 
-当前 Web 仍是 React Flow 空白画布，API 不保存或执行 WorkflowDefinition。生产节点、Plugin、LangChain 模型调用、整图 Compiler、持久 checkpointer、运行接口、Queue 作业及人工审核产品流程均未接入。后续实现继续按已确认范围逐步推进，不能用基础适配测试替代这些能力的交付验证。
+当前项目仍只保存名称、视口和 revision，不保存或执行 WorkflowDefinition。WorkflowState、运行 Binding 求值、生产节点、Plugin、真实模型调用、整图 Compiler、持久 checkpointer、运行接口、Queue 及审核产品流程均未接入。

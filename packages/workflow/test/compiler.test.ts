@@ -42,12 +42,11 @@ type TestStateUpdate = typeof TestState.Update;
 const contract = {
   type: 'test.operation',
   version: 1,
-  preset: 'test-preset',
   inputSchema: z.object({ value: z.number().int() }),
   outputSchema: z.object({ value: z.number(), label: z.string() }),
   configSchema: z.object({
     multiplier: z.number().finite(),
-    label: z.object({ text: z.string() }),
+    label: z.string(),
   }),
 };
 type TestOperation = NodeOperation<
@@ -60,10 +59,11 @@ function definition() {
     id: 'operation',
     type: contract.type,
     typeVersion: contract.version,
-    preset: contract.preset,
+    preset: 'test-preset',
     name: '测试值操作',
-    inputs: [],
-    config: { multiplier: 2, label: { text: '原始配置' } },
+    inputs: {},
+    ui: { position: { x: 0, y: 0 } },
+    config: { multiplier: 2, label: '原始配置' },
   } satisfies NodeDefinition;
 }
 
@@ -74,7 +74,7 @@ const context: CompileContext<TestStateValue, TestStateUpdate> = {
 
 const operation: TestOperation = ({ inputs, config }) => ({
   value: inputs.value * config.multiplier,
-  label: config.label.text,
+  label: config.label,
 });
 
 // 这些显式测试端口使用测试领域类型；真实端口类型在专门的声明测试中验证。
@@ -91,11 +91,17 @@ function createTestNodeType<I extends z.ZodObject, O extends z.ZodObject, C exte
     {
       type: values.type,
       version: values.version,
-      metadata: { name: '测试操作', category: 'test' },
+      metadata: { name: '测试操作', category: 'data' },
       inputs: Object.keys(values.inputSchema.shape).map(port),
       outputs: Object.keys(values.outputSchema.shape).map(port),
-      configSchema: values.configSchema,
-      ui: {},
+      config: Object.keys(values.configSchema.shape).map((key) => ({
+        key,
+        name: key,
+        type:
+          key === 'multiplier' || key === 'offset' || key === 'defaultOffset'
+            ? ('number' as const)
+            : ('string' as const),
+      })),
     },
     values,
     operation,
@@ -122,7 +128,7 @@ describe('NodeCompiler 与原生 LangGraph 的适配', () => {
 
     node.id = 'changed';
     node.config.multiplier = 100;
-    node.config.label.text = '修改后的配置';
+    node.config.label = '修改后的配置';
 
     const result = await graph.invoke({ value: 3 });
     expect(result.results).toEqual({ operation: { value: 6, label: '原始配置' } });
@@ -130,33 +136,27 @@ describe('NodeCompiler 与原生 LangGraph 的适配', () => {
     expect(Object.keys(invoke.mock.calls[0]![0])).toEqual(['inputs', 'config']);
   });
 
-  it('未知类型和未知 Preset 均拒绝编译，不回退到已注册的基础类型', () => {
-    const baseCompiler = createTestNodeType({ ...contract, preset: undefined }, operation);
+  it('未知类型和未知版本拒绝编译，Preset 不成为额外运行身份', () => {
     const registry = new NodeRegistry<TestStateValue, TestStateUpdate>([
-      baseCompiler,
       createTestNodeType(contract, operation),
     ]);
-    expect(() => registry.compile({ ...definition(), preset: undefined }, context)).not.toThrow();
     for (const node of [
       { ...definition(), type: 'test.unavailable' },
-      { ...definition(), preset: 'unavailable' },
+      { ...definition(), typeVersion: 2 },
     ]) {
       expect(() => registry.compile(node, context)).toThrow(
-        expect.objectContaining({ code: 'unavailable_compiler' }),
+        expect.objectContaining({ code: 'unavailable_type' }),
       );
     }
-    const presetOnly = new NodeRegistry<TestStateValue, TestStateUpdate>([
-      createTestNodeType(contract, operation),
-    ]);
-    expect(() => presetOnly.compile({ ...definition(), preset: undefined }, context)).toThrow(
-      expect.objectContaining({ code: 'unavailable_compiler' }),
-    );
+    expect(() =>
+      registry.compile({ ...definition(), preset: 'another-config-template' }, context),
+    ).not.toThrow();
   });
 
-  it('同一类型及 Preset 的重复编译器不能覆盖已有注册', () => {
+  it('同一类型版本的重复实现不能覆盖已有注册', () => {
     const compiler = createTestNodeType(contract, operation);
     expect(() => new NodeRegistry<TestStateValue, TestStateUpdate>([compiler, compiler])).toThrow(
-      expect.objectContaining({ code: 'duplicate_compiler' }),
+      expect.objectContaining({ code: 'duplicate_type' }),
     );
   });
 
@@ -236,7 +236,6 @@ describe('序列化配置与操作有效值的转换边界', () => {
   const transformedContract = {
     type: 'test.transform',
     version: 1,
-    preset: 'test-transform-preset',
     inputSchema: z.object({ value: z.number() }),
     outputSchema: z.object({
       value: z.number(),
@@ -266,9 +265,10 @@ describe('序列化配置与操作有效值的转换边界', () => {
       id: 'transform',
       type: transformedContract.type,
       typeVersion: transformedContract.version,
-      preset: transformedContract.preset,
+      preset: 'test-transform-preset',
       name: '测试配置转换',
-      inputs: [],
+      inputs: {},
+      ui: { position: { x: 0, y: 0 } },
       config: { factor: '2', offset: 3 },
     };
     const parsed = parseNodeDefinition(transformedContract, node);
@@ -307,11 +307,12 @@ describe('序列化配置与操作有效值的转换边界', () => {
       type: transformedContract.type,
       typeVersion: transformedContract.version,
       name: '测试 Preset 配置转换',
-      inputs: [],
+      inputs: {},
+      ui: { position: { x: 0, y: 0 } },
       config: { offset: 20 },
     };
     const preset = {
-      id: transformedContract.preset,
+      id: 'test-transform-preset',
       type: transformedContract.type,
       typeVersion: transformedContract.version,
       name: '测试转换预设',
@@ -348,18 +349,20 @@ describe('原生 Interrupt、Command 和 Checkpoint', () => {
   it('显式测试编译器直接中断并用同一 thread 恢复，其他 thread 保持隔离', async () => {
     const entered = vi.fn();
     const reviewCompiler: NodeType<TestStateValue, TestStateUpdate> = {
-      definition: {
+      manifest: {
         type: 'test.review',
         version: 1,
-        metadata: { name: '测试审核', category: 'test' },
+        metadata: { name: '测试审核', category: 'flow' },
         inputs: [{ key: 'value', name: '测试值', dataType: { kind: 'number' } }],
         outputs: [
           { key: 'approved', name: '审核结果', dataType: { kind: 'boolean' } },
           { key: 'value', name: '测试值', dataType: { kind: 'number' } },
         ],
-        ui: {},
-        configSchema: z.object({}),
+        config: [],
       },
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ approved: z.boolean(), value: z.number() }),
+      configSchema: z.object({}),
       compile: (node) => (state) => {
         entered();
         const feedback = z
@@ -388,7 +391,8 @@ describe('原生 Interrupt、Command 和 Checkpoint', () => {
         type: 'test.review',
         typeVersion: 1,
         name: '测试审核',
-        inputs: [],
+        inputs: {},
+        ui: { position: { x: 0, y: 0 } },
         config: {},
       },
       context,

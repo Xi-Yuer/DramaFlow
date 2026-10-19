@@ -1,11 +1,8 @@
 import {
-  edgeDefinitionSchema,
   nodeDefinitionSchema,
   nodePresetSchema,
   nodeTypeIdSchema,
   nodeTypeVersionSchema,
-  workflowIdentifierSchema,
-  type InputBinding,
   type NodeDefinition,
 } from '@dramaflow/contracts';
 import type { RunnableConfig } from '@langchain/core/runnables';
@@ -20,7 +17,6 @@ export interface NodeContract<
 > {
   type: string;
   version: number;
-  preset?: string;
   inputSchema: InputSchema;
   outputSchema: OutputSchema;
   configSchema: ConfigSchema;
@@ -37,8 +33,8 @@ export class NodeContractError extends Error {
       | 'contract_mismatch'
       | 'unknown_input'
       | 'preset_mismatch'
-      | 'unknown_config_field'
-      | 'port_schema_mismatch',
+      | 'port_schema_mismatch'
+      | 'config_schema_mismatch',
     message: string,
   ) {
     super(message);
@@ -58,22 +54,17 @@ function parseRecord<Schema extends z.ZodObject>(schema: Schema, value: unknown)
 function validateContractIdentity(contract: NodeContract): void {
   nodeTypeIdSchema.parse(contract.type);
   nodeTypeVersionSchema.parse(contract.version);
-  if (contract.preset !== undefined) workflowIdentifierSchema.parse(contract.preset);
 }
 
 export function parseNodeDefinition(contract: NodeContract, input: unknown): NodeDefinition {
   validateContractIdentity(contract);
   const node = nodeDefinitionSchema.parse(input);
-  if (
-    node.type !== contract.type ||
-    node.typeVersion !== contract.version ||
-    node.preset !== contract.preset
-  ) {
+  if (node.type !== contract.type || node.typeVersion !== contract.version) {
     throw new NodeContractError('contract_mismatch', '节点与所选类型 / Preset 契约不匹配');
   }
-  for (const binding of node.inputs) {
-    if (!Object.hasOwn(contract.inputSchema.shape, binding.target)) {
-      throw new NodeContractError('unknown_input', `节点绑定了未声明的输入端口：${binding.target}`);
+  for (const target of Object.keys(node.inputs)) {
+    if (!Object.hasOwn(contract.inputSchema.shape, target)) {
+      throw new NodeContractError('unknown_input', `节点绑定了未声明的输入端口：${target}`);
     }
   }
   // Definition 保存 Schema 的原始输入；转换与默认值只用于验证，不回写到可再次解析的配置。
@@ -94,8 +85,7 @@ export function applyNodePreset(
     node.type !== preset.type ||
     node.typeVersion !== preset.typeVersion ||
     contract.type !== preset.type ||
-    contract.version !== preset.typeVersion ||
-    contract.preset !== preset.id
+    contract.version !== preset.typeVersion
   ) {
     throw new NodeContractError('preset_mismatch', 'Preset 与节点类型或有效契约不匹配');
   }
@@ -104,14 +94,6 @@ export function applyNodePreset(
     preset: preset.id,
     config: { ...preset.config, ...node.config },
   });
-}
-
-export function inputBindingFromEdge(input: unknown): InputBinding {
-  const edge = edgeDefinitionSchema.parse(input);
-  return {
-    target: edge.targetHandle,
-    source: { nodeId: edge.sourceNodeId, outputKey: edge.sourceHandle },
-  };
 }
 
 // Compiler 内的值操作校验工具，不是节点扩展接口或独立 Runtime。

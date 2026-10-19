@@ -102,6 +102,7 @@ afterAll(async () => {
 
 it('未登录禁止访问，注册和未授权认证入口关闭', async () => {
   expect((await call('/api/v1/users/me')).status).toBe(401);
+  expect((await call('/api/v1/workflow/node-types')).status).toBe(401);
   expect(
     (
       await call('/api/auth/sign-up/email', 'POST', {
@@ -144,6 +145,15 @@ it('真实密码登录、Cookie 会话和安全 DTO，不暴露凭证', async ()
   expect(body.role).toBe('user');
   expect(JSON.stringify(body)).not.toContain('token');
   expect(JSON.stringify(body)).not.toContain('password');
+  const nodeTypes = await call(
+    '/api/v1/workflow/node-types',
+    'GET',
+    undefined,
+    cookie,
+  );
+  expect(nodeTypes.status).toBe(200);
+  expect(nodeTypes.headers.get('Cache-Control')).toBe('no-store');
+  expect(await nodeTypes.json()).toEqual([]);
   const account = await db.account.findFirstOrThrow({ where: { userId } });
   expect(account.password).not.toBe(password);
   expect(account.password!.length).toBeGreaterThan(30);

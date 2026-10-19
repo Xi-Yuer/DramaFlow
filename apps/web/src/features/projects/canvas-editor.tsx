@@ -12,10 +12,13 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { App, Button } from 'antd';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { saveProjectSchema, type Project } from '@dramaflow/contracts';
 import { ApiError } from '@/lib/http';
 import { AccountMenuButton } from '@/features/auth/account-menu';
+import { nodeTypeApi, nodeTypeKeys } from '@/features/workflow/node-type-api';
+import { WorkflowManifestProvider, workflowNodeTypes } from '@/features/workflow/workflow-node';
 import { projectApi } from './project-api';
 import { clampViewport, draftSignature } from './viewport';
 
@@ -31,6 +34,7 @@ function CanvasBoard({ project, onReload }: { project: Project; onReload: () => 
   const router = useRouter();
   const { message, modal } = App.useApp();
   const { getViewport } = useReactFlow();
+  const nodeTypes = useQuery({ queryKey: nodeTypeKeys.list, queryFn: nodeTypeApi.list });
   const [name, setName] = useState(project.name);
   const [viewport, setViewport] = useState(project.viewport);
   const [saving, setSaving] = useState(false);
@@ -173,21 +177,32 @@ function CanvasBoard({ project, onReload }: { project: Project; onReload: () => 
         </div>
       </header>
       <div className="canvas-stage">
-        <ReactFlow
-          onMoveEnd={onMoveEnd}
-          defaultViewport={project.viewport}
-          minZoom={0.1}
-          maxZoom={3}
-          colorMode="dark"
-          fitView={false}
-          proOptions={{ hideAttribution: false }}
-        >
-          <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="#ffffff18" />
-          <Controls showInteractive={false} position="bottom-left" />
-        </ReactFlow>
+        <WorkflowManifestProvider manifests={nodeTypes.data ?? []}>
+          <ReactFlow
+            nodeTypes={workflowNodeTypes}
+            onMoveEnd={onMoveEnd}
+            defaultViewport={project.viewport}
+            minZoom={0.1}
+            maxZoom={3}
+            colorMode="dark"
+            fitView={false}
+            proOptions={{ hideAttribution: false }}
+          >
+            <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="#ffffff18" />
+            <Controls showInteractive={false} position="bottom-left" />
+          </ReactFlow>
+        </WorkflowManifestProvider>
         <div className="canvas-empty">
           <p>空白画布</p>
-          <span>当前暂无可用节点。</span>
+          <span role="status">
+            {nodeTypes.isPending
+              ? '正在加载节点目录…'
+              : nodeTypes.isError
+                ? '节点目录加载失败，请重新加载项目。'
+                : nodeTypes.data.length === 0
+                  ? '当前暂无可用节点。'
+                  : '已加载节点目录，工作流编辑与保存尚未开放。'}
+          </span>
         </div>
       </div>
     </main>

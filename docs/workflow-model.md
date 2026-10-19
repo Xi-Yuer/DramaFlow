@@ -2,7 +2,7 @@
 
 本文维护 Workflow 层的当前设计结论，承接 [平台核心模型](platform-model.md)。这里只确定流程的身份、静态定义、输入输出契约、不可变版本及运行边界，不设计 Node 内部执行、数据库表或 Runtime 调度实现。实现现状见 [当前架构](architecture.md)，设计进度见 [分步设计与实施方案](implementation-plan.md)。
 
-已有代码范围见 [Workflow 基础库](architecture.md#workflow-基础库)：元数据与显式 Schema 组合、值契约校验、输出收集、只读版本快照及运行版本检查已经实现；应用接口、持久化、完整图校验及调度尚未接入。
+已有代码范围见 [Workflow 基础库](architecture.md#workflow-基础库)：元数据、正式静态定义、引用与联合 DAG、值契约、输出收集、快照及版本检查已经实现；应用保存、发布、持久化和运行尚未接入。节点目录 API 不等于工作流执行接口。
 
 ## 核心关系
 
@@ -33,7 +33,7 @@ Workflow
 
 Workflow 回答“这是谁的哪一个流程、草稿是什么”；WorkflowDefinition 回答“有哪些节点、怎样连接、接受什么输入、暴露什么输出”。一个项目恰好一张 Canvas，对应一个逻辑 Workflow；Canvas 是编辑视图，不是 Runtime 的执行状态。
 
-以下 TypeScript 表达完整概念关系。当前元数据、NodeDefinition、InputBinding、EdgeDefinition 和 Schema 组合器已经在 contracts 导出，Node 层边界见 [Node 模型](node-model.md)；最小 DataType 声明已实现，复合结构及媒体 / 领域运行值契约仍待数据流设计。调用 `createWorkflowSchemas` 时必须显式提供 DataType、Node、Edge Schema，可复用已有 Node / Edge 结构，没有任意 JSON 或空壳默认类型。
+contracts 已导出正式 WorkflowDefinition / workflowDefinitionSchema；通用 createWorkflowSchemas 仍要求显式传入 DataType、Node、Edge Schema。正式定义使用 NodeDefinition 和 ControlEdgeDefinition，保留四个顶层组成；数据绑定只在 Node.inputs 中维护，不保存第二份 Data Edge。节点细节见 [Node 模型](node-model.md)。
 
 ```ts
 interface Workflow {
@@ -42,21 +42,21 @@ interface Workflow {
   name: string;
   description?: string;
   draft: WorkflowDefinition;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface WorkflowDefinition {
   inputs: WorkflowInput[];
   nodes: NodeDefinition[];
-  edges: EdgeDefinition[];
+  edges: ControlEdgeDefinition[];
   outputs: WorkflowOutput[];
 }
 ```
 
 Inputs 与 Outputs 只在 WorkflowDefinition 内定义，随草稿和版本分别保存；不在 Workflow 顶层再维护一份可独立修改的契约。版本、运行的关联也不改变 WorkflowDefinition 的四个组成部分。
 
-视口、节点布局等纯编辑信息不决定执行语义，具体与定义如何分离留到编辑协议设计。现有项目名称与拟议的 Workflow 元数据名称如何呈现及持久化，也不在本步增加同步字段或修改项目保存接口。
+视口与节点布局不决定执行语义；节点布局当前必填保存在 ui.position，React Flow 临时交互状态不进入定义。现有项目名称与拟议的 Workflow 元数据名称如何呈现及持久化，也不在本步增加同步字段或修改项目保存接口。
 
 ## Inputs：工作流的显式输入契约
 
@@ -64,12 +64,12 @@ Workflow 是具有明确 Input Contract 的可执行单元。运行输入以该�
 
 | 类别       | 需要表达的值                                    | 边界                                                                 |
 | ---------- | ----------------------------------------------- | -------------------------------------------------------------------- |
-| 基础值     | `text`、`number`、`boolean`                     | 提供明确的类型与约束                                                 |
+| 基础值     | `string`、`number`、`boolean`                   | 提供明确的类型与约束                                                 |
 | 媒体与文件 | `file`、`image`、`video`、`audio`               | 使用受管理、可校验的素材引用，不把文件二进制或服务端本地路径塞入定义 |
 | 领域资料   | `asset`、`character`、`scene`，以及后续产品资料 | 明确引用或结构契约；具体领域模型在数据与资产阶段确定                 |
-| 复合值     | `array`、`object`                               | 描述元素或字段类型，不能只接受无约束 JSON                            |
+| 复合值     | `array`、`json`                                 | 数组声明元素类型；复杂字段和真实值约束由服务端 Zod 明确声明          |
 
-例如，小说转漫剧可以声明小说文件引用、目标集数、视频风格；广告流程可以声明产品资料、目标受众、时长和带枚举约束的投放平台。这些是契约需求示意，不代表已有对应领域类型或资产实现。
+例如，小说转漫剧可以声明小说文件引用、目标集数、视频风格；广告流程可以声明产品资料、目标受众、时长和带枚举约束的投放平台。这些是契约需求示意，不代表已有资产或领域运行值实现。当前最小 DataType 还包括 any，静态匹配不替代真实值校验。
 
 输入名称必须唯一，输入输出名称及来源输出键目前采用以英文字母开头的字母、数字、下划线标识，并拒绝原型相关保留属性名。启动前按所选版本的契约校验实际输入及素材访问权限，不合格的输入不能进入执行。必填、默认值、空值、复合结构与类型兼容规则随 DataType / 数据流模型细化，不在这里先建立另一套类型系统。
 
@@ -110,7 +110,7 @@ interface WorkflowVersion {
   workflowId: string;
   version: number;
   definition: WorkflowDefinition;
-  publishedAt: Date;
+  publishedAt: string;
 }
 ```
 
@@ -134,14 +134,14 @@ interface WorkflowRun {
   status: RunStatus;
   inputs: Record<string, unknown>;
   outputs?: Record<string, unknown>;
-  startedAt?: Date;
-  completedAt?: Date;
+  startedAt?: string;
+  completedAt?: string;
 }
 ```
 
 `workflowVersionId` 必须属于同一个 `workflowId`，读取或启动时都必须检查对应项目权限。同一版本可以多次运行，各次输入、State、资产引用、节点执行结果、错误及等待记录相互隔离，不反写进 WorkflowDefinition。
 
-`Record<string, unknown>` 仅表示本次输入输出值集合；实际值必须通过该版本契约校验，不能作为绕过边界验证的自由数据入口。当前基础 Schema 的时间字段采用 ISO 字符串，值契约与快照拒绝非 JSON 值；概念示例中的 `Date` 不是当前共享协议字段类型，也不规定数据库存储类型。
+`Record<string, unknown>` 仅表示本次输入输出值集合；实际值必须通过该版本契约校验，不能绕过边界验证。共享时间字段采用 ISO 字符串，值契约与快照拒绝非 JSON 值。
 
 | 状态        | 语义                                         |
 | ----------- | -------------------------------------------- |
@@ -175,8 +175,10 @@ Workflow 的显式输入输出使它可以被其他 Workflow 作为完整单元�
 
 ## 图拓扑与执行职责
 
-WorkflowDefinition 通过 nodes、edges 及控制节点表达串行、并行、条件与显式批量，不另设 `parallelNodes`、`sequentialNodes` 等独立列表，也不预先建立一个包含所有控制逻辑的固定 Pipeline。
+WorkflowDefinition 仍保留 inputs、nodes、edges、outputs。Node.inputs 是按目标端口组织的四类 Binding record：connection、constant、workflow_input、asset；edges 只保存 ControlEdgeDefinition，不另存 Data Edge。React Flow 数据边由 connection 派生；控制边独立表达执行路由。
 
-执行关系决定节点激活，数据绑定负责传值，联合依赖必须无环。平台 Workflow Compiler 将已校验关系映射到 LangGraph 的边、条件路由、fan-in、Send 与子图，由 LangGraph 执行；不另写 ready 判断、调度器、Checkpoint 或暂停恢复状态机。WorkflowDefinition 不包含运行进度、队列任务或领域专用调度分支。
+正式 workflowDefinitionSchema 检查顶层唯一性、输出引用节点、控制边 ID 与端点、connection 来源节点、workflow_input 名称、自连接和控制 / 数据联合 DAG。它没有 Manifest，不能判断 outputKey / sourcePort 是否已声明、端口类型兼容或资源权限，也不解析 Binding。asset 只有 assetId，尚无资产读取或版本解析。
 
-本步确定静态定义与运行分离、完整契约版本化、显式输入输出、固定版本运行及流程可组合的边界。Node 编译适配见 [Node 模型](node-model.md)；DataType、State / Binding、整图编译、执行事件投影和持久化实现分别在相应步骤细化，不用占位契约将这些事项标成已完成。
+串行、并行、条件和显式批量仍由图关系与控制节点表达，不增加 parallelNodes / sequentialNodes 等列表。平台完整 Compiler 将依赖映射到 LangGraph 边、条件路由、fan-in、Send 与子图，图调度、Checkpoint 和暂停恢复由 LangGraph 提供。
+
+完整编译前先确定 WorkflowState 的通道、输出身份、并行 reducer、绑定求值和序列化边界。当前泛型节点适配不等于已有 State 或执行引擎；项目保存协议也没有接入 WorkflowDefinition。下一步统一见 [实施方案](implementation-plan.md)。

@@ -3,7 +3,6 @@ import { z } from 'zod';
 import {
   applyNodePreset,
   invokeNodeOperation,
-  inputBindingFromEdge,
   parseNodeDefinition,
   type NodeContract,
 } from '../src/index.js';
@@ -12,7 +11,6 @@ import {
 const contract = {
   type: 'ai.llm',
   version: 1,
-  preset: 'storyboard-generator',
   inputSchema: z.object({
     script: z.string().min(1),
     characters: z.array(z.string()),
@@ -31,10 +29,11 @@ function definition() {
     typeVersion: 1,
     preset: 'storyboard-generator',
     name: '生成分镜',
-    inputs: [
-      { target: 'script', source: { nodeId: 'script', outputKey: 'text' } },
-      { target: 'characters', source: { nodeId: 'characters', outputKey: 'items' } },
-    ],
+    inputs: {
+      script: { type: 'connection', nodeId: 'script', outputKey: 'text' },
+      characters: { type: 'connection', nodeId: 'characters', outputKey: 'items' },
+    },
+    ui: { position: { x: 0, y: 0 } },
     config: { prompt: '分镜提示词', temperature: 0.5 },
   };
 }
@@ -46,19 +45,19 @@ const values = {
 
 describe('节点类型、实例和 Preset', () => {
   it('依据有效类型契约校验实例配置和目标端口', () => {
-    expect(parseNodeDefinition(contract, definition()).inputs).toHaveLength(2);
+    expect(Object.keys(parseNodeDefinition(contract, definition()).inputs)).toHaveLength(2);
     expect(() =>
       parseNodeDefinition(contract, {
         ...definition(),
-        inputs: [{ target: 'unknown', source: { nodeId: 'a', outputKey: 'text' } }],
+        inputs: { unknown: { type: 'connection', nodeId: 'a', outputKey: 'text' } },
       }),
     ).toThrow(expect.objectContaining({ code: 'unknown_input' }));
   });
 
-  it('类型或 Preset 不匹配时拒绝使用其他有效契约', () => {
+  it('类型或类型版本不匹配时拒绝使用其他有效契约', () => {
     for (const node of [
       { ...definition(), type: 'net.http' },
-      { ...definition(), preset: 'advertisement' },
+      { ...definition(), typeVersion: 2 },
     ]) {
       expect(() => parseNodeDefinition(contract, node)).toThrow(
         expect.objectContaining({ code: 'contract_mismatch' }),
@@ -92,19 +91,16 @@ describe('节点类型、实例和 Preset', () => {
       expect(() => parseNodeDefinition(contract, { ...definition(), config })).toThrow(z.ZodError);
   });
 
-  it('可以从 Edge 提取数据映射，而不触发节点或修改原连线', () => {
-    const edge = {
-      id: 'e1',
-      sourceNodeId: 'script',
-      sourceHandle: 'text',
-      targetNodeId: 'storyboard',
-      targetHandle: 'script',
+  it('多来源绑定只保存描述，不在实例校验时解析值或读取资产', () => {
+    const node = {
+      ...definition(),
+      inputs: {
+        script: { type: 'constant', value: '用户文本' },
+        characters: { type: 'asset', assetId: 'test-asset' },
+        style: { type: 'workflow_input', key: 'style' },
+      },
     };
-    expect(inputBindingFromEdge(edge)).toEqual({
-      target: 'script',
-      source: { nodeId: 'script', outputKey: 'text' },
-    });
-    expect(edge.id).toBe('e1');
+    expect(parseNodeDefinition(contract, node).inputs).toEqual(node.inputs);
   });
 });
 
@@ -172,17 +168,16 @@ describe('Input → Execute → Output 调用边界', () => {
     expect(result.shots[0]?.text).toBe('原始结果');
   });
 
-  it('同一 Runtime type 和执行函数可以服务不同有效 Preset 契约', async () => {
+  it('同一值契约和执行函数可以接收不同输入，不建立 Preset 执行身份', async () => {
     const base = {
       type: 'ai.llm',
       version: 1,
       outputSchema: z.object({ text: z.string() }),
       configSchema: z.object({}),
     };
-    const story = { ...base, preset: 'story', inputSchema: z.object({ subject: z.string() }) };
+    const story = { ...base, inputSchema: z.object({ subject: z.string() }) };
     const advertisement = {
       ...base,
-      preset: 'advertisement',
       inputSchema: z.object({ product: z.string() }),
     };
     const executor = ({ inputs }: { inputs: Record<string, unknown> }) => ({

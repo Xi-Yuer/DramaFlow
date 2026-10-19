@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   createWorkflowSchemas,
-  edgeDefinitionSchema,
+  controlEdgeDefinitionSchema,
+  inputBindingSchema,
   nodeDefinitionSchema,
   nodePresetSchema,
   nodeRunSchema,
@@ -16,11 +17,13 @@ function node() {
     typeVersion: 1,
     name: '生成分镜',
     preset: 'storyboard-generator',
-    inputs: [
-      { target: 'script', source: { nodeId: 'script', outputKey: 'text' } },
-      { target: 'characters', source: { nodeId: 'characters', outputKey: 'items' } },
-      { target: 'style', source: { nodeId: 'style', outputKey: 'text' } },
-    ],
+    inputs: {
+      script: { type: 'connection', nodeId: 'script', outputKey: 'text' },
+      characters: { type: 'connection', nodeId: 'characters', outputKey: 'items' },
+      style: { type: 'constant', value: '黑白' },
+      novel: { type: 'workflow_input', key: 'novel' },
+      reference: { type: 'asset', assetId: 'unread-asset' },
+    },
     config: { prompt: '生成分镜', temperature: 0.5 },
     ui: { position: { x: 100, y: -50 } },
   };
@@ -29,7 +32,8 @@ function node() {
 describe('Node 定义与绑定协议', () => {
   it('保存多个明确上游、配置与布局，类型标识不预设节点目录', () => {
     const parsed = nodeDefinitionSchema.parse({ ...node(), type: 'video.image_to_video' });
-    expect(parsed.inputs).toHaveLength(3);
+    expect(Object.keys(parsed.inputs)).toHaveLength(5);
+    expect(parsed.inputs.reference).toEqual({ type: 'asset', assetId: 'unread-asset' });
     expect(parsed.type).toBe('video.image_to_video');
     expect(parsed.typeVersion).toBe(1);
     expect(parsed.ui?.position).toEqual({ x: 100, y: -50 });
@@ -47,17 +51,40 @@ describe('Node 定义与绑定协议', () => {
     }
   });
 
-  it('拒绝同一输入端口被多个来源重复绑定', () => {
-    const definition = node();
-    expect(
-      nodeDefinitionSchema.safeParse({
-        ...definition,
-        inputs: [
-          ...definition.inputs,
-          { target: 'script', source: { nodeId: 'other', outputKey: 'text' } },
+  it('每个输入端口保存一个明确来源，拒绝旧数组和不安全键', () => {
+    for (const inputs of [
+      [{ target: 'script', source: { nodeId: 'script', outputKey: 'text' } }],
+      { constructor: { type: 'constant', value: 'unsafe' } },
+      {
+        script: [
+          { type: 'constant', value: 'a' },
+          { type: 'constant', value: 'b' },
         ],
-      }).success,
-    ).toBe(false);
+      },
+    ])
+      expect(nodeDefinitionSchema.safeParse({ ...node(), inputs }).success).toBe(false);
+  });
+
+  it('四类绑定分别校验字段，常量只接受 JSON，不解析资产', () => {
+    expect(
+      inputBindingSchema.parse({ type: 'constant', value: { nested: [null, false, 0, ''] } }),
+    ).toEqual({ type: 'constant', value: { nested: [null, false, 0, ''] } });
+    expect(inputBindingSchema.parse({ type: 'asset', assetId: 'not-loaded' })).toEqual({
+      type: 'asset',
+      assetId: 'not-loaded',
+    });
+    for (const binding of [
+      { type: 'constant', value: undefined },
+      { type: 'constant', value: new Date() },
+      { type: 'constant', value: () => 'text' },
+      { type: 'constant', value: Infinity },
+      { type: 'connection', nodeId: 'script', output: 'text' },
+      { type: 'workflow_input', key: 'bad.key' },
+      { type: 'asset', assetId: '' },
+      { type: 'asset', assetId: 'a1', url: 'local://asset' },
+      { type: 'expression', expression: 'state.x' },
+    ])
+      expect(inputBindingSchema.safeParse(binding).success).toBe(false);
   });
 
   it('拒绝运行状态、旧式不明确的来源字段及非 JSON 配置', () => {
@@ -66,22 +93,31 @@ describe('Node 定义与绑定协议', () => {
       { ...node(), inputs: [{ target: 'script', source: { nodeId: 'script', output: 'text' } }] },
       { ...node(), config: { invalid: new Date() } },
       { ...node(), ui: { position: { x: Infinity, y: 0 } } },
+      { ...node(), ui: undefined },
       { ...node(), position: { x: 0, y: 0 } },
     ])
       expect(nodeDefinitionSchema.safeParse(value).success).toBe(false);
   });
 
-  it('Edge 保存平台中立的完整端口映射', () => {
+  it('ControlEdge 只保存执行路由，拒绝旧数据边字段和编辑状态', () => {
     const edge = {
       id: 'e1',
-      sourceNodeId: 'script',
-      sourceHandle: 'text',
+      sourceNodeId: 'condition',
+      sourcePort: 'yes',
       targetNodeId: 'storyboard',
-      targetHandle: 'script',
     };
-    expect(edgeDefinitionSchema.parse(edge)).toEqual(edge);
-    expect(edgeDefinitionSchema.safeParse({ ...edge, targetHandle: '' }).success).toBe(false);
-    expect(edgeDefinitionSchema.safeParse({ ...edge, selected: true }).success).toBe(false);
+    expect(controlEdgeDefinitionSchema.parse(edge)).toEqual(edge);
+    expect(
+      controlEdgeDefinitionSchema.parse({ id: 'e2', sourceNodeId: 'a', targetNodeId: 'b' })
+        .sourcePort,
+    ).toBeUndefined();
+    for (const value of [
+      { ...edge, sourcePort: '' },
+      { ...edge, sourceHandle: 'text' },
+      { ...edge, targetHandle: 'script' },
+      { ...edge, selected: true },
+    ])
+      expect(controlEdgeDefinitionSchema.safeParse(value).success).toBe(false);
   });
 
   it('Preset 仅保存类型归属与显式配置，不保存可执行函数', () => {
@@ -102,7 +138,7 @@ describe('Node 定义与绑定协议', () => {
     const schemas = createWorkflowSchemas({
       dataType: z.literal('text'),
       node: nodeDefinitionSchema,
-      edge: edgeDefinitionSchema,
+      edge: controlEdgeDefinitionSchema,
     });
     const definition = {
       inputs: [],

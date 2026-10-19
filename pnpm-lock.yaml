@@ -44,6 +44,9 @@ importers:
       '@dramaflow/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@dramaflow/workflow':
+        specifier: workspace:*
+        version: link:../../packages/workflow
       '@nestjs/common':
         specifier: ^12.0.1
         version: 12.1.3(reflect-metadata@0.2.2)(rxjs@7.8.2)

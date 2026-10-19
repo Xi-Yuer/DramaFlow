@@ -1,81 +1,38 @@
-import {
-  nodeTypeDeclarationSchema,
-  nodeTypeManifestSchema,
-  type NodeTypeDeclaration,
-  type NodeTypeManifest,
-} from '@dramaflow/contracts';
+import { nodeTypeManifestSchema, type NodeTypeManifest } from '@dramaflow/contracts';
 import { z } from 'zod';
 import { NodeContractError } from './node.js';
 
-// 静态说明书与真实输入输出的 Zod 校验分离；配置 Schema 只在服务端持有。
-export interface NodeTypeDefinition<
-  ConfigSchema extends z.ZodObject = z.ZodObject,
-> extends NodeTypeDeclaration {
-  configSchema: ConfigSchema;
-}
-
-export interface NodeValueSchemas<
+// 服务端真实值契约，不进入 Manifest、工作流定义或浏览器数据。
+export interface NodeSchemas<
   InputSchema extends z.ZodObject = z.ZodObject,
   OutputSchema extends z.ZodObject = z.ZodObject,
+  ConfigSchema extends z.ZodObject = z.ZodObject,
 > {
   inputSchema: InputSchema;
   outputSchema: OutputSchema;
+  configSchema: ConfigSchema;
 }
 
-export function parseNodeTypeDefinition<ConfigSchema extends z.ZodObject>(
-  definition: NodeTypeDefinition<ConfigSchema>,
-): NodeTypeDefinition<ConfigSchema> {
-  const declaration = nodeTypeDeclarationSchema.parse({
-    type: definition.type,
-    version: definition.version,
-    metadata: definition.metadata,
-    inputs: definition.inputs,
-    outputs: definition.outputs,
-    ...(definition.capabilities !== undefined ? { capabilities: definition.capabilities } : {}),
-    ui: definition.ui,
-  });
-  for (const field of Object.keys(declaration.ui.config ?? {})) {
-    if (!Object.hasOwn(definition.configSchema.shape, field)) {
-      throw new NodeContractError('unknown_config_field', `UI 引用了未声明的配置字段：${field}`);
-    }
-  }
-  return { ...declaration, configSchema: definition.configSchema };
+export function parseNodeManifest(input: unknown): NodeTypeManifest {
+  return nodeTypeManifestSchema.parse(input);
 }
 
-// 只检查两种契约的端口名称一致；不从 Zod 猜测 DataType，也不创建媒体/领域值校验器。
-export function assertNodePortSchemas(
-  definition: NodeTypeDefinition,
-  schemas: NodeValueSchemas,
-): void {
-  for (const [ports, schema] of [
-    [definition.inputs, schemas.inputSchema],
-    [definition.outputs, schemas.outputSchema],
+export function assertNodeSchemas(manifest: NodeTypeManifest, schemas: NodeSchemas): void {
+  for (const [ports, schema, code] of [
+    [manifest.inputs, schemas.inputSchema, 'port_schema_mismatch'],
+    [manifest.outputs, schemas.outputSchema, 'port_schema_mismatch'],
+    [manifest.config, schemas.configSchema, 'config_schema_mismatch'],
   ] as const) {
-    const names = new Set(ports.map((port) => port.key));
-    if (
-      names.size !== Object.keys(schema.shape).length ||
-      Object.keys(schema.shape).some((key) => !names.has(key))
-    ) {
-      throw new NodeContractError('port_schema_mismatch', '声明端口与执行值 Schema 字段不一致');
+    const names = new Set(ports.map((field) => field.key));
+    const keys = Object.keys(schema.shape);
+    if (names.size !== keys.length || keys.some((key) => !names.has(key))) {
+      throw new NodeContractError(code, 'Manifest 声明与服务端值 Schema 字段不一致');
     }
   }
-}
-
-export function createNodeTypeManifest(definitionInput: NodeTypeDefinition): NodeTypeManifest {
-  const definition = parseNodeTypeDefinition(definitionInput);
-  return nodeTypeManifestSchema.parse({
-    type: definition.type,
-    version: definition.version,
-    metadata: definition.metadata,
-    inputs: definition.inputs,
-    outputs: definition.outputs,
-    ...(definition.capabilities !== undefined ? { capabilities: definition.capabilities } : {}),
-    ui: definition.ui,
-    configSchema: z.toJSONSchema(definition.configSchema.strict(), {
-      target: 'draft-2020-12',
-      io: 'input',
-      unrepresentable: 'throw',
-      metadata: z.registry<Record<string, unknown>>(),
-    }),
-  });
+  // 公开默认值必须被对应的服务端字段接受；不会写入实例或注入运行 State。
+  for (const field of manifest.config) {
+    if (Object.hasOwn(field, 'defaultValue')) {
+      z.json().parse(schemas.configSchema.shape[field.key]!.parse(field.defaultValue));
+    }
+  }
 }
