@@ -21,7 +21,8 @@
 | Workflow           | 管理流程身份、元数据及可编辑草稿                     | 草稿内容是静态 WorkflowDefinition，不包含一次运行的状态           |
 | WorkflowDefinition | 描述节点、连接方式及整个流程的输入输出               | 包含 inputs、nodes、edges、outputs；不包含运行数据                |
 | WorkflowVersion    | 发布后的完整定义快照                                 | 输入输出契约与图一起冻结，发布不触发执行                          |
-| Node               | Workflow 中最小的编排单位，描述本步骤做什么          | 不自行调度整个工作流；一个节点不一定等于一次外部调用              |
+| Node               | Workflow 中最小的可调度执行单元                      | Input → Execute → Output；不读取上下游、不自行调度整个工作流      |
+| Node Preset        | 同一 Runtime 类型下的场景配置与有效契约选择          | 业务名称不直接等同于新 Runtime 类型，不复制相近业务执行器         |
 | Edge               | 表达节点之间的控制或数据关系                         | 执行激活与数据传值的语义必须区分，具体表达方式留待后续设计        |
 | State              | 一次 WorkflowRun 的运行状态                          | 不成为跨项目共享状态、工作流定义或自动收集全部聊天的容器          |
 | Runtime            | 解释工作流并协调执行、状态推进和恢复                 | 调度交给 LangGraph；不包含漫剧、广告、口播的专用调度分支          |
@@ -34,7 +35,7 @@
 | Agent              | 在约束下使用模型、Tool 与上下文完成任务的能力        | 具体模型待第 ⑫ 步设计，不赋予隐式修改工作流或继续执行的权限       |
 | Domain Template    | 漫剧、广告、产品、口播等场景的流程模板               | 组合通用底座与领域节点；不把专用流程写进 Runtime                  |
 
-WorkflowDefinition、WorkflowVersion 与 WorkflowRun 的详细关系集中在 [Workflow 模型](workflow-model.md) 维护；本表只保留一级职责摘要。
+WorkflowDefinition、WorkflowVersion 与 WorkflowRun 的详细关系集中在 [Workflow 模型](workflow-model.md)，节点、有效类型契约和 Preset 集中在 [Node 模型](node-model.md) 维护；本表只保留一级职责摘要。
 
 ## 核心职责分工
 
@@ -115,6 +116,8 @@ Runtime 协调校验与持久化：Image Asset 引用 + 本次 State 更新
 
 这些是场景示意，不构成节点目录或实施承诺。Runtime 统一处理依赖、激活、状态和执行策略；“角色”“剧集”“商品卖点”等语义由领域层表达。
 
+允许视频生产的 Node、Tool、Schema 和 Asset Type 专业化，例如图生视频、首尾帧生成、拼接、裁剪、音视频合成、字幕和抽帧。它们可以有专用输入输出与执行语义，不必强行合成万能节点；生成能力通过 Capability 和用户明确选择的 Plugin 接入，避免与单一厂商绑定。整体保持 Runtime 通用、视频领域 Capability 专业化、上层模板场景化，分层细节见 [Node 模型](node-model.md#视频领域能力与厂商边界)。
+
 ```text
 Video Creation Platform
 = Workflow Engine + Node System
@@ -128,4 +131,4 @@ Workflow 与 Node 构成编排骨架，其余体系围绕它们服务。逻辑�
 
 本文维护平台定位、概念职责、单项目单画布单逻辑工作流、定义与运行分离，以及领域层与执行底座的边界。仓库目录的承载关系见 [当前架构](architecture.md)，不为尚未确定的概念批量建立空包。
 
-Workflow 详细模型见 [Workflow 模型](workflow-model.md)，其余模型按 [分步设计与实施方案](implementation-plan.md) 逐层展开；当前阶段、下一步与待决策项只在该方案中维护。平台边界随已确认的新决策原地修订，不保留相互矛盾的旧结论。
+详细模型见 [Workflow 模型](workflow-model.md) 与 [Node 模型](node-model.md)，其余模型按 [分步设计与实施方案](implementation-plan.md) 逐层展开；当前阶段、下一步与待决策项只在该方案中维护。平台边界随已确认的新决策原地修订，不保留相互矛盾的旧结论。

@@ -33,7 +33,7 @@ Workflow
 
 Workflow 回答“这是谁的哪一个流程、草稿是什么”；WorkflowDefinition 回答“有哪些节点、怎样连接、接受什么输入、暴露什么输出”。一个项目恰好一张 Canvas，对应一个逻辑 Workflow；Canvas 是编辑视图，不是 Runtime 的执行状态。
 
-以下 TypeScript 表达完整概念关系。当前元数据及 Schema 组合器已经在 contracts 导出，但尚无具体 `DataType`、`NodeDefinition`、`EdgeDefinition` 协议；调用 `createWorkflowSchemas` 时必须提供真实 Schema，没有任意 JSON 或空壳默认类型。完整输入输出声明随这些模型细化。
+以下 TypeScript 表达完整概念关系。当前元数据、NodeDefinition、InputBinding、EdgeDefinition 和 Schema 组合器已经在 contracts 导出，Node 层边界见 [Node 模型](node-model.md)；完整 DataType 尚待确定。调用 `createWorkflowSchemas` 时必须显式提供 DataType、Node、Edge Schema，可复用已有 Node / Edge 结构，没有任意 JSON 或空壳默认类型。
 
 ```ts
 interface Workflow {

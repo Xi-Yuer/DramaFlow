@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
-const identifierSchema = z
+export const workflowIdentifierSchema = z
   .string()
   .min(1)
   .refine((value) => value === value.trim(), '标识不能包含首尾空白');
+
+const identifierSchema = workflowIdentifierSchema;
 
 export const workflowPortNameSchema = z
   .string()

@@ -1,6 +1,6 @@
 # 当前架构与目录职责
 
-DramaFlow 是面向 AI 视频内容生产、以漫剧为核心场景的可编排工作流平台，面向团队自部署。已确定的一级概念与边界见 [平台核心模型](platform-model.md)，静态定义、版本及运行关系见 [Workflow 模型](workflow-model.md)，设计推进顺序见 [分步设计与实施方案](implementation-plan.md)。
+DramaFlow 是面向 AI 视频内容生产、以漫剧为核心场景的可编排工作流平台，面向团队自部署。一级概念见 [平台核心模型](platform-model.md)，静态定义与版本见 [Workflow 模型](workflow-model.md)，节点、有效契约与 Preset 见 [Node 模型](node-model.md)，进度见 [分步设计与实施方案](implementation-plan.md)。
 
 ## 已实现的基础工程
 
@@ -29,24 +29,39 @@ worker 为独立 NestJS 应用上下文，只复用 infrastructure 模块，不�
 - `createWorkflowVersionSnapshot`：要求完整版本 Schema，校验后复制并递归冻结 JSON 快照，避免后续草稿或调用方修改影响该对象。
 - `assertWorkflowRunVersion`：检查运行绑定的版本身份及 Workflow 身份一致。
 
-这些是可调用的基础库函数，不创建运行、调用插件或执行图。快照只保证内存对象隔离与只读，不替代发布权限、持久化不可变性或并发控制。运行元数据校验不等于完整状态机，输入资产权限仍需由应用服务校验。具体 Node / Edge / DataType 协议、HTTP 发布和运行接口、数据库模型、LangGraph 适配尚未实现。
+这些是可调用的基础库函数，不创建运行、调用插件或执行图。快照只保证内存对象隔离与只读，不替代发布权限、持久化不可变性或并发控制。运行元数据校验不等于完整状态机，输入资产权限仍需由应用服务校验。完整 DataType、HTTP 发布和运行接口、数据库模型、LangGraph 适配尚未实现。
 
 现有单元测试覆盖契约组合、边界校验、显式多结果收集、快照隔离及版本绑定；测试中的具体节点和类型 Schema 只用于测试，不作为生产适配器。
+
+## Node 基础库
+
+`packages/contracts/src/node.ts` 已提供 NodeDefinition、InputBinding、带端口映射的 Edge、Preset、NodeRun 及八种节点状态 Schema。绑定来源统一使用 `nodeId / outputKey`，同一目标输入禁止重复绑定；配置和运行值必须为 JSON，错误采用 code / message，时间采用 ISO 字符串。NodeRun 只校验记录结构，不处理状态转换或归属权限。
+
+`packages/workflow/src/node.ts` 已提供执行侧的 `NodeTypeDefinition`、`NodeExecutor` 类型和以下函数：
+
+- `parseNodeDefinition`：检查实例 type / preset 与有效契约匹配、绑定目标端口存在，以及配置满足具体 Schema。
+- `applyNodePreset`：显式合并所选 Preset 配置和实例覆盖后校验，不修改原对象或执行任务。
+- `inputBindingFromEdge`：从完整端口映射提取数据绑定，不改变控制激活状态。
+- `executeNode`：校验输入和配置后调用显式执行函数，再校验输出；不传完整图或 State，拒绝额外字段和非 JSON 值，异常不自动重试。
+
+同一 Runtime type 可在不同 Preset 下使用不同有效输入输出契约，生产类型、Preset 目录与服务端查找机制尚未实现。Node / Edge Schema 可以直接作为 `createWorkflowSchemas` 的显式参数，完整工作流发布仍需补齐引用、输出键、类型、联合依赖无环及 Preset 契约固定等校验。
+
+当前没有生产 LLM、HTTP、Code 或视频节点，没有绑定解析器、图就绪判定、状态机或自动调度。新增测试使用显式纯函数和测试契约，验证多上游结构、Preset 匹配、对象级约束、失败边界与输入输出隔离，不作为可用业务节点。
 
 ## 现有目录如何承载后续模型
 
 继续采用模块化单体与独立 worker。下表的后续职责是边界约束，具体接口与目录拆分随相应设计步骤确定；不表示已存在这些业务实现。
 
-| 目录                 | 当前实现                                      | 后续承载边界                                                                      |
-| -------------------- | --------------------------------------------- | --------------------------------------------------------------------------------- |
-| `apps/web`           | 登录、账户中心、项目列表、React Flow 空白画布 | 创作交互、编辑视图与前端适配；不加载服务端插件适配器或密钥                        |
-| `apps/api`           | 认证、用户资料、项目 API 与基础设施服务       | 模块化业务入口、权限、定义与运行管理、资产等应用服务；模块通过服务及契约协作      |
-| `apps/worker`        | NestJS 应用上下文，仅接入基础设施             | 承载独立执行进程，调用运行时；不另建一套工作流调度语义                            |
-| `packages/contracts` | 身份、资料、项目协议及 Workflow 基础 Schema   | 经逐步设计确定的平台中立协议与边界校验，不依赖框架或数据库模型                    |
-| `packages/database`  | Prisma 与身份、基础项目持久化                 | 数据访问及迁移；数据库结构随真实领域模型设计，不以概念表直接生成数据表            |
-| `packages/workflow`  | Workflow 值契约、输出收集、快照和运行版本检查 | 工作流核心及执行适配的承载包；保持 Runtime 的领域无关边界，具体拆分待设计         |
-| `packages/plugins`   | 空入口，保留模型 SDK 依赖                     | 受信任的外部能力适配；不承担工作流调度或隐式供应商选择                            |
-| `packages/context`   | 空入口                                        | 独立上下文构建职责；只使用明确选择或绑定的数据，不把整个 State 自动变成模型上下文 |
+| 目录                 | 当前实现                                           | 后续承载边界                                                                      |
+| -------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `apps/web`           | 登录、账户中心、项目列表、React Flow 空白画布      | 创作交互、编辑视图与前端适配；不加载服务端插件适配器或密钥                        |
+| `apps/api`           | 认证、用户资料、项目 API 与基础设施服务            | 模块化业务入口、权限、定义与运行管理、资产等应用服务；模块通过服务及契约协作      |
+| `apps/worker`        | NestJS 应用上下文，仅接入基础设施                  | 承载独立执行进程，调用运行时；不另建一套工作流调度语义                            |
+| `packages/contracts` | 身份、资料、项目及 Workflow / Node 基础 Schema     | 经逐步设计确定的平台中立协议与边界校验，不依赖框架或数据库模型                    |
+| `packages/database`  | Prisma 与身份、基础项目持久化                      | 数据访问及迁移；数据库结构随真实领域模型设计，不以概念表直接生成数据表            |
+| `packages/workflow`  | Workflow 契约、快照及 Node 配置、Preset 与调用边界 | 工作流核心及执行适配的承载包；保持 Runtime 的领域无关边界，具体拆分待设计         |
+| `packages/plugins`   | 空入口，保留模型 SDK 依赖                          | 受信任的外部能力适配；不承担工作流调度或隐式供应商选择                            |
+| `packages/context`   | 空入口                                             | 独立上下文构建职责；只使用明确选择或绑定的数据，不把整个 State 自动变成模型上下文 |
 
 `apps/api/src/workflows`、`runtime`、`runs`、`plugins`、`assets` 等目前只有 `.gitkeep` 的目录只是预留位置。Tool、Middleware、Agent、领域节点与模板暂不新增独立包或空壳类；等职责和真实依赖明确后再决定承载位置。
 
