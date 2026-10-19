@@ -36,6 +36,6 @@ WorkflowState.outputs 使用 RuntimeValue map，定义、业务历史、内容�
 
 人工介入继续使用 interrupt / Command.resume，不能吞掉中断控制异常或把它记为普通失败；恢复可能使节点从开头重入。审核决策是独立业务审计，waiting 仅业务投影；生成副作用与审核分离，受理结果不明不盲目重试，不承诺外部 exactly-once。[官方 Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts) 描述原生规则。
 
-静态分支、条件、Send、fan-in 与子图使用 LangGraph 机制，精确映射待下一步 Graph Model。单次图调用 maxConcurrency 位于顶层配置；跨运行与供应商配额由后续 Queue / Worker 处理，不把 Send 当作全部容量控制。[官方 Graph API 示例](https://docs.langchain.com/oss/javascript/langgraph/use-graph-api) 展示这些执行机制。
+Data Edge 保存值来源，Control Edge 保存显式执行先后；定义层的联合 DAG 只检查无环，不完成实际依赖编译或决定多个上游的 Join 规则。静态分支、条件、Send、fan-in 与子图使用 LangGraph 机制，精确映射留待后续编译适配。单次图调用 maxConcurrency 位于顶层配置；跨运行与供应商配额由后续 Queue / Worker 处理，不把 Send 当作全部容量控制。[官方 Graph API 示例](https://docs.langchain.com/oss/javascript/langgraph/use-graph-api) 展示这些执行机制。
 
 当前没有结构策略、完整 Compiler、生产 Runtime、模型调用、Queue、审核或内容 Store。生产节点目录仍为空；不得将测试适配、类型接口或规划标为可用业务能力。

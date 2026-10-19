@@ -23,7 +23,7 @@
 | WorkflowVersion    | 发布后的完整定义快照                                 | 输入输出契约与图一起冻结，发布不触发执行                          |
 | Node               | Workflow 中最小的可调度执行单元                      | Input → Execute → Output；不读取上下游、不自行调度整个工作流      |
 | Node Preset        | 同一 Runtime 类型下的场景配置与有效契约选择          | 业务名称不直接等同于新 Runtime 类型，不复制相近业务执行器         |
-| Edge               | Workflow 中的节点关系                                | 数据连接只保存在 Workflow.edges；Node.inputs 只保存非连线输入     |
+| Edge               | Workflow 中的数据来源与显式执行先后关系              | 连接只保存在 Workflow.edges；Node.inputs 只保存非连线输入         |
 | State              | 一次 WorkflowRun 的运行状态                          | 不成为跨项目共享状态、工作流定义或自动收集全部聊天的容器          |
 | Runtime            | LangGraph 执行编译后的图，推进 State 并支持恢复      | 平台提供领域 DSL 与编译适配，不自建调度器或领域专用调度分支       |
 | Capability         | 描述节点所需的能力类别，例如图像生成                 | 表达能力需求，不指定厂商；具体协议随 Node、Plugin 阶段设计        |
@@ -62,7 +62,7 @@ Project、Canvas、Workflow 的职责不同，不据此新增“项目 → 多�
 
 Workflow 定义与 WorkflowRun / State 分离，草稿修改不能改变已有运行。State 以单次运行为边界；跨运行复用生产资料通过显式 Asset 引用表达，不能靠复用可变运行状态实现。
 
-Workflow.edges 中的 Data Edge 是节点间数据连接的唯一来源，Node.inputs 只保存固定值、Workflow Input 与 Asset 等非连线输入。数据连接必须无环，目标输入端口至多接收一条边；数组值不隐含多连接聚合。数据关系是否激活执行、是否需要 Control Edge 及二者关系独立设计，不由数据模型先行赋予路由语义。Binding 运行求值与依赖编译尚未接入。
+Workflow.edges 是节点间连接的唯一来源：Data Edge 声明输入值来源，Control Edge 声明显式执行先后，创建数据连接不自动补控制边。Node.inputs 只保存固定值、Workflow Input 与 Asset 等非连线输入。两类关系合并后必须无环；数据输入端口至多接收一条 Data Edge，数组值不隐含多连接聚合。Control Edge 不占用输入值，可有多个控制上游，但不预设 Join 规则。Binding 运行求值、实际依赖编译及调度尚未接入。
 
 所有新素材对象写入 RustFS，通过 S3 接口访问，不静默回退本地文件，存储实施说明见 [RustFS 存储](object-storage.md)。资产的领域元数据、版本、权限及生命周期在第 ⑩ 步设计。角色等生产资料不能简单等同于一张图片；其描述与媒体关联留到资产和领域模型阶段确定。
 

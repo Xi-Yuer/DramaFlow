@@ -6,15 +6,17 @@ NodeDefinition 是流程实例，NodeTypeManifest 是可传输说明书，服务
 
 NodeDefinition 固定 id、type、typeVersion、name、config、inputs 及 ui.position；preset 仅是配置模板元数据。Node.inputs record 只保存 StaticInputBinding：constant / workflow_input / asset。上游节点输入只由 WorkflowDefinition.edges 中的 DataEdgeDefinition 表达，不在 inputs 重复保存。asset 明确 assetId + versionId，不选择最新版本。
 
-React Flow type 选择 workflowNode renderer，实际运行类型在 data.nodeType / data.typeVersion。selected、dragging、measured 等临时字段不进入定义。Data Edge 的 ID、节点与端口可无损往返 React Flow Edge；显式连接对照唯一目录检查精确版本、端口与共享类型兼容规则，断连和重连检查完整旧边快照，防止过期事件误改现有连接。
+React Flow type 选择 workflowNode renderer，实际运行类型在 data.nodeType / data.typeVersion。selected、dragging、measured 等临时字段不进入定义。Data / Control Edge 的种类、ID、节点与可选端口可往返 React Flow Edge；显式数据连接对照唯一目录检查精确版本、端口与共享类型兼容规则，控制连接使用独立 Handle。断连和重连检查种类及完整旧边快照，防止过期事件误改现有连接。
 
-数据边只声明值从哪个输出端口传到哪个输入端口，不赋予激活或条件路由语义。Control Edge 是否需要及其与 Data Edge 的关系另行设计。
+Data Edge 声明输入值来源，Control Edge 声明显式执行先后，两者都只保存在 WorkflowDefinition.edges，不自动相互补齐。Control Edge 不占用 Node.inputs，多个控制上游不预设 Join 语义；具体执行依赖由后续 Compiler 映射到 LangGraph。
 
 ## Manifest 与端口
 
 Manifest 的 type / version 固定节点类型身份，executionKind 必填，支持 action、control、composite、interaction。metadata 分类仍是 input / ai / image / video / audio / flow / data / output。说明书只含 JSON，不包含 Zod、execute、编译器或私有服务依赖。
 
-端口使用正式 DataType，Handle.id 必须等于对应端口 key，同方向唯一。required 表示是否可以不提供输入；null 由 union 描述。一个输入端口至多一条 Data Edge，且不能同时保留静态 Binding。集合用 array.itemType；数组值不隐含多连接聚合，不声明 multiple。
+数据端口使用正式 DataType，数据 Handle.id 必须等于对应端口 key，同方向唯一。required 表示是否可以不提供输入；null 由 union 描述。一个数据输入端口至多一条 Data Edge，且不能同时保留静态 Binding。集合用 array.itemType；数组值不隐含多连接聚合，不声明 multiple。
+
+普通控制 Handle 使用 `control:source` / `control:target`，与数据端口 key 隔离，默认控制 Handle 不进入领域 portKey。Control Edge 的可选 portKey 支持命名端口往返，但当前 Manifest 不声明命名控制端口，通用节点只提供普通控制出入口，不渲染分支路由。
 
 config 为 string / number / boolean / select 字段数组；默认值按字段类型、范围与选项校验。配置控件提示在 config[].ui，输入提示在 ui.inputs；Zod 与 UI 编辑提示不混用，默认值不自动注入定义或 State。
 

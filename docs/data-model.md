@@ -1,6 +1,6 @@
 # 数据类型、运行值与内容引用
 
-本文维护本轮数据模型。实际接入范围见 [当前架构](architecture.md)，下一步 Graph Model 见 [实施方案](implementation-plan.md)。
+本文维护数据类型、运行值与内容引用模型。实际接入范围见 [当前架构](architecture.md)，阶段与后续议题见 [实施方案](implementation-plan.md)。
 
 ## 四个维度
 

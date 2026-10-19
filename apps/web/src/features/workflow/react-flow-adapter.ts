@@ -1,18 +1,20 @@
 import {
+  controlEdgeDefinitionSchema,
   dataEdgeDefinitionSchema,
   isTypeAssignable,
   nodeDefinitionSchema,
   nodeTypeManifestListSchema,
   workflowDefinitionSchema,
+  workflowEdgeSchema,
   workflowIdentifierSchema,
-  workflowPortNameSchema,
-  type DataEdgeDefinition,
+  type WorkflowEdge as WorkflowEdgeDefinition,
   type NodeDefinition,
   type NodeTypeManifest,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
 import type { Edge, Node } from '@xyflow/react';
 import { z } from 'zod';
+import { controlHandleId, parseWorkflowHandle } from './workflow-handles';
 
 export type WorkflowNodeData = {
   nodeType: NodeDefinition['type'];
@@ -24,7 +26,7 @@ export type WorkflowNodeData = {
 };
 
 export type WorkflowNode = Node<WorkflowNodeData, 'workflowNode'>;
-export type WorkflowEdgeData = { kind: 'data' };
+export type WorkflowEdgeData = { kind: 'data' | 'control' };
 export type WorkflowEdge = Edge<WorkflowEdgeData>;
 
 const reactFlowNodeSchema = z.object({
@@ -43,14 +45,16 @@ const reactFlowNodeSchema = z.object({
 
 const connectionSchema = z.object({
   source: workflowIdentifierSchema,
-  sourceHandle: workflowPortNameSchema,
+  sourceHandle: z.string().min(1),
   target: workflowIdentifierSchema,
-  targetHandle: workflowPortNameSchema,
+  targetHandle: z.string().min(1),
 });
 
 const reactFlowEdgeSchema = connectionSchema.extend({
   id: workflowIdentifierSchema,
-  data: z.object({ kind: z.literal('data') }),
+  sourceHandle: z.string().nullish(),
+  targetHandle: z.string().nullish(),
+  data: z.object({ kind: z.enum(['data', 'control']) }),
 });
 
 type WorkflowConnection = z.infer<typeof connectionSchema>;
@@ -92,9 +96,24 @@ export function toReactFlowNodes(input: unknown): WorkflowNode[] {
   return workflowDefinitionSchema.parse(input).nodes.map(toReactFlowNode);
 }
 
-// ID 与 Handle 直接映射；领域 edges 是连接关系的唯一来源。
+// 默认控制 Handle 是 UI 标识；命名控制端口保留方向命名空间并无损映射。
+export function controlEdgeToReactFlowEdge(input: unknown): WorkflowEdge {
+  const edge = controlEdgeDefinitionSchema.parse(input);
+  return {
+    id: edge.id,
+    source: edge.source.nodeId,
+    sourceHandle: controlHandleId('source', edge.source.portKey),
+    target: edge.target.nodeId,
+    targetHandle: controlHandleId('target', edge.target.portKey),
+    data: { kind: 'control' },
+    style: { strokeDasharray: '5 4' },
+  };
+}
+
+// 领域 edges 是两类连接的唯一来源；数据端口仍直接使用 portKey。
 export function toReactFlowEdge(input: unknown): WorkflowEdge {
-  const edge = dataEdgeDefinitionSchema.parse(input);
+  const edge = workflowEdgeSchema.parse(input);
+  if (edge.kind === 'control') return controlEdgeToReactFlowEdge(edge);
   return {
     id: edge.id,
     source: edge.source.nodeId,
@@ -105,8 +124,27 @@ export function toReactFlowEdge(input: unknown): WorkflowEdge {
   };
 }
 
-export function fromReactFlowEdge(input: unknown): DataEdgeDefinition {
+export function fromReactFlowEdge(input: unknown): WorkflowEdgeDefinition {
   const edge = reactFlowEdgeSchema.parse(input);
+  if (edge.data.kind === 'control') {
+    const source = parseWorkflowHandle(edge.sourceHandle ?? controlHandleId('source'), 'source');
+    const target = parseWorkflowHandle(edge.targetHandle ?? controlHandleId('target'), 'target');
+    if (source.kind !== 'control' || target.kind !== 'control') {
+      throw new Error('控制边只能连接控制端口');
+    }
+    return controlEdgeDefinitionSchema.parse({
+      id: edge.id,
+      kind: 'control',
+      source: {
+        nodeId: edge.source,
+        ...(source.portKey !== undefined ? { portKey: source.portKey } : {}),
+      },
+      target: {
+        nodeId: edge.target,
+        ...(target.portKey !== undefined ? { portKey: target.portKey } : {}),
+      },
+    });
+  }
   return dataEdgeDefinitionSchema.parse({
     id: edge.id,
     kind: edge.data.kind,
@@ -123,20 +161,42 @@ function manifestFor(manifests: readonly NodeTypeManifest[], type: string, versi
   return manifests.find((manifest) => manifest.type === type && manifest.version === version);
 }
 
-function addDataEdge(
+function addWorkflowEdge(
   workflow: WorkflowDefinition,
   connection: WorkflowConnection,
   manifests: readonly NodeTypeManifest[],
   id: string,
+  expectedKind?: WorkflowEdgeDefinition['kind'],
 ): WorkflowDefinition {
+  const sourceHandle = parseWorkflowHandle(connection.sourceHandle, 'source');
+  const targetHandle = parseWorkflowHandle(connection.targetHandle, 'target');
+  if (sourceHandle.kind !== targetHandle.kind) {
+    throw new Error('数据端口与控制端口不能混连');
+  }
+  if (expectedKind !== undefined && sourceHandle.kind !== expectedKind) {
+    throw new Error('重连不能改变边类型');
+  }
   const source = workflow.nodes.find((node) => node.id === connection.source);
   if (!source) throw new Error('连线的来源节点不存在');
   const target = workflow.nodes.find((node) => node.id === connection.target);
   if (!target) throw new Error('连线的目标节点不存在');
-  if (source.id === target.id) throw new Error('数据边不能连接自身');
+  if (source.id === target.id) throw new Error('边不能连接自身');
   const sourceManifest = manifestFor(manifests, source.type, source.typeVersion);
   const targetManifest = manifestFor(manifests, target.type, target.typeVersion);
   if (!sourceManifest || !targetManifest) throw new Error('节点类型不可用');
+  if (sourceHandle.kind === 'control' && targetHandle.kind === 'control') {
+    // 当前通用节点只声明默认控制入口 / 出口；命名路由需后续控制端口协议。
+    if (sourceHandle.portKey !== undefined || targetHandle.portKey !== undefined) {
+      throw new Error('命名控制端口尚未声明');
+    }
+    workflow.edges.push({
+      id,
+      kind: 'control',
+      source: { nodeId: source.id },
+      target: { nodeId: target.id },
+    });
+    return workflowDefinitionSchema.parse(workflow);
+  }
   const output = sourceManifest.outputs.find((port) => port.key === connection.sourceHandle);
   if (!output) throw new Error('来源端口不存在');
   const inputPort = targetManifest.inputs.find((port) => port.key === connection.targetHandle);
@@ -147,7 +207,9 @@ function addDataEdge(
   if (
     workflow.edges.some(
       (edge) =>
-        edge.target.nodeId === connection.target && edge.target.portKey === connection.targetHandle,
+        edge.kind === 'data' &&
+        edge.target.nodeId === connection.target &&
+        edge.target.portKey === connection.targetHandle,
     )
   ) {
     throw new Error('目标输入端口已经存在连接');
@@ -168,7 +230,7 @@ export function connectWorkflowNodes(
   connectionInput: unknown,
   manifestsInput: unknown,
 ): WorkflowDefinition {
-  return addDataEdge(
+  return addWorkflowEdge(
     workflowDefinitionSchema.parse(input),
     connectionSchema.parse(connectionInput),
     nodeTypeManifestListSchema.parse(manifestsInput),
@@ -176,7 +238,7 @@ export function connectWorkflowNodes(
   );
 }
 
-function matchesDataEdge(edge: DataEdgeDefinition, snapshot: DataEdgeDefinition) {
+function matchesWorkflowEdge(edge: WorkflowEdgeDefinition, snapshot: WorkflowEdgeDefinition) {
   return (
     edge.id === snapshot.id &&
     edge.kind === snapshot.kind &&
@@ -191,7 +253,7 @@ function matchesDataEdge(edge: DataEdgeDefinition, snapshot: DataEdgeDefinition)
 export function disconnectWorkflowEdge(input: unknown, edgeInput: unknown): WorkflowDefinition {
   const workflow = workflowDefinitionSchema.parse(input);
   const snapshot = fromReactFlowEdge(edgeInput);
-  workflow.edges = workflow.edges.filter((edge) => !matchesDataEdge(edge, snapshot));
+  workflow.edges = workflow.edges.filter((edge) => !matchesWorkflowEdge(edge, snapshot));
   return workflow;
 }
 
@@ -204,13 +266,14 @@ export function reconnectWorkflowEdge(
 ): WorkflowDefinition {
   const workflow = workflowDefinitionSchema.parse(input);
   const snapshot = fromReactFlowEdge(edgeInput);
-  const index = workflow.edges.findIndex((edge) => matchesDataEdge(edge, snapshot));
+  const index = workflow.edges.findIndex((edge) => matchesWorkflowEdge(edge, snapshot));
   if (index === -1) return workflow;
   workflow.edges.splice(index, 1);
-  return addDataEdge(
+  return addWorkflowEdge(
     workflow,
     connectionSchema.parse(connectionInput),
     nodeTypeManifestListSchema.parse(manifestsInput),
     snapshot.id,
+    snapshot.kind,
   );
 }

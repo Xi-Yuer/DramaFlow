@@ -22,9 +22,9 @@ NodeOutputMap 已明确为 Record<string, Record<string, RuntimeValue>>，不再
 
 ## 并行与历史
 
-不同节点的 outputs 应按节点键合并，不能默认整对象覆盖。相同 nodeId 的并发分支必须明确分支身份和结果收集规则，不能依靠最后完成者覆盖；最终通道与 reducer 交给下一步 Graph Model 核定。[官方并行说明](https://docs.langchain.com/oss/javascript/langgraph/use-graph-api#run-graph-nodes-in-parallel) 介绍原生更新机制。
+不同节点的 outputs 应按节点键合并，不能默认整对象覆盖。相同 nodeId 的并发分支必须明确分支身份和结果收集规则，不能依靠最后完成者覆盖；最终通道与 reducer 留待后续执行适配核定。[官方并行说明](https://docs.langchain.com/oss/javascript/langgraph/use-graph-api#run-graph-nodes-in-parallel) 介绍原生更新机制。
 
-State 只保留当前有效值。旧版本、失败记录、模型、耗时与成本进入 NodeRun 等业务记录。attempt 不等于函数重入次数；Send 分支也不能仅靠 nodeId 标识。审核回改的讨论不授权任意循环，也不绕过当前数据 DAG 校验。
+State 只保留当前有效值。旧版本、失败记录、模型、耗时与成本进入 NodeRun 等业务记录。attempt 不等于函数重入次数；Send 分支也不能仅靠 nodeId 标识。审核回改的讨论不授权任意循环，也不绕过当前数据 / 控制联合 DAG 校验。
 
 ## Thread、审核与子流程
 
@@ -32,4 +32,4 @@ WorkflowRun.threadId 独立必填，createWorkflowRunConfig 将它映射到 conf
 
 审核继续用 LangGraph interrupt / Command.resume，waiting 是业务投影。节点恢复从开头重入，副作用需幂等，审核决策记录独立于 Checkpoint；当前没有生产审核 API 或 Run Store。[官方 Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts) 解释原生恢复机制。
 
-Send 使用 branch-local 输入，不能争写全局 currentEpisode。SubWorkflow 通过明确输入输出映射组合，不复制整个父 State；分支、父子运行、Join 与控制依赖的精确模型留在下一步，不自建 ready 轮询或恢复状态机。
+Send 使用 branch-local 输入，不能争写全局 currentEpisode。SubWorkflow 通过明确输入输出映射组合，不复制整个父 State。Control Edge 声明显式执行先后，不写 State 输入值，也不因允许多个上游就确定 Join 规则；实际依赖、分支、父子运行与 Join 的执行映射仍需后续设计，不自建 ready 轮询或恢复状态机。

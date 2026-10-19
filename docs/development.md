@@ -6,15 +6,15 @@
 
 共享包通过 dist 暴露；根 Turbo 任务先构建依赖。前后端业务目录保留 .gitkeep，加入实际文件后可删除该占位文件。空包入口只标识预留结构，不可当作可用功能。
 
-修改基础服务后运行相关 typecheck、lint、build；需要真实基础设施时运行 pnpm test:storage 或 pnpm test:integration。contracts / workflow 的 Manifest、三类静态 Binding、Data Edge 与数据 DAG、值校验、快照及泛型 LangGraph 适配，以及 web 的整图转换和 renderer 测试接入 pnpm test；pnpm check 同时检查源码与测试的类型。没有测试的空业务包不设置虚假的通过测试任务。
+修改基础服务后运行相关 typecheck、lint、build；需要真实基础设施时运行 pnpm test:storage 或 pnpm test:integration。contracts / workflow 的 Manifest、三类静态 Binding、Data / Control Edge 与联合 DAG、值校验、快照及泛型 LangGraph 适配，以及 web 的整图转换和 renderer 测试接入 pnpm test；pnpm check 同时检查源码与测试的类型。没有测试的空业务包不设置虚假的通过测试任务。
 
 工作流基础开发先阅读 [Runtime 架构](runtime-architecture.md)。复用 LangGraph 的 StateGraph、Checkpoint、Interrupt / Resume、Send 和条件路由，使用真实 LangGraph 测试编译适配；MemorySaver 仅显式用于测试，不作为未接入生产持久化的兜底。普通节点操作的值校验测试与图执行测试分开，不能用单节点成功证明整个 WorkflowDefinition 已可执行。
 
 节点类型开发对照 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。分别验证纯 JSON Manifest 的配置类型 / 默认值、服务端三组 Zod 与声明字段一致、精确类型版本注册以及 listManifests 的白名单与数据隔离。Preset 只测试配置模板行为，不作为 Registry 身份；保留 transform 和默认值不回写定义的回归。
 
-正式 WorkflowDefinition 测试检查三类 StaticInputBinding、Data Edge 引用与 ID 唯一、自连接、目标端口单连接、静态 Binding 冲突及数据 DAG；拒绝旧 ConnectionBinding。通用 factory 继续用独立自定义 Schema 测试，不强加正式 Node 协议。静态成功不证明端口存在、真实值有效或资产可访问，assetId / versionId 只是明确版本的引用声明。
+正式 WorkflowDefinition 测试检查三类 StaticInputBinding、两类边引用与全局 ID 唯一、自连接及联合 DAG；Data Edge 另检查目标数据端口单连接与静态 Binding 冲突，Control Edge 不占用输入并允许多个控制上游。检查控制端口可省略或命名，拒绝旧 ConnectionBinding。通用 factory 继续用独立自定义 Schema 测试，不强加正式 Node 协议。静态成功不证明端口存在、真实值有效或资产可访问，也不证明已实现依赖调度或 Join；assetId / versionId 只是明确版本的引用声明。
 
-React Flow 测试检查 Data Edge ID / Handle 无损往返、按精确版本 Manifest 与共享 isTypeAssignable 校验后创建边、目标单连接与数组输入不聚合、移除被显式替换的静态 Binding、过期断连 / 重连不误改、临时字段剔除，以及 GenericWorkflowNode 的 Handle / 不可用状态。目录 API 使用真实默认鉴权与 no-store，前端处理加载、错误与空态；生产 Registry 为空，不用假类型填充。画布已接入 Data Edge 事件，但没有节点添加与 Workflow 持久化，项目保存继续只处理名称、视口和 revision。
+React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Handle 命名空间、控制端口省略与命名映射、跨类连线拒绝，以及删除 / 重连按边种类与完整快照防止误改。数据连线还检查精确版本 Manifest、共享 isTypeAssignable、目标单连接与数组输入不聚合、移除被显式替换的静态 Binding；节点转换检查临时字段剔除，renderer 检查数据端口 key、普通控制 Handle 与不可用状态。目录 API 使用真实默认鉴权与 no-store，前端处理加载、错误与空态；生产 Registry 为空，不用假类型填充。画布已接入两类边事件，但没有节点添加与 Workflow 持久化，项目保存继续只处理名称、视口和 revision。
 
 数据库模型在 packages/database/prisma/schema.prisma 定义。执行迁移前核对 DATABASE_URL 仅指向本项目开发库，再运行 pnpm db:migrate。迁移影响范围与操作方式统一见 [部署与数据库](deployment.md)。
 

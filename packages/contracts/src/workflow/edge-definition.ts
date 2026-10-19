@@ -14,8 +14,24 @@ export const dataEdgeDefinitionSchema = z
   })
   .strict();
 
-// 目前只定义数据边；后续边种类需明确协议后再扩展此联合。
-export const workflowEdgeSchema = z.discriminatedUnion('kind', [dataEdgeDefinitionSchema]);
+const controlEdgeEndpointSchema = z
+  .object({ nodeId: workflowIdentifierSchema, portKey: workflowPortNameSchema.optional() })
+  .strict();
+
+export const controlEdgeDefinitionSchema = z
+  .object({
+    id: workflowIdentifierSchema,
+    kind: z.literal('control'),
+    source: controlEdgeEndpointSchema,
+    target: controlEdgeEndpointSchema,
+  })
+  .strict();
+
+export const workflowEdgeSchema = z.discriminatedUnion('kind', [
+  dataEdgeDefinitionSchema,
+  controlEdgeDefinitionSchema,
+]);
 
 export type DataEdgeDefinition = z.infer<typeof dataEdgeDefinitionSchema>;
+export type ControlEdgeDefinition = z.infer<typeof controlEdgeDefinitionSchema>;
 export type WorkflowEdge = z.infer<typeof workflowEdgeSchema>;

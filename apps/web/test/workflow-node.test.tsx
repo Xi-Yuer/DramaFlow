@@ -8,6 +8,7 @@ import {
   WorkflowManifestProvider,
 } from '../src/features/workflow/workflow-node';
 import { toReactFlowNode, type WorkflowNode } from '../src/features/workflow/react-flow-adapter';
+import { controlHandleId } from '../src/features/workflow/workflow-handles';
 
 const manifest = nodeTypeManifestSchema.parse({
   type: 'video.image_to_video',
@@ -85,6 +86,43 @@ describe('通用 WorkflowNode', () => {
     expect(html).toContain('未配置');
     expect(html).not.toContain('1080p');
     expect(html).not.toContain('<button');
+  });
+
+  it('标题控制出入口与数据端口分区，分别使用独立 Handle ID 和可访问名称', () => {
+    const html = render([manifest]);
+    const header = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
+    expect(header).toContain(`data-handleid="${controlHandleId('target')}"`);
+    expect(header).toContain(`data-handleid="${controlHandleId('source')}"`);
+    expect(header).toContain('aria-label="控制输入"');
+    expect(header).toContain('aria-label="控制输出"');
+    expect(header).not.toContain('data-handleid="image"');
+    expect(html.match(/data-handleid=/g)).toHaveLength(5);
+  });
+
+  it('合法的数据端口名 control 不与控制 Handle 冲突', () => {
+    const catalog = {
+      ...manifest,
+      inputs: [
+        {
+          key: 'control',
+          name: '控制数据',
+          dataType: { kind: 'primitive', name: 'string' },
+        },
+      ],
+      outputs: [
+        {
+          key: 'control',
+          name: '控制数据',
+          dataType: { kind: 'primitive', name: 'string' },
+        },
+      ],
+    } satisfies NodeTypeManifest;
+    const html = render([catalog]);
+    expect(html.match(/data-handleid="control"/g)).toHaveLength(2);
+    expect(html).toContain('aria-label="输入：控制数据"');
+    expect(html).toContain('aria-label="输出：控制数据"');
+    expect(html).toContain(`data-handleid="${controlHandleId('target')}"`);
+    expect(html).toContain(`data-handleid="${controlHandleId('source')}"`);
   });
 
   it('缺少精确类型版本时明确显示不可用，不回退最新版本或开放端口', () => {

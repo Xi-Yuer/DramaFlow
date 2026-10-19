@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   workflowDefinitionSchema,
   workflowEdgeSchema,
+  type ControlEdgeDefinition,
   type DataEdgeDefinition,
   type NodeDefinition,
   type WorkflowDefinition,
@@ -31,6 +32,19 @@ function edge(
     kind: 'data',
     source: { nodeId: sourceNodeId, portKey: sourcePortKey },
     target: { nodeId: targetNodeId, portKey: targetPortKey },
+  };
+}
+
+function controlEdge(
+  id: string,
+  sourceNodeId: string,
+  targetNodeId: string,
+): ControlEdgeDefinition {
+  return {
+    id,
+    kind: 'control',
+    source: { nodeId: sourceNodeId },
+    target: { nodeId: targetNodeId },
   };
 }
 
@@ -78,23 +92,64 @@ describe('正式 WorkflowDefinition 静态校验', () => {
     expect(parsed.nodes.every((entry) => Object.keys(entry.inputs).length === 0)).toBe(true);
   });
 
+  it('A.output → B.input 与 A → C 只序列化为两条独立关系', () => {
+    const source: WorkflowDefinition = {
+      inputs: [],
+      nodes: [node('a'), node('b'), node('c')],
+      edges: [edge('a-output-b-input', 'a', 'b', 'input', 'output'), controlEdge('a-c', 'a', 'c')],
+      outputs: [],
+    };
+    const parsed = workflowDefinitionSchema.parse(JSON.parse(JSON.stringify(source)));
+    expect(parsed.edges).toEqual(source.edges);
+    expect(parsed.edges).toHaveLength(2);
+    expect(parsed.nodes.every((entry) => Object.keys(entry.inputs).length === 0)).toBe(true);
+    expect(parsed.edges.filter((entry) => entry.kind === 'control')).toHaveLength(1);
+  });
+
+  it('相同端点的数据边与控制边可独立共存，不自动补边', () => {
+    const source = definition();
+    const control: ControlEdgeDefinition = {
+      ...controlEdge('control-1', 'a', 'b'),
+      source: { nodeId: 'a', portKey: 'text' },
+      target: { nodeId: 'b', portKey: 'text' },
+    };
+    for (const edges of [
+      [...source.edges, control],
+      [control, ...source.edges],
+    ]) {
+      expect(workflowDefinitionSchema.parse({ ...source, edges }).edges).toEqual(edges);
+    }
+    expect(workflowDefinitionSchema.parse(source).edges).toEqual(source.edges);
+  });
+
   it('相同节点间多个目标端口合并依赖检查，不误判合法 DAG', () => {
     const source = definition();
     source.edges = [edge('first', 'a', 'b', 'first'), edge('second', 'a', 'b', 'second')];
     expect(workflowDefinitionSchema.parse(source).edges).toHaveLength(2);
   });
 
-  it('拒绝数据边重复 ID 和不存在的来源或目标节点', () => {
+  it('拒绝任意边重复 ID，包括跨种类重复 ID', () => {
     const source = definition();
     for (const edges of [
       [edge('same', 'a', 'b', 'first'), edge('same', 'a', 'b', 'second')],
-      [edge('unknown-source', 'missing', 'b')],
-      [edge('unknown-target', 'a', 'missing')],
+      [controlEdge('same', 'a', 'b'), controlEdge('same', 'a', 'b')],
+      [edge('same', 'a', 'b'), controlEdge('same', 'a', 'b')],
     ])
       expect(workflowDefinitionSchema.safeParse({ ...source, edges }).success).toBe(false);
   });
 
-  it('拒绝旧 connection 绑定、控制边与未定义的边种类', () => {
+  it('拒绝数据边或控制边引用不存在的来源或目标节点', () => {
+    const source = definition();
+    for (const edges of [
+      [edge('unknown-source', 'missing', 'b')],
+      [edge('unknown-target', 'a', 'missing')],
+      [controlEdge('unknown-source', 'missing', 'b')],
+      [controlEdge('unknown-target', 'a', 'missing')],
+    ])
+      expect(workflowDefinitionSchema.safeParse({ ...source, edges }).success).toBe(false);
+  });
+
+  it('拒绝旧 connection 绑定、旧控制边字段与未定义的边种类', () => {
     const source = definition();
     expect(
       workflowDefinitionSchema.safeParse({
@@ -110,7 +165,6 @@ describe('正式 WorkflowDefinition 静态校验', () => {
     ).toBe(false);
     for (const legacyEdge of [
       { id: 'control', sourceNodeId: 'a', targetNodeId: 'b' },
-      { ...edge('control', 'a', 'b'), kind: 'control' },
       { ...edge('unknown', 'a', 'b'), kind: 'unknown' },
     ]) {
       expect(workflowEdgeSchema.safeParse(legacyEdge).success).toBe(false);
@@ -129,17 +183,19 @@ describe('正式 WorkflowDefinition 静态校验', () => {
     ).toBe(false);
   });
 
-  it('拒绝自连和数据环', () => {
+  it('拒绝数据或控制自连、纯数据环、纯控制环与混合环', () => {
     const source = definition();
-    expect(
-      workflowDefinitionSchema.safeParse({ ...source, edges: [edge('self', 'a', 'a')] }).success,
-    ).toBe(false);
-    expect(() =>
-      workflowDefinitionSchema.parse({
-        ...source,
-        edges: [edge('forward', 'a', 'b'), edge('back', 'b', 'a')],
-      }),
-    ).toThrow('数据依赖必须无环');
+    for (const self of [edge('self', 'a', 'a'), controlEdge('self', 'a', 'a')])
+      expect(workflowDefinitionSchema.safeParse({ ...source, edges: [self] }).success).toBe(false);
+    for (const edges of [
+      [edge('forward', 'a', 'b'), edge('back', 'b', 'a')],
+      [controlEdge('forward', 'a', 'b'), controlEdge('back', 'b', 'a')],
+      [edge('forward', 'a', 'b'), controlEdge('back', 'b', 'a')],
+      [controlEdge('forward', 'a', 'b'), edge('back', 'b', 'a')],
+    ])
+      expect(() => workflowDefinitionSchema.parse({ ...source, edges })).toThrow(
+        '控制关系与数据依赖联合必须无环',
+      );
   });
 
   it('每个目标输入最多接收一条边，不隐式聚合数组', () => {
@@ -168,6 +224,27 @@ describe('正式 WorkflowDefinition 静态校验', () => {
           nodes: [node('a'), node('b', { text: binding })],
         }).success,
       ).toBe(false);
+  });
+
+  it('控制边不占用静态输入或数据端口，多个上游控制关系可以共同到达目标', () => {
+    const source = definition();
+    source.nodes = [
+      node('a'),
+      node('b', { text: { type: 'constant', value: '静态输入' } }),
+      node('c'),
+    ];
+    source.edges = [
+      {
+        ...controlEdge('first-control', 'a', 'b'),
+        target: { nodeId: 'b', portKey: 'text' },
+      },
+      {
+        ...controlEdge('second-control', 'c', 'b'),
+        target: { nodeId: 'b', portKey: 'text' },
+      },
+      edge('data-other-port', 'a', 'b', 'other'),
+    ];
+    expect(workflowDefinitionSchema.parse(source)).toEqual(source);
   });
 
   it('同名输入端口可分别属于不同目标节点', () => {

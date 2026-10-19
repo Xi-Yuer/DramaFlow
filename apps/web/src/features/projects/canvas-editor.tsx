@@ -23,6 +23,7 @@ import { ApiError } from '@/lib/http';
 import { AccountMenuButton } from '@/features/auth/account-menu';
 import { nodeTypeApi, nodeTypeKeys } from '@/features/workflow/node-type-api';
 import { WorkflowManifestProvider, workflowNodeTypes } from '@/features/workflow/workflow-node';
+import { areWorkflowHandlesCompatible } from '@/features/workflow/workflow-handles';
 import {
   connectWorkflowNodes,
   disconnectWorkflowEdge,
@@ -245,6 +246,9 @@ function CanvasBoard({ project, onReload }: { project: Project; onReload: () => 
             onReconnect={onReconnect}
             onEdgesDelete={onEdgesDelete}
             onEdgesChange={onEdgesChange}
+            isValidConnection={(connection) =>
+              areWorkflowHandlesCompatible(connection.sourceHandle, connection.targetHandle)
+            }
             onMoveEnd={onMoveEnd}
             defaultViewport={project.viewport}
             minZoom={0.1}

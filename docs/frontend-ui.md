@@ -6,9 +6,11 @@
 
 当前使用 Ant Design、Next.js Registry 和 TanStack Query，主题入口为 `apps/web/src/app/theme.ts`。登录页和账户中心已应用石墨灰与青色主题，通用表单、密码输入、选择器、页签、菜单、提示和弹窗复用组件库。定制样式集中在页面布局与少量装饰；后续按具体模块继续遵守下方提示词。
 
-节点界面读取纯 JSON NodeTypeManifest，配置由 config 字段数组描述，控件提示只在 config[].ui；输入提示位于 ui.inputs。metadata.category 固定八类，图标与 component 使用受控映射，不加载 Zod、execute 或模型实例。number 的范围来自配置字段，不在 slider UI 重复保存。DataType 使用 primitive / named / array / object / union / any，端口 key 对应 Handle.id；声明不代表已有配置表单、模型或资产选择服务，边界见 [Manifest 实施说明](node-type-implementation.md)。
+节点界面读取纯 JSON NodeTypeManifest，配置由 config 字段数组描述，控件提示只在 config[].ui；输入提示位于 ui.inputs。metadata.category 固定八类，图标与 component 使用受控映射，不加载 Zod、execute 或模型实例。number 的范围来自配置字段，不在 slider UI 重复保存。DataType 使用 primitive / named / array / object / union / any，数据端口 key 对应数据 Handle.id；声明不代表已有配置表单、模型或资产选择服务，边界见 [Manifest 实施说明](node-type-implementation.md)。
 
-react-flow-adapter.ts 将 Workflow.edges 中的 Data Edge 无损映射为 React Flow Edge，保留边 ID、两端节点与 Handle；Handle.id 必须等于 Manifest 的端口 key。显式连线先对照精确版本 Manifest 检查端口、共享静态类型兼容及目标单连接，再创建 Data Edge，并移除被显式替换的目标静态 Binding；数组输入也不自动接收多条边。断连和重连核对完整旧边快照；selected、dragging、measured 不持久化。GenericWorkflowNode 按精确类型版本 Manifest 自动生成 Handle，缺失显示不可用；画布查询目录、注册 renderer 并接入 Data Edge 事件。当前生产目录为空，没有节点添加与 Workflow 持久化，项目保存仍只有名称、视口及 revision。相关边界见 [Node 模型](node-model.md)。
+react-flow-adapter.ts 将 Workflow.edges 中的 Data / Control Edge 映射为 React Flow Edge，以 edge.data.kind 区分并保留边 ID、两端节点与端口。数据 Handle.id 必须等于 Manifest 的端口 key；控制 Handle 使用 `control:source` / `control:target`，命名端口使用 `control:source:approved` 等保留命名空间。默认 UI 控制 Handle 不进入领域 portKey，连线仅允许同类 Handle 相连。
+
+显式数据连线先对照精确版本 Manifest 检查端口、共享静态类型兼容及目标单连接，再创建 Data Edge，并移除被显式替换的目标静态 Binding；数组输入也不自动接收多条数据边。控制边不占用静态输入，不自动从数据边补齐。断连和重连核对边种类与完整旧快照；selected、dragging、measured 不持久化。GenericWorkflowNode 只生成 Manifest 数据 Handle 与普通控制出入口，命名控制端口的路由交互尚未设计。画布查询目录、注册 renderer 并接入两类边事件。当前生产目录为空，没有节点添加与 Workflow 持久化，项目保存仍只有名称、视口及 revision。相关边界见 [Node 模型](node-model.md)。
 
 ## 可直接用于后续实施的样式提示词
 

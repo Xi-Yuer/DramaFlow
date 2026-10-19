@@ -13,7 +13,7 @@ import {
 import {
   nodeDefinitionSchema,
   workflowDefinitionSchema,
-  type DataEdgeDefinition,
+  dataEdgeDefinitionSchema,
   type NodeTypeManifest,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
@@ -387,7 +387,7 @@ describe('Data Edge 连线校验', () => {
         { ...connection, source: 'storyboard', target: 'script' },
         manifests(),
       ),
-    ).toThrow('数据依赖必须无环');
+    ).toThrow('联合必须无环');
   });
 });
 
@@ -476,7 +476,7 @@ describe('Data Edge 删除与重连', () => {
         { ...connection, source: 'storyboard', target: 'script', targetHandle: 'style' },
         manifests(),
       ),
-    ).toThrow('数据依赖必须无环');
+    ).toThrow('联合必须无环');
     expect(input).toEqual(snapshot);
     expect(input.nodes[1].inputs.novel).toEqual({ type: 'workflow_input', key: 'novel' });
   });
@@ -493,7 +493,7 @@ describe('Data Edge 删除与重连', () => {
   });
 
   it('端点快照和领域对象相互隔离', () => {
-    const domain: DataEdgeDefinition = workflow().edges[0];
+    const domain = dataEdgeDefinitionSchema.parse(workflow().edges[0]);
     const edge = toReactFlowEdge(domain);
     domain.source.portKey = 'newText';
     expect(edge.sourceHandle).toBe('text');

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { DataType, NodeTypeManifest } from '@dramaflow/contracts';
 import type { WorkflowNode } from './react-flow-adapter';
+import { controlHandleId } from './workflow-handles';
 import styles from './workflow-node.module.css';
 
 const ManifestContext = createContext<readonly NodeTypeManifest[]>([]);
@@ -97,6 +98,28 @@ export function GenericWorkflowNode({ data, selected, isConnectable }: NodeProps
       aria-label={`${data.name}${manifest ? '' : '：节点类型不可用'}`}
     >
       <header className={styles.header}>
+        {manifest ? (
+          <>
+            <Handle
+              className={`${styles.controlHandle} ${styles.controlInput}`}
+              type="target"
+              position={Position.Left}
+              id={controlHandleId('target')}
+              isConnectable={isConnectable}
+              aria-label="控制输入"
+              title="控制输入"
+            />
+            <Handle
+              className={`${styles.controlHandle} ${styles.controlOutput}`}
+              type="source"
+              position={Position.Right}
+              id={controlHandleId('source')}
+              isConnectable={isConnectable}
+              aria-label="控制输出"
+              title="控制输出"
+            />
+          </>
+        ) : null}
         <span className={styles.icon} aria-hidden="true">
           {icon}
         </span>

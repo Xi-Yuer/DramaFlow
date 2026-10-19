@@ -2,7 +2,7 @@
 
 本文维护 Workflow 层的当前设计结论，承接 [平台核心模型](platform-model.md)。这里只确定流程的身份、静态定义、输入输出契约、不可变版本及运行边界，不设计 Node 内部执行、数据库表或 Runtime 调度实现。实现现状见 [当前架构](architecture.md)，设计进度见 [分步设计与实施方案](implementation-plan.md)。
 
-已有代码范围见 [Workflow 基础库](architecture.md#workflow-基础库)：元数据、正式静态定义、Data Edge 与数据 DAG 校验、值契约、输出收集、快照及版本检查已经实现；应用保存、发布、持久化和运行尚未接入。节点目录 API 不等于工作流执行接口。
+已有代码范围见 [Workflow 基础库](architecture.md#workflow-基础库)：元数据、正式静态定义、Data / Control Edge 与联合 DAG 校验、值契约、输出收集、快照及版本检查已经实现；应用保存、发布、持久化和运行尚未接入。节点目录 API 不等于工作流执行接口。
 
 ## 核心关系
 
@@ -33,7 +33,7 @@ Workflow
 
 Workflow 回答“这是谁的哪一个流程、草稿是什么”；WorkflowDefinition 回答“有哪些节点、怎样连接、接受什么输入、暴露什么输出”。一个项目恰好一张 Canvas，对应一个逻辑 Workflow；Canvas 是编辑视图，不是 Runtime 的执行状态。
 
-contracts 已导出正式 WorkflowDefinition / workflowDefinitionSchema；通用 createWorkflowSchemas 仍要求显式传入 DataType、Node、Edge Schema。正式定义使用 NodeDefinition 和 WorkflowEdge，保留四个顶层组成。Data Edge 是节点间数据连接的唯一来源；Node.inputs 只保存非连线输入。节点细节见 [Node 模型](node-model.md)。
+contracts 已导出正式 WorkflowDefinition / workflowDefinitionSchema；通用 createWorkflowSchemas 仍要求显式传入 DataType、Node、Edge Schema。正式定义使用 NodeDefinition 和 WorkflowEdge，保留四个顶层组成。edges 是节点间连接的唯一来源，分别以 Data Edge 表达值来源、Control Edge 表达显式执行先后；Node.inputs 只保存非连线输入。节点细节见 [Node 模型](node-model.md)。
 
 ```ts
 interface Workflow {
@@ -178,7 +178,7 @@ Workflow 的显式输入输出使它可以被其他 Workflow 作为完整单元�
 
 ## 图拓扑与执行职责
 
-WorkflowDefinition.edges 是节点间数据连接的权威来源。WorkflowEdge 当前只包含 DataEdgeDefinition，保留 union 供后续已明确的边类型扩展；本步不定义 Control Edge。
+WorkflowDefinition.edges 是节点间连接的权威来源。WorkflowEdge 使用 kind 区分 Data Edge 和 Control Edge：前者声明输入值来自哪个输出，后者声明显式执行先后约束。创建 Data Edge 不自动补 Control Edge，控制关系也不提供输入值。
 
 ```ts
 interface DataEdgeDefinition {
@@ -188,17 +188,26 @@ interface DataEdgeDefinition {
   target: { nodeId: string; portKey: string };
 }
 
-type WorkflowEdge = DataEdgeDefinition;
+interface ControlEdgeDefinition {
+  id: string;
+  kind: 'control';
+  source: { nodeId: string; portKey?: string };
+  target: { nodeId: string; portKey?: string };
+}
+
+type WorkflowEdge = DataEdgeDefinition | ControlEdgeDefinition;
 ```
 
-`source.nodeId / portKey` 表示上游节点及输出端口，`target.nodeId / portKey` 表示下游节点及输入端口。Node.inputs 是按输入端口组织的 StaticInputBinding record，只包含 constant、workflow_input、asset；不接受 ConnectionBinding。同一个目标端口不能同时存在 Data Edge 和静态 Binding。asset 显式保存 assetId 与 versionId，尚无资产读取或授权解析。
+Data Edge 的 `source.nodeId / portKey` 表示上游节点及输出端口，`target.nodeId / portKey` 表示下游节点及输入端口。Node.inputs 是按输入端口组织的 StaticInputBinding record，只包含 constant、workflow_input、asset；不接受 ConnectionBinding。同一个目标数据输入端口不能同时存在 Data Edge 和静态 Binding。asset 显式保存 assetId 与 versionId，尚无资产读取或授权解析。
 
-React Flow Edge 的 id、source、sourceHandle、target、targetHandle 分别无损映射 Data Edge 的 id、source.nodeId、source.portKey、target.nodeId、target.portKey。Handle.id 必须等于对应 InputPortDefinition.key 或 OutputPortDefinition.key，不再生成另一套端口标识或重复连接关系。
+Control Edge 两端的 portKey 均可省略，普通节点间的先后关系无需命名控制端口。它不占用 Node.inputs，也不受数据输入端口单连接规则限制，允许多个控制上游；这不预设 Join 等待全部还是任一上游。可选命名端口仅有结构与往返支持，不代表已有条件路由、分支语义或命名控制端口 Manifest。
 
-正式 workflowDefinitionSchema 检查顶层唯一性、输出引用节点、数据边 ID 与端点节点、workflow_input 名称、自连接、目标端口单连接、静态 Binding 冲突与数据 DAG。它没有 Manifest，不能判断端口是否声明、端口类型兼容或资源权限，也不解析运行值。显式连线需再对照节点精确类型版本的 Manifest 检查源输出、目标输入及共享 isTypeAssignable；一个目标端口至多一条 Data Edge，数组类型表示输入值是数组，不表示多条连接自动聚合。
+React Flow Edge 通过 edge.data.kind 区分两类边，并保留边 ID 和两端节点。Data Edge 的 sourceHandle / targetHandle 直接映射领域 portKey，数据 Handle.id 必须等于对应 InputPortDefinition.key 或 OutputPortDefinition.key。控制 Handle 使用独立保留命名空间：普通出入口为 `control:source` / `control:target`，命名控制端口例如 `control:source:approved`。普通控制 Handle 不写入领域 portKey；带名 Handle 映射回实际名称。连线只允许 Data → Data 或 Control → Control，拒绝跨类连接，连接关系始终只保存在 edges。
 
-平台完整 Compiler 后续将明确图依赖到 LangGraph 边、条件路由、fan-in、Send 与子图的映射，不增加 parallelNodes / sequentialNodes 等列表，也不由本步的数据关系推断执行激活。图调度、Checkpoint 和暂停恢复由 LangGraph 提供。
+正式 workflowDefinitionSchema 检查顶层唯一性、输出引用节点、两类边全局 ID 唯一与端点节点、workflow_input 名称、自连接及两类关系合并后的无环约束；目标数据端口单连接与静态 Binding 冲突只适用于 Data Edge。它没有 Manifest，不能判断端口是否声明、端口类型兼容或资源权限，也不解析运行值。显式数据连线需再对照节点精确类型版本的 Manifest 检查源输出、目标输入及共享 isTypeAssignable；一个目标数据端口至多一条 Data Edge，数组类型表示输入值是数组，不表示多条连接自动聚合。
+
+联合 DAG 只验证图结构无环，不实现依赖调度或 Join。平台完整 Compiler 后续将明确两类边到 LangGraph 实际依赖的合并方式，不增加 parallelNodes / sequentialNodes 等列表。图调度、Checkpoint 和暂停恢复由 LangGraph 提供。
 
 WorkflowState.outputs 已使用携带 DataType 的 RuntimeValue，语义与承载规则见 [数据模型](data-model.md)。当前 Codec / Resolver / Executor 为服务接口，完整图编译和运行仍未接入。
 
-项目保存协议仍未接入 WorkflowDefinition。Control Edge 的必要性及其与 Data Edge 的关系留待独立设计，阶段与下一步统一见 [实施方案](implementation-plan.md)。
+项目保存协议仍未接入 WorkflowDefinition，阶段与下一步统一见 [实施方案](implementation-plan.md)。

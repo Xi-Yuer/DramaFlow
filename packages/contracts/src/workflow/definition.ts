@@ -10,7 +10,7 @@ const schemas = createWorkflowSchemas({
   edge: workflowEdgeSchema,
 });
 
-// 仅校验静态引用与数据 DAG，不解释运行值、不查询资产，也不推断声明端口。
+// 仅校验静态引用与控制 / 数据联合 DAG，不解释运行值、不查询资产，也不推断声明端口。
 export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
   (definition, context) => {
     const nodes = new Set(definition.nodes.map((node) => node.id));
@@ -49,7 +49,7 @@ export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
         context.addIssue({
           code: 'custom',
           path: ['edges', index, 'id'],
-          message: '数据边标识不能重复',
+          message: '边标识不能重复',
         });
       }
       edgeIds.add(edge.id);
@@ -58,7 +58,7 @@ export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
           context.addIssue({
             code: 'custom',
             path: ['edges', index, key, 'nodeId'],
-            message: '数据边引用了不存在的节点',
+            message: '边引用了不存在的节点',
           });
         }
       }
@@ -66,30 +66,32 @@ export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
         context.addIssue({
           code: 'custom',
           path: ['edges', index, 'target', 'nodeId'],
-          message: '数据边不能连接自身',
+          message: '边不能连接自身',
         });
       } else {
         addDependency(edge.source.nodeId, edge.target.nodeId);
       }
 
-      const targetPorts = connectedInputs.get(edge.target.nodeId) ?? new Set<string>();
-      if (targetPorts.has(edge.target.portKey)) {
-        context.addIssue({
-          code: 'custom',
-          path: ['edges', index, 'target', 'portKey'],
-          message: '每个输入端口最多连接一条数据边',
-        });
-      }
-      targetPorts.add(edge.target.portKey);
-      connectedInputs.set(edge.target.nodeId, targetPorts);
+      if (edge.kind === 'data') {
+        const targetPorts = connectedInputs.get(edge.target.nodeId) ?? new Set<string>();
+        if (targetPorts.has(edge.target.portKey)) {
+          context.addIssue({
+            code: 'custom',
+            path: ['edges', index, 'target', 'portKey'],
+            message: '每个输入端口最多连接一条数据边',
+          });
+        }
+        targetPorts.add(edge.target.portKey);
+        connectedInputs.set(edge.target.nodeId, targetPorts);
 
-      const targetNode = nodeDefinitions.get(edge.target.nodeId);
-      if (targetNode && Object.hasOwn(targetNode.inputs, edge.target.portKey)) {
-        context.addIssue({
-          code: 'custom',
-          path: ['edges', index, 'target', 'portKey'],
-          message: '数据边目标端口不能同时保存静态输入绑定',
-        });
+        const targetNode = nodeDefinitions.get(edge.target.nodeId);
+        if (targetNode && Object.hasOwn(targetNode.inputs, edge.target.portKey)) {
+          context.addIssue({
+            code: 'custom',
+            path: ['edges', index, 'target', 'portKey'],
+            message: '数据边目标端口不能同时保存静态输入绑定',
+          });
+        }
       }
     });
 
@@ -109,7 +111,7 @@ export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
       context.addIssue({
         code: 'custom',
         path: ['edges'],
-        message: '数据依赖必须无环',
+        message: '控制关系与数据依赖联合必须无环',
       });
     }
   },
