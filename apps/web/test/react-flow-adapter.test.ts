@@ -8,7 +8,11 @@ import {
   toReactFlowNode,
   toReactFlowNodes,
 } from '../src/features/workflow/react-flow-adapter';
-import { nodeDefinitionSchema, type WorkflowDefinition } from '@dramaflow/contracts';
+import {
+  nodeDefinitionSchema,
+  type NodeTypeManifest,
+  type WorkflowDefinition,
+} from '@dramaflow/contracts';
 
 // 所有节点均为协议测试样例，不注册到生产目录或画布。
 function definition() {
@@ -44,11 +48,31 @@ function workflow(): WorkflowDefinition {
       }),
       definition(),
     ],
-    edges: [
-      { id: 'route', sourceNodeId: 'script', sourcePort: 'approved', targetNodeId: 'storyboard' },
-    ],
+    edges: [{ id: 'route', sourceNodeId: 'script', targetNodeId: 'storyboard' }],
     outputs: [],
   };
+}
+
+function manifests(): NodeTypeManifest[] {
+  return [
+    {
+      type: 'ai.llm',
+      version: 1,
+      metadata: { name: '文本', category: 'ai' },
+      inputs: [
+        { key: 'script', name: '剧本', dataType: { kind: 'string' } },
+        { key: 'style', name: '风格', dataType: { kind: 'string' } },
+        { key: 'novel', name: '小说', dataType: { kind: 'string' } },
+        { key: 'reference', name: '参考', dataType: { kind: 'image' } },
+      ],
+      outputs: [
+        { key: 'text', name: '文本', dataType: { kind: 'string' } },
+        { key: 'newText', name: '新文本', dataType: { kind: 'string' } },
+        { key: 'picture', name: '图片', dataType: { kind: 'image' } },
+      ],
+      config: [],
+    },
+  ];
 }
 
 const connection = {
@@ -161,10 +185,10 @@ describe('React Flow 连线仅由绑定与控制边派生', () => {
     });
     expect(edges[1]).toMatchObject({
       source: 'script',
-      sourceHandle: 'approved',
       target: 'storyboard',
       data: { kind: 'control' },
     });
+    expect(edges[1].sourceHandle).toBeUndefined();
     expect(edges[1].targetHandle).toBeUndefined();
   });
 
@@ -178,7 +202,7 @@ describe('React Flow 连线仅由绑定与控制边派生', () => {
 
   it('显式连线仅替换目标端口，不存第二份数据边，不修改原对象', () => {
     const input = workflow();
-    const result = connectWorkflowNodes(input, connection);
+    const result = connectWorkflowNodes(input, connection, manifests());
     expect(result.nodes[1].inputs.style).toEqual({
       type: 'connection',
       nodeId: 'script',
@@ -188,29 +212,104 @@ describe('React Flow 连线仅由绑定与控制边派生', () => {
     expect(input.nodes[1].inputs.style).toEqual({ type: 'constant', value: '黑白' });
     expect(result.edges).toEqual(input.edges);
     expect(toReactFlowEdges(result).filter((edge) => edge.data?.kind === 'data')).toHaveLength(2);
-    expect(connectWorkflowNodes(result, connection)).toEqual(result);
+    expect(connectWorkflowNodes(result, connection, manifests())).toEqual(result);
   });
 
   it.each([undefined, null, '', 'bad-handle'])('连接拒绝缺失或非法端口 %s', (handle) => {
     expect(() =>
-      connectWorkflowNodes(workflow(), { ...connection, sourceHandle: handle }),
+      connectWorkflowNodes(workflow(), { ...connection, sourceHandle: handle }, manifests()),
     ).toThrow();
     expect(() =>
-      connectWorkflowNodes(workflow(), { ...connection, targetHandle: handle }),
+      connectWorkflowNodes(workflow(), { ...connection, targetHandle: handle }, manifests()),
     ).toThrow();
   });
 
   it('连接拒绝不存在的端点', () => {
-    expect(() => connectWorkflowNodes(workflow(), { ...connection, source: 'missing' })).toThrow(
-      '来源节点',
-    );
-    expect(() => connectWorkflowNodes(workflow(), { ...connection, target: 'missing' })).toThrow(
-      '目标节点',
-    );
+    expect(() =>
+      connectWorkflowNodes(workflow(), { ...connection, source: 'missing' }, manifests()),
+    ).toThrow('来源节点');
+    expect(() =>
+      connectWorkflowNodes(workflow(), { ...connection, target: 'missing' }, manifests()),
+    ).toThrow('目标节点');
+  });
+
+  it('连接拒绝未声明的端口和不兼容的类型', () => {
+    expect(() =>
+      connectWorkflowNodes(workflow(), { ...connection, sourceHandle: 'missingPort' }, manifests()),
+    ).toThrow('来源端口');
+    expect(() =>
+      connectWorkflowNodes(workflow(), { ...connection, targetHandle: 'missingPort' }, manifests()),
+    ).toThrow('目标端口');
+    expect(() =>
+      connectWorkflowNodes(
+        workflow(),
+        { ...connection, sourceHandle: 'picture', targetHandle: 'style' },
+        manifests(),
+      ),
+    ).toThrow('端口类型不兼容');
+    expect(() => connectWorkflowNodes(workflow(), connection, [])).toThrow('节点类型不可用');
+  });
+
+  it('连接目录必须按类型版本唯一，不以数组顺序选择冲突的端口契约', () => {
+    const compatible = manifests()[0];
+    const conflicting: NodeTypeManifest = {
+      ...compatible,
+      outputs: [{ key: 'text', name: '图片', dataType: { kind: 'image' } }],
+    };
+    const input = workflow();
+    const snapshot = structuredClone(input);
+    for (const catalog of [
+      [compatible, conflicting],
+      [conflicting, compatible],
+    ]) {
+      expect(() => connectWorkflowNodes(input, connection, catalog)).toThrow('重复类型版本');
+      expect(input).toEqual(snapshot);
+    }
+  });
+
+  it('目标节点的类型版本不可用时拒绝连接，不回退来源节点的版本', () => {
+    const input = workflow();
+    input.nodes[1].typeVersion = 2;
+    expect(() => connectWorkflowNodes(input, connection, manifests())).toThrow('节点类型不可用');
+    const older = manifests()[0];
+    const newer: NodeTypeManifest = {
+      ...older,
+      version: 2,
+      inputs: older.inputs.map((port) =>
+        port.key === 'style' ? { ...port, dataType: { kind: 'image' } } : port,
+      ),
+    };
+    expect(() => connectWorkflowNodes(input, connection, [older, newer])).toThrow('端口类型不兼容');
+    expect(
+      connectWorkflowNodes(input, { ...connection, sourceHandle: 'picture' }, [older, newer])
+        .nodes[1].inputs.style,
+    ).toEqual({ type: 'connection', nodeId: 'script', outputKey: 'picture' });
+  });
+
+  it('显式连接遵守 any 的单向及数组元素兼容规则', () => {
+    const catalog = manifests();
+    catalog[0].outputs[0].dataType = { kind: 'any' };
+    expect(() => connectWorkflowNodes(workflow(), connection, catalog)).toThrow('端口类型不兼容');
+    catalog[0].inputs[1].dataType = { kind: 'any' };
+    expect(connectWorkflowNodes(workflow(), connection, catalog).nodes[1].inputs.style).toEqual({
+      type: 'connection',
+      nodeId: 'script',
+      outputKey: 'text',
+    });
+    catalog[0].outputs[0].dataType = { kind: 'array', item: { kind: 'any' } };
+    catalog[0].inputs[1].dataType = { kind: 'array', item: { kind: 'image' } };
+    expect(() => connectWorkflowNodes(workflow(), connection, catalog)).toThrow('端口类型不兼容');
+    catalog[0].outputs[0].dataType = { kind: 'array', item: { kind: 'image' } };
+    catalog[0].inputs[1].dataType = { kind: 'array', item: { kind: 'any' } };
+    expect(connectWorkflowNodes(workflow(), connection, catalog).nodes[1].inputs.style).toEqual({
+      type: 'connection',
+      nodeId: 'script',
+      outputKey: 'text',
+    });
   });
 
   it('断开数据边只删除对应绑定，保留其余输入和控制边', () => {
-    const input = connectWorkflowNodes(workflow(), connection);
+    const input = connectWorkflowNodes(workflow(), connection, manifests());
     const edge = toReactFlowEdges(input).find((item) => item.targetHandle === 'style');
     const result = disconnectWorkflowEdge(input, edge);
     expect(result.nodes[1].inputs).not.toHaveProperty('style');
@@ -224,11 +323,15 @@ describe('React Flow 连线仅由绑定与控制边派生', () => {
     const edge = toReactFlowEdges(input)[0];
     input.nodes[1].inputs.script = { type: 'constant', value: '用户输入' };
     expect(disconnectWorkflowEdge(input, edge)).toEqual(input);
-    const updated = connectWorkflowNodes(input, {
-      ...connection,
-      targetHandle: 'script',
-      sourceHandle: 'newText',
-    });
+    const updated = connectWorkflowNodes(
+      input,
+      {
+        ...connection,
+        targetHandle: 'script',
+        sourceHandle: 'newText',
+      },
+      manifests(),
+    );
     expect(disconnectWorkflowEdge(updated, edge)).toEqual(updated);
     const valid = toReactFlowEdges(updated)[0];
     expect(disconnectWorkflowEdge(updated, { ...valid, id: 'wrong-id' })).toEqual(updated);

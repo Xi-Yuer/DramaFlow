@@ -3,7 +3,7 @@ import { AuthService } from './auth/auth.service.js';
 import { mountAuth } from './auth/auth.http.js';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
-import { ApiExceptionFilter } from './infrastructure/api-exception.filter.js';
+import { ApiExceptionFilter } from './http/exception.filter.js';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {

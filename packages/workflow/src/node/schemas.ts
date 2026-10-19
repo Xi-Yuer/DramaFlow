@@ -1,6 +1,6 @@
 import { nodeTypeManifestSchema, type NodeTypeManifest } from '@dramaflow/contracts';
 import { z } from 'zod';
-import { NodeContractError } from './node.js';
+import { NodeContractError } from './operation.js';
 
 // 服务端真实值契约，不进入 Manifest、工作流定义或浏览器数据。
 export interface NodeSchemas<

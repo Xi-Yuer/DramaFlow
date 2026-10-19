@@ -1,8 +1,10 @@
-import { Public } from './auth/auth.guard.js';
+import {
+  DatabaseService,
+  RedisService,
+  StorageService,
+} from '@dramaflow/server';
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
-import { DatabaseService } from './infrastructure/database.service.js';
-import { RedisService } from './infrastructure/redis.service.js';
-import { StorageService } from './infrastructure/storage.service.js';
+import { Public } from '../auth/auth.guard.js';
 
 @Public()
 @Controller('health')

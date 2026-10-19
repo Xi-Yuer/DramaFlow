@@ -36,12 +36,13 @@ pnpm dev
 | apps/api           | NestJS、Better Auth、资料、项目与受保护节点目录 API        |
 | apps/worker        | 独立 NestJS 应用上下文，尚未注册业务任务                   |
 | packages/database  | Prisma、身份/资料/凭证/会话及基础项目模型、pgvector        |
+| packages/server    | API 与 worker 共用的数据库、Redis、对象存储和凭证加密      |
 | packages/contracts | 身份、项目、Workflow / Node、DataType 及静态类型声明       |
 | packages/workflow  | 值契约、快照、服务端 NodeType / Registry 与 LangGraph 适配 |
 | packages/plugins   | 插件包空入口，保留模型 SDK 依赖                            |
 | packages/context   | 上下文包空入口，待逐步定义                                 |
 
-上述目录是当前工程结构，不为每个一级概念预建独立包。未来职责的承载边界见 [架构与目录职责](docs/architecture.md)。
+上述目录是当前工程结构，不为每个一级概念预建独立包。contracts 按 identity / project 协议与 workflow / node 分组，workflow 按 definition / node / run 分组；server 只承载服务端基础设施。具体职责见 [架构与目录职责](docs/architecture.md)。
 
 ## 检查与部署
 
@@ -52,7 +53,7 @@ pnpm test:integration
 pnpm stack:up
 ```
 
-`test` 运行现有单元测试，包括 Workflow / Node 契约、manifest、React Flow 转换与真实 LangGraph 编译适配；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、会话、角色、来源校验、项目隔离、分页与版本冲突和基础设施，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。测试中的图执行不代表完整工作流产品可运行；生产 checkpointer、运行接口和真实模型调用尚未接入。
+`test` 运行现有单元测试，包括 Workflow / Node 契约、manifest、React Flow 转换与真实 LangGraph 编译适配；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、会话、角色、来源校验、项目隔离、分页与修订冲突和基础设施，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。测试中的图执行不代表完整工作流产品可运行；生产 checkpointer、运行接口和真实模型调用尚未接入。
 
 `stack:up` 构建镜像，启动基础设施、初始化存储桶、迁移和初始管理员，再启动 API、worker 和前端。已有数据卷不会因更新代码而自动删除。
 

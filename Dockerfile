@@ -13,6 +13,7 @@ COPY packages/contracts/package.json ./packages/contracts/package.json
 COPY packages/context/package.json ./packages/context/package.json
 COPY packages/database/package.json ./packages/database/package.json
 COPY packages/plugins/package.json ./packages/plugins/package.json
+COPY packages/server/package.json ./packages/server/package.json
 COPY packages/workflow/package.json ./packages/workflow/package.json
 RUN pnpm install --frozen-lockfile
 COPY . .

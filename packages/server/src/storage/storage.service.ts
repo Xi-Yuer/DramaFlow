@@ -44,11 +44,7 @@ export class StorageService implements OnModuleDestroy {
     await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
   }
 
-  async put(
-    key: string,
-    bytes: Uint8Array,
-    contentType: string,
-  ): Promise<void> {
+  async put(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -60,9 +56,7 @@ export class StorageService implements OnModuleDestroy {
   }
 
   async get(key: string): Promise<Uint8Array> {
-    const result = await this.client.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-    );
+    const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
     if (!result.Body) throw new Error('对象内容为空');
     return result.Body.transformToByteArray();
   }

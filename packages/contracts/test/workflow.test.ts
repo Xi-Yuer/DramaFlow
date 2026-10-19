@@ -5,7 +5,7 @@ import {
   workflowRunMetadataSchema,
   workflowRunStatusSchema,
   workflowVersionMetadataSchema,
-} from '../src/workflow.js';
+} from '../src/workflow/metadata.js';
 
 // 仅用于测试组合校验器，不作为生产 Node / Edge / DataType 定义。
 const schemas = createWorkflowSchemas({

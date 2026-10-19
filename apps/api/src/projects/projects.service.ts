@@ -6,23 +6,32 @@ import {
 import { z } from 'zod';
 import {
   createProjectSchema,
+  decodeProjectPageCursor,
+  encodeProjectPageCursor,
   saveProjectSchema,
+  projectListQuerySchema,
   projectSchema,
   projectSummarySchema,
 } from '@dramaflow/contracts';
-import { DatabaseService } from '../infrastructure/database.service.js';
+import { DatabaseService } from '@dramaflow/server';
 
 @Injectable()
 export class ProjectsService {
   constructor(private readonly db: DatabaseService) {}
   async list(ownerId: string, query: unknown) {
-    const { cursor } = z
-      .object({ cursor: z.string().uuid().optional() })
-      .strict()
-      .parse(query);
+    const { cursor: rawCursor } = projectListQuerySchema.parse(query);
+    const cursor = rawCursor ? decodeProjectPageCursor(rawCursor) : undefined;
     const items = await this.db.client.project.findMany({
-      where: { ownerId, ...(cursor ? { id: { lt: cursor } } : {}) },
-      orderBy: { id: 'desc' },
+      where: cursor
+        ? {
+            ownerId,
+            OR: [
+              { updatedAt: { lt: new Date(cursor.updatedAt) } },
+              { updatedAt: new Date(cursor.updatedAt), id: { lt: cursor.id } },
+            ],
+          }
+        : { ownerId },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
       take: 31,
       select: {
         id: true,
@@ -32,16 +41,23 @@ export class ProjectsService {
         updatedAt: true,
       },
     });
-    const hasMore = items.length > 30;
+    const page = items.slice(0, 30);
+    const last = page.at(-1);
     return {
-      items: items.slice(0, 30).map((item) =>
+      items: page.map((item) =>
         projectSummarySchema.parse({
           ...item,
           createdAt: item.createdAt.toISOString(),
           updatedAt: item.updatedAt.toISOString(),
         }),
       ),
-      nextCursor: hasMore ? items[29]!.id : null,
+      nextCursor:
+        items.length > 30 && last
+          ? encodeProjectPageCursor({
+              updatedAt: last.updatedAt.toISOString(),
+              id: last.id,
+            })
+          : null,
     };
   }
   async create(ownerId: string, raw: unknown) {
@@ -66,7 +82,7 @@ export class ProjectsService {
   async save(ownerId: string, rawId: string, raw: unknown) {
     const id = z.string().uuid().parse(rawId);
     const input = saveProjectSchema.parse(raw);
-    // 所有者与版本一并约束原子写入；不先读后无条件更新。
+    // 所有者与修订号一并约束原子写入；不先读后无条件更新。
     const changed = await this.db.client.project.updateMany({
       where: { id, ownerId, revision: input.revision },
       data: {
@@ -79,7 +95,7 @@ export class ProjectsService {
       await this.get(ownerId, id);
       throw new ConflictException({
         code: 'REVISION_CONFLICT',
-        message: '项目已在其他页面更新，请保留当前内容并重新加载最新版本',
+        message: '项目已在其他页面更新，请保留当前内容并重新加载',
       });
     }
     // 响应使用本次写入的 revision，不读取可能已被下一次写入覆盖的内容。

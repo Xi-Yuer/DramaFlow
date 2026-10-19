@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { dataTypeSchema } from './data-type.js';
-import { controlEdgeDefinitionSchema, nodeDefinitionSchema } from './node.js';
-import { createWorkflowSchemas } from './workflow.js';
+import { dataTypeSchema } from '../data-type.js';
+import { controlEdgeDefinitionSchema, nodeDefinitionSchema } from '../node/definition.js';
+import { createWorkflowSchemas } from './metadata.js';
 
 const schemas = createWorkflowSchemas({
   dataType: dataTypeSchema,

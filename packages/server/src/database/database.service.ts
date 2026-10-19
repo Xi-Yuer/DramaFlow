@@ -1,9 +1,4 @@
-import {
-  Global,
-  Injectable,
-  Module,
-  type OnModuleDestroy,
-} from '@nestjs/common';
+import { Global, Injectable, Module, type OnModuleDestroy } from '@nestjs/common';
 import { createDatabase } from '@dramaflow/database';
 
 @Injectable()

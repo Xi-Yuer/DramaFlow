@@ -8,7 +8,7 @@
 
 节点界面读取纯 JSON NodeTypeManifest，配置由 config 字段数组描述，控件提示只在 config[].ui；输入提示位于 ui.inputs。metadata.category 固定八类，图标与 component 使用受控映射，不加载 Zod、compile 或模型实例。number 的范围来自配置字段，不在 slider UI 重复保存。端口 key 对应 Handle.id；声明不代表已有配置表单、模型或资产选择服务，边界见 [Manifest 实施说明](node-type-implementation.md)。
 
-react-flow-adapter.ts 从 Node.inputs.connection 派生数据边，独立转换控制边，并以 edge.data.kind 区分。连线操作更新目标 Binding，断连防止旧事件误删；selected、dragging、measured 不持久化。GenericWorkflowNode 已按精确类型版本 Manifest 自动生成 Handle，缺失显示不可用；画布已查询目录并注册 renderer。当前生产目录为空，没有添加节点、图编辑或工作流保存，项目保存仍只有名称、视口及 revision。相关边界见 [Node 模型](node-model.md)。
+react-flow-adapter.ts 从 Node.inputs.connection 派生数据边，独立转换控制边，并以 edge.data.kind 区分。连线操作对照 Manifest 检查端口和静态类型后更新目标 Binding，断连防止旧事件误删；selected、dragging、measured 不持久化。GenericWorkflowNode 已按精确类型版本 Manifest 自动生成 Handle，缺失显示不可用；画布已查询目录并注册 renderer。当前生产目录为空，没有添加节点、图编辑或工作流保存，项目保存仍只有名称、视口及 revision。相关边界见 [Node 模型](node-model.md)。
 
 ## 可直接用于后续实施的样式提示词
 

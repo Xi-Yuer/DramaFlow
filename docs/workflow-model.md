@@ -180,7 +180,7 @@ Workflow 的显式输入输出使它可以被其他 Workflow 作为完整单元�
 
 WorkflowDefinition 仍保留 inputs、nodes、edges、outputs。Node.inputs 是按目标端口组织的四类 Binding record：connection、constant、workflow_input、asset；edges 只保存 ControlEdgeDefinition，不另存 Data Edge。React Flow 数据边由 connection 派生；控制边独立表达执行路由。
 
-正式 workflowDefinitionSchema 检查顶层唯一性、输出引用节点、控制边 ID 与端点、connection 来源节点、workflow_input 名称、自连接和控制 / 数据联合 DAG。它没有 Manifest，不能判断 outputKey / sourcePort 是否已声明、端口类型兼容或资源权限，也不解析 Binding。asset 只有 assetId，尚无资产读取或版本解析。
+正式 workflowDefinitionSchema 检查顶层唯一性、输出引用节点、控制边 ID 与端点、connection 来源节点、workflow_input 名称、自连接和控制 / 数据联合 DAG。它没有 Manifest，不能判断 outputKey 是否已声明、端口类型兼容或资源权限，也不解析 Binding。控制边没有路由端口。asset 只有 assetId，尚无资产读取或版本解析。
 
 串行、并行、条件和显式批量仍由图关系与控制节点表达，不增加 parallelNodes / sequentialNodes 等列表。平台完整 Compiler 将依赖映射到 LangGraph 边、条件路由、fan-in、Send 与子图，图调度、Checkpoint 和暂停恢复由 LangGraph 提供。
 

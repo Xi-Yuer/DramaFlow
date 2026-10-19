@@ -1,11 +1,7 @@
 import { z } from 'zod';
-import { projectSchema, projectSummarySchema, type SaveProject } from '@dramaflow/contracts';
+import { projectListSchema, projectSchema, type SaveProject } from '@dramaflow/contracts';
 import { jsonBody, request } from '@/lib/http';
 
-const listSchema = z.object({
-  items: z.array(projectSummarySchema),
-  nextCursor: z.string().uuid().nullable(),
-});
 const saveResultSchema = z.object({ revision: z.number().int().positive() });
 
 export const projectKeys = {
@@ -15,7 +11,7 @@ export const projectKeys = {
 
 export const projectApi = {
   list: (cursor?: string) =>
-    request(`/projects${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, listSchema),
+    request(`/projects${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, projectListSchema),
   create: (name: string) =>
     request('/projects', projectSchema, { method: 'POST', body: jsonBody({ name }) }),
   get: (id: string) => request(`/projects/${id}`, projectSchema),

@@ -14,7 +14,7 @@
 
 正式 WorkflowDefinition 测试检查四类 Binding、引用、自连接及控制 / 数据联合 DAG；通用 factory 继续用独立自定义 Schema 测试，不强加正式 Node 协议。静态成功不证明端口存在、真实值有效或资产可访问，assetId 只是引用声明。
 
-React Flow 测试检查 data / control 边派生、单目标绑定更新、过期断连不误删、临时字段剔除、类型版本匹配与 GenericWorkflowNode 的 Handle / 不可用状态。目录 API 使用真实默认鉴权与 no-store，前端处理加载、错误与空态；生产 Registry 为空，不用假类型填充。实际画布尚无添加、图编辑与工作流保存，项目保存继续只处理名称、视口和 revision。
+React Flow 测试检查 data / control 边派生、按 Manifest 校验端口和静态类型后的单目标绑定更新、过期断连不误删、临时字段剔除、类型版本匹配与 GenericWorkflowNode 的 Handle / 不可用状态。目录 API 使用真实默认鉴权与 no-store，前端处理加载、错误与空态；生产 Registry 为空，不用假类型填充。实际画布尚无添加、图编辑与工作流保存，项目保存继续只处理名称、视口和 revision。
 
 数据库模型在 packages/database/prisma/schema.prisma 定义。执行迁移前核对 DATABASE_URL 仅指向本项目开发库，再运行 pnpm db:migrate。迁移影响范围与操作方式统一见 [部署与数据库](deployment.md)。
 

@@ -4,7 +4,15 @@ import { spawn } from 'node:child_process';
 if (existsSync('.env')) process.loadEnvFile('.env');
 const child = spawn(
   'pnpm',
-  ['--filter', '@dramaflow/api', 'exec', 'vitest', 'run', '--config', 'vitest.config.storage.ts'],
+  [
+    '--filter',
+    '@dramaflow/server',
+    'exec',
+    'vitest',
+    'run',
+    '--config',
+    'vitest.config.storage.ts',
+  ],
   {
     stdio: 'inherit',
     env: process.env,

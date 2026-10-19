@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { Request } from 'express';
-import { DatabaseService } from '../infrastructure/database.service.js';
+import { DatabaseService } from '@dramaflow/server';
 import { createAuth } from './auth.factory.js';
 
 @Injectable()

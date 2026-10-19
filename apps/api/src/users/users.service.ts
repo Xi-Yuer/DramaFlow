@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { currentUserSchema, profileInputSchema } from '@dramaflow/contracts';
-import { DatabaseService } from '../infrastructure/database.service.js';
+import { DatabaseService } from '@dramaflow/server';
 import type { AuthActor } from '../auth/auth.service.js';
 
 @Injectable()

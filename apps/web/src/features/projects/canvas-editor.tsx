@@ -156,7 +156,7 @@ function CanvasBoard({ project, onReload }: { project: Project; onReload: () => 
           onChange={(event) => setName(event.target.value)}
         />
         <span className="canvas-status">
-          {conflict ? '版本冲突' : dirty ? '未保存' : `已保存 · 版本 ${revision}`}
+          {conflict ? '修订冲突' : dirty ? '未保存' : `已保存 · 修订 ${revision}`}
         </span>
         {conflict ? (
           <Button size="small" onClick={reload}>

@@ -42,19 +42,19 @@ interface NodeDefinition {
 
 ## 数据绑定与控制关系
 
-Node.inputs 是数据绑定的唯一真相。connection 派生 React Flow 数据边；新增连线更新目标节点对应输入，删除连线仅在旧快照仍匹配当前来源时移除绑定，避免过期事件误删新连接。数据边不另行保存到 Workflow.edges。
+Node.inputs 是数据绑定的唯一真相。connection 派生 React Flow 数据边；新增连线先对照目录检查端口和静态类型，再更新目标节点对应输入。删除连线仅在旧快照仍匹配当前来源时移除绑定，避免过期事件误删新连接。数据边不另行保存到 Workflow.edges。
 
-Workflow.edges 只保存 ControlEdgeDefinition：id、sourceNodeId、可选 sourcePort、targetNodeId。条件路由等控制关系与数据来源分离；可视化统一使用 React Flow Edge，并以 data.kind 的 data / control 区分。执行激活和数据传值不同，二者联合依赖必须无环。
+Workflow.edges 只保存 ControlEdgeDefinition：id、sourceNodeId、targetNodeId。控制边是节点级激活关系，条件路由端口尚未进入这条边。可视化统一使用 React Flow Edge，并以 data.kind 的 data / control 区分。执行激活和数据传值不同，二者联合依赖必须无环。
 
-正式 workflowDefinitionSchema 检查节点、工作流输入和控制边引用、控制边 ID 唯一、自连接及联合 DAG。它不取得 Manifest，因此不检查 outputKey、路由端口是否已声明或端口类型兼容；也不检查资源权限、执行 Binding 或调度图。完整发布校验还需服务端类型与权限。
+正式 workflowDefinitionSchema 检查节点、工作流输入和控制边引用、控制边 ID 唯一、自连接及联合 DAG。它不取得 Manifest，因此不检查 outputKey 是否已声明或端口类型兼容；也不检查资源权限、执行 Binding 或调度图。完整发布校验还需服务端类型与权限。
 
 ## 端口类型与配置
 
 DataType 支持 any、string、number、boolean、json、image、video、audio、file、domain{name} 和递归 array{item}。它是端口类型描述，不等于 Zod 或媒体运行值协议。
 
-isDataTypeAssignable 的 V1 规则是：any 在两侧均放宽静态匹配；其余基础种类相同，domain 名称相同，数组元素递归匹配。json 只匹配 json 或 any，file 只匹配 file 或 any，不引入继承、隐式类型提升或媒体转换。任何真实值仍须通过服务端 Zod。
+isDataTypeAssignable 的规则是：目标端口为 any 时接受任意来源，any 来源只能接到 any；其余基础种类相同，domain 名称相同，数组元素递归匹配。json 只匹配 json 或 any 目标，file 只匹配 file 或 any 目标，不引入继承、隐式类型提升或媒体转换。任何真实值仍须通过服务端 Zod。
 
-端口 key 对应 Handle.id，同方向唯一、输入输出可同名。required / multiple 当前只描述端口，multiple 不等于数组，也不启用同一输入的多连接。端口不保存 defaultValue；固定输入放在 constant Binding。配置字段是 string / number / boolean / select 四类纯 JSON 声明，携带类型正确的默认值、适用范围和控件提示；默认值不会自动写入实例或 State。
+端口 key 对应 Handle.id，同方向唯一、输入输出可同名。输入端口可以声明 required。一个端口只保存一条绑定，Manifest 不提供 multiple。端口不保存 defaultValue；固定输入放在 constant Binding。配置字段是 string / number / boolean / select 四类纯 JSON 声明，携带类型正确的默认值、适用范围和控件提示；默认值不会自动写入实例或 State。
 
 ## 服务端注册与编译
 

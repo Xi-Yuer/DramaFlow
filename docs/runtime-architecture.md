@@ -42,7 +42,7 @@ LangGraph 节点函数需要接收图 State，编译适配层因此可以读取 
 
 当前 NodeType 持有纯 JSON manifest、三组服务端 Zod 与 compile，createOperationNodeType 保留泛型普通操作适配。CompileContext.readInputs / writeOutputs 没有预设具体 WorkflowState，不解析四类 Binding；invokeNodeOperation 仅校验实际输入、配置和输出并透传 runnable 配置，不负责 ready 判断、调度、暂停、恢复或重试。普通节点只生成自身函数，不持有全图 builder 或增加其他节点的边。
 
-浏览器经受保护目录 API 读取 listManifests 的纯 JSON 副本；Manifest.config 是公开字段数组，不携带 Zod、JSON Schema、compile 或服务端实例。公开默认值和声明文本不得含密钥，后端实际值仍按完整 Zod 校验。DataType 只做静态匹配，capabilities 不提供 Resolver；具体边界见 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。
+浏览器经受保护目录 API 读取 listManifests 的纯 JSON 副本；Manifest.config 是公开字段数组，不携带 Zod、JSON Schema、compile 或服务端实例。公开默认值和声明文本不得含密钥，后端实际值仍按完整 Zod 校验。DataType 只做静态匹配：目标端口为 any 时接受其他类型，any 来源不能接到具体端口。capabilities 不提供 Resolver；具体边界见 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。
 
 React Flow renderer 使用 workflowNode，领域类型与版本在 data.nodeType / data.typeVersion，布局对应必填 ui.position。数据边从 Node.inputs.connection 派生，Workflow.edges 只保存控制关系；临时交互状态不进入 DSL。画布已注册 GenericWorkflowNode 并查询目录，尚无图编辑保存。输入控件提示在 ui.inputs，配置控件提示只在 config[].ui，不承担 Binding 运行求值。
 

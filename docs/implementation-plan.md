@@ -6,7 +6,7 @@
 
 2026-10-19：① 平台、② Workflow、③ Node 已有基础模型与实现；④ 已确定四类 Binding、控制 / 数据分离，以及 [WorkflowState 核心边界](workflow-state.md)：run / inputs 不可变、outputs 当前有效值与历史分离、variables 显式、execution 最小、存储分工和分支局部数据。
 
-本轮将独立 threadId、NodeRun 正整数 attempt 与可选 inputSnapshot / outputSnapshot 落到契约。Run / NodeRun 持久化暂缓，Workflow 版本保存、权限、分支身份及投影一致性尚未定；JSON 快照不是最终 RuntimeValue，也未执行大小、内容引用或脱敏策略。实际代码能力统一见 [当前架构](architecture.md)。
+运行记录契约包含独立 threadId、NodeRun 正整数 attempt 与可选 inputSnapshot / outputSnapshot。Run / NodeRun 持久化暂缓，Workflow 版本保存、权限、分支身份及投影一致性尚未定；JSON 快照不是最终 RuntimeValue，也未执行大小、内容引用或脱敏策略。实际代码能力统一见 [当前架构](architecture.md)。
 
 **下一步先确定 DataType + RuntimeValue + Reference + Domain Object，再完成 State、Binding Resolver 和完整 Compiler。** 不导出最终 State，不创建孤立空表或提前接入运行服务；生产目录仍为空，项目保存协议不变。
 

@@ -99,20 +99,15 @@ describe('Node 定义与绑定协议', () => {
       expect(nodeDefinitionSchema.safeParse(value).success).toBe(false);
   });
 
-  it('ControlEdge 只保存执行路由，拒绝旧数据边字段和编辑状态', () => {
+  it('ControlEdge 只保存节点级执行关系，拒绝端口字段和编辑状态', () => {
     const edge = {
       id: 'e1',
       sourceNodeId: 'condition',
-      sourcePort: 'yes',
       targetNodeId: 'storyboard',
     };
     expect(controlEdgeDefinitionSchema.parse(edge)).toEqual(edge);
-    expect(
-      controlEdgeDefinitionSchema.parse({ id: 'e2', sourceNodeId: 'a', targetNodeId: 'b' })
-        .sourcePort,
-    ).toBeUndefined();
     for (const value of [
-      { ...edge, sourcePort: '' },
+      { ...edge, sourcePort: 'yes' },
       { ...edge, sourceHandle: 'text' },
       { ...edge, targetHandle: 'script' },
       { ...edge, selected: true },

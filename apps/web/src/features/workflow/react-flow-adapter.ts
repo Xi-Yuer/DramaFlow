@@ -1,11 +1,14 @@
 import {
   controlEdgeDefinitionSchema,
+  isDataTypeAssignable,
   nodeDefinitionSchema,
+  nodeTypeManifestListSchema,
   workflowDefinitionSchema,
   workflowIdentifierSchema,
   workflowPortNameSchema,
   type ControlEdgeDefinition,
   type NodeDefinition,
+  type NodeTypeManifest,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
 import type { Edge, Node } from '@xyflow/react';
@@ -105,7 +108,6 @@ export function toReactFlowControlEdge(input: unknown): WorkflowEdge {
   return {
     id: controlEdgeId(edge.id),
     source: edge.sourceNodeId,
-    ...(edge.sourcePort !== undefined ? { sourceHandle: edge.sourcePort } : {}),
     target: edge.targetNodeId,
     data: { kind: 'control' },
   };
@@ -131,15 +133,33 @@ export function toReactFlowEdges(input: unknown): WorkflowEdge[] {
   return [...dataEdges, ...workflow.edges.map(toReactFlowControlEdge)];
 }
 
-// 用户明确连线时才替换该输入端口的原绑定；不创建持久化 Data Edge。
-export function connectWorkflowNodes(input: unknown, connectionInput: unknown): WorkflowDefinition {
+function manifestFor(manifests: readonly NodeTypeManifest[], type: string, version: number) {
+  return manifests.find((manifest) => manifest.type === type && manifest.version === version);
+}
+
+// 用户明确连线时才替换该输入端口的原绑定；端口和类型必须能在传入的目录里对上。
+export function connectWorkflowNodes(
+  input: unknown,
+  connectionInput: unknown,
+  manifestsInput: unknown,
+): WorkflowDefinition {
   const workflow = workflowDefinitionSchema.parse(input);
   const connection = connectionSchema.parse(connectionInput);
-  if (!workflow.nodes.some((node) => node.id === connection.source)) {
-    throw new Error('连线的来源节点不存在');
-  }
+  const manifests = nodeTypeManifestListSchema.parse(manifestsInput);
+  const source = workflow.nodes.find((node) => node.id === connection.source);
+  if (!source) throw new Error('连线的来源节点不存在');
   const target = workflow.nodes.find((node) => node.id === connection.target);
   if (!target) throw new Error('连线的目标节点不存在');
+  const sourceManifest = manifestFor(manifests, source.type, source.typeVersion);
+  const targetManifest = manifestFor(manifests, target.type, target.typeVersion);
+  if (!sourceManifest || !targetManifest) throw new Error('节点类型不可用');
+  const output = sourceManifest.outputs.find((port) => port.key === connection.sourceHandle);
+  if (!output) throw new Error('来源端口不存在');
+  const inputPort = targetManifest.inputs.find((port) => port.key === connection.targetHandle);
+  if (!inputPort) throw new Error('目标端口不存在');
+  if (!isDataTypeAssignable(output.dataType, inputPort.dataType)) {
+    throw new Error('端口类型不兼容');
+  }
   target.inputs[connection.targetHandle] = {
     type: 'connection',
     nodeId: connection.source,
@@ -156,7 +176,7 @@ function matchesControlEdge(
     controlEdgeId(edge.id) === snapshot.id &&
     edge.sourceNodeId === snapshot.source &&
     edge.targetNodeId === snapshot.target &&
-    (edge.sourcePort ?? null) === (snapshot.sourceHandle ?? null) &&
+    snapshot.sourceHandle == null &&
     snapshot.targetHandle == null
   );
 }

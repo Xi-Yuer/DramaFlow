@@ -137,9 +137,7 @@ describe('正式 WorkflowDefinition 静态校验', () => {
       node('a'),
       node('b', { input: { type: 'connection', nodeId: 'a', outputKey: 'notDeclared' } }),
     ];
-    source.edges = [
-      { id: 'route', sourceNodeId: 'a', sourcePort: 'unknownRoute', targetNodeId: 'b' },
-    ];
+    source.edges = [{ id: 'route', sourceNodeId: 'a', targetNodeId: 'b' }];
     source.outputs = [
       {
         name: 'text',
@@ -148,6 +146,12 @@ describe('正式 WorkflowDefinition 静态校验', () => {
       },
     ];
     expect(workflowDefinitionSchema.parse(source)).toEqual(source);
+    expect(
+      workflowDefinitionSchema.safeParse({
+        ...source,
+        edges: [{ id: 'route', sourceNodeId: 'a', sourcePort: 'unknownRoute', targetNodeId: 'b' }],
+      }).success,
+    ).toBe(false);
   });
 
   it('工作流输出引用和顶层唯一性继续使用已有 factory 校验', () => {

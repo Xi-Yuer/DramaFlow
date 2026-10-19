@@ -4,8 +4,11 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { createDatabase } from '@dramaflow/database';
-import { projectSchema, projectSummarySchema } from '@dramaflow/contracts';
-import { z } from 'zod';
+import {
+  decodeProjectPageCursor,
+  projectListSchema,
+  projectSchema,
+} from '@dramaflow/contracts';
 import { createAuth } from '../src/auth/auth.factory.js';
 
 if (
@@ -161,7 +164,7 @@ it('真实密码登录、Cookie 会话和安全 DTO，不暴露凭证', async ()
   expect(secondCookie).not.toBe(cookie);
 });
 
-it('真实项目 API 保留基础字段、所有者隔离和版本并发校验，拒绝旧业务协议', async () => {
+it('真实项目 API 保留基础字段、所有者隔离和修订号并发校验，拒绝旧业务协议', async () => {
   expect((await call('/api/v1/projects')).status).toBe(401);
   const createdResponse = await call(
     '/api/v1/projects',
@@ -204,19 +207,13 @@ it('真实项目 API 保留基础字段、所有者隔离和版本并发校验�
       )
     ).status,
   ).toBe(404);
-  const listSchema = z
-    .object({
-      items: z.array(projectSummarySchema),
-      nextCursor: z.string().uuid().nullable(),
-    })
-    .strict();
   for (const [session, ownId, otherId] of [
     [cookie, created.id, adminProject.id],
     [adminCookie, adminProject.id, created.id],
   ]) {
     const response = await call('/api/v1/projects', 'GET', undefined, session);
     expect(response.status).toBe(200);
-    const list = listSchema.parse(await response.json());
+    const list = projectListSchema.parse(await response.json());
     expect(list.items.map((item) => item.id)).toContain(ownId);
     expect(list.items.map((item) => item.id)).not.toContain(otherId);
   }
@@ -265,6 +262,74 @@ it('真实项目 API 保留基础字段、所有者隔离和版本并发校验�
   expect((await call('/api/v1/plugins', 'GET', undefined, cookie)).status).toBe(
     404,
   );
+});
+
+it('真实项目列表跨页保留相同毫秒记录的顺序，始终隔离所有者', async () => {
+  const before = await call('/api/v1/projects', 'GET', undefined, cookie);
+  expect(before.status).toBe(200);
+  const existing = projectListSchema.parse(await before.json());
+  expect(existing.nextCursor).toBeNull();
+  const ownIds = Array.from({ length: 35 }, () => randomUUID())
+    .sort()
+    .reverse();
+  const otherIds: string[] = Array.from({ length: 3 }, () => randomUUID());
+  const updatedAt = new Date('2099-01-01T00:00:00.123Z');
+  await db.project.createMany({
+    data: [...ownIds, ...otherIds].map((id, index) => ({
+      id,
+      ownerId: index < ownIds.length ? userId : ids[1]!,
+      name: '分页测试',
+      viewport: { x: 0, y: 0, zoom: 1 },
+      updatedAt,
+    })),
+  });
+  try {
+    const firstResponse = await call(
+      '/api/v1/projects',
+      'GET',
+      undefined,
+      cookie,
+    );
+    expect(firstResponse.status).toBe(200);
+    const first = projectListSchema.parse(await firstResponse.json());
+    expect(first.items.map((item) => item.id)).toEqual(ownIds.slice(0, 30));
+    expect(first.nextCursor).not.toBeNull();
+    expect(decodeProjectPageCursor(first.nextCursor!)).toEqual({
+      updatedAt: updatedAt.toISOString(),
+      id: ownIds[29],
+    });
+
+    const secondResponse = await call(
+      `/api/v1/projects?cursor=${encodeURIComponent(first.nextCursor!)}`,
+      'GET',
+      undefined,
+      cookie,
+    );
+    expect(secondResponse.status).toBe(200);
+    const second = projectListSchema.parse(await secondResponse.json());
+    expect(second.items.map((item) => item.id)).toEqual([
+      ...ownIds.slice(30),
+      ...existing.items.map((item) => item.id),
+    ]);
+    expect(second.nextCursor).toBeNull();
+    const combined = [...first.items, ...second.items].map((item) => item.id);
+    expect(new Set(combined).size).toBe(combined.length);
+    expect(combined.some((id) => otherIds.includes(id))).toBe(false);
+    expect(
+      (
+        await call(
+          '/api/v1/projects?cursor=not-base64',
+          'GET',
+          undefined,
+          cookie,
+        )
+      ).status,
+    ).toBe(400);
+  } finally {
+    await db.project.deleteMany({
+      where: { id: { in: [...ownIds, ...otherIds] } },
+    });
+  }
 });
 
 it('资料可编辑，角色不能自助提升，跨来源写入被拒绝', async () => {

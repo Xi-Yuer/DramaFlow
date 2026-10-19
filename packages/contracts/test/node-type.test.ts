@@ -4,9 +4,11 @@ import {
   configFieldDefinitionSchema,
   dataTypeSchema,
   inputPortDefinitionSchema,
+  isDataTypeAssignable,
   nodeCategorySchema,
   nodeTypeIdSchema,
   nodeTypeManifestSchema,
+  nodeTypeManifestListSchema,
   nodeTypeVersionSchema,
 } from '../src/index.js';
 
@@ -29,7 +31,7 @@ function manifest() {
         required: true,
       },
       { key: 'prompt', name: '提示词', dataType: { kind: 'string' }, required: true },
-      { key: 'duration', name: '时长', dataType: { kind: 'number' }, multiple: false },
+      { key: 'duration', name: '时长', dataType: { kind: 'number' } },
     ],
     outputs: [{ key: 'video', name: '视频', description: '生成结果', dataType: { kind: 'video' } }],
     config: [
@@ -62,6 +64,23 @@ function manifest() {
 }
 
 describe('可序列化 DataType 声明', () => {
+  it('共用兼容检查只允许目标 any 放宽约束，递归数组仍遵守相同方向', () => {
+    expect(isDataTypeAssignable({ kind: 'any' }, { kind: 'image' })).toBe(false);
+    expect(isDataTypeAssignable({ kind: 'image' }, { kind: 'any' })).toBe(true);
+    expect(
+      isDataTypeAssignable(
+        { kind: 'array', item: { kind: 'any' } },
+        { kind: 'array', item: { kind: 'image' } },
+      ),
+    ).toBe(false);
+    expect(
+      isDataTypeAssignable(
+        { kind: 'array', item: { kind: 'image' } },
+        { kind: 'array', item: { kind: 'any' } },
+      ),
+    ).toBe(true);
+  });
+
   it('支持 any / json / file、基础媒体和递归领域集合，不使用 Zod 实例充当类型', () => {
     for (const kind of [
       'any',
@@ -171,6 +190,13 @@ describe('配置字段声明', () => {
 });
 
 describe('NodeTypeManifest 公开协议', () => {
+  it('目录允许多个明确版本并存，拒绝同类型同版本的重复声明', () => {
+    const source = manifest();
+    expect(nodeTypeManifestListSchema.parse([])).toEqual([]);
+    expect(nodeTypeManifestListSchema.parse([source, { ...source, version: 2 }])).toHaveLength(2);
+    expect(() => nodeTypeManifestListSchema.parse([source, source])).toThrow('重复类型版本');
+  });
+
   it('完整 Manifest 按 JSON 往返，输入 UI 与字段配置 UI 各有一个来源', () => {
     const source = manifest();
     const parsed = nodeTypeManifestSchema.parse(JSON.parse(JSON.stringify(source)));
@@ -248,6 +274,14 @@ describe('NodeTypeManifest 公开协议', () => {
         name: '时长',
         dataType: { kind: 'number' },
         defaultValue: 5,
+      }).success,
+    ).toBe(false);
+    expect(
+      inputPortDefinitionSchema.safeParse({
+        key: 'duration',
+        name: '时长',
+        dataType: { kind: 'number' },
+        multiple: true,
       }).success,
     ).toBe(false);
     expect(

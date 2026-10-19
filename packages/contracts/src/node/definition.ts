@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { nodeTypeIdSchema, nodeTypeVersionSchema } from './node-type.js';
-import { workflowIdentifierSchema, workflowPortNameSchema } from './workflow.js';
+import { nodeTypeIdSchema, nodeTypeVersionSchema } from './manifest.js';
+import { workflowIdentifierSchema, workflowPortNameSchema } from '../workflow/metadata.js';
 
 export const connectionBindingSchema = z
   .object({
@@ -47,12 +47,11 @@ export const nodeDefinitionSchema = z
   })
   .strict();
 
-// Workflow.edges 只保存控制关系；数据边由 Node.inputs.connection 派生。
+// Workflow.edges 只保存节点级控制关系。条件路由尚未进入这条边，避免无执行语义的端口被保存下来。
 export const controlEdgeDefinitionSchema = z
   .object({
     id: workflowIdentifierSchema,
     sourceNodeId: workflowIdentifierSchema,
-    sourcePort: workflowPortNameSchema.optional(),
     targetNodeId: workflowIdentifierSchema,
   })
   .strict();

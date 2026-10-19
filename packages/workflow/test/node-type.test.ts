@@ -242,8 +242,9 @@ describe('V1 DataType仅用于静态兼容', () => {
     ] as const)
       expect(isDataTypeAssignable({ kind: pair[0] }, { kind: pair[1] })).toBe(false);
   });
-  it('any放宽双向静态检查，仍不能绕过服务端真实值契约', async () => {
-    expect(isDataTypeAssignable({ kind: 'any' }, { kind: 'image' })).toBe(true);
+  it('只有目标端口为 any 时放宽静态检查，any 来源不能接到具体端口', async () => {
+    expect(isDataTypeAssignable({ kind: 'any' }, { kind: 'image' })).toBe(false);
+    expect(isDataTypeAssignable({ kind: 'any' }, { kind: 'any' })).toBe(true);
     expect(isDataTypeAssignable({ kind: 'video' }, { kind: 'any' })).toBe(true);
     const registry = new NodeRegistry<TestValue, TestUpdate>([
       createOperationNodeType(manifest(), schemas, ({ inputs }) => ({ text: inputs.text })),

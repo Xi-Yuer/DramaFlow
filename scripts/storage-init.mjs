@@ -2,8 +2,8 @@ import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 
 if (existsSync('.env')) process.loadEnvFile('.env');
-// 复用 API 已锁定的官方 SDK，不增加初始化工具镜像。
-const require = createRequire(new URL('../apps/api/package.json', import.meta.url));
+// 复用服务端基础设施包已锁定的官方 SDK，不增加初始化工具镜像。
+const require = createRequire(new URL('../packages/server/package.json', import.meta.url));
 const { S3Client, HeadBucketCommand, CreateBucketCommand } = require('@aws-sdk/client-s3');
 for (const key of ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY']) {
   if (!process.env[key]) throw new Error(`${key} 未配置，请先运行 pnpm env:init`);

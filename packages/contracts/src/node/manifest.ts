@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { dataTypeSchema } from './data-type.js';
-import { workflowIdentifierSchema, workflowPortNameSchema } from './workflow.js';
+import { dataTypeSchema } from '../data-type.js';
+import { workflowIdentifierSchema, workflowPortNameSchema } from '../workflow/metadata.js';
 
 export const nodeTypeIdSchema = z
   .string()
@@ -31,6 +31,7 @@ export const nodeMetadataSchema = z
   })
   .strict();
 
+// 一个端口当前只对应一条绑定。多来源聚合确定后再增加字段，避免目录声明和实例模型不一致。
 export const inputPortDefinitionSchema = z
   .object({
     key: workflowPortNameSchema,
@@ -38,7 +39,6 @@ export const inputPortDefinitionSchema = z
     description: descriptionSchema.optional(),
     dataType: dataTypeSchema,
     required: z.boolean().optional(),
-    multiple: z.boolean().optional(),
   })
   .strict();
 
@@ -48,7 +48,6 @@ export const outputPortDefinitionSchema = z
     name: displayNameSchema,
     description: descriptionSchema.optional(),
     dataType: dataTypeSchema,
-    multiple: z.boolean().optional(),
   })
   .strict();
 
@@ -202,6 +201,20 @@ export const nodeTypeManifestSchema = z
         });
       }
     }
+  });
+
+// 目录与显式连线共用同一边界，避免相同类型版本出现互相冲突的端口声明。
+export const nodeTypeManifestListSchema = z
+  .array(nodeTypeManifestSchema)
+  .superRefine((manifests, context) => {
+    const keys = new Set<string>();
+    manifests.forEach((manifest, index) => {
+      const key = JSON.stringify([manifest.type, manifest.version]);
+      if (keys.has(key)) {
+        context.addIssue({ code: 'custom', path: [index], message: '节点目录包含重复类型版本' });
+      }
+      keys.add(key);
+    });
   });
 
 export type NodeCategory = z.infer<typeof nodeCategorySchema>;

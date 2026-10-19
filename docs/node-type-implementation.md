@@ -8,7 +8,7 @@
 | ---------------- | --------------------------------- | --------------------------------------------------------------------- |
 | type / version   | 稳定类型身份与正整数版本          | 通过实例 type / typeVersion 精确引用                                  |
 | metadata         | name、description、category、icon | category 仅 input / ai / image / video / audio / flow / data / output |
-| inputs / outputs | 可见端口                          | key、name、可选 description、DataType 及相应 required / multiple      |
+| inputs / outputs | 可见端口                          | key、name、可选 description、DataType，输入可声明 required            |
 | config           | 执行配置字段数组                  | string / number / boolean / select 四类                               |
 | capabilities     | 所需能力类型                      | 可选、无重复，不绑定供应商                                            |
 | ui               | 节点及输入的编辑提示              | 可选 color / inputs；配置控件只在 config[].ui                         |
@@ -17,11 +17,11 @@ Manifest 全部字段可 JSON 序列化，不含 Zod、JSON Schema、compile、�
 
 配置默认值按字段类型校验；number 的 min / max 有效且默认值在范围内，select 选项值唯一且默认值属于选项。FieldUI 仅有受控 component 与可选 placeholder，slider 的数值边界来自对应 number 配置，不另存第二份范围。UI 输入引用必须属于输入端口。
 
-端口不包含默认值；用户固定输入通过 constant Binding 表达。配置默认值可以公开并供后续编辑初始化参考，当前不自动注入 NodeDefinition 或 LangGraph State。端口 multiple 仍不代表多来源聚合已经实现。
+端口不包含默认值；用户固定输入通过 constant Binding 表达。配置默认值可以公开并供后续编辑初始化参考，当前不自动注入 NodeDefinition 或 LangGraph State。一个端口对应一条绑定，多来源聚合不在 Manifest 中声明。
 
 ## DataType 与真实值
 
-DataType 是稳定类型说明，包含 any、json、file、基础值、媒体、domain 和递归 array；不扩展 Union、Tuple、继承或复杂泛型。any 仅放宽静态匹配，json 不自动吸收其他基础种类，file 不作为媒体基类；领域名称相同、数组元素递归匹配。不做隐式转换，真实值仍用 Zod 校验。
+DataType 是稳定类型说明，包含 any、json、file、基础值、媒体、domain 和递归 array；不扩展 Union、Tuple、继承或复杂泛型。只有目标端口为 any 时接受其他类型，any 来源不能接到具体端口。json 不自动吸收其他基础种类，file 不作为媒体基类；领域名称相同、数组元素递归匹配。不做隐式转换，真实值仍用 Zod 校验。
 
 image / video / audio / file 声明不提供媒体读取或版本化 Asset 契约。asset Binding 目前仅有 assetId，不能由编辑器自行拼接 URL 或推断资产版本；资产读取、授权和版本解析尚未实现。
 

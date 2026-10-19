@@ -7,8 +7,8 @@ import {
 } from '@dramaflow/contracts';
 import type { GraphNodeReturnValue, LangGraphRunnableConfig } from '@langchain/langgraph';
 import { z } from 'zod';
-import { invokeNodeOperation, parseNodeDefinition, type NodeOperation } from './node.js';
-import { assertNodeSchemas, parseNodeManifest, type NodeSchemas } from './node-type.js';
+import { invokeNodeOperation, parseNodeDefinition, type NodeOperation } from './operation.js';
+import { assertNodeSchemas, parseNodeManifest, type NodeSchemas } from './schemas.js';
 
 // State/Binding 模型尚未确定；这些泛型接口只适配本节点，不提供 Graph builder 或调度器。
 export type LangGraphNode<State extends object, Update extends object> = (

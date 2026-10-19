@@ -2,7 +2,8 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { DatabaseService } from '../infrastructure/database.service.js';
+import { encodeProjectPageCursor } from '@dramaflow/contracts';
+import { DatabaseService } from '@dramaflow/server';
 import { ProjectsService } from './projects.service.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
@@ -77,27 +78,79 @@ describe('基础项目与所有者隔离', () => {
     });
   });
 
-  it('分页始终限定所有者，以第 30 条记录作为下一页游标', async () => {
+  it('分页按更新时间倒序，并以最后一条的时间与 id 作为下一页游标', async () => {
     const { service, project } = await setup();
-    const cursor = '00000000-0000-4000-8000-000000000099';
+    const cursor = encodeProjectPageCursor({
+      updatedAt: timestamp.toISOString(),
+      id: '00000000-0000-4000-8000-000000000099',
+    });
     const records = Array.from({ length: 31 }, (_, index) => ({
       ...summary,
       id: `00000000-0000-4000-8000-${(index + 1).toString().padStart(12, '0')}`,
+      updatedAt: new Date(timestamp.getTime() - index * 1000),
     }));
     project.findMany.mockResolvedValue(records);
     const result = await service.list(ownerId, { cursor });
     expect(project.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { ownerId, id: { lt: cursor } },
-        orderBy: { id: 'desc' },
+        where: {
+          ownerId,
+          OR: [
+            { updatedAt: { lt: timestamp } },
+            {
+              updatedAt: timestamp,
+              id: { lt: '00000000-0000-4000-8000-000000000099' },
+            },
+          ],
+        },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
         take: 31,
       }),
     );
     expect(result.items).toHaveLength(30);
-    expect(result.nextCursor).toBe(records[29]!.id);
+    expect(result.nextCursor).toBe(
+      encodeProjectPageCursor({
+        updatedAt: records[29]!.updatedAt.toISOString(),
+        id: records[29]!.id,
+      }),
+    );
   });
 
-  it('保存通过所有者和版本原子更新，并返回本次写入版本', async () => {
+  it('首页和最后一页始终限定所有者，不为不足一页的结果制造游标', async () => {
+    const { service, project } = await setup();
+    project.findMany.mockResolvedValue([summary]);
+    const result = await service.list(ownerId, {});
+    expect(project.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { ownerId },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      }),
+    );
+    expect(result.items.map((item) => item.id)).toEqual([projectId]);
+    expect(result.nextCursor).toBeNull();
+    project.findMany.mockResolvedValue([]);
+    expect(await service.list(ownerId, {})).toEqual({
+      items: [],
+      nextCursor: null,
+    });
+  });
+
+  it('游标无效时不查询数据库', async () => {
+    const { service, project } = await setup();
+    for (const query of [
+      { cursor: 'not-base64' },
+      { cursor: 'a'.repeat(257) },
+      { cursor: ['a', 'b'] },
+      { ownerId: 'other-owner' },
+    ]) {
+      await expect(service.list(ownerId, query)).rejects.toBeInstanceOf(
+        z.ZodError,
+      );
+    }
+    expect(project.findMany).not.toHaveBeenCalled();
+  });
+
+  it('保存通过所有者和修订号原子更新，并返回本次写入的修订号', async () => {
     const { service, project } = await setup();
     await expect(service.save(ownerId, projectId, saveInput)).resolves.toEqual({
       revision: 4,
@@ -109,7 +162,7 @@ describe('基础项目与所有者隔离', () => {
     expect(project.findFirst).not.toHaveBeenCalled();
   });
 
-  it('相同版本并发保存时，仅成功写入者返回新版本，另一方收到 409', async () => {
+  it('相同修订号并发保存时，仅成功写入者返回新修订号，另一方收到 409', async () => {
     const { service, project } = await setup();
     project.updateMany
       .mockResolvedValueOnce({ count: 1 })
@@ -129,7 +182,7 @@ describe('基础项目与所有者隔离', () => {
     });
   });
 
-  it('其他所有者保存失败时返回 404，不暴露项目版本', async () => {
+  it('其他所有者保存失败时返回 404，不暴露项目修订号', async () => {
     const { service, project } = await setup();
     project.updateMany.mockResolvedValue({ count: 0 });
     project.findFirst.mockResolvedValue(null);

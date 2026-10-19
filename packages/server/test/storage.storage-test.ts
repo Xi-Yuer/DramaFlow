@@ -7,7 +7,7 @@ import {
   GetObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { StorageService } from '../src/infrastructure/storage.service.js';
+import { StorageService } from '../src/storage/storage.service.js';
 
 describe('真实 RustFS 存储', () => {
   const bucket = `dramaflow-check-${randomUUID()}`;
@@ -17,11 +17,7 @@ describe('真实 RustFS 存储', () => {
   let created = false;
 
   beforeAll(async () => {
-    for (const key of [
-      'S3_ENDPOINT',
-      'S3_ACCESS_KEY_ID',
-      'S3_SECRET_ACCESS_KEY',
-    ]) {
+    for (const key of ['S3_ENDPOINT', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY']) {
       if (!process.env[key]) throw new Error(`${key} 未配置`);
     }
     vi.stubEnv('S3_BUCKET', bucket);
@@ -44,9 +40,7 @@ describe('真实 RustFS 存储', () => {
     try {
       if (created) {
         for (const key of keys)
-          await client.send(
-            new DeleteObjectCommand({ Bucket: bucket, Key: key }),
-          );
+          await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
         await client.send(new DeleteBucketCommand({ Bucket: bucket }));
       }
     } finally {
@@ -62,13 +56,9 @@ describe('真实 RustFS 存储', () => {
     keys.push(key);
     await storage.put(key, bytes, 'application/octet-stream');
     expect(Buffer.from(await storage.get(key))).toEqual(bytes);
-    const object = await client.send(
-      new GetObjectCommand({ Bucket: bucket, Key: key }),
-    );
+    const object = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
     expect(object.ContentType).toBe('application/octet-stream');
-    expect(Buffer.from(await object.Body!.transformToByteArray())).toEqual(
-      bytes,
-    );
+    expect(Buffer.from(await object.Body!.transformToByteArray())).toEqual(bytes);
   });
 
   it('不存在的对象明确报错', async () => {

@@ -4,7 +4,7 @@ import {
   DatabaseService,
   RedisService,
   StorageService,
-} from '@dramaflow/api/infrastructure';
+} from '@dramaflow/server';
 import { AppModule } from './app.module.js';
 
 async function bootstrap() {
