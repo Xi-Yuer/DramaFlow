@@ -42,7 +42,12 @@ it('健康接口验证真实 PostgreSQL、Redis 和对象存储', async () => {
 });
 
 it('已移除的业务接口不再对外提供服务', async () => {
-  for (const path of ['/api/v1/workspaces', '/api/v1/catalog']) {
+  for (const path of [
+    '/api/v1/workspaces',
+    '/api/v1/catalog',
+    '/api/v1/plugins',
+    '/api/v1/plugins/installations',
+  ]) {
     const response = await fetch(`${origin}${path}`);
     expect(response.status).toBe(404);
   }

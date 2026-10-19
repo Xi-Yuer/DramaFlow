@@ -1,4 +1,3 @@
-import { PluginsModule } from './plugins/plugins.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -7,13 +6,7 @@ import { InfrastructureModule } from './infrastructure/infrastructure.module.js'
 import { HealthController } from './health.controller.js';
 
 @Module({
-  imports: [
-    InfrastructureModule,
-    AuthModule,
-    UsersModule,
-    ProjectsModule,
-    PluginsModule,
-  ],
+  imports: [InfrastructureModule, AuthModule, UsersModule, ProjectsModule],
   controllers: [HealthController],
 })
 export class AppModule {}

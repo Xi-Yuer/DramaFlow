@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Form, Input, Modal, Spin } from 'antd';
@@ -46,9 +45,6 @@ function ProjectListBody() {
         </div>
         <span className="account-location">项目画布</span>
         <div className="account-actions">
-          <Link href="/plugins" className="header-link">
-            模型插件
-          </Link>
           <AccountMenuButton />
         </div>
       </header>
@@ -57,9 +53,7 @@ function ProjectListBody() {
           <div>
             <span className="small-kicker">ONE CANVAS, ONE PROJECT</span>
             <h1>你的项目</h1>
-            <p className="secondary-copy">
-              每个项目就是一张画布。右击可以添加文本、角色、图片和模型节点；模型节点使用已安装的插件。
-            </p>
+            <p className="secondary-copy">每个项目就是一张画布，当前从空白画布开始。</p>
           </div>
           <Button type="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>
             新建项目
@@ -98,7 +92,6 @@ function ProjectListBody() {
                   <span className="project-card-body">
                     <strong>{project.name}</strong>
                     <span>
-                      {project.nodeCount} 个节点 ·{' '}
                       {new Date(project.updatedAt).toLocaleString('zh-CN', {
                         month: 'numeric',
                         day: 'numeric',

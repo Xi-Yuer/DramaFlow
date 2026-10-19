@@ -1,6 +1,6 @@
 generator client {
-  provider = "prisma-client"
-  output = "../src/generated/prisma"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
   moduleFormat = "esm"
 }
 
@@ -11,22 +11,21 @@ datasource db {
 // 业务模型由用户逐步指导后添加。
 
 model User {
-  id            String   @id
-  name          String   @db.VarChar(80)
-  email         String   @unique @db.VarChar(254)
-  emailVerified Boolean  @default(false)
+  id            String       @id
+  name          String       @db.VarChar(80)
+  email         String       @unique @db.VarChar(254)
+  emailVerified Boolean      @default(false)
   image         String?
-  role          String   @default("user") @db.VarChar(32)
-  banned        Boolean  @default(false)
+  role          String       @default("user") @db.VarChar(32)
+  banned        Boolean      @default(false)
   banReason     String?
   banExpires    DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
   sessions      Session[]
   accounts      Account[]
   profile       UserProfile?
   projects      Project[]
-  pluginInstallations PluginInstallation[]
 
   @@map("auth_user")
 }
@@ -61,11 +60,11 @@ model Session {
 }
 
 model Account {
-  id                    String   @id
+  id                    String    @id
   accountId             String
   providerId            String
   userId                String
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?
   refreshToken          String?
   idToken               String?
@@ -73,8 +72,8 @@ model Account {
   refreshTokenExpiresAt DateTime?
   scope                 String?
   password              String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   @@unique([providerId, accountId])
   @@index([userId])
@@ -102,35 +101,17 @@ model RateLimit {
   @@map("auth_rate_limit")
 }
 
-// 一个项目就是一张画布；未来运行快照独立建模，不能复用可变草稿。
+// 一个项目就是一张空白画布；具体业务模型等待重新规划。
 model Project {
-  id         String   @id @default(uuid()) @db.Uuid
-  ownerId    String
-  name       String   @db.VarChar(80)
-  revision   Int      @default(1)
-  definition Json
-  viewport   Json
-  nodeCount  Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String
+  name      String   @db.VarChar(80)
+  revision  Int      @default(1)
+  viewport  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId, updatedAt, id])
   @@map("canvas_project")
-}
-
-// 插件安装只保存加密后的凭证。明文密钥不能进入这个模型的查询结果。
-model PluginInstallation {
-  id            String   @id @default(uuid()) @db.Uuid
-  ownerId       String
-  pluginId      String   @db.VarChar(80)
-  pluginVersion Int
-  label         String   @db.VarChar(80)
-  secretCipher  String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-
-  @@index([ownerId, updatedAt])
-  @@map("plugin_installation")
 }

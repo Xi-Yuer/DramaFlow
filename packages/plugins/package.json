@@ -16,21 +16,15 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src test",
-    "test": "vitest run"
+    "lint": "eslint src"
   },
   "dependencies": {
-    "@dramaflow/contracts": "workspace:*",
     "@langchain/core": "^1.2.18",
     "@langchain/openai": "^1.6.2",
-    "openai": "^7.34.0",
-    "zod": "^4.6.7",
-    "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1"
+    "openai": "^7.34.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.0"
+    "typescript": "^6.0.3"
   }
 }

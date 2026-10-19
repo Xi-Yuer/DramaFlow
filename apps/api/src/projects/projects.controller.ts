@@ -15,9 +15,6 @@ import { ProjectsService } from './projects.service.js';
 @Controller('projects')
 export class ProjectsController {
   constructor(private readonly projects: ProjectsService) {}
-  @Get('node-types') @Header('Cache-Control', 'no-store') catalog() {
-    return this.projects.catalog();
-  }
   @Get() @Header('Cache-Control', 'no-store') list(
     @Actor() actor: AuthActor,
     @Query() query: unknown,

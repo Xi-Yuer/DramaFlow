@@ -1,137 +1,46 @@
 'use client';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Background,
   BackgroundVariant,
   Controls,
-  MarkerType,
   ReactFlow,
   ReactFlowProvider,
-  useEdgesState,
-  useNodesState,
   useReactFlow,
-  type Connection,
-  type Edge,
-  type NodeMouseHandler,
   type OnMove,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { App, Button } from 'antd';
-import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import {
-  saveProjectSchema,
-  validateWorkflow,
-  type InstallationSummary,
-  type NodeDefinition,
-  type PluginManifest,
-  type Project,
-} from '@dramaflow/contracts';
+import { saveProjectSchema, type Project } from '@dramaflow/contracts';
 import { ApiError } from '@/lib/http';
 import { AccountMenuButton } from '@/features/auth/account-menu';
-import { CatalogContext, canvasNodeTypes } from './flow-node';
-import {
-  clampViewport,
-  connectionIssue,
-  draftSignature,
-  toCanvasEdges,
-  toCanvasNodes,
-  toWorkflow,
-  type CanvasNode,
-} from './graph';
-import { NodeInspector } from './node-inspector';
-import { NodeMenu, type CanvasMenu } from './node-menu';
 import { projectApi } from './project-api';
+import { clampViewport, draftSignature } from './viewport';
 
-const edgeDefaults = {
-  type: 'smoothstep',
-  markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: '#8a8a96' },
-} as const;
-
-export function CanvasEditor({
-  project,
-  catalog,
-  manifests,
-  installations,
-  onReload,
-}: {
-  project: Project;
-  catalog: NodeDefinition[];
-  manifests: PluginManifest[];
-  installations: InstallationSummary[];
-  onReload: () => void;
-}) {
-  const catalogMap = useMemo(
-    () => new Map(catalog.map((item) => [`${item.type}@${item.version}`, item])),
-    [catalog],
-  );
+export function CanvasEditor({ project, onReload }: { project: Project; onReload: () => void }) {
   return (
-    <CatalogContext.Provider value={catalogMap}>
-      <ReactFlowProvider>
-        <CanvasBoard
-          project={project}
-          catalog={catalog}
-          manifests={manifests}
-          installations={installations}
-          onReload={onReload}
-        />
-      </ReactFlowProvider>
-    </CatalogContext.Provider>
+    <ReactFlowProvider>
+      <CanvasBoard project={project} onReload={onReload} />
+    </ReactFlowProvider>
   );
 }
 
-function CanvasBoard({
-  project,
-  catalog,
-  manifests,
-  installations,
-  onReload,
-}: {
-  project: Project;
-  catalog: NodeDefinition[];
-  manifests: PluginManifest[];
-  installations: InstallationSummary[];
-  onReload: () => void;
-}) {
+function CanvasBoard({ project, onReload }: { project: Project; onReload: () => void }) {
   const router = useRouter();
   const { message, modal } = App.useApp();
-  const { screenToFlowPosition, getViewport } = useReactFlow();
-  const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>(
-    toCanvasNodes(project.definition),
-  );
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(
-    toCanvasEdges(project.definition).map((edge) => ({ ...edge, ...edgeDefaults })),
-  );
+  const { getViewport } = useReactFlow();
   const [name, setName] = useState(project.name);
   const [viewport, setViewport] = useState(project.viewport);
-  const [menu, setMenu] = useState<CanvasMenu | null>(null);
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [revision, setRevision] = useState(project.revision);
   const [savedSignature, setSavedSignature] = useState(() =>
-    draftSignature(
-      project.name,
-      toCanvasNodes(project.definition),
-      toCanvasEdges(project.definition),
-      catalog,
-      project.viewport,
-    ),
+    draftSignature(project.name, project.viewport),
   );
-  const clickStart = useRef<{
-    nodeId: string;
-    handleId: string | null;
-    handleType: 'source' | 'target';
-  } | null>(null);
-  const signature = draftSignature(name, nodes, edges, catalog, viewport);
+  const signature = draftSignature(name, viewport);
   const dirty = signature !== savedSignature;
-  const selected = nodes.filter((node) => node.selected);
-  const active = selected.length === 1 ? selected[0] : undefined;
-  const activeDefinition = active
-    ? catalog.find(
-        (item) => item.type === active.data.nodeType && item.version === active.data.version,
-      )
-    : undefined;
 
   useEffect(() => {
     if (!dirty) return;
@@ -142,67 +51,6 @@ function CanvasBoard({
     window.addEventListener('beforeunload', onLeave);
     return () => window.removeEventListener('beforeunload', onLeave);
   }, [dirty]);
-
-  const closeMenu = useCallback(() => setMenu(null), []);
-
-  function updateNode(id: string, patch: Partial<CanvasNode['data']>) {
-    setNodes((current) =>
-      current.map((node) =>
-        node.id === id ? { ...node, data: { ...node.data, ...patch } } : node,
-      ),
-    );
-  }
-
-  function removeNode(id: string) {
-    setNodes((current) => current.filter((node) => node.id !== id));
-    setEdges((current) => current.filter((edge) => edge.source !== id && edge.target !== id));
-    setMenu(null);
-  }
-
-  function addNode(definition: NodeDefinition, flow: { x: number; y: number }) {
-    const id = crypto.randomUUID();
-    setNodes((current) => [
-      ...current.map((node) => ({ ...node, selected: false })),
-      {
-        id,
-        type: 'canvas',
-        selected: true,
-        position: { x: flow.x - 110, y: flow.y - 36 },
-        data: {
-          nodeType: definition.type,
-          version: definition.version,
-          title: definition.title,
-          config: structuredClone(definition.defaultConfig),
-        },
-      },
-    ]);
-    setMenu(null);
-  }
-
-  const onConnect = useCallback(
-    (connection: Connection) => {
-      const source = connection.source;
-      const target = connection.target;
-      if (!source || !target) return;
-      const issue = connectionIssue(toWorkflow(nodes, edges, catalog), catalog, connection);
-      if (issue) {
-        void message.warning(issue);
-        return;
-      }
-      setEdges((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          source,
-          target,
-          sourceHandle: connection.sourceHandle,
-          targetHandle: connection.targetHandle,
-          ...edgeDefaults,
-        },
-      ]);
-    },
-    [catalog, edges, message, nodes, setEdges],
-  );
 
   const onMoveEnd = useCallback<OnMove>((_, next) => {
     const view = clampViewport(next);
@@ -215,21 +63,6 @@ function CanvasBoard({
     );
   }, []);
 
-  const onNodeContextMenu = useCallback<NodeMouseHandler<CanvasNode>>((event, node) => {
-    event.preventDefault();
-    setMenu({ kind: 'node', x: event.clientX, y: event.clientY, nodeId: node.id });
-  }, []);
-
-  function openPaneMenu(event: MouseEvent | React.MouseEvent) {
-    event.preventDefault();
-    setMenu({
-      kind: 'pane',
-      x: event.clientX,
-      y: event.clientY,
-      flow: screenToFlowPosition({ x: event.clientX, y: event.clientY }),
-    });
-  }
-
   const savingLock = useRef(false);
   const save = useCallback(async () => {
     if (savingLock.current || !dirty) return;
@@ -238,21 +71,11 @@ function CanvasBoard({
       void message.error('请填写项目名称');
       return;
     }
-    if (nodes.some((node) => !node.data.title.trim())) {
-      void message.error('请为每个节点填写标题');
-      return;
-    }
-    const definition = toWorkflow(nodes, edges, catalog);
     const view = clampViewport(getViewport());
-    const payload = { revision, name: trimmed, definition, viewport: view };
+    const payload = { revision, name: trimmed, viewport: view };
     const parsed = saveProjectSchema.safeParse(payload);
     if (!parsed.success) {
       void message.error(parsed.error.issues[0]?.message ?? '画布内容不符合保存协议');
-      return;
-    }
-    const issues = validateWorkflow(definition, catalog);
-    if (issues.length) {
-      void message.error([...new Set(issues.map((item) => item.message))].join('；'));
       return;
     }
     savingLock.current = true;
@@ -261,7 +84,7 @@ function CanvasBoard({
       const result = await projectApi.save(project.id, parsed.data);
       setRevision(result.revision);
       setViewport(view);
-      setSavedSignature(draftSignature(trimmed, nodes, edges, catalog, view));
+      setSavedSignature(draftSignature(trimmed, view));
       setName(trimmed);
       setConflict(false);
       void message.success('画布已保存');
@@ -276,7 +99,7 @@ function CanvasBoard({
       savingLock.current = false;
       setSaving(false);
     }
-  }, [catalog, dirty, edges, getViewport, message, name, nodes, project.id, revision]);
+  }, [dirty, getViewport, message, name, project.id, revision]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -346,115 +169,26 @@ function CanvasBoard({
           保存
         </Button>
         <div className="canvas-actions">
-          <Link href="/plugins" className="header-link">
-            模型插件
-          </Link>
           <AccountMenuButton />
         </div>
       </header>
       <div className="canvas-stage">
         <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={canvasNodeTypes}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
           onMoveEnd={onMoveEnd}
-          onPaneClick={closeMenu}
-          onPaneContextMenu={openPaneMenu}
-          onNodeContextMenu={onNodeContextMenu}
-          isValidConnection={(connection) =>
-            connectionIssue(toWorkflow(nodes, edges, catalog), catalog, connection) === null
-          }
-          onClickConnectStart={(_, params) => {
-            if (
-              !params.nodeId ||
-              (params.handleType !== 'source' && params.handleType !== 'target')
-            ) {
-              clickStart.current = null;
-              return;
-            }
-            clickStart.current = {
-              nodeId: params.nodeId,
-              handleId: params.handleId,
-              handleType: params.handleType,
-            };
-          }}
-          onClickConnectEnd={(event) => {
-            const start = clickStart.current;
-            clickStart.current = null;
-            const raw = event.target;
-            const element = raw instanceof Element ? raw.closest('.react-flow__handle') : null;
-            if (!start || !element) return;
-            const nodeId = element.getAttribute('data-nodeid');
-            const handleId = element.getAttribute('data-handleid');
-            if (!nodeId || (nodeId === start.nodeId && handleId === start.handleId)) return;
-            const connection =
-              start.handleType === 'source'
-                ? {
-                    source: start.nodeId,
-                    target: nodeId,
-                    sourceHandle: start.handleId,
-                    targetHandle: handleId,
-                  }
-                : {
-                    source: nodeId,
-                    target: start.nodeId,
-                    sourceHandle: handleId,
-                    targetHandle: start.handleId,
-                  };
-            const issue = connectionIssue(toWorkflow(nodes, edges, catalog), catalog, connection);
-            if (issue) void message.warning(issue);
-          }}
-          onConnectEnd={(_, state) => {
-            if (state.isValid !== false || !state.fromNode || !state.toNode) return;
-            const issue = connectionIssue(toWorkflow(nodes, edges, catalog), catalog, {
-              source: state.fromNode.id,
-              target: state.toNode.id,
-              sourceHandle: state.fromHandle?.id,
-              targetHandle: state.toHandle?.id,
-            });
-            if (issue) void message.warning(issue);
-          }}
           defaultViewport={project.viewport}
           minZoom={0.1}
           maxZoom={3}
           colorMode="dark"
-          deleteKeyCode={['Backspace', 'Delete']}
-          edgesReconnectable={false}
           fitView={false}
           proOptions={{ hideAttribution: false }}
-          defaultEdgeOptions={edgeDefaults}
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="#ffffff18" />
           <Controls showInteractive={false} position="bottom-left" />
         </ReactFlow>
-        {nodes.length === 0 ? (
-          <div className="canvas-empty">
-            <p>右击画布，从开始节点接出文本、图片或视频</p>
-            <span>只有输入输出类型一致的端口可以连线。模型节点只保存选择，不会发起生成。</span>
-          </div>
-        ) : null}
-        {menu ? (
-          <NodeMenu
-            menu={menu}
-            catalog={catalog}
-            onAdd={addNode}
-            onDelete={removeNode}
-            onClose={closeMenu}
-          />
-        ) : null}
-        {active ? (
-          <NodeInspector
-            node={active}
-            definition={activeDefinition}
-            manifests={manifests}
-            installations={installations}
-            onChange={(patch) => updateNode(active.id, patch)}
-            onRemove={() => removeNode(active.id)}
-          />
-        ) : null}
+        <div className="canvas-empty">
+          <p>空白画布</p>
+          <span>当前暂无可用节点。</span>
+        </div>
       </div>
     </main>
   );

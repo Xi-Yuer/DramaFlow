@@ -4,6 +4,8 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { createDatabase } from '@dramaflow/database';
+import { projectSchema, projectSummarySchema } from '@dramaflow/contracts';
+import { z } from 'zod';
 import { createAuth } from '../src/auth/auth.factory.js';
 
 if (
@@ -147,6 +149,112 @@ it('真实密码登录、Cookie 会话和安全 DTO，不暴露凭证', async ()
   expect(account.password!.length).toBeGreaterThan(30);
   secondCookie = cookies(await signIn());
   expect(secondCookie).not.toBe(cookie);
+});
+
+it('真实项目 API 保留基础字段、所有者隔离和版本并发校验，拒绝旧业务协议', async () => {
+  expect((await call('/api/v1/projects')).status).toBe(401);
+  const createdResponse = await call(
+    '/api/v1/projects',
+    'POST',
+    { name: ' 第一集 ' },
+    cookie,
+  );
+  expect(createdResponse.status).toBe(201);
+  const created = projectSchema.parse(await createdResponse.json());
+  expect(created.name).toBe('第一集');
+  expect(created.revision).toBe(1);
+  expect(created.viewport).toEqual({ x: 0, y: 0, zoom: 1 });
+  expect(created).not.toHaveProperty('ownerId');
+  expect(created).not.toHaveProperty('definition');
+  expect(created).not.toHaveProperty('nodeCount');
+  const path = `/api/v1/projects/${created.id}`;
+  const ownProject = await call(path, 'GET', undefined, secondCookie);
+  expect(ownProject.status).toBe(200);
+  expect(projectSchema.parse(await ownProject.json())).toEqual(created);
+
+  const adminLogin = await signIn(adminEmail);
+  expect(adminLogin.status).toBe(200);
+  const adminCookie = cookies(adminLogin);
+  const adminProjectResponse = await call(
+    '/api/v1/projects',
+    'POST',
+    { name: '管理员的项目' },
+    adminCookie,
+  );
+  expect(adminProjectResponse.status).toBe(201);
+  const adminProject = projectSchema.parse(await adminProjectResponse.json());
+  expect((await call(path, 'GET', undefined, adminCookie)).status).toBe(404);
+  expect(
+    (
+      await call(
+        `/api/v1/projects/${adminProject.id}`,
+        'GET',
+        undefined,
+        cookie,
+      )
+    ).status,
+  ).toBe(404);
+  const listSchema = z
+    .object({
+      items: z.array(projectSummarySchema),
+      nextCursor: z.string().uuid().nullable(),
+    })
+    .strict();
+  for (const [session, ownId, otherId] of [
+    [cookie, created.id, adminProject.id],
+    [adminCookie, adminProject.id, created.id],
+  ]) {
+    const response = await call('/api/v1/projects', 'GET', undefined, session);
+    expect(response.status).toBe(200);
+    const list = listSchema.parse(await response.json());
+    expect(list.items.map((item) => item.id)).toContain(ownId);
+    expect(list.items.map((item) => item.id)).not.toContain(otherId);
+  }
+
+  const update = {
+    revision: created.revision,
+    name: '第一集修改版',
+    viewport: { x: 120, y: -80, zoom: 1.5 },
+  };
+  const saved = await call(path, 'PUT', update, cookie);
+  expect(saved.status).toBe(200);
+  expect(await saved.json()).toEqual({ revision: 2 });
+  const loaded = await call(path, 'GET', undefined, cookie);
+  expect(loaded.status).toBe(200);
+  expect(projectSchema.parse(await loaded.json())).toMatchObject({
+    name: update.name,
+    viewport: update.viewport,
+    revision: 2,
+  });
+  const stale = await call(path, 'PUT', update, secondCookie);
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({ code: 'REVISION_CONFLICT' });
+  expect(
+    (await call(path, 'PUT', { ...update, revision: 2 }, adminCookie)).status,
+  ).toBe(404);
+
+  for (const extra of [
+    { definition: { schemaVersion: 1, nodes: [], edges: [], bindings: [] } },
+    { nodeCount: 0 },
+  ]) {
+    expect(
+      (
+        await call(
+          '/api/v1/projects',
+          'POST',
+          { name: '旧协议', ...extra },
+          cookie,
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (await call(path, 'PUT', { ...update, revision: 2, ...extra }, cookie))
+        .status,
+    ).toBe(400);
+  }
+  expect((await call('/api/v1/plugins', 'GET', undefined, cookie)).status).toBe(
+    404,
+  );
 });
 
 it('资料可编辑，角色不能自助提升，跨来源写入被拒绝', async () => {
