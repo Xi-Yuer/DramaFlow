@@ -402,8 +402,26 @@ describe('原生 Interrupt、Command 和 Checkpoint', () => {
       .addEdge(START, 'review')
       // MemorySaver 明确只用于本测试；不宣称进程重启或生产持久化已实现。
       .compile({ checkpointer: new MemorySaver() });
-    const firstConfig = { configurable: { thread_id: 'test-review-first' } };
-    const secondConfig = { configurable: { thread_id: 'test-review-second' } };
+    const version = {
+      id: 'test-review-version',
+      workflowId: 'test-review-workflow',
+      version: 1,
+      publishedAt: '2026-10-19T00:00:00.000Z',
+    };
+    const firstRun: WorkflowRunMetadata = {
+      id: 'test-review-first-run',
+      workflowId: version.workflowId,
+      workflowVersionId: version.id,
+      threadId: 'test-review-first-thread',
+      status: 'pending',
+    };
+    const secondRun: WorkflowRunMetadata = {
+      ...firstRun,
+      id: 'test-review-second-run',
+      threadId: 'test-review-second-thread',
+    };
+    const firstConfig = createWorkflowRunConfig(firstRun, version);
+    const secondConfig = createWorkflowRunConfig(secondRun, version);
 
     const paused = await graph.invoke({ value: 10 }, firstConfig);
     expect(paused).toMatchObject({
@@ -413,7 +431,10 @@ describe('原生 Interrupt、Command 和 Checkpoint', () => {
     await graph.invoke({ value: 20 }, secondConfig);
     expect(entered).toHaveBeenCalledTimes(2);
 
-    const resumed = await graph.invoke(new Command({ resume: { approved: true } }), firstConfig);
+    const resumed = await graph.invoke(
+      new Command({ resume: { approved: true } }),
+      createWorkflowRunConfig(firstRun, version),
+    );
     expect(resumed.results).toEqual({ review: { approved: true, value: 10 } });
     // 恢复从节点开头重跑，适配器没有吞掉 Interrupt 或构造自己的恢复状态机。
     expect(entered).toHaveBeenCalledTimes(3);
@@ -493,6 +514,7 @@ describe('WorkflowRun 与 LangGraph thread 配置', () => {
     id: 'run-1',
     workflowId: 'workflow-1',
     workflowVersionId: 'version-1',
+    threadId: 'root-thread-1',
     status: 'pending',
   };
   const version: WorkflowVersionMetadata = {
@@ -502,29 +524,32 @@ describe('WorkflowRun 与 LangGraph thread 配置', () => {
     publishedAt: '2026-10-19T00:00:00.000Z',
   };
 
-  it('校验版本后绑定 Run.id，保留顶层并发、取消和其他配置，不修改调用方', () => {
+  it('校验版本后绑定独立 threadId，保留顶层并发、取消和其他配置，不修改调用方', () => {
     const signal = new AbortController().signal;
     const original = { maxConcurrency: 3, signal, configurable: { requestId: 'request-1' } };
     const result = createWorkflowRunConfig(run, version, original);
     expect(result).toEqual({
       maxConcurrency: 3,
       signal,
-      configurable: { requestId: 'request-1', thread_id: run.id },
+      configurable: { requestId: 'request-1', thread_id: run.threadId },
     });
     expect(result.signal).toBe(signal);
     expect(original.configurable).toEqual({ requestId: 'request-1' });
-    expect(createWorkflowRunConfig(run, version).configurable?.thread_id).toBe(run.id);
+    expect(createWorkflowRunConfig(run, version).configurable?.thread_id).toBe(run.threadId);
+    expect(
+      createWorkflowRunConfig({ ...run, threadId: run.id }, version).configurable?.thread_id,
+    ).toBe(run.id);
   });
 
   it('明确传入相同 thread 时接受，拒绝把 Run 绑定到其他 thread', () => {
     expect(
-      createWorkflowRunConfig(run, version, { configurable: { thread_id: run.id } }).configurable
-        ?.thread_id,
-    ).toBe(run.id);
-    for (const threadId of ['foreign-thread', '', 123]) {
+      createWorkflowRunConfig(run, version, { configurable: { thread_id: run.threadId } })
+        .configurable?.thread_id,
+    ).toBe(run.threadId);
+    for (const threadId of [run.id, 'foreign-thread', '', 123, null]) {
       expect(() =>
         createWorkflowRunConfig(run, version, { configurable: { thread_id: threadId } }),
-      ).toThrow('thread_id 必须与 WorkflowRun.id 一致');
+      ).toThrow('thread_id 必须与 WorkflowRun.threadId 一致');
     }
   });
 
@@ -541,6 +566,9 @@ describe('WorkflowRun 与 LangGraph thread 配置', () => {
 
   it('绑定前校验运行与版本元数据，不接受空标识或非法版本号', () => {
     expect(() => createWorkflowRunConfig({ ...run, id: '' }, version)).toThrow(z.ZodError);
+    for (const threadId of ['', ' thread-1']) {
+      expect(() => createWorkflowRunConfig({ ...run, threadId }, version)).toThrow(z.ZodError);
+    }
     expect(() => createWorkflowRunConfig(run, { ...version, version: 0 })).toThrow(z.ZodError);
   });
 });

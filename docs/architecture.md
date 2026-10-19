@@ -38,9 +38,9 @@ parseNodeDefinition 检查类型版本、目标输入端口和实际配置；app
 
 createOperationNodeType 保留泛型普通操作适配：编译产物可加入真实 StateGraph，CompileContext 只负责输入读取与输出更新边界，不给节点全图 builder。当前没有具体 WorkflowState、四类 Binding 求值器、完整 DSL Compiler、持久 checkpointer 或运行事件投影。
 
-createWorkflowRunConfig 检查 Run / Version 身份，绑定根 Run.id 为 LangGraph thread_id 并保留并发、取消等配置；不创建运行、检查权限、加载版本或选择 checkpointer。真实 LangGraph 测试保留原生执行、interrupt / Command、Send / reducer 及并发验证，MemorySaver 与测试类型不代表生产恢复或真实生成。
+createWorkflowRunConfig 检查 Run / Version 身份，使用必填 Run.threadId 绑定 LangGraph thread_id，允许它与 Run.id 不同，拒绝调用方覆盖为其他 thread，并保留并发、取消等配置；不自动分配 thread、不创建运行、检查权限、加载版本或选择 checkpointer。真实 LangGraph 测试验证独立 threadId 的中断恢复与线程隔离；MemorySaver 与测试类型不代表生产恢复或真实生成。
 
-NodeRun 只校验 JSON 输入输出、八种业务状态、code / message 错误和 ISO 时间，不驱动图调度或提供持久化。类型与编译边界见 [Manifest 实施说明](node-type-implementation.md)。
+NodeRun 契约包含必填正整数 attempt、可选 inputSnapshot / outputSnapshot、八种业务状态、code / message 错误和 ISO 时间。尚未取得输入或输出时允许没有快照；快照仅接受 JSON 记录，不能据此声称已实现 RuntimeValue、内容大小控制或脱敏。恢复重入不会在契约中自动增加 attempt，不驱动图调度，也没有 Run Store / 数据库表。类型与编译边界见 [Manifest 实施说明](node-type-implementation.md)，State、历史与引用职责见 [State 边界](workflow-state.md)。
 
 ## React Flow 数据适配
 
@@ -52,16 +52,16 @@ GenericWorkflowNode 根据精确类型版本 Manifest 自动生成 Handle、显�
 
 ## 目录与依赖
 
-| 目录               | 当前职责                                             | 后续边界                               |
-| ------------------ | ---------------------------------------------------- | -------------------------------------- |
-| apps/web           | 身份、账户、项目画布、目录查询、通用 renderer 与适配 | 创作交互，不加载服务端插件或密钥       |
-| apps/api           | 认证、资料、项目、节点目录和基础设施                 | 模块化业务入口、权限与应用服务         |
-| apps/worker        | 仅基础设施的 NestJS 上下文                           | 独立执行进程，不自建图调度语义         |
-| packages/contracts | 中立 JSON 协议和静态校验                             | 不依赖前端、数据库或 Runtime 框架      |
-| packages/database  | Prisma 与身份、基础项目持久化                        | 模型、迁移按实际业务增加               |
-| packages/workflow  | 值契约、快照、NodeType / Registry 与 LangGraph 适配  | 先确定 State，再实现领域编译与执行接入 |
-| packages/plugins   | 空入口，保留模型 SDK                                 | 受信任外部能力，无隐式供应商选择       |
-| packages/context   | 空入口                                               | 独立构建明确选择的上下文               |
+| 目录               | 当前职责                                             | 后续边界                                |
+| ------------------ | ---------------------------------------------------- | --------------------------------------- |
+| apps/web           | 身份、账户、项目画布、目录查询、通用 renderer 与适配 | 创作交互，不加载服务端插件或密钥        |
+| apps/api           | 认证、资料、项目、节点目录和基础设施                 | 模块化业务入口、权限与应用服务          |
+| apps/worker        | 仅基础设施的 NestJS 上下文                           | 独立执行进程，不自建图调度语义          |
+| packages/contracts | 中立 JSON 协议和静态校验                             | 不依赖前端、数据库或 Runtime 框架       |
+| packages/database  | Prisma 与身份、基础项目持久化                        | 模型、迁移按实际业务增加                |
+| packages/workflow  | 值契约、快照、NodeType / Registry 与 LangGraph 适配  | 先统一值与引用，再完成 State 和执行接入 |
+| packages/plugins   | 空入口，保留模型 SDK                                 | 受信任外部能力，无隐式供应商选择        |
+| packages/context   | 空入口                                               | 独立构建明确选择的上下文                |
 
 不为附件目录示意重命名为 common / client，不为未来概念建立空壳执行器。API 与 worker 通过服务和契约协作；第三方类型在适配层转换，不进入 contracts。
 

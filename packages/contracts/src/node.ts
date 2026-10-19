@@ -83,15 +83,17 @@ export const nodeRunErrorSchema = z
   .object({ code: workflowIdentifierSchema, message: z.string() })
   .strict();
 
-// 仅校验记录结构，不隐式执行状态转换或将原始 Error / 供应商响应写入记录。
+// 运行历史契约，尚非数据库 Store；快照仅校验 JSON，不代替 RuntimeValue、大小及脱敏策略。
+// attempt 由后续运行服务分配，不在这里因恢复重入自动递增。
 export const nodeRunSchema = z
   .object({
     id: workflowIdentifierSchema,
     workflowRunId: workflowIdentifierSchema,
     nodeId: workflowIdentifierSchema,
+    attempt: z.number().int().positive(),
     status: nodeRunStatusSchema,
-    inputs: z.record(z.string(), z.json()),
-    outputs: z.record(z.string(), z.json()).optional(),
+    inputSnapshot: z.record(z.string(), z.json()).optional(),
+    outputSnapshot: z.record(z.string(), z.json()).optional(),
     error: nodeRunErrorSchema.optional(),
     startedAt: z.iso.datetime().optional(),
     completedAt: z.iso.datetime().optional(),

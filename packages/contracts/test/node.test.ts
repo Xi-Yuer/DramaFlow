@@ -159,8 +159,8 @@ describe('NodeRun 记录协议', () => {
     id: 'nr1',
     workflowRunId: 'wr1',
     nodeId: 'storyboard',
+    attempt: 1,
     status: 'pending',
-    inputs: {},
   };
 
   it('支持八种状态，并与静态 NodeDefinition 分离', () => {
@@ -190,9 +190,56 @@ describe('NodeRun 记录协议', () => {
     ).toBe('outcome_unknown');
     for (const value of [
       { ...run, error: new Error('原始错误') },
-      { ...run, outputs: { result: new Map() } },
+      { ...run, inputSnapshot: { result: new Map() } },
+      { ...run, outputSnapshot: { result: new Map() } },
+      { ...run, outputSnapshot: { video: new Uint8Array([1, 2]) } },
       { ...run, startedAt: new Date() },
     ])
       expect(nodeRunSchema.safeParse(value).success).toBe(false);
+  });
+
+  it('待执行和绑定失败可以没有快照，明确空输入与没有快照是两种记录', () => {
+    expect(nodeRunSchema.parse(run)).not.toHaveProperty('inputSnapshot');
+    expect(nodeRunSchema.parse(run)).not.toHaveProperty('outputSnapshot');
+    expect(nodeRunSchema.parse({ ...run, inputSnapshot: {} }).inputSnapshot).toEqual({});
+    expect(
+      nodeRunSchema.parse({
+        ...run,
+        status: 'failed',
+        error: { code: 'invalid_input', message: '输入绑定无效' },
+      }),
+    ).not.toHaveProperty('inputSnapshot');
+  });
+
+  it('attempt 必须显式为正整数，旧输入输出字段不能混入历史记录', () => {
+    for (const attempt of [undefined, 0, -1, 1.5, '1', Infinity]) {
+      expect(nodeRunSchema.safeParse({ ...run, attempt }).success).toBe(false);
+    }
+    for (const legacy of [{ inputs: {} }, { outputs: {} }]) {
+      expect(nodeRunSchema.safeParse({ ...run, ...legacy }).success).toBe(false);
+    }
+  });
+
+  it('同一节点的多次执行分别保存快照，记录不会共享调用方的可变对象', () => {
+    const input = { story: { text: '原始输入' } };
+    const first = nodeRunSchema.parse({
+      ...run,
+      status: 'completed',
+      inputSnapshot: input,
+      outputSnapshot: { script: '第一版' },
+    });
+    const second = nodeRunSchema.parse({
+      ...run,
+      id: 'nr2',
+      attempt: 2,
+      status: 'completed',
+      inputSnapshot: input,
+      outputSnapshot: { script: '第二版' },
+    });
+    input.story.text = '后续修改';
+    expect(first.inputSnapshot).toEqual({ story: { text: '原始输入' } });
+    expect(second.inputSnapshot).toEqual(first.inputSnapshot);
+    expect(first.outputSnapshot).toEqual({ script: '第一版' });
+    expect(second.outputSnapshot).toEqual({ script: '第二版' });
   });
 });

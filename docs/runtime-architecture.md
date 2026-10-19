@@ -1,6 +1,6 @@
 # Runtime 架构与技术分工
 
-LangGraph.js 是 DramaFlow 的核心 Graph Runtime。平台围绕它实现面向视频内容生产的定义协议、编译适配、权限与业务记录，不再建立另一套图调度器。本文维护技术分工与运行边界；领域模型分别见 [Workflow 模型](workflow-model.md) 和 [Node 模型](node-model.md)，当前实施状态统一见 [实施方案](implementation-plan.md)。
+LangGraph.js 是 DramaFlow 的核心 Graph Runtime。平台围绕它实现面向视频内容生产的定义协议、编译适配、权限与业务记录，不再建立另一套图调度器。本文维护技术分工与运行边界；领域模型见 [Workflow](workflow-model.md)、[Node](node-model.md) 与 [WorkflowState 边界](workflow-state.md)，当前阶段统一见 [实施方案](implementation-plan.md)。
 
 ## 技术职责
 
@@ -46,27 +46,27 @@ LangGraph 节点函数需要接收图 State，编译适配层因此可以读取 
 
 React Flow renderer 使用 workflowNode，领域类型与版本在 data.nodeType / data.typeVersion，布局对应必填 ui.position。数据边从 Node.inputs.connection 派生，Workflow.edges 只保存控制关系；临时交互状态不进入 DSL。画布已注册 GenericWorkflowNode 并查询目录，尚无图编辑保存。输入控件提示在 ui.inputs，配置控件提示只在 config[].ui，不承担 Binding 运行求值。
 
-正式 WorkflowDefinition 已校验静态引用与控制 / 数据联合 DAG；完整 WorkflowState、并行 reducer、Binding 求值和依赖编译尚未明确。下一步先确定 State，再实现整图 Compiler，不能用已有泛型接口代替这些设计。
+正式 WorkflowDefinition 已校验静态引用与联合 DAG；WorkflowState 已确定最小分区、当前输出与历史分离方向，尚无最终值协议或 State Schema。先确定 DataType / RuntimeValue / Reference / Domain Object，再完成 State、Binding Resolver 和整图 Compiler，不能用泛型接口代替这些模型。
 
 ## State、运行记录与 Checkpoint
 
-State Schema 与 reducer 使用 LangGraph 原生机制承载。平台将明确每个 State 通道的领域语义、更新方式与可序列化边界，不另外维护一份驱动执行的可变状态。WorkflowRun / NodeRun 的状态用于查询、界面和审计等业务投影，不用它们重新决定节点调度。
+State 的 run / inputs 不可变、outputs 只保留当前有效值、variables 显式与 execution 最小化，以及 State / 业务记录 / 内容存储的职责，集中维护在 [WorkflowState 边界](workflow-state.md)。各通道最终值类型、reducer、同节点并发冲突与分支身份尚未落地，Run / NodeRun 状态不驱动第二套调度器。
 
-平台根运行使用 `WorkflowRun.id` 作为 `configurable.thread_id`。`createWorkflowRunConfig` 检查 Run 与 Version 的归属并构造该配置，不创建、启动或恢复运行。未来的运行服务在每次执行与恢复前检查权限、版本及运行归属，避免把知道 thread_id 当作授权。
+WorkflowRun 元数据有独立必填 threadId，createWorkflowRunConfig 校验 Run / Version 后将 run.threadId 写入 configurable.thread_id，拒绝冲突配置，不要求 threadId 等于 Run.id。该函数不创建线程或运行，不检查项目权限或执行恢复；未来运行服务必须验证归属，不能把知道 thread_id 当作授权。
 
-Checkpoint 保存 thread 的执行状态，不保存可重新部署执行的完整领域 DSL。进程重启后，平台仍须加载 Run 原来绑定的不可变 WorkflowVersion，以兼容的 NodeCompiler 和 State Schema 重新构建 / 编译图，并接回同一个持久 checkpointer 和 thread_id；不能加载当前草稿或动态选择最新版。编译实现的兼容性与版本管理待运行持久化阶段明确。
+Checkpoint 保存执行快照，不保存可重新部署的完整领域 DSL。恢复仍须加载 Run 原来绑定的不可变 WorkflowVersion，以兼容的编译实现重新构建图，接回同一 threadId 和持久 checkpointer。NodeRun 的 attempt 与可选 JSON 快照仅实现契约，不代表已有业务 Store、attempt 分配或运行投影一致性。
 
-生产持久 checkpointer 尚未接入。当前真实 LangGraph 集成测试显式使用 MemorySaver 验证编译节点与原生执行行为；内存 checkpoint 随进程退出丢失，不构成生产恢复能力，也不允许成为生产存储故障时的静默兜底。持久化职责与内存限制见 [官方 Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence)。
+生产持久 checkpointer 尚未接入。原生集成测试显式使用 MemorySaver，内存快照随进程退出丢失，不构成生产恢复，也不能成为存储故障时的静默兜底。[官方 Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence) 说明原生持久化职责。
 
 ## 人工中断与恢复
 
-人工审核编译为 LangGraph `interrupt(payload)`，恢复通过同一个根 thread 的 `new Command({ resume: value })` 进入原图。平台负责审核请求展示、权限、恢复值校验和幂等入口；暂停位置与继续执行由 LangGraph 管理。
+人工审核编译为 LangGraph interrupt(payload)，恢复通过 Run 原有 threadId 与 new Command({ resume: value }) 进入原图。平台负责审核请求展示、权限、恢复值校验和幂等入口；暂停位置与继续执行由 LangGraph 管理。
 
 当前依赖 `@langchain/langgraph 1.5.0` 的 Command 输入处理使用真值判断，裸 `false`、`0` 或空字符串恢复值会被忽略。集成验证使用经 Zod 校验的结构化反馈（包括 `{ approved: false }`），不把裸假值恢复标为可用；正式审核协议与依赖升级时须复核这一边界。
 
 `interrupt()` 使用特殊控制异常暂停执行。适配层不能吞掉它、转换成普通失败结果或写为 NodeRun `failed`。恢复时整个节点函数会从开头重跑，因此生成请求、资产写入等副作用必须与审核步骤分离；确有必要重入的操作复用稳定操作标识，不因恢复自动重新生成。中断载荷与恢复值保持可序列化；细节见 [官方 Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts)。
 
-Run 的 `waiting` 只是业务展示状态。等待供应商回调、人工确认或批处理都需要明确的等待原因与恢复入口，不能由一个平台状态字段取代 checkpoint。具体等待模型及事件持久化留待后续设计。
+Run 的 `waiting` 只是业务展示状态。等待供应商回调、人工确认或批处理都需要明确的等待原因与恢复入口，不能由一个平台状态字段取代 checkpoint。审核决策等业务审计独立于 checkpoint，具体等待模型与持久化仍待设计，见 [State、Thread 与审计边界](workflow-state.md#thread人工介入与审计)。
 
 ## 并行、队列与副作用
 
@@ -82,4 +82,4 @@ Queue / Worker 完成作业或收到回调后唤醒对应运行，图的后续�
 
 基础库已有纯 JSON Manifest、四类 Binding、ControlEdge、静态引用及联合 DAG 校验、NodeType / Registry、版本快照和普通操作适配。目录 API 与通用 renderer 已接入，生产 Registry 为空。真实 LangGraph 测试保留泛型适配与原生运行验证，测试类型和 MemorySaver 不作为生产能力；具体范围统一见 [当前架构](architecture.md)。
 
-当前项目仍只保存名称、视口和 revision，不保存或执行 WorkflowDefinition。WorkflowState、运行 Binding 求值、生产节点、Plugin、真实模型调用、整图 Compiler、持久 checkpointer、运行接口、Queue 及审核产品流程均未接入。
+当前项目仍只保存名称、视口和 revision。独立 threadId、NodeRun attempt 与可选快照只落到契约；完整 WorkflowState / RuntimeValue、Binding 求值、Run / NodeRun 数据库、整图 Compiler、持久 checkpointer、运行接口、真实生成和审核业务均未接入。

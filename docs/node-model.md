@@ -62,7 +62,7 @@ NodeType 持有 manifest、inputSchema、outputSchema、configSchema 与 compile
 
 注册时 assertNodeSchemas 核对输入、输出及配置 key 集合，并验证公开配置默认值能被对应服务端字段接受；字段名相同不代表全部运行约束一致。Manifest 不由 Zod 自动转换生成，后端完整校验仍是实际值的权威。
 
-createOperationNodeType(manifest, schemas, operation) 保留已有普通操作适配。编译产物接收泛型 State，CompileContext 读取明确输入并写回该节点的 State 增量；普通操作只收到 inputs / config 及独立 RunnableConfig。当前没有平台 WorkflowState 或 Binding 求值器，也没有完整 DSL Compiler。
+createOperationNodeType(manifest, schemas, operation) 保留已有普通操作适配。编译产物接收泛型 State，CompileContext 读取明确输入并写回该节点的 State 增量；普通操作只收到 inputs / config 及独立 RunnableConfig。当前只有 WorkflowState 的核心方向，没有最终 State / RuntimeValue 或 Binding 求值器，也没有完整 DSL Compiler，详见 [WorkflowState 边界](workflow-state.md)。
 
 Definition / Preset 保留原始 JSON 配置，Schema 转换和默认值不回写定义，防止编译、应用和执行间累积 transform。普通操作不重试、不更换插件；异常直接传播，LangGraph interrupt 控制异常不能记为普通 failed。节点只编译自身函数，不取得 Graph builder、修改其他节点或添加全图边。
 
@@ -70,7 +70,9 @@ Definition / Preset 保留原始 JSON 配置，Schema 转换和默认值不回�
 
 Preset 是所属 type / typeVersion 的配置模板，不是新的 Runtime 身份。applyNodePreset 检查类型版本、合并模板配置和实例覆盖并校验，不修改原对象、不运行节点，也不改变 Registry 查找。相近业务复用运行机制，不为剧本、广告文案等名称复制执行器。
 
-NodeRun 保存 JSON 输入输出、结构化 code / message、ISO 时间与 pending、ready、running、waiting、completed、failed、skipped、cancelled 八种业务状态。它不包含调度逻辑，持久化、权限及事件投影尚未实现。运行固定不可变 WorkflowVersion 与节点类型版本；恢复使用原 thread，细节见 [Runtime 架构](runtime-architecture.md)。
+NodeRun 契约保存 workflowRunId、nodeId、必填正整数 attempt、可选 inputSnapshot / outputSnapshot、结构化错误和时间，以及八种业务状态。快照是 JSON record，不是最终 RuntimeValue，也不保证大小、引用或脱敏策略；attempt 不在 Schema 中分配，不能把每次节点重入自动计为新 attempt。
+
+State outputs 只保留节点当前有效结果，执行历史由未来 NodeRun Store 承担；同 nodeId 的并发分支还需明确额外身份与汇总规则。Run / NodeRun 数据库、权限及投影一致性尚未实现。运行恢复使用明确的 Run.threadId、原不可变版本及兼容编译实现，不能从 Run.id 推断 thread。详细记录与 State 边界集中见 [WorkflowState](workflow-state.md)。
 
 ## 视频领域能力与厂商边界
 

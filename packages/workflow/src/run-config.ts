@@ -17,8 +17,8 @@ export function createWorkflowRunConfig(
   const version = workflowVersionMetadataSchema.parse(versionInput);
   assertWorkflowRunVersion(run, version);
   const threadId: unknown = config.configurable?.thread_id;
-  if (threadId !== undefined && threadId !== run.id) {
-    throw new Error('LangGraph thread_id 必须与 WorkflowRun.id 一致');
+  if (threadId !== undefined && threadId !== run.threadId) {
+    throw new Error('LangGraph thread_id 必须与 WorkflowRun.threadId 一致');
   }
-  return { ...config, configurable: { ...config.configurable, thread_id: run.id } };
+  return { ...config, configurable: { ...config.configurable, thread_id: run.threadId } };
 }

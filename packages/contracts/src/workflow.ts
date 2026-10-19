@@ -48,12 +48,14 @@ export const workflowRunStatusSchema = z.enum([
   'cancelled',
 ]);
 
-// 仅校验运行元数据；输入输出值必须另外依据版本契约校验。
+// 仅校验运行元数据；threadId 是显式根 thread 标识，不从 id 自动推断。
+// 输入输出值必须另外依据版本契约校验。
 export const workflowRunMetadataSchema = z
   .object({
     id: identifierSchema,
     workflowId: identifierSchema,
     workflowVersionId: identifierSchema,
+    threadId: identifierSchema,
     status: workflowRunStatusSchema,
     startedAt: z.iso.datetime().optional(),
     completedAt: z.iso.datetime().optional(),

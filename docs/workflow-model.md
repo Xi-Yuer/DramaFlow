@@ -131,6 +131,7 @@ interface WorkflowRun {
   id: string;
   workflowId: string;
   workflowVersionId: string;
+  threadId: string;
   status: RunStatus;
   inputs: Record<string, unknown>;
   outputs?: Record<string, unknown>;
@@ -138,6 +139,8 @@ interface WorkflowRun {
   completedAt?: string;
 }
 ```
+
+上述完整运行对象表达领域方向；当前只实现元数据契约，threadId 必填且独立于 Run.id，运行输入输出与业务数据库尚未接入。创建运行时可以选择相同的 ID 值，但不能在缺少 threadId 时推断或固定为相等。
 
 `workflowVersionId` 必须属于同一个 `workflowId`，读取或启动时都必须检查对应项目权限。同一版本可以多次运行，各次输入、State、资产引用、节点执行结果、错误及等待记录相互隔离，不反写进 WorkflowDefinition。
 
@@ -152,7 +155,7 @@ interface WorkflowRun {
 | `failed`    | 本次运行失败                                 |
 | `cancelled` | 本次运行被取消                               |
 
-`waiting` 是等待人工审核、外部 API、子流程或批量结果等执行事实的业务投影，不能凭状态字符串驱动另一套暂停 / 恢复流程。人工介入使用 LangGraph interrupt / Command.resume；根 WorkflowRun.id 对应 thread_id，等待原因与业务记录映射随 State、持久化和长任务模型细化，技术边界见 [技术职责](runtime-architecture.md)。
+`waiting` 是等待人工审核、外部 API、子流程或批量结果等执行事实的业务投影，不能凭状态字符串驱动另一套暂停 / 恢复流程。人工介入使用 LangGraph interrupt / Command.resume；WorkflowRun.threadId 映射 thread_id，等待原因及业务审计与 checkpoint 分离，见 [WorkflowState 边界](workflow-state.md) 与 [技术职责](runtime-architecture.md)。
 
 恢复继续使用原 Run、thread_id 及其不可变版本，不重新选择最新版。Checkpoint 保存执行 State，不保存平台 DSL；应用必须按 Run 绑定的版本重新编译图，不能恢复最新草稿。人工确认、生成和继续下游仍须遵守明确操作边界；恢复与用户主动重生成分离，供应商受理不明时不能借恢复盲目重试。
 
@@ -181,4 +184,4 @@ WorkflowDefinition 仍保留 inputs、nodes、edges、outputs。Node.inputs 是�
 
 串行、并行、条件和显式批量仍由图关系与控制节点表达，不增加 parallelNodes / sequentialNodes 等列表。平台完整 Compiler 将依赖映射到 LangGraph 边、条件路由、fan-in、Send 与子图，图调度、Checkpoint 和暂停恢复由 LangGraph 提供。
 
-完整编译前先确定 WorkflowState 的通道、输出身份、并行 reducer、绑定求值和序列化边界。当前泛型节点适配不等于已有 State 或执行引擎；项目保存协议也没有接入 WorkflowDefinition。下一步统一见 [实施方案](implementation-plan.md)。
+WorkflowState 的五个核心分区、当前输出与历史分离、Send 局部输入和子工作流显式映射方向已在 [State 边界](workflow-state.md) 确定。先统一 DataType / RuntimeValue / Reference / Domain Object，再完成最终 State、Binding Resolver 与 Compiler。当前泛型适配不代表完整运行实现，项目保存协议也未接入 WorkflowDefinition。下一步见 [实施方案](implementation-plan.md)。

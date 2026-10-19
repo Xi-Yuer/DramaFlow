@@ -163,6 +163,7 @@ describe('Workflow 版本快照与运行绑定', () => {
       id: 'run-1',
       workflowId: 'workflow-1',
       workflowVersionId: 'version-1',
+      threadId: 'thread-1',
       status: 'waiting' as const,
     };
     expect(() => assertWorkflowRunVersion(run, metadata)).not.toThrow();

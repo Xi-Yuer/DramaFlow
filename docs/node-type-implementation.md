@@ -41,7 +41,7 @@ NodeType
 
 Preset 仅是配置模板。它可以保留实例元数据，不能加入 Registry key，也不能让同一 type / version 的运行契约因 Preset 名称隐式变化。
 
-createOperationNodeType 保留泛型普通操作适配与已有真实 LangGraph 测试。CompileContext 的 State / Update 尚未具体化，不解析四类 Binding，不获取全图构建器。WorkflowState 必须先确定，再实现完整 Workflow Compiler；If / Batch 等控制扩展另行设计。
+createOperationNodeType 保留泛型普通操作适配与已有真实 LangGraph 测试。CompileContext 的 State / Update 尚未具体化，不解析四类 Binding，不获取全图构建器。WorkflowState 已确定核心分区与存储边界；仍须先统一 DataType / RuntimeValue / Reference / Domain Object，再完成最终 State 与 Workflow Compiler，见 [State 边界](workflow-state.md)。If / Batch 等控制扩展另行设计。
 
 ## 目录 API 与通用节点
 
@@ -61,4 +61,4 @@ GET /api/v1/workflow/node-types 默认经真实 AuthGuard 认证，并设置 Cac
 | 运行值依赖 | 显式文本 Zod             | 尚需明确媒体 / Asset 运行值协议      |
 | 外部能力   | 受信任文本生成插件       | 受信任图生视频插件                   |
 
-上述是声明职责对照，没有对应生产注册。下一步先明确 WorkflowState 的通道、节点输出身份、并行 reducer、Checkpoint 大小及 Binding 求值，再写完整编译链；Plugin Resolver、Tool、Agent、Middleware、Batch、HumanReview、SubWorkflow 和完整 Runtime 本轮不实施。
+上述是静态职责对照，没有对应生产注册。下一步先确定 DataType / RuntimeValue / Reference / Domain Object，再完成 State、Binding Resolver 与完整 Compiler；不能将 asset_ref 示例、JSON 快照或当前泛型适配当成最终值协议。Plugin Resolver、Tool、Agent、Middleware、Batch、HumanReview、SubWorkflow 与完整 Runtime 本轮不实施。

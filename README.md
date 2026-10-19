@@ -4,7 +4,7 @@ DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，�
 
 当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录并注册通用 renderer；生产目录为空，没有添加节点、图编辑保存、工作流运行或模型调用。
 
-基础库已实现纯 JSON Manifest、四类输入 Binding、独立 ControlEdge、静态引用与联合 DAG 校验、版本精确注册及泛型 LangGraph 普通操作适配。Node.inputs 是数据绑定唯一来源，React Flow 数据边从它派生；完整 WorkflowState、绑定求值、整图编译和运行持久化仍待实现。具体范围见 [当前架构](docs/architecture.md#node-基础库)。
+基础库已实现纯 JSON Manifest、四类输入 Binding、独立 ControlEdge、静态引用与联合 DAG 校验、版本精确注册及泛型 LangGraph 普通操作适配。Node.inputs 是数据绑定唯一来源，React Flow 数据边从它派生；WorkflowState 的核心职责已确定，最终值 / 引用协议、State、绑定求值、整图编译和运行持久化仍待实现，见 [State 边界](docs/workflow-state.md)。具体范围见 [当前架构](docs/architecture.md#node-基础库)。
 
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 
@@ -63,6 +63,7 @@ pnpm stack:up
 - [协作规范](AGENTS.md)
 - [平台核心模型](docs/platform-model.md)
 - [Workflow 模型](docs/workflow-model.md)
+- [WorkflowState 边界](docs/workflow-state.md)
 - [Node 模型](docs/node-model.md)
 - [节点类型实施拆解](docs/node-type-implementation.md)
 - [Runtime 架构与技术分工](docs/runtime-architecture.md)

@@ -111,8 +111,29 @@ describe('版本及运行元数据', () => {
       expect(workflowRunStatusSchema.parse(status)).toBe(status);
     }
     expect(workflowRunStatusSchema.safeParse('paused').success).toBe(false);
-    const run = { id: 'run-1', workflowId: 'w1', workflowVersionId: 'v1', status: 'waiting' };
+    const run = {
+      id: 'run-1',
+      workflowId: 'w1',
+      workflowVersionId: 'v1',
+      threadId: 'thread-1',
+      status: 'waiting',
+    };
     expect(workflowRunMetadataSchema.parse(run)).toEqual(run);
     expect(workflowRunMetadataSchema.safeParse({ ...run, inputs: {} }).success).toBe(false);
+  });
+
+  it('threadId 是必填独立标识，不从 Run.id 隐式推断', () => {
+    const run = {
+      id: 'run-1',
+      workflowId: 'w1',
+      workflowVersionId: 'v1',
+      threadId: 'root-thread-1',
+      status: 'pending',
+    };
+    expect(workflowRunMetadataSchema.parse(run).threadId).toBe('root-thread-1');
+    expect(workflowRunMetadataSchema.parse({ ...run, threadId: run.id }).threadId).toBe(run.id);
+    for (const threadId of [undefined, '', '  ', ' thread-1', 'thread-1 ', 1]) {
+      expect(workflowRunMetadataSchema.safeParse({ ...run, threadId }).success).toBe(false);
+    }
   });
 });
