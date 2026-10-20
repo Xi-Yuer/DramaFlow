@@ -1,6 +1,6 @@
 # WorkflowState 边界
 
-状态承载采用 [数据模型](data-model.md) 中的 RuntimeValue。当前已有 TypeScript State 协议与 typed outputs，没有生产 LangGraph State Schema、reducer 或整图调度适配，实际接入见 [架构](architecture.md)。
+状态承载采用 [数据模型](data-model.md) 中的 RuntimeValue。WorkflowState 的协议与 LangGraph Annotation 共用 runtime/state.ts，不建立第二套状态模型；实际接入范围见 [架构](architecture.md#数据与-node-基础库)。
 
 ## 生命周期与存储职责
 
@@ -18,11 +18,13 @@ State 不包含整个数据库、全部日志或原始媒体。图片、视频�
 | variables | 显式工作流变量                                             | 不成为任意节点读写的隐式上下文                           |
 | execution | 图执行必要控制状态                                         | 当前保留为空，具体控制字段及 reducer 随 Graph Model 明确 |
 
-NodeOutputMap 已明确为 Record<string, Record<string, RuntimeValue>>，不再用 unknown 表示节点运行结果。输入和变量同样携带实际类型；这不表示已实现初始化、更新检查或 Checkpoint 持久化。
+NodeOutputMap 已明确为 Record<string, Record<string, RuntimeValue>>，不再用 unknown 表示节点运行结果。输入和变量同样携带实际类型。run、inputs、variables、execution 使用单值通道；调用方提供运行初始值，Action wrapper 只写 outputs，不开放其他分区的并发写入。outputs 使用独立 reducer，default 每次生成空 map；通道定义不代表 Checkpoint 已持久化。
 
 ## 并行与历史
 
-不同节点的 outputs 应按节点键合并，不能默认整对象覆盖。相同 nodeId 的并发分支必须明确分支身份和结果收集规则，不能依靠最后完成者覆盖；最终通道与 reducer 留待后续执行适配核定。[官方并行说明](https://docs.langchain.com/oss/javascript/langgraph/use-graph-api#run-graph-nodes-in-parallel) 介绍原生更新机制。
+Action wrapper 等待 NodeExecutor 后只返回 `{ outputs: { [nodeId]: result.output } }`，不展开旧 state.outputs，不处理 Binding、业务 Schema 或 Artifact。项目与运行 ID 取自当前 state.run；工作流、能力及 RunnableConfig 由编译上下文工厂提供。Executor 继续只返回结果，不直接改 State；失败原样向图传播，不返回占位增量。
+
+mergeNodeOutputs 按 nodeId 合并不同节点的 map，不修改 current / update。同一 nodeId 已是 current 的自有键时抛 DuplicateNodeOutputWriteError（DUPLICATE_NODE_OUTPUT_WRITE），即使值相同也不视为幂等写入；不合并同一节点的多个端口片段，不静默覆盖。[官方 reducer 参数说明](https://docs.langchain.com/oss/javascript/langgraph/graph-api#reducer-arguments) 中 current 是累计状态，不携带 step 身份。因此普通确定性 DAG 采用输出单次写入约束：同一步的并发重复写入及后续 step 对已有键的隐式覆盖均拒绝。重试、循环或审核后产生新 effective output，须另有明确的执行 / 版本语义，不能由 reducer 猜测。
 
 State 只保留当前有效值。旧版本、失败记录、模型、耗时与成本进入 NodeRun 等业务记录。attempt 不等于函数重入次数；Send 分支也不能仅靠 nodeId 标识。审核回改的讨论不授权任意循环，也不绕过当前数据 / 控制联合 DAG 校验。
 

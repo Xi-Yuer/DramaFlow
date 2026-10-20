@@ -57,8 +57,8 @@ describe('普通操作编译策略', () => {
       manifest,
       executor: { execute },
       executionContext: (config) => ({
-        projectId: 'p',
-        workflowRunId: 'r',
+        projectId: 'stale-project',
+        workflowRunId: 'stale-run',
         workflow,
         runnableConfig: config,
       }),
@@ -67,14 +67,33 @@ describe('普通操作编译策略', () => {
     expect(execute).not.toHaveBeenCalled();
     const wrapped = addNode.mock.calls[0]![1];
     const config = { configurable: { thread_id: 't' }, maxConcurrency: 2 };
-    expect(await wrapped(state, config)).toEqual(result);
+    const currentState = {
+      ...state,
+      outputs: { previous: { text: { storage: 'inline', type: StringType, value: '旧结果' } } },
+    } satisfies WorkflowState;
+    const snapshot = structuredClone(currentState);
+    expect(await wrapped(currentState, config)).toEqual({ outputs: { [node.id]: result.output } });
+    expect(currentState).toEqual(snapshot);
     expect(execute).toHaveBeenCalledWith(node, {
       projectId: 'p',
       workflowRunId: 'r',
       runnableConfig: config,
       workflow,
-      state,
+      state: currentState,
     });
+  });
+  it('Executor 失败时原样传播，不返回 output delta', async () => {
+    const cause = new Error('执行失败');
+    const execute = vi.fn<NodeExecutor['execute']>().mockRejectedValue(cause);
+    const addNode = vi.fn<(id: string, node: LangGraphNode) => void>();
+    new ActionNodeCompilationStrategy().compile({
+      node,
+      manifest,
+      executor: { execute },
+      executionContext: () => ({ workflow }),
+      addNode,
+    });
+    await expect(addNode.mock.calls[0]![1](state, {})).rejects.toBe(cause);
   });
   it('拒绝错误版本和非 action，不为控制结构编造执行语义', () => {
     const strategy = new ActionNodeCompilationStrategy();

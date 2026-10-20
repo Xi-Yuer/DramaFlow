@@ -82,6 +82,6 @@ Resolver 只定位、包装并合并 RuntimeValue，保留上游值和引用，�
 
 普通 Action NodeExecutor 负责精确版本查找、绑定、decode、输入 / 配置 Zod 校验、NodeType.execute、输出 Zod 校验和逐端口 encode，返回 `NodeExecutionResult { output: Record<string, RuntimeValue> }`。上下文提供领域 workflow / state 与项目运行定位，NodeType 收到校验后的业务输入 / 配置及执行上下文，不是 RuntimeValue map。错误按七阶段包装，原生 LangGraph 控制异常直接传播，见 [Runtime](runtime-architecture.md#action-执行错误阶段)。
 
-NodeExecutor 逐个编码 Manifest 声明的输出，传入 port.dataType 与 port.storagePolicy ?? auto；全部成功才返回 map，不修改 WorkflowState。编码或写入失败标记 encode_output，停止后续端口，不返回部分结果、不自动重试或回退。已成功写入的前序 Artifact 不由 Executor 回滚，Writer 的生产实现与产物清理独立处理。WorkflowState.outputs 增量与 NodeRun 记录保持独立职责。NodeRunRecorder 的 begin / complete / fail 与 Checkpoint 分离，未来快照须使用 RuntimeValue，不写入凭证或临时 URL；attempt 不等于函数重入次数。
+NodeExecutor 逐个编码 Manifest 声明的输出，传入 port.dataType 与 port.storagePolicy ?? auto；全部成功才返回 map，不修改 WorkflowState。编码或写入失败标记 encode_output，停止后续端口，不返回部分结果、不自动重试或回退。已成功写入的前序 Artifact 不由 Executor 回滚，Writer 的生产实现与产物清理独立处理。Action 编译包装将执行结果映射为当前节点的 outputs 增量，LangGraph reducer 合并并检查重复节点写入，规则见 [State 边界](workflow-state.md#并行与历史)。NodeRun 记录继续独立于 State 更新。NodeRunRecorder 的 begin / complete / fail 与 Checkpoint 分离，未来快照须使用 RuntimeValue，不写入凭证或临时 URL；attempt 不等于函数重入次数。
 
 普通 NodeType 只实现 input + config + context → output，不获得 Graph builder、BindingResolver、内容 Store 或 Checkpoint，不负责调度、绑定解析或输出持久化。控制、复合和交互结构使用独立策略，不在 Executor 中按业务 type 写 switch。输出编码由 Runtime Codec 和 ArtifactWriter 协作，不由 NodeType 构造 RuntimeValue 或产物引用。不能把输出编码主干或测试替身标为完整生产图 Runtime。

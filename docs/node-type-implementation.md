@@ -16,7 +16,7 @@ NodeType.execute(input, config, context) 只处理业务。NodeRegistry 按 mani
 
 createOperationNodeType 仅组合 Manifest、三组 Zod 与业务 operation，返回 execute 实现，不生成 LangGraph 节点。invokeNodeOperation 仍是独立真实值校验工具；它不是另一套节点扩展接口或调度器。定义和 Preset 保留原始 JSON 配置，不把 transform / 默认值回写后再次累积转换。
 
-NodeCompilationStrategy 接收节点、说明书、统一 Executor、执行上下文工厂及 addNode 边界。action 策略只添加一个调用 Executor 的函数，不接管边、暂停、并发或资产写入；结构、交互等策略及完整 WorkflowCompiler 独立设计。
+NodeCompilationStrategy 接收节点、说明书、统一 Executor、执行上下文工厂及 addNode 边界。action 策略只添加一个调用 Executor 并返回自身 outputs 增量的函数，不接管边、暂停、并发调度或资产写入；结构、交互等策略及完整 WorkflowCompiler 独立设计。
 
 ## 目录 API 与前端
 

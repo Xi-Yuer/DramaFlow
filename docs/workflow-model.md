@@ -208,6 +208,6 @@ React Flow Edge 通过 edge.data.kind 区分两类边，并保留边 ID 和两�
 
 联合 DAG 只验证图结构无环。执行依赖收集独立读取两类边的节点 ID，按目标聚合、按来源去重，不增加 parallelNodes / sequentialNodes 等列表；多上游映射为一条 LangGraph 数组 Join Edge。原始 Data Edge 的两端 portKey 保留给 BindingResolver 读取上游输出，依赖编译不读取端口或构造输入。条件候选分支不能直接放入 ALL 等待集合。图调度、Checkpoint 和暂停恢复由 LangGraph 提供。
 
-WorkflowState.outputs 使用携带 DataType 的 RuntimeValue。BindingResolver 定位或包装输入，Codec 解码输入并按统一存储策略编码输出，引用访问及写入委托独立服务；Action NodeExecutor 校验输入 / 配置 / 输出并返回 `{ output: Record<string, RuntimeValue> }`，不修改 State。规则见 [数据模型](data-model.md)，能力与引用服务限制见 [架构](architecture.md#数据与-node-基础库)，完整图编译和运行仍未接入。
+WorkflowState.outputs 使用携带 DataType 的 RuntimeValue。BindingResolver 定位或包装输入，Codec 解码输入并按统一存储策略编码输出，引用访问及写入委托独立服务；Action NodeExecutor 校验输入 / 配置 / 输出并返回 `{ output: Record<string, RuntimeValue> }`，不修改 State。Action 编译包装返回当前节点的 outputs 增量，LangGraph reducer 按节点键合并并拒绝重复写入，规则见 [State 边界](workflow-state.md#并行与历史) 与 [数据模型](data-model.md)，能力与引用服务限制见 [架构](architecture.md#数据与-node-基础库)，完整图编译和运行仍未接入。
 
 项目保存协议仍未接入 WorkflowDefinition，阶段与下一步统一见 [实施方案](implementation-plan.md)。

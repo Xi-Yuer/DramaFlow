@@ -20,9 +20,11 @@ NodeDefinition + NodeExecutionContext
   → outputSchema.parse
   → 按 OutputPortDefinition 调用 RuntimeValueCodec.encode
   → NodeExecutionResult { output: Record<string, RuntimeValue> }
+  → Action wrapper 返回 { outputs: { [nodeId]: output } }
+  → WorkflowStateAnnotation.outputs reducer 合并
 ```
 
-普通 NodeType 不再 compile，也不取得 Graph builder。ActionNodeCompilationStrategy 只包装统一 Executor，注入调用时的当前 State 并返回 NodeExecutionResult；图 State 增量适配独立处理，不把 Executor 返回结果冒充 State 更新。control / composite / interaction 使用独立结构策略，不强行套普通 action。
+普通 NodeType 不再 compile，也不取得 Graph builder。ActionNodeCompilationStrategy 只包装统一 Executor，注入调用时的当前 State 与 state.run 中的项目 / 运行 ID，再将结果映射为当前 nodeId 的 WorkflowStateUpdate。wrapper 不展开旧 outputs，不解析 Binding、校验业务 Schema 或操作 Artifact；这些仍由 Executor 与注入服务承担。control / composite / interaction 使用独立结构策略，不强行套普通 action。
 
 普通 Action NodeExecutor 主干固定为精确版本查找、绑定、decode、输入 / 配置 Zod 校验、业务调用、输出 Zod 校验和逐端口 encode，返回 RuntimeValue map。NodeExecutionContext 包含领域 workflow / state、项目运行定位及可选信号 / 能力 / 配置，不传 React Flow 对象；Codec 接收单独构造的项目运行定位；encode 额外携带 nodeId / outputKey，Writer 另收到 DataType。不按 node.type 分支，不直接访问 Artifact 存储，不处理 State 增量、NodeRun、Retry 或 Human Review，实际范围见 [架构](architecture.md#数据与-node-基础库)。
 
@@ -60,7 +62,7 @@ decode 不读取 Registry、不依赖数据库或对象存储实现、不生成 
 
 ## State 与持久化
 
-WorkflowState.outputs 使用 RuntimeValue map，定义、业务历史、内容存储与执行快照分离。真正的通道和 reducer 随 Graph Model 明确，不能用对象覆盖或业务状态轮询代替。[官方 Graph API](https://docs.langchain.com/oss/javascript/langgraph/graph-api) 说明图和状态机制。
+WorkflowStateAnnotation 与既有 State 接口共处 runtime/state.ts。outputs 使用 mergeNodeOutputs 合并局部 RuntimeValue map，缺省为空；重复 nodeId 写入明确失败。其余分区不由普通 Action wrapper 写入，定义、业务历史、内容存储与执行快照分离，完整规则见 [State 边界](workflow-state.md#并行与历史)。不以对象覆盖或业务状态轮询代替通道。[官方 Graph API](https://docs.langchain.com/oss/javascript/langgraph/graph-api) 说明图和状态机制。
 
 运行配置使用必填 Run.threadId；恢复必须加载原不可变 WorkflowVersion，以兼容实现重建图，接回原 thread 与持久 checkpointer，而不是当前草稿。知道 thread_id 不等于拥有资源权限。当前只实现配置映射，没有生产运行接口和持久 checkpointer。[官方 Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence) 说明原生持久化机制。
 

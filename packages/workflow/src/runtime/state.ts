@@ -1,11 +1,11 @@
 import type { NodeOutputMap, RuntimeValue } from '@dramaflow/contracts';
+import { Annotation } from '@langchain/langgraph';
 export interface WorkflowRunContext {
   readonly workflowId: string;
   readonly workflowVersionId: string;
   readonly workflowRunId: string;
   readonly projectId: string;
 }
-// 这是值协议，不创建 LangGraph Channel、reducer 或分支调度规则。
 export interface WorkflowState {
   readonly run: WorkflowRunContext;
   readonly inputs: Readonly<Record<string, RuntimeValue>>;
@@ -16,3 +16,28 @@ export interface WorkflowState {
 export interface WorkflowStateUpdate {
   outputs: NodeOutputMap;
 }
+
+export class DuplicateNodeOutputWriteError extends Error {
+  readonly code = 'DUPLICATE_NODE_OUTPUT_WRITE';
+
+  constructor(public readonly nodeId: string) {
+    super(`节点输出重复写入：${nodeId}`);
+    this.name = 'DuplicateNodeOutputWriteError';
+  }
+}
+
+export function mergeNodeOutputs(current: NodeOutputMap, update: NodeOutputMap): NodeOutputMap {
+  for (const nodeId of Object.keys(update)) {
+    if (Object.hasOwn(current, nodeId)) throw new DuplicateNodeOutputWriteError(nodeId);
+  }
+  return { ...current, ...update };
+}
+
+// 普通确定性 DAG 只允许节点输出写入一次。reducer 不推断 step、重试或新 effective output。
+export const WorkflowStateAnnotation = Annotation.Root({
+  run: Annotation<WorkflowState['run']>(),
+  inputs: Annotation<WorkflowState['inputs']>(),
+  outputs: Annotation<NodeOutputMap>({ reducer: mergeNodeOutputs, default: () => ({}) }),
+  variables: Annotation<WorkflowState['variables']>(),
+  execution: Annotation<WorkflowState['execution']>(),
+});

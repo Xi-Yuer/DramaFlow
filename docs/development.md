@@ -16,7 +16,9 @@ BindingResolver 测试使用真实静态转换实现，检查 Data Edge 端口�
 
 RuntimeValueCodec 测试检查 inline 原样返回且不调用引用服务，reference 保留引用与最小上下文后委托 DataReferenceResolver。验证媒体 / 领域对象原样返回、引用失败 code / cause、并行解码、按原键返回、空 map 与整体失败；只处理自有键且不污染原型。输出编码检查显式策略绕过 auto、统一类型规则不按大小猜测、未知规则报错、JSON 承载边界、Writer 收到原始业务值 / 类型 / 输出定位、无效引用与写入失败不回退或重试。替身不证明真实存储、授权或 signed URL 已接入。
 
-Action NodeExecutor 测试用仅测试注册的 math.add 与真实 Registry / BindingResolver / Codec，验证精确版本、严格步骤顺序、三组 Schema、默认 / 转换后逐端口编码，以及定义 / State 不变。用测试视频节点检查 reference video 与 inline duration、Writer 上下文、校验失败不写入及写入失败停止后续端口。覆盖七阶段失败、cause 与后续步骤停止、Registry / 非 action 拒绝、非 Error 异常和 GraphBubbleUp 穿透。真实 StateGraph / MemorySaver 仅测试 interrupt / Command 传播恢复，不实现生产 WorkflowState 映射或审核。编译包装检查当前 State 和运行配置传递；State 增量、真实 Artifact / NodeRun 持久化不属于这些通过用例的能力声明。
+Action NodeExecutor 测试用仅测试注册的 math.add 与真实 Registry / BindingResolver / Codec，验证精确版本、严格步骤顺序、三组 Schema、默认 / 转换后逐端口编码，以及定义 / State 不变。用测试视频节点检查 reference video 与 inline duration、Writer 上下文、校验失败不写入及写入失败停止后续端口。覆盖七阶段失败、cause 与后续步骤停止、Registry / 非 action 拒绝、非 Error 异常和 GraphBubbleUp 穿透。真实 StateGraph / MemorySaver 仅测试 interrupt / Command 传播恢复，不证明生产持久化或审核。编译包装检查只返回自身输出增量、不改原 State、项目运行身份取自 state.run、配置传递及失败透传。
+
+State 测试用真实 WorkflowStateAnnotation 验证 outputs 缺省空 map、独立调用初始化、纯合并不修改输入、同 step 重复 nodeId 冲突与跨 step 隐式覆盖拒绝，包含原型相关键。使用真实 Registry / BindingResolver / Codec / Executor / Action 策略和 DependencyCompiler 构造 A、B → C，控制两种完成顺序，检查双方输出完整保留、C 通过 Data Edge 读取两份值且只执行一次。通过这些用例不代表完整 WorkflowCompiler、真实 Artifact / NodeRun 持久化或生产运行服务已接入。
 
 节点类型开发对照 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。分别验证纯 JSON Manifest 的配置类型 / 默认值、输出 storagePolicy 可选且枚举合法 / 输入不接受该字段、服务端三组 Zod 与声明字段一致、精确类型版本注册以及 listManifests 的白名单与数据隔离。Preset 只测试配置模板行为，不作为 Registry 身份；保留 transform 和默认值不回写定义的回归。
 
@@ -30,7 +32,7 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 
 认证相关开发先阅读 authentication.md。新增业务 API 默认受 AuthGuard 保护，公开接口需显式 Public；修改角色、停用或会话逻辑后执行隔离数据库集成测试。
 
-项目接口或保存协议变更后，执行 pnpm check 和 pnpm test:integration，重点验证名称/视口边界、所有者隔离、分页、revision 冲突及旧节点/插件字段被拒绝；浏览器检查登录、新建项目、名称和视口保存、重新加载及账户中心。当前仅节点目录接入 API，项目接口不保存或执行节点；泛型 LangGraph 测试不覆盖 WorkflowState、Binding 求值、生产持久化、队列或真实模型。
+项目接口或保存协议变更后，执行 pnpm check 和 pnpm test:integration，重点验证名称/视口边界、所有者隔离、分页、revision 冲突及旧节点/插件字段被拒绝；浏览器检查登录、新建项目、名称和视口保存、重新加载及账户中心。当前仅节点目录接入 API，项目接口不保存或执行节点；独立的 State / Action 适配测试覆盖确定性数据流，不覆盖应用运行入口、生产持久化、队列或真实模型。
 
 仅更新架构和规划文档时，检查 Markdown 格式、相对链接、当前实现描述及模型约束的一致性；不把未运行的构建、集成测试或模型调用写成已通过。后续各步新增真实能力后，再更新相应验证范围。
 
@@ -63,4 +65,4 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 
 ## 定向验证范围
 
-按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / 输入解析 / Codec / 存储策略 / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；输入组装、Codec 与输出编码主干不代表已有真实 Artifact 写入、State 写回或完整图运行。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
+按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / State 通道与并行增量 / 输入解析 / Codec / 存储策略 / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；State 增量适配和执行主干不代表已有真实 Artifact 写入、业务 NodeRun、生产 Checkpoint 或完整图运行接口。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
