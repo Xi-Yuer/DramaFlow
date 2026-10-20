@@ -1,4 +1,8 @@
-import type { WorkflowVersionMetadata } from '@dramaflow/contracts';
+import {
+  workflowDefinitionSchema,
+  type WorkflowDefinition,
+  type WorkflowVersionMetadata,
+} from '@dramaflow/contracts';
 import { z } from 'zod';
 
 export type DeepReadonly<T> = T extends object
@@ -12,6 +16,13 @@ function freeze<T>(value: T): DeepReadonly<T> {
   }
   // 上方递归冻结所有已验证的 JSON 子对象；断言仅将这一结果表达为只读类型。
   return value as DeepReadonly<T>;
+}
+
+// 编译和 Executor 继续使用既有 Definition 类型，实际对象已与调用方隔离并递归冻结。
+export function createWorkflowDefinitionSnapshot(input: unknown): WorkflowDefinition {
+  const definition = workflowDefinitionSchema.parse(input);
+  freeze(definition);
+  return definition;
 }
 
 // 调用方必须提供完整定义的版本 Schema；此函数不替代权限、图校验或持久化发布。

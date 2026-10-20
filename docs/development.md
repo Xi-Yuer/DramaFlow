@@ -18,11 +18,15 @@ RuntimeValueCodec 测试检查 inline 原样返回且不调用引用服务，ref
 
 Action NodeExecutor 测试用仅测试注册的 math.add 与真实 Registry / BindingResolver / Codec，验证精确版本、严格步骤顺序、三组 Schema、默认 / 转换后逐端口编码，以及定义 / State 不变。用测试视频节点检查 reference video 与 inline duration、Writer 上下文、校验失败不写入及写入失败停止后续端口。分别覆盖业务阶段失败摘要 / cause 与后续步骤停止，及 createRunning / updateInputs / markCompleted 故障原样传播、均不调用 markFailed；完成记录确认前不返回执行结果。覆盖三类真实 Binding 错误的 resolve_input 摘要、Registry / 非 action 拒绝、非 Error 异常和 GraphBubbleUp 穿透且不记 failed、创建 / 输入 / 完成记录顺序，以及 markFailed 再失败时保留双重原因。真实 StateGraph / MemorySaver 仅测试 interrupt / Command 传播恢复，不证明生产持久化或审核。编译包装检查只返回自身输出增量、不改原 State、项目运行身份取自 state.run、配置传递及失败透传。
 
-State 测试用真实 WorkflowStateAnnotation 验证 outputs 缺省空 map、独立调用初始化、纯合并不修改输入、同 step 重复 nodeId 冲突与跨 step 隐式覆盖拒绝，包含原型相关键。使用真实 Registry / BindingResolver / Codec / Executor / Action 策略和 DependencyCompiler 构造 A、B → C，控制两种完成顺序，检查双方输出完整保留、C 通过 Data Edge 读取两份值且只执行一次。通过这些用例不代表完整 WorkflowCompiler、真实 Artifact 持久化或生产运行服务已接入。
+State 测试用真实 WorkflowStateAnnotation 验证 outputs 缺省空 map、独立调用初始化、纯合并不修改输入、同 step 重复 nodeId 冲突与跨 step 隐式覆盖拒绝，包含原型相关键。使用真实 Registry / BindingResolver / Codec / Executor / Action 策略和 DependencyCompiler 构造 A、B → C，控制两种完成顺序，检查双方输出完整保留、C 通过 Data Edge 读取两份值且只执行一次。DefaultWorkflowCompiler 的整图用例另外覆盖根 / 叶连接、混合边去重、两种完成顺序、空图与精确版本拒绝；这些测试不证明真实 Artifact 持久化或生产运行服务已接入。
 
 NodeRun contract 测试独立放在 contracts/test/node-run.test.ts，验证三状态、ISO 时间、RuntimeValue map、字符串阶段及可选错误码的 JSON 往返。NodeRun 的数据库集成测试先经真实 WorkflowRun Repository 创建父运行，再使用真实 PostgreSQL、Repository 和 Executor，并经 Action wrapper / outputs reducer 验证先失败再成功的两条历史。另注入完成记录服务故障，验证 NodeRun 不反向 failed、输入仍保留、State 无输出。检查最小创建参数连续分配 attempt 1/2、任意非空错误阶段 / 可省略 code、Binding 失败、RuntimeValue 快照不含解码媒体 URL、并发 attempt、唯一约束、输入只写一次、终态不可覆盖及所有者 / 项目 / 运行隔离；内容服务仍是测试替身。
 
-WorkflowRun contract 测试检查六状态、独立 thread、ISO 时间、输入与最终输出 RuntimeValue map；现有配置适配测试同时接受完整运行对象。数据库用例不 invoke LangGraph，覆盖完整等待再运行路径、30 组合法 / 非法转换、首次时间不变、终态并发竞争、thread 唯一、固定版本与输入、权限隔离、NodeRun 同项目外键与级联删除。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目及级联记录，不清空开发库。单独验证运行记录可定向执行 test/workflow-runs.e2e-spec.ts 和 test/node-runs.e2e-spec.ts；这些测试不证明已有 WorkflowRunner、真实 Artifact 或生产 Checkpoint。
+WorkflowRun contract 测试检查六状态、独立 thread、ISO 时间、输入与最终输出 RuntimeValue map；现有配置适配测试同时接受完整运行对象。WorkflowRun Repository 的数据库用例不 invoke LangGraph，覆盖完整等待再运行路径、30 组合法 / 非法转换、首次时间不变、终态并发竞争、thread 唯一、固定版本与输入、权限隔离、NodeRun 同项目外键与级联删除。
+
+WorkflowRunner 单元测试用真实 StateGraph / MemorySaver、Registry、BindingResolver、Codec、Executor 和普通 Action Compiler，检查首次启动的完整顺序、thread 来自已保存 Run、输入初始值、快照隔离、项目 / 工作流 / 版本错配及 draft 拒绝。原生 interrupt、静态断点和只返回 State 的 invoke 适配均验证 waiting；缺失或错误 checkpoint、节点错误、最终输出缺失、编译错误及记录服务故障验证相应失败边界。WorkflowOutputResolver 另检查按名称收集引用、不泄漏内部节点结果、缺失来源 / 继承属性 / 类型错误。
+
+test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的两类 Repository 和原生 LangGraph，验证首次成功、节点失败、原生暂停、NodeRun completed 但最终输出解析失败、编译失败、完成记录不可用时不反向 failed。版本读取使用明确测试记录，MemorySaver 只验证原生快照机制，不是生产持久化兜底。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目及级联记录，不清空开发库。可定向执行 test/workflow-runner.e2e-spec.ts、test/workflow-runs.e2e-spec.ts 和 test/node-runs.e2e-spec.ts；这些测试不证明真实版本发布服务、Artifact 或生产 Checkpointer 已接入。
 
 节点类型开发对照 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。分别验证纯 JSON Manifest 的配置类型 / 默认值、输出 storagePolicy 可选且枚举合法 / 输入不接受该字段、服务端三组 Zod 与声明字段一致、精确类型版本注册以及 listManifests 的白名单与数据隔离。Preset 只测试配置模板行为，不作为 Registry 身份；保留 transform 和默认值不回写定义的回归。
 

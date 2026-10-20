@@ -1,5 +1,12 @@
-import type { NodeOutputMap, RuntimeValue } from '@dramaflow/contracts';
+import {
+  nodeOutputMapSchema,
+  runtimeValueMapSchema,
+  workflowIdentifierSchema,
+  type NodeOutputMap,
+  type RuntimeValue,
+} from '@dramaflow/contracts';
 import { Annotation } from '@langchain/langgraph';
+import { z } from 'zod';
 export interface WorkflowRunContext {
   readonly workflowId: string;
   readonly workflowVersionId: string;
@@ -16,6 +23,24 @@ export interface WorkflowState {
 export interface WorkflowStateUpdate {
   outputs: NodeOutputMap;
 }
+
+// 外部 Graph / checkpoint 返回值在已有 State 模块校验，不另造中断状态字段。
+export const workflowStateSchema = z
+  .object({
+    run: z
+      .object({
+        workflowId: workflowIdentifierSchema,
+        workflowVersionId: workflowIdentifierSchema,
+        workflowRunId: workflowIdentifierSchema,
+        projectId: workflowIdentifierSchema,
+      })
+      .strict(),
+    inputs: runtimeValueMapSchema,
+    outputs: nodeOutputMapSchema,
+    variables: runtimeValueMapSchema,
+    execution: z.object({}).strict(),
+  })
+  .strict();
 
 export class DuplicateNodeOutputWriteError extends Error {
   readonly code = 'DUPLICATE_NODE_OUTPUT_WRITE';

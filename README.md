@@ -4,7 +4,7 @@ DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，�
 
 当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录、注册通用 renderer，并接入 Data / Control Edge 连线、重连与删除事件；生产目录为空，没有添加节点、Workflow 持久化、工作流运行或模型调用。
 
-基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。WorkflowRun / NodeRun 通过独立 Repository 落 PostgreSQL，运行绑定明确版本，节点历史关联父运行；引用解析与 Artifact 写入仍是接口，尚无 WorkflowRunner 或完整生产管线，见 [数据模型](docs/data-model.md) 与 [当前架构](docs/architecture.md)。
+基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。WorkflowRun / NodeRun 通过独立 Repository 落 PostgreSQL；WorkflowRunner 首次启动按明确版本组装 Action 图，区分结束与原生暂停，并只记录声明的最终输出。版本读取和 Checkpointer 由外部注入，引用解析与 Artifact 写入仍是接口；尚无生产运行入口或恢复能力，见 [数据模型](docs/data-model.md) 与 [当前架构](docs/architecture.md)。
 
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 

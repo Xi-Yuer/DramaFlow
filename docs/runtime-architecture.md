@@ -77,13 +77,25 @@ WorkflowRun 保存某个明确 WorkflowVersion 的一次完整运行，独立于
 
 Repository 创建 pending，使用明确的 markRunning / markWaiting / markCompleted / markFailed / markCancelled。合法转换、时间规则见 [Workflow 模型](workflow-model.md#workflowrun一次实际运行)；Repository 对当前状态原子检查，数据库保护不可变身份、版本、输入和合法转换。WorkflowRun waiting 只表示整图正在等待，NodeRun 仍只有普通 Action 的三种状态；这些记录操作不调用 LangGraph，不意味着已有 interrupt / resume 或人工审核实现。
 
-inputs / outputs 是 RuntimeValue map。outputs 只接收最终对外工作流结果，不复制按 nodeId 组织的 State.outputs；结果收集及版本业务契约校验由执行编排层承担。NodeRun 通过同项目复合外键引用真实 WorkflowRun，Checkpoint 继续独立。尚无版本数据库实体，因此版本归属验证与不可变定义加载仍由后续版本服务落实；当前固定的是记录中的明确版本身份。
+inputs / outputs 是 RuntimeValue map。outputs 只接收最终对外工作流结果，不复制按 nodeId 组织的 State.outputs；结果收集由 WorkflowOutputResolver 承担，完整业务值校验继续由节点三组 Schema 负责。NodeRun 通过同项目复合外键引用真实 WorkflowRun，Checkpoint 继续独立。版本读取经 WorkflowVersionRepository 边界提供明确版本、项目与工作流身份；真实版本持久化与发布服务尚未接入，不能把测试记录作为生产版本来源。
+
+### WorkflowRunner 首次启动
+
+run/workflow-runner.ts 是一次完整图运行的生命周期协调边界，仅提供 start。StartWorkflowRunInput 只含项目、工作流、版本 ID 和 RuntimeValue 输入，拒绝调用方传入 Definition / draft。WorkflowVersionRepository.getVersion 返回完整版本记录及归属，Runner 校验请求的三重身份、复制并递归冻结 Definition；版本读取或归属失败发生在创建运行前，不启动 Graph。此接口比只返回 Definition 多携带身份信息，以便实际完成项目 / 工作流 / 版本校验。
+
+正常顺序为加载版本 → 校验归属 → create pending → compile → markRunning → invoke → 检查原生 snapshot → completed / waiting。初始 State 使用已创建运行的身份与输入快照，outputs / variables / execution 为空。thread_id 唯一取自 run.threadId，经既有 createWorkflowRunConfig 映射；Runner 和 Compiler 都不生成替代线程。Compiler 使用限定本次运行的 Executor 工厂与显式注入的 Checkpointer，复用 Action 策略和 DependencyCompiler，补充根节点 START、叶节点 END；只支持现有普通确定性 Action DAG，不自建调度，不管理运行状态，也不实现交互 / 控制结构。
+
+invoke 返回后仍调用原生 getState(config)。Runner 检查 result 的 isInterrupted 标记，以及 StateSnapshot.next / tasks；有待执行任务或中断则 markWaiting，不收集最终输出。每次读取快照都解析 State 并核对项目 / 版本 / 运行 / thread 身份；只有没有 pending tasks 的终态才通过 WorkflowOutputResolver 按 definition.outputs 数组的 name 与 source.nodeId / outputKey 收集 RuntimeValue；不保存整个 State.outputs。缺失来源、类型不匹配或异常 checkpoint 明确失败，不返回占位结果。检查依据当前安装的 LangGraph API 与 [StateSnapshot](https://reference.langchain.com/javascript/langchain-langgraph/index/StateSnapshot)，不在 State 增加 isInterrupted 字段。[原生 Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts) 规定暂停和 thread 的关系。
+
+业务 / 图执行错误由 Runner 记录整图 failed 后原样上抛；阶段区分 compile、invoke、inspect_state、resolve_output，持久化稳定摘要，原始原因保留在异常中。NodeRun 仍由 NodeExecutor 单独维护，节点 completed 不等于整图 completed。编译失败发生在 pending，按既定 pending → running → failed 路径记录，不 invoke，也不新增 pending → failed 转换。markRunning / markWaiting / markCompleted 自身失败原样作为基础设施异常上抛，不反向 markFailed；markFailed 再失败时 WorkflowRunRecordingError 同时保留原异常与记录异常。正常 interrupt 由 LangGraph 返回暂停快照并投影 waiting；若原生 GraphBubbleUp 异常仍逃出 Graph，则原样交还上层，不猜测其等待状态或记为业务失败。
+
+Runner 不实现 resume / cancel / retry、HumanReviewRecord、SubWorkflow 或 Batch。生产版本读取实现、持久 Checkpointer 与运行 HTTP / worker 入口仍未接入；没有内存或 draft 生产兜底。测试明确注入 MemorySaver 和版本记录，真实运行历史使用隔离 PostgreSQL 验证。
 
 ## State 与持久化
 
 WorkflowStateAnnotation 与既有 State 接口共处 runtime/state.ts。outputs 使用 mergeNodeOutputs 合并局部 RuntimeValue map，缺省为空；重复 nodeId 写入明确失败。其余分区不由普通 Action wrapper 写入，定义、业务历史、内容存储与执行快照分离，完整规则见 [State 边界](workflow-state.md#并行与历史)。不以对象覆盖或业务状态轮询代替通道。[官方 Graph API](https://docs.langchain.com/oss/javascript/langgraph/graph-api) 说明图和状态机制。
 
-运行配置使用必填 Run.threadId；恢复必须加载原不可变 WorkflowVersion，以兼容实现重建图，接回原 thread 与持久 checkpointer，而不是当前草稿。知道 thread_id 不等于拥有资源权限。当前只实现配置映射，没有生产运行接口和持久 checkpointer。[官方 Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence) 说明原生持久化机制。
+运行配置使用必填 Run.threadId；恢复必须加载原不可变 WorkflowVersion，以兼容实现重建图，接回原 thread 与持久 checkpointer，而不是当前草稿。知道 thread_id 不等于拥有资源权限。已有首次启动协调器与普通 Action 整图编译，没有生产运行接口、resume 或持久 checkpointer 实现。[官方 Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence) 说明原生持久化机制。
 
 ## 人工介入、并行与副作用
 
@@ -91,4 +103,4 @@ WorkflowStateAnnotation 与既有 State 接口共处 runtime/state.ts。outputs 
 
 Data Edge 保存值来源，Control Edge 保存显式执行先后；定义层的联合 DAG 只检查无环，执行依赖由独立收集函数生成。普通确定性 fan-in 遵循上述 ALL Join，条件分支、Send、Batch 与子图的精确映射留待各自结构策略。单次图调用 maxConcurrency 位于顶层配置；跨运行与供应商配额由后续 Queue / Worker 处理，不把 Send 当作全部容量控制。[官方 Graph API 示例](https://docs.langchain.com/oss/javascript/langgraph/use-graph-api) 展示这些执行机制。
 
-当前没有结构策略、完整 Compiler、生产 Runtime、模型调用、Queue、审核或内容 Store。生产节点目录仍为空；不得将测试适配、类型接口或规划标为可用业务能力。
+当前没有控制 / 交互结构策略、生产运行入口、模型调用、Queue、审核或内容 Store。生产节点目录仍为空；首次启动基础库不代表已有真实生成服务，不得将测试适配、类型接口或规划标为可用业务能力。
