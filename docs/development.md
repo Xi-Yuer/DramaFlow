@@ -14,11 +14,11 @@
 
 BindingResolver 测试使用真实静态转换实现，检查 Data Edge 端口映射、常量按目标声明 dataType 内联包装、workflow_input 原样复用 inline / reference，以及 asset 引用保留明确版本。上下文显式提供精确版本 Manifest，测试未知静态 / 数据目标端口报 INPUT_PORT_NOT_FOUND、缺失工作流输入报 WORKFLOW_INPUT_MISSING，并保留来源冲突、缺失上游输出及继承属性不可作为值的回归。覆盖空值 / 数组等常量、不做类型猜测或业务 Zod 校验、不同资产版本不互相改写、引用不被 decode、输入上下文不被修改及网络调用防护。静态校验的冲突 issue.params.code 与运行错误均使用 INPUT_SOURCE_CONFLICT。引用包装不证明资产存在、版本 / 权限可访问或完整 NodeExecutor 已接入。
 
-RuntimeValueCodec 测试检查 inline 原样返回且不调用引用服务，reference 保留引用与最小上下文后委托 DataReferenceResolver。验证媒体 / 领域对象原样返回、引用失败 code / cause、并行解码、按原键返回、空 map 与整体失败；只处理自有键且不污染原型。替身不证明真实存储、授权或 signed URL 已接入。
+RuntimeValueCodec 测试检查 inline 原样返回且不调用引用服务，reference 保留引用与最小上下文后委托 DataReferenceResolver。验证媒体 / 领域对象原样返回、引用失败 code / cause、并行解码、按原键返回、空 map 与整体失败；只处理自有键且不污染原型。输出编码检查显式策略绕过 auto、统一类型规则不按大小猜测、未知规则报错、JSON 承载边界、Writer 收到原始业务值 / 类型 / 输出定位、无效引用与写入失败不回退或重试。替身不证明真实存储、授权或 signed URL 已接入。
 
-Action NodeExecutor 测试用仅测试注册的 math.add 与真实 Registry / BindingResolver / Codec，验证精确版本、严格步骤顺序、三组 Schema、默认 / 转换不回写定义和只返回业务 output。覆盖六阶段失败、cause 与后续步骤停止、Registry / 非 action 拒绝、非 Error 异常和 GraphBubbleUp 穿透。真实 StateGraph / MemorySaver 仅测试 interrupt / Command 传播恢复，不实现生产 WorkflowState 映射或审核。编译包装检查当前 State 和运行配置传递；输出 encode、State 增量、Artifact / NodeRun 不属于这些通过用例的能力声明。
+Action NodeExecutor 测试用仅测试注册的 math.add 与真实 Registry / BindingResolver / Codec，验证精确版本、严格步骤顺序、三组 Schema、默认 / 转换后逐端口编码，以及定义 / State 不变。用测试视频节点检查 reference video 与 inline duration、Writer 上下文、校验失败不写入及写入失败停止后续端口。覆盖七阶段失败、cause 与后续步骤停止、Registry / 非 action 拒绝、非 Error 异常和 GraphBubbleUp 穿透。真实 StateGraph / MemorySaver 仅测试 interrupt / Command 传播恢复，不实现生产 WorkflowState 映射或审核。编译包装检查当前 State 和运行配置传递；State 增量、真实 Artifact / NodeRun 持久化不属于这些通过用例的能力声明。
 
-节点类型开发对照 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。分别验证纯 JSON Manifest 的配置类型 / 默认值、服务端三组 Zod 与声明字段一致、精确类型版本注册以及 listManifests 的白名单与数据隔离。Preset 只测试配置模板行为，不作为 Registry 身份；保留 transform 和默认值不回写定义的回归。
+节点类型开发对照 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。分别验证纯 JSON Manifest 的配置类型 / 默认值、输出 storagePolicy 可选且枚举合法 / 输入不接受该字段、服务端三组 Zod 与声明字段一致、精确类型版本注册以及 listManifests 的白名单与数据隔离。Preset 只测试配置模板行为，不作为 Registry 身份；保留 transform 和默认值不回写定义的回归。
 
 正式 WorkflowDefinition 测试检查三类 StaticInputBinding、两类边引用与全局 ID 唯一、自连接及联合 DAG；Data Edge 另检查目标数据端口单连接与静态 Binding 冲突，Control Edge 不占用输入并允许多个控制上游。检查控制端口可省略或命名，拒绝旧 ConnectionBinding。通用 factory 继续用独立自定义 Schema 测试，不强加正式 Node 协议。静态成功不证明端口存在、真实值有效或资产可访问，也不替代独立依赖收集与运行输入绑定检查；assetId / versionId 只是明确版本的引用声明。
 
@@ -63,4 +63,4 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 
 ## 定向验证范围
 
-按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / 输入解析 / Decode / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；输入组装、解码与业务执行主干不代表已有输出编码、State 写回或完整图运行。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
+按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / 输入解析 / Codec / 存储策略 / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；输入组装、Codec 与输出编码主干不代表已有真实 Artifact 写入、State 写回或完整图运行。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。

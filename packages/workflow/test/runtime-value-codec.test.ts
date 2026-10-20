@@ -9,6 +9,8 @@ import {
 } from '@dramaflow/contracts';
 import {
   DefaultRuntimeValueCodec,
+  DefaultDataStoragePolicyResolver,
+  type ArtifactWriter,
   ReferenceResolutionError,
   type DataReferenceResolver,
   type MediaResource,
@@ -37,6 +39,32 @@ const media: MediaResource = {
   access: { url: 'https://media.example.test/image?signature=test-only' },
 };
 
+function decodeCodec(resolver: DataReferenceResolver) {
+  return new DefaultRuntimeValueCodec(
+    resolver,
+    { write: vi.fn<ArtifactWriter['write']>().mockRejectedValue(new Error('解码不应写入')) },
+    {
+      resolve: vi.fn().mockImplementation(() => {
+        throw new Error('解码不应选择存储策略');
+      }),
+    },
+  );
+}
+
+function encodingFixture() {
+  const write = vi
+    .fn<ArtifactWriter['write']>()
+    .mockResolvedValue({ kind: 'artifact', id: 'artifact-1' });
+  const resolve = vi
+    .fn<DataReferenceResolver['resolve']>()
+    .mockRejectedValue(new Error('编码不应读取引用'));
+  const policy = new DefaultDataStoragePolicyResolver();
+  const selectPolicy = vi.spyOn(policy, 'resolve');
+  const codec = new DefaultRuntimeValueCodec({ resolve }, { write }, policy);
+  const encodeContext = { ...context, nodeId: 'video', outputKey: 'result' };
+  return { codec, write, resolve, selectPolicy, encodeContext };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {
@@ -58,7 +86,7 @@ describe('RuntimeValueCodec 单值解码', () => {
     const resolve = vi
       .fn<DataReferenceResolver['resolve']>()
       .mockRejectedValue(new Error('不应调用'));
-    const codec = new DefaultRuntimeValueCodec({ resolve });
+    const codec = decodeCodec({ resolve });
     const runtimeValue: InlineRuntimeValue = Object.freeze({
       storage: 'inline',
       type: StringType,
@@ -70,7 +98,7 @@ describe('RuntimeValueCodec 单值解码', () => {
 
   it('reference 只委托显式 Resolver，保留固定版本与最小上下文，返回业务媒体对象', async () => {
     const resolve = vi.fn<DataReferenceResolver['resolve']>().mockResolvedValue(media);
-    const codec = new DefaultRuntimeValueCodec({ resolve });
+    const codec = decodeCodec({ resolve });
     expect(await codec.decode(image, context)).toBe(media);
     expect(resolve).toHaveBeenCalledExactlyOnceWith(assetReference, context);
     expect(resolve.mock.calls[0]?.[0]).toBe(assetReference);
@@ -82,7 +110,7 @@ describe('RuntimeValueCodec 单值解码', () => {
     const reference: DataReference = { kind: 'artifact', id: 'character-artifact' };
     const character = { name: '小林', traits: ['勇敢'] };
     const resolve = vi.fn<DataReferenceResolver['resolve']>().mockResolvedValue(character);
-    const codec = new DefaultRuntimeValueCodec({ resolve });
+    const codec = decodeCodec({ resolve });
     expect(
       await codec.decode(
         { storage: 'reference', type: { kind: 'named', name: 'story.character' }, reference },
@@ -96,7 +124,7 @@ describe('RuntimeValueCodec 单值解码', () => {
     '异步引用解析失败时保留 cause 并标记结构化错误',
     async (cause) => {
       const resolve = vi.fn<DataReferenceResolver['resolve']>().mockRejectedValue(cause);
-      const result = new DefaultRuntimeValueCodec({ resolve }).decode(image, context);
+      const result = decodeCodec({ resolve }).decode(image, context);
       await expect(result).rejects.toBeInstanceOf(ReferenceResolutionError);
       await expect(result).rejects.toMatchObject({
         code: 'REFERENCE_RESOLUTION_FAILED',
@@ -111,9 +139,7 @@ describe('RuntimeValueCodec 单值解码', () => {
     const resolve = vi.fn<DataReferenceResolver['resolve']>().mockImplementation(() => {
       throw cause;
     });
-    await expect(
-      new DefaultRuntimeValueCodec({ resolve }).decode(image, context),
-    ).rejects.toMatchObject({
+    await expect(decodeCodec({ resolve }).decode(image, context)).rejects.toMatchObject({
       code: 'REFERENCE_RESOLUTION_FAILED',
       cause,
     });
@@ -122,9 +148,7 @@ describe('RuntimeValueCodec 单值解码', () => {
   it('Resolver 已提供结构化引用错误时原样传播，不重复包装', async () => {
     const error = new ReferenceResolutionError(assetReference, { cause: new Error('版本不可用') });
     const resolve = vi.fn<DataReferenceResolver['resolve']>().mockRejectedValue(error);
-    await expect(new DefaultRuntimeValueCodec({ resolve }).decode(image, context)).rejects.toBe(
-      error,
-    );
+    await expect(decodeCodec({ resolve }).decode(image, context)).rejects.toBe(error);
   });
 });
 
@@ -141,7 +165,7 @@ describe('RuntimeValueCodec 批量解码', () => {
       if (started.size === 2) bothStarted.resolve();
       return reference.kind === 'asset' ? imageGate.promise : characterGate.promise;
     });
-    const codec = new DefaultRuntimeValueCodec({ resolve });
+    const codec = decodeCodec({ resolve });
     const values: Readonly<Record<string, RuntimeValue>> = Object.freeze({
       prompt: Object.freeze({ storage: 'inline', type: StringType, value: '人物向前走' }),
       image,
@@ -174,7 +198,7 @@ describe('RuntimeValueCodec 批量解码', () => {
 
   it('空 map 返回空结果，不调用引用服务', async () => {
     const resolve = vi.fn<DataReferenceResolver['resolve']>();
-    expect(await new DefaultRuntimeValueCodec({ resolve }).decodeRecord({}, context)).toEqual({});
+    expect(await decodeCodec({ resolve }).decodeRecord({}, context)).toEqual({});
     expect(resolve).not.toHaveBeenCalled();
   });
 
@@ -182,7 +206,7 @@ describe('RuntimeValueCodec 批量解码', () => {
     const cause = new Error('资产版本不存在');
     const resolve = vi.fn<DataReferenceResolver['resolve']>().mockRejectedValue(cause);
     await expect(
-      new DefaultRuntimeValueCodec({ resolve }).decodeRecord(
+      decodeCodec({ resolve }).decodeRecord(
         { prompt: { storage: 'inline', type: StringType, value: '提示词' }, image },
         context,
       ),
@@ -198,11 +222,130 @@ describe('RuntimeValueCodec 批量解码', () => {
     ]);
     Object.setPrototypeOf(values, { inherited: image });
     const resolve = vi.fn<DataReferenceResolver['resolve']>();
-    const result = await new DefaultRuntimeValueCodec({ resolve }).decodeRecord(values, context);
+    const result = await decodeCodec({ resolve }).decodeRecord(values, context);
     expect(Object.keys(result)).toEqual(['__proto__', 'constructor', 'toString']);
     expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
     expect(Object.hasOwn(result, '__proto__')).toBe(true);
     expect(result['__proto__']).toBe('值');
     expect(resolve).not.toHaveBeenCalled();
+  });
+});
+
+describe('RuntimeValueCodec 输出编码', () => {
+  it.each([
+    { value: '文本' },
+    { value: 12.5 },
+    { value: false },
+    { value: null },
+    { value: { nested: [1, '值'] } },
+  ])(
+    'inline 只包装可序列化值，不读写引用、不选择策略或做业务类型校验：$value',
+    async ({ value }) => {
+      const f = encodingFixture();
+      expect(
+        await f.codec.encode(value, {
+          type: StringType,
+          storagePolicy: 'inline',
+          context: f.encodeContext,
+        }),
+      ).toEqual({ storage: 'inline', type: StringType, value });
+      expect(f.write).not.toHaveBeenCalled();
+      expect(f.resolve).not.toHaveBeenCalled();
+      expect(f.selectPolicy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { value: undefined },
+    { value: Infinity },
+    { value: new Uint8Array([1, 2]) },
+    { value: new Date() },
+    { value: { nested: undefined } },
+  ])('inline 拒绝非 JSON 值，不隐式序列化、丢弃字段或改用 Artifact：$value', async ({ value }) => {
+    const f = encodingFixture();
+    await expect(
+      f.codec.encode(value, {
+        type: StringType,
+        storagePolicy: 'inline',
+        context: f.encodeContext,
+      }),
+    ).rejects.toThrow();
+    expect(f.write).not.toHaveBeenCalled();
+  });
+
+  it('reference 只委托 ArtifactWriter，传递原始业务值、类型与输出定位，State 中仅留引用', async () => {
+    const f = encodingFixture();
+    const value = new Uint8Array([1, 2, 3]);
+    const result = await f.codec.encode(value, {
+      type: ImageType,
+      storagePolicy: 'reference',
+      context: f.encodeContext,
+    });
+    expect(result).toEqual({
+      storage: 'reference',
+      type: ImageType,
+      reference: { kind: 'artifact', id: 'artifact-1' },
+    });
+    expect(f.write).toHaveBeenCalledExactlyOnceWith(value, { ...f.encodeContext, type: ImageType });
+    expect(f.write.mock.calls[0]?.[0]).toBe(value);
+    expect(f.resolve).not.toHaveBeenCalled();
+    expect(f.selectPolicy).not.toHaveBeenCalled();
+  });
+
+  it.each(['inline', 'reference'] as const)(
+    'auto 将值和声明类型交给统一 Resolver，采用其 %s 结果',
+    async (policy) => {
+      const f = encodingFixture();
+      f.selectPolicy.mockReturnValue(policy);
+      const result = await f.codec.encode(media, {
+        type: ImageType,
+        storagePolicy: 'auto',
+        context: f.encodeContext,
+      });
+      expect(f.selectPolicy).toHaveBeenCalledExactlyOnceWith(ImageType, media);
+      expect(result.storage).toBe(policy);
+      expect(f.write).toHaveBeenCalledTimes(policy === 'reference' ? 1 : 0);
+    },
+  );
+
+  it('auto 策略缺失时失败，不创建 Artifact', async () => {
+    const f = encodingFixture();
+    await expect(
+      f.codec.encode(
+        {},
+        {
+          type: { kind: 'named', name: 'custom.unknown' },
+          storagePolicy: 'auto',
+          context: f.encodeContext,
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'DATA_STORAGE_POLICY_NOT_FOUND' });
+    expect(f.write).not.toHaveBeenCalled();
+  });
+
+  it('Writer 失败保留 cause，且不回退 inline 或重试', async () => {
+    const f = encodingFixture();
+    const error = new Error('对象存储写入失败');
+    f.write.mockRejectedValue(error);
+    await expect(
+      f.codec.encode(media, {
+        type: ImageType,
+        storagePolicy: 'reference',
+        context: f.encodeContext,
+      }),
+    ).rejects.toBe(error);
+    expect(f.write).toHaveBeenCalledTimes(1);
+  });
+
+  it('Writer 返回无效引用时拒绝生成 RuntimeValue', async () => {
+    const f = encodingFixture();
+    f.write.mockResolvedValue({ kind: 'artifact', id: '' });
+    await expect(
+      f.codec.encode(media, {
+        type: ImageType,
+        storagePolicy: 'reference',
+        context: f.encodeContext,
+      }),
+    ).rejects.toThrow();
   });
 });

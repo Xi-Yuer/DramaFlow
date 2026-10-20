@@ -10,6 +10,7 @@ import {
   nodeTypeManifestSchema,
   nodeTypeManifestListSchema,
   nodeTypeVersionSchema,
+  outputPortDefinitionSchema,
 } from '../src/index.js';
 
 function manifest() {
@@ -209,6 +210,23 @@ describe('配置字段声明', () => {
 });
 
 describe('NodeTypeManifest 公开协议', () => {
+  it('输出端口可声明存储策略，省略时保持省略，由 Runtime 采用 auto', () => {
+    const port = { key: 'video', name: '视频', dataType: { kind: 'named', name: 'media.video' } };
+    expect(outputPortDefinitionSchema.parse(port)).toEqual(port);
+    for (const storagePolicy of ['inline', 'reference', 'auto']) {
+      const output = { ...port, storagePolicy };
+      expect(outputPortDefinitionSchema.parse(output)).toEqual(output);
+      expect(nodeTypeManifestSchema.parse({ ...manifest(), outputs: [output] }).outputs).toEqual([
+        output,
+      ]);
+    }
+    expect(outputPortDefinitionSchema.safeParse({ ...port, storagePolicy: 'size' }).success).toBe(
+      false,
+    );
+    expect(inputPortDefinitionSchema.safeParse({ ...port, storagePolicy: 'auto' }).success).toBe(
+      false,
+    );
+  });
   it('目录允许多个明确版本并存，拒绝同类型同版本的重复声明', () => {
     const source = manifest();
     expect(nodeTypeManifestListSchema.parse([])).toEqual([]);

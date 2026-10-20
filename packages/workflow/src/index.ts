@@ -11,6 +11,8 @@ export * from './node/type.js';
 export * from './runtime/value-codec.js';
 export * from './runtime/runtime-value-codec.js';
 export * from './runtime/data-reference-resolver.js';
+export * from './runtime/artifact-writer.js';
+export * from './runtime/data-storage-policy-resolver.js';
 export * from './runtime/state.js';
 export * from './runtime/binding-resolver.js';
 export * from './runtime/binding-resolution-error.js';

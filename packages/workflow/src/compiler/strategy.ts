@@ -12,7 +12,7 @@ import type {
 } from '../runtime/node-executor.js';
 import type { WorkflowState } from '../runtime/state.js';
 
-// 本阶段返回业务执行结果；输出 encode 与 WorkflowState 增量适配尚未接入。
+// 返回按端口编码的执行结果；WorkflowState 增量适配由后续 LangGraph wrapper 完成。
 export type LangGraphNode = (
   state: WorkflowState,
   config: LangGraphRunnableConfig,

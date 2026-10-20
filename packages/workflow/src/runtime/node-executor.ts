@@ -25,7 +25,7 @@ export interface NodeExecutionContext extends RuntimeValueContext {
   readonly runnableConfig?: RunnableConfig;
 }
 export interface NodeExecutionResult {
-  readonly output: unknown;
+  readonly output: Record<string, RuntimeValue>;
 }
 
 export interface NodeExecutor {
@@ -65,7 +65,21 @@ export class DefaultNodeExecutor implements NodeExecutor {
       const rawOutput = await nodeType.execute(input, config, context);
       stage = 'validate_output';
       const output = nodeType.outputSchema.parse(rawOutput);
-      return { output };
+      stage = 'encode_output';
+      const encodedOutputs: Record<string, RuntimeValue> = {};
+      for (const port of nodeType.manifest.outputs) {
+        encodedOutputs[port.key] = await this.runtimeValueCodec.encode(output[port.key], {
+          type: port.dataType,
+          storagePolicy: port.storagePolicy ?? 'auto',
+          context: {
+            projectId: context.projectId,
+            workflowRunId: context.workflowRunId,
+            nodeId: node.id,
+            outputKey: port.key,
+          },
+        });
+      }
+      return { output: encodedOutputs };
     } catch (cause) {
       // 中断、父图 Command 等原生控制异常必须交还 LangGraph，不能记为业务失败。
       if (cause !== null && isGraphBubbleUp(cause)) throw cause;

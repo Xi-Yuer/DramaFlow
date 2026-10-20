@@ -14,6 +14,7 @@ import {
   createWorkflowRunConfig,
   type LangGraphNode,
   type NodeExecutor,
+  type NodeExecutionResult,
   type WorkflowState,
 } from '../src/index.js';
 
@@ -46,7 +47,9 @@ const workflow = { inputs: [], nodes: [node], edges: [], outputs: [] };
 
 describe('普通操作编译策略', () => {
   it('仅包装统一 Executor，编译不执行业务，节点不获得 Graph builder', async () => {
-    const result = { output: { text: '结果' } };
+    const result: NodeExecutionResult = {
+      output: { text: { storage: 'inline', type: StringType, value: '结果' } },
+    };
     const execute = vi.fn<NodeExecutor['execute']>().mockResolvedValue(result);
     const addNode = vi.fn<(id: string, node: LangGraphNode) => void>();
     new ActionNodeCompilationStrategy().compile({

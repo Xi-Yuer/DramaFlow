@@ -7,7 +7,7 @@
 | definition | 显式输入输出值校验、版本快照与运行版本归属                                        |
 | data       | DataTypeDefinition / Registry，递归真实值 Zod 校验                                |
 | node       | NodeType.execute、精确版本 Registry、值 Schema 与 Preset 校验                     |
-| runtime    | WorkflowState、输入组装、Decode 与 Action 主干，引用解析 / 编码 / 内容与审计接口  |
+| runtime    | WorkflowState、输入组装、Codec 与 Action 输出编码，引用 / Artifact / 审计服务接口 |
 | compiler   | CompilationStrategy、薄 action 包装、Data / Control Edge 依赖收集与 ALL Join 编译 |
 | run        | 显式 Run.threadId 到 LangGraph 配置的映射                                         |
 
@@ -15,6 +15,6 @@ NodeType 不再自行 compile，普通业务只处理 input + config + context�
 
 DataTypeRegistry 的公开副本不含 Zod。isTypeAssignable 重导出共享纯函数，前后端采用相同规则。RuntimeValue 包含实际类型与承载方式，NodeOutputMap 不使用 unknown 代替结果。
 
-BindingResolver 按 Manifest 组装 RuntimeValue，Decode 只返回 inline 值或委托引用服务。Action NodeExecutor 串联精确 Registry、绑定、decode、三组 Schema 和业务调用，只返回业务 output，编译包装也不将其冒充 State 增量。引用解析、输出编码、内容 / 审计尚无生产实现，不提供内存、本地文件或默认模型兜底。State 无生产 reducer、图运行接口或持久 checkpointer；MemorySaver 和测试实现不作为生产能力。
+BindingResolver 按 Manifest 组装 RuntimeValue，Decode 只返回 inline 值或委托引用服务。Action NodeExecutor 串联精确 Registry、绑定、decode、三组 Schema、业务调用和逐端口 encode，返回 RuntimeValue map，编译包装仍不将其冒充 State 增量。auto 通过统一类型规则选择 inline / reference，引用输出仅经注入的 ArtifactWriter 写入。引用解析、Artifact 写入与内容 / 审计服务尚无生产实现，不提供内存、本地文件或默认模型兜底。State 无生产 reducer、图运行接口或持久 checkpointer；MemorySaver 和测试实现不作为生产能力。
 
 详细说明见 [数据模型](../../docs/data-model.md)、[Node](../../docs/node-model.md)、[Runtime](../../docs/runtime-architecture.md)、[当前架构](../../docs/architecture.md) 与 [实施方案](../../docs/implementation-plan.md)。

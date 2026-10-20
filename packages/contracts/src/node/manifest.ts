@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { dataTypeSchema } from '../data/type.js';
+import { dataStoragePolicySchema } from '../data/manifest.js';
 import { workflowIdentifierSchema, workflowPortNameSchema } from '../workflow/metadata.js';
 
 export const nodeTypeIdSchema = z
@@ -48,6 +49,7 @@ export const outputPortDefinitionSchema = z
     name: displayNameSchema,
     description: descriptionSchema.optional(),
     dataType: dataTypeSchema,
+    storagePolicy: dataStoragePolicySchema.optional(),
   })
   .strict();
 

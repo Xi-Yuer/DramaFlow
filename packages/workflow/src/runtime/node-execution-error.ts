@@ -5,6 +5,7 @@ const stageCodes = {
   validate_config: 'NODE_CONFIG_VALIDATION_FAILED',
   execute: 'NODE_EXECUTION_FAILED',
   validate_output: 'NODE_OUTPUT_VALIDATION_FAILED',
+  encode_output: 'NODE_OUTPUT_ENCODING_FAILED',
 } as const;
 
 export type NodeExecutionStage = keyof typeof stageCodes;

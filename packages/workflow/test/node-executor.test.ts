@@ -14,6 +14,7 @@ import {
 import {
   NumberType,
   StringType,
+  VideoType,
   type NodeDefinition,
   type NodeTypeManifest,
 } from '@dramaflow/contracts';
@@ -22,6 +23,8 @@ import {
   createBindingResolver,
   DefaultNodeExecutor,
   DefaultRuntimeValueCodec,
+  DefaultDataStoragePolicyResolver,
+  type ArtifactWriter,
   NodeExecutionError,
   NodeRegistry,
   ReferenceResolutionError,
@@ -71,7 +74,15 @@ function fixture() {
   const referenceResolver = {
     resolve: vi.fn<DataReferenceResolver['resolve']>().mockRejectedValue(new Error('不应解析引用')),
   };
-  const codec = new DefaultRuntimeValueCodec(referenceResolver);
+  const write = vi
+    .fn<ArtifactWriter['write']>()
+    .mockResolvedValue({ kind: 'artifact', id: 'video-artifact' });
+  const codec = new DefaultRuntimeValueCodec(
+    referenceResolver,
+    { write },
+    new DefaultDataStoragePolicyResolver(),
+  );
+  const encode = vi.spyOn(codec, 'encode');
   const decodeRecord = vi.spyOn(codec, 'decodeRecord');
   const inputParse = vi.spyOn(schemas.inputSchema, 'parse');
   const configParse = vi.spyOn(schemas.configSchema, 'parse');
@@ -104,6 +115,8 @@ function fixture() {
     resolveInputs,
     referenceResolver,
     codec,
+    write,
+    encode,
     decodeRecord,
     inputParse,
     configParse,
@@ -115,10 +128,12 @@ function fixture() {
 }
 
 describe('普通 Action Node 执行主链', () => {
-  it('math.add 严格依次经过 Registry、Binding、Decode、三组 Schema 和业务调用，只返回业务输出', async () => {
+  it('math.add 严格依次经过 Registry、Binding、Decode、三组 Schema 和业务调用，按端口编码输出', async () => {
     const f = fixture();
     const snapshot = structuredClone({ node: f.node, context: f.context });
-    expect(await f.executor.execute(f.node, f.context)).toEqual({ output: { result: 30 } });
+    expect(await f.executor.execute(f.node, f.context)).toEqual({
+      output: { result: { storage: 'inline', type: NumberType, value: 30 } },
+    });
     const pipeline = [
       f.get,
       f.resolveInputs,
@@ -127,6 +142,7 @@ describe('普通 Action Node 执行主链', () => {
       f.configParse,
       f.execute,
       f.outputParse,
+      f.encode,
     ];
     for (const step of pipeline) expect(step).toHaveBeenCalledTimes(1);
     const order = pipeline.flatMap((step) => step.mock.invocationCallOrder);
@@ -146,6 +162,12 @@ describe('普通 Action Node 执行主链', () => {
       { projectId: 'p', workflowRunId: 'r' },
     );
     expect(f.execute).toHaveBeenCalledWith({ a: 10, b: 20 }, {}, f.context);
+    expect(f.encode).toHaveBeenCalledExactlyOnceWith(30, {
+      type: NumberType,
+      storagePolicy: 'auto',
+      context: { projectId: 'p', workflowRunId: 'r', nodeId: 'sum', outputKey: 'result' },
+    });
+    expect(f.write).not.toHaveBeenCalled();
     expect(f.referenceResolver.resolve).not.toHaveBeenCalled();
     expect({ node: f.node, context: f.context }).toEqual(snapshot);
     expect(f.context.state.outputs).toEqual({});
@@ -156,7 +178,7 @@ describe('普通 Action Node 执行主链', () => {
     const second = vi.fn(async () => ({ result: 200 }));
     f.registry.register({ ...f.schemas, manifest: { ...f.manifest, version: 2 }, execute: second });
     expect(await f.executor.execute({ ...f.node, typeVersion: 2 }, f.context)).toEqual({
-      output: { result: 200 },
+      output: { result: { storage: 'inline', type: NumberType, value: 200 } },
     });
     expect(f.execute).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledTimes(1);
@@ -188,7 +210,9 @@ describe('普通 Action Node 执行主链', () => {
     };
     const snapshot = structuredClone({ node: f.node, context });
     const executor = new DefaultNodeExecutor(registry, f.bindings, f.codec);
-    expect(await executor.execute(f.node, context)).toEqual({ output: { result: 61 } });
+    expect(await executor.execute(f.node, context)).toEqual({
+      output: { result: { storage: 'inline', type: NumberType, value: 61 } },
+    });
     expect(execute).toHaveBeenCalledWith({ a: 10, b: 20 }, { factor: 2 }, context);
     expect({ node: f.node, context }).toEqual(snapshot);
   });
@@ -202,6 +226,7 @@ describe('NodeExecutor 错误阶段', () => {
     'validate_config',
     'execute',
     'validate_output',
+    'encode_output',
   ])('失败准确标记 %s，保留 cause，并停止后续步骤', async (stage) => {
     const f = fixture();
     let context = f.context;
@@ -238,6 +263,10 @@ describe('NodeExecutor 错误阶段', () => {
       case 'validate_output':
         f.execute.mockResolvedValue({ result: '不是数字' });
         break;
+      case 'encode_output':
+        cause = new Error('编码失败');
+        f.encode.mockRejectedValue(cause);
+        break;
     }
     const invocation = f.executor.execute(f.node, context);
     await expect(invocation).rejects.toBeInstanceOf(NodeExecutionError);
@@ -249,6 +278,8 @@ describe('NodeExecutor 错误阶段', () => {
     }
     if (stage === 'validate_input')
       await expect(invocation).rejects.toHaveProperty('code', 'NODE_INPUT_VALIDATION_FAILED');
+    if (stage === 'encode_output')
+      await expect(invocation).rejects.toHaveProperty('code', 'NODE_OUTPUT_ENCODING_FAILED');
     const steps = [
       f.resolveInputs,
       f.decodeRecord,
@@ -256,6 +287,7 @@ describe('NodeExecutor 错误阶段', () => {
       f.configParse,
       f.execute,
       f.outputParse,
+      f.encode,
     ];
     const stages: NodeExecutionStage[] = [
       'resolve_input',
@@ -264,6 +296,7 @@ describe('NodeExecutor 错误阶段', () => {
       'validate_config',
       'execute',
       'validate_output',
+      'encode_output',
     ];
     for (const step of steps.slice(stages.indexOf(stage) + 1)) expect(step).not.toHaveBeenCalled();
     expect(f.context.state.outputs).toEqual({});
@@ -327,8 +360,10 @@ describe('LangGraph 原生控制异常边界', () => {
     const TestState = Annotation.Root({ done: Annotation<boolean>() });
     const graph = new StateGraph(TestState)
       .addNode('call', async () => {
-        expect(await f.executor.execute(f.node, f.context)).toEqual({ output: { result: 30 } });
-        // 仅测试原生中断传播，不将业务输出编码为生产 WorkflowState。
+        expect(await f.executor.execute(f.node, f.context)).toEqual({
+          output: { result: { storage: 'inline', type: NumberType, value: 30 } },
+        });
+        // 仅测试原生中断传播，不将编码结果映射为生产 WorkflowState。
         return { done: true };
       })
       .addEdge(START, 'call')
@@ -341,5 +376,122 @@ describe('LangGraph 原生控制异常边界', () => {
     expect(await graph.invoke(new Command({ resume: 10 }), config)).toMatchObject({ done: true });
     expect(f.outputParse).toHaveBeenCalledTimes(1);
     expect((await graph.getState(config)).tasks).toHaveLength(0);
+  });
+});
+
+describe('NodeExecutor 按输出端口编码', () => {
+  function videoFixture() {
+    const f = fixture();
+    const node: NodeDefinition = { ...f.node, id: 'render', type: 'test.video', inputs: {} };
+    const video = {
+      id: 'business-video',
+      mediaType: 'video',
+      mimeType: 'video/mp4',
+      access: { url: 'https://media.example.test/video' },
+    };
+    const manifest: NodeTypeManifest = {
+      ...f.manifest,
+      type: node.type,
+      inputs: [],
+      outputs: [
+        { key: 'video', name: '视频', dataType: VideoType },
+        { key: 'duration', name: '时长', dataType: NumberType, storagePolicy: 'inline' },
+      ],
+    };
+    const execute = vi.fn(async () => ({ video, duration: 12.5 }));
+    const outputSchema = z
+      .object({
+        video: z.object({
+          id: z.string(),
+          mediaType: z.string(),
+          mimeType: z.string(),
+          access: z.object({ url: z.string() }),
+        }),
+        duration: z.number(),
+      })
+      .strict();
+    const executor = new DefaultNodeExecutor(
+      new NodeRegistry([
+        {
+          manifest,
+          inputSchema: z.object({}).strict(),
+          configSchema: z.object({}).strict(),
+          outputSchema,
+          execute,
+        },
+      ]),
+      f.bindings,
+      f.codec,
+    );
+    const context = { ...f.context, workflow: { ...f.context.workflow, nodes: [node] } };
+    return { ...f, executor, context, node, video, execute };
+  }
+
+  it('video 写 Artifact，duration 内联，业务 Node 无需返回存储封装，Executor 不写 State', async () => {
+    const f = videoFixture();
+    const snapshot = structuredClone({ node: f.node, context: f.context });
+    expect(await f.executor.execute(f.node, f.context)).toEqual({
+      output: {
+        video: {
+          storage: 'reference',
+          type: VideoType,
+          reference: { kind: 'artifact', id: 'video-artifact' },
+        },
+        duration: { storage: 'inline', type: NumberType, value: 12.5 },
+      },
+    });
+    expect(f.write).toHaveBeenCalledExactlyOnceWith(f.video, {
+      projectId: 'p',
+      workflowRunId: 'r',
+      nodeId: 'render',
+      outputKey: 'video',
+      type: VideoType,
+    });
+    expect(f.encode.mock.calls).toEqual([
+      [
+        f.video,
+        {
+          type: VideoType,
+          storagePolicy: 'auto',
+          context: { projectId: 'p', workflowRunId: 'r', nodeId: 'render', outputKey: 'video' },
+        },
+      ],
+      [
+        12.5,
+        {
+          type: NumberType,
+          storagePolicy: 'inline',
+          context: { projectId: 'p', workflowRunId: 'r', nodeId: 'render', outputKey: 'duration' },
+        },
+      ],
+    ]);
+    expect(await f.execute.mock.results[0]?.value).toEqual({ video: f.video, duration: 12.5 });
+    expect({ node: f.node, context: f.context }).toEqual(snapshot);
+  });
+
+  it('ArtifactWriter 失败标记 encode_output，保留原因，不编码后续端口或返回部分结果', async () => {
+    const f = videoFixture();
+    const cause = new Error('写入失败');
+    f.write.mockRejectedValue(cause);
+    await expect(f.executor.execute(f.node, f.context)).rejects.toMatchObject({
+      nodeId: 'render',
+      nodeType: 'test.video',
+      stage: 'encode_output',
+      code: 'NODE_OUTPUT_ENCODING_FAILED',
+      cause,
+    });
+    expect(f.write).toHaveBeenCalledTimes(1);
+    expect(f.encode).toHaveBeenCalledTimes(1);
+    expect(f.context.state.outputs).toEqual({});
+  });
+
+  it('输出 Schema 失败时不开始 Artifact 写入', async () => {
+    const f = videoFixture();
+    f.execute.mockResolvedValue({ video: f.video, duration: NaN });
+    await expect(f.executor.execute(f.node, f.context)).rejects.toMatchObject({
+      stage: 'validate_output',
+    });
+    expect(f.write).not.toHaveBeenCalled();
+    expect(f.encode).not.toHaveBeenCalled();
   });
 });

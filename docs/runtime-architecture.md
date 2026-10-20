@@ -18,16 +18,17 @@ NodeDefinition + NodeExecutionContext
   → inputSchema.parse / configSchema.parse
   → NodeType.execute(input, config, context)
   → outputSchema.parse
-  → NodeExecutionResult { output }
+  → 按 OutputPortDefinition 调用 RuntimeValueCodec.encode
+  → NodeExecutionResult { output: Record<string, RuntimeValue> }
 ```
 
-普通 NodeType 不再 compile，也不取得 Graph builder。ActionNodeCompilationStrategy 只包装统一 Executor，注入调用时的当前 State 并返回 NodeExecutionResult；输出 encode 与图 State 增量适配独立处理，不把业务结果冒充 State 更新。control / composite / interaction 使用独立结构策略，不强行套普通 action。
+普通 NodeType 不再 compile，也不取得 Graph builder。ActionNodeCompilationStrategy 只包装统一 Executor，注入调用时的当前 State 并返回 NodeExecutionResult；图 State 增量适配独立处理，不把 Executor 返回结果冒充 State 更新。control / composite / interaction 使用独立结构策略，不强行套普通 action。
 
-普通 Action NodeExecutor 主干固定为精确版本查找、绑定、decode、输入 / 配置 Zod 校验、业务调用和输出 Zod 校验，返回业务 output。NodeExecutionContext 包含领域 workflow / state、项目运行定位及可选信号 / 能力 / 配置，不传 React Flow 对象；Codec 只接收单独构造的最小项目运行上下文。不按 node.type 分支，不处理输出编码、Artifact、State 增量、NodeRun、Retry 或 Human Review，实际范围见 [架构](architecture.md#数据与-node-基础库)。
+普通 Action NodeExecutor 主干固定为精确版本查找、绑定、decode、输入 / 配置 Zod 校验、业务调用、输出 Zod 校验和逐端口 encode，返回 RuntimeValue map。NodeExecutionContext 包含领域 workflow / state、项目运行定位及可选信号 / 能力 / 配置，不传 React Flow 对象；Codec 接收单独构造的项目运行定位；encode 额外携带 nodeId / outputKey，Writer 另收到 DataType。不按 node.type 分支，不直接访问 Artifact 存储，不处理 State 增量、NodeRun、Retry 或 Human Review，实际范围见 [架构](architecture.md#数据与-node-基础库)。
 
 ### Action 执行错误阶段
 
-NodeExecutionError 保留 nodeId、nodeType、stage、code 和原始 cause。六个 stage 为 resolve_input、decode_input、validate_input、validate_config、execute、validate_output；Registry 缺少版本或非 action 拒绝归入 resolve_input。普通失败停止后续步骤，不自动重试。输入校验使用 NODE_INPUT_VALIDATION_FAILED，引用错误保留在 decode_input 的 cause 中，不把所有问题当成原始 ZodError。
+NodeExecutionError 保留 nodeId、nodeType、stage、code 和原始 cause。七个 stage 为 resolve_input、decode_input、validate_input、validate_config、execute、validate_output、encode_output；Registry 缺少版本或非 action 拒绝归入 resolve_input。普通失败停止后续步骤，不自动重试。输入校验使用 NODE_INPUT_VALIDATION_FAILED，引用错误保留在 decode_input 的 cause 中，输出编码或 Artifact 写入失败使用 encode_output / NODE_OUTPUT_ENCODING_FAILED，不与 validate_output 混淆。
 
 LangGraph GraphBubbleUp（含 interrupt / 父图 Command 控制异常）原样传播，不包装为业务失败，不自建恢复状态机。[官方 Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts) 说明中断必须交还图 Runtime；这里只守住异常边界，不引入审核实现。
 
@@ -55,7 +56,7 @@ BindingResolver.resolveInputs 的上下文包含 node、nodeType、edges、state
 
 RuntimeValueCodec.decode 只接收 RuntimeValue 与 projectId / workflowRunId，返回 unknown。inline 原样返回实际值；reference 只调用 DataReferenceResolver，具体授权与内容访问由该引用服务实现承担。媒体可以返回含临时访问 URL 的 MediaResource，其他领域返回相应业务对象，不统一转换成 Buffer 或 URL。decodeRecord 使用 Promise.all 并行解码，再保留输入键组装结果；任何引用失败都使批量调用失败，不提供部分结果或重试。
 
-Codec 不读取 Registry、不依赖数据库或对象存储实现、不生成 URL，也不执行 Zod。引用失败用 REFERENCE_RESOLUTION_FAILED 保留边界与 cause；NodeExecutor 解码后执行 inputSchema.parse，按 NODE_INPUT_VALIDATION_FAILED 区分业务校验。NodeType.execute 只接收校验后的业务输入。输出 encode 仍保留独立 RuntimeValueEncoder 端口，详见 [数据模型](data-model.md#codecbinding-与执行服务接口)。
+decode 不读取 Registry、不依赖数据库或对象存储实现、不生成 URL，也不执行业务 Schema 校验。引用失败用 REFERENCE_RESOLUTION_FAILED 保留边界与 cause；NodeExecutor 解码后执行 inputSchema.parse，按 NODE_INPUT_VALIDATION_FAILED 区分业务校验。NodeType.execute 只接收校验后的业务输入。输出 encode 根据端口存储策略，经统一 DataStoragePolicyResolver 选择 inline / reference；reference 只委托 ArtifactWriter。inline 只检查可持久化 JSON 边界，不调用业务 Schema；默认类型规则、最小上下文及失败约束见 [数据模型](data-model.md#codecbinding-与执行服务接口)。
 
 ## State 与持久化
 
