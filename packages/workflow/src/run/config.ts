@@ -13,7 +13,8 @@ export function createWorkflowRunConfig(
   versionInput: WorkflowVersionMetadata,
   config: RunnableConfig = {},
 ): RunnableConfig {
-  const run = workflowRunMetadataSchema.parse(runInput);
+  // 同时接收完整 WorkflowRun；此处只消费身份与 thread 元数据。
+  const run = workflowRunMetadataSchema.strip().parse(runInput);
   const version = workflowVersionMetadataSchema.parse(versionInput);
   assertWorkflowRunVersion(run, version);
   const threadId: unknown = config.configurable?.thread_id;

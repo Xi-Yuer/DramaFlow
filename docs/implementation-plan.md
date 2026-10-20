@@ -4,46 +4,46 @@
 
 ## 当前阶段
 
-2026-10-20：NodeExecutor 的 Action 生命周期已接入 NodeRunRepository，业务失败与记录基础设施故障边界已明确；能力与输出适配限制见 [当前架构](architecture.md#数据与-node-基础库)，职责边界见 [Runtime](runtime-architecture.md#action-执行错误阶段)。
+2026-10-20：WorkflowRun 领域模型、Repository 和持久化边界已落实，NodeRun 已关联真实父运行；能力与输出适配限制见 [当前架构](architecture.md#数据与-node-基础库)，职责边界见 [Runtime](runtime-architecture.md#workflowrun-记录边界)。
 
 数据语义与承载见 [数据模型](data-model.md)。两类边的静态联合无环检查、执行依赖收集和运行输入绑定职责分离。完整生产执行管线、大小预算、权限解析、业务持久化及控制结构通道语义仍待后续阶段接入；本步不扩大项目保存与节点目录的应用边界，不预设条件路由。
 
-**下一步只解决 WorkflowRun 生命周期：Graph 开始、运行、等待、成功、失败时，业务状态如何与 LangGraph 对齐。** 不提前扩展 Retry、Human Review、Control Node、完整图运行或生成流程。
+**下一步只解决 WorkflowRunner：将既定 WorkflowRun 生命周期与 LangGraph invoke / interrupt / resume / checkpoint 对接。** 不提前扩展 Retry、Human Review、Control Node 或生成流程。
 
 本文件是当前阶段、下一步与待决策项的唯一维护入口；推进时原地修订，不堆叠旧计划或逐轮交付流水。文档维护方式见 [开发指南](development.md#文档维护)。
 
 ## 设计顺序
 
-| 顺序 | 议题                                      | 本步需要回答的问题                               | 状态                                           |
-| ---- | ----------------------------------------- | ------------------------------------------------ | ---------------------------------------------- |
-| ①    | 平台是什么                                | 平台定位、一级概念、领域层与执行底座             | 已记录顶层决策                                 |
-| ②    | Workflow 工作流模型                       | 静态定义、版本、输入输出及 WorkflowRun           | 已确定边界并实施基础库                         |
-| ③    | Node 节点模型                             | Manifest、服务端实现、实例、端口、版本与编译边界 | 已实施基础设施与目录接入                       |
-| ④    | State / 数据流模型                        | 单次状态、绑定求值、结果传递与并行隔离           | 普通 Action 增量与 outputs reducer 已明确      |
-| ⑤    | Runtime 执行模型                          | LangGraph 编译与服务接入、持久化、恢复及事件投影 | 节点业务记录已明确，WorkflowRun 生命周期待设计 |
-| ⑥    | Tool 工具体系                             | 可调用操作、调用契约、权限及 Node / Agent 关系   | 待逐步设计                                     |
-| ⑦    | Plugin 外部能力体系                       | 能力声明、模型、凭证、版本与供应商适配           | 待逐步设计                                     |
-| ⑧    | Middleware 中间件体系                     | 日志、权限、成本、重试的介入边界                 | 待逐步设计                                     |
-| ⑨    | Human Review / Interrupt 人工介入         | 暂停、确认、恢复与生成副作用边界                 | 待逐步设计                                     |
-| ⑩    | Asset 资产体系                            | 生产资料、媒体引用、版本、归属与生命周期         | 待逐步设计                                     |
-| ⑪    | Batch / Parallel / SubWorkflow 长任务体系 | 显式批量、并行、结果收集及子流程生命周期         | 待逐步设计                                     |
-| ⑫    | Agent 智能体体系                          | 模型、工具、上下文与人工确认边界                 | 待逐步设计                                     |
-| ⑬    | 漫剧领域节点与模板                        | 在已确定底座上表达漫剧生产与领域资料             | 待逐步设计                                     |
-| ⑭    | 广告 / 产品 / 口播等扩展                  | 复用底座并补充领域节点和模板                     | 待逐步设计                                     |
+| 顺序 | 议题                                      | 本步需要回答的问题                               | 状态                                      |
+| ---- | ----------------------------------------- | ------------------------------------------------ | ----------------------------------------- |
+| ①    | 平台是什么                                | 平台定位、一级概念、领域层与执行底座             | 已记录顶层决策                            |
+| ②    | Workflow 工作流模型                       | 静态定义、版本、输入输出及 WorkflowRun           | 已确定边界并实施基础库                    |
+| ③    | Node 节点模型                             | Manifest、服务端实现、实例、端口、版本与编译边界 | 已实施基础设施与目录接入                  |
+| ④    | State / 数据流模型                        | 单次状态、绑定求值、结果传递与并行隔离           | 普通 Action 增量与 outputs reducer 已明确 |
+| ⑤    | Runtime 执行模型                          | LangGraph 编译与服务接入、持久化、恢复及事件投影 | 运行记录边界已明确，WorkflowRunner 待设计 |
+| ⑥    | Tool 工具体系                             | 可调用操作、调用契约、权限及 Node / Agent 关系   | 待逐步设计                                |
+| ⑦    | Plugin 外部能力体系                       | 能力声明、模型、凭证、版本与供应商适配           | 待逐步设计                                |
+| ⑧    | Middleware 中间件体系                     | 日志、权限、成本、重试的介入边界                 | 待逐步设计                                |
+| ⑨    | Human Review / Interrupt 人工介入         | 暂停、确认、恢复与生成副作用边界                 | 待逐步设计                                |
+| ⑩    | Asset 资产体系                            | 生产资料、媒体引用、版本、归属与生命周期         | 待逐步设计                                |
+| ⑪    | Batch / Parallel / SubWorkflow 长任务体系 | 显式批量、并行、结果收集及子流程生命周期         | 待逐步设计                                |
+| ⑫    | Agent 智能体体系                          | 模型、工具、上下文与人工确认边界                 | 待逐步设计                                |
+| ⑬    | 漫剧领域节点与模板                        | 在已确定底座上表达漫剧生产与领域资料             | 待逐步设计                                |
+| ⑭    | 广告 / 产品 / 口播等扩展                  | 复用底座并补充领域节点和模板                     | 待逐步设计                                |
 
 这是设计顺序，不要求逐个建设相互脱离的子系统；已经明确且能独立验证的内容同步落到代码。外部生成涉及的 Plugin、Asset、凭证和安全策略不能用占位实现跨过。后续路线不构成一次性实施授权。
 
 Workflow 的可组合性与固定被调用版本原则已在 [Workflow 模型](workflow-model.md#workflow-组合与-subworkflow-边界) 确定。第 ⑪ 步继续细化父子运行与批量生命周期，不授权任意循环、递归调用或项目下多个独立画布 / 工作流。
 
-## 下一步：WorkflowRun 生命周期与 LangGraph 对齐
+## 下一步：WorkflowRunner 与 LangGraph 对齐
 
-NodeRun 记录业务执行历史，Checkpoint 负责原生图恢复。下一步只回答：
+WorkflowRun 记录整次运行，NodeRun 记录节点历史，Checkpoint 负责原生图恢复。下一步只回答：
 
-1. Graph 开始、执行中、成功和失败时，WorkflowRun 状态与时间如何落库？
+1. 如何加载固定版本并调用 Graph，将开始、成功和失败投影到既定 WorkflowRun 操作？
 2. 图等待事实怎样投影为业务状态，且不再建设另一套暂停 / 恢复状态机？
 3. 节点记录失败、图 State 更新失败与业务结果如何对齐，避免把单节点 completed 当作整图成功？
 
-不提前实现 Retry、Human Review、Control Node、真实模型或完整生成流程。普通 Action 禁止主动 interrupt；原生控制异常保持穿透，已有 NodeRun 保持 running。Human Review 阶段再引入 waiting，明确 resume 复用同一 NodeRun、不增加 attempt；本步不恢复关联，不靠 reducer 静默覆盖已有有效输出。
+不提前实现 Retry、Human Review、Control Node、真实模型或完整生成流程。普通 Action 禁止主动 interrupt；原生控制异常保持穿透，已有 NodeRun 保持 running。Human Review 阶段再引入 NodeRun.waiting，明确 resume 复用同一 NodeRun、不增加 attempt；本步不恢复关联，不靠 reducer 静默覆盖已有有效输出。
 
 ## 从设计进入代码
 

@@ -44,11 +44,11 @@ class PrismaNodeRunRepository implements NodeRunRepository {
     const nodeId = workflowIdentifierSchema.parse(input.nodeId);
     return this.db.client.$transaction(
       async (tx) => {
-        const project = await tx.project.findFirst({
-          where: { id: projectId, ownerId },
+        const run = await tx.workflowRun.findFirst({
+          where: { id: workflowRunId, projectId, project: { ownerId } },
           select: { id: true },
         });
-        if (!project) throw new NotFoundException('项目不存在或无权访问');
+        if (!run) throw new NotFoundException('运行不存在或无权访问');
         // 同一运行 / 节点串行分配；锁随事务释放，不重试业务执行，也不需要独立计数实体。
         const lockKey = JSON.stringify([workflowRunId, nodeId]);
         await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
@@ -142,11 +142,11 @@ export class NodeRunRepositories {
   ): Promise<NodeRunRepository> {
     const projectId = z.uuid().parse(rawProjectId);
     const workflowRunId = workflowIdentifierSchema.parse(rawWorkflowRunId);
-    const project = await this.db.client.project.findFirst({
-      where: { id: projectId, ownerId },
+    const run = await this.db.client.workflowRun.findFirst({
+      where: { id: workflowRunId, projectId, project: { ownerId } },
       select: { id: true },
     });
-    if (!project) throw new NotFoundException('项目不存在或无权访问');
+    if (!run) throw new NotFoundException('运行不存在或无权访问');
     return new PrismaNodeRunRepository(this.db, {
       ownerId,
       projectId,

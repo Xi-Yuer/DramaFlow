@@ -19,6 +19,7 @@ export * from './runtime/binding-resolution-error.js';
 export * from './runtime/node-executor.js';
 export * from './runtime/node-execution-error.js';
 export * from './run/node-run-repository.js';
+export * from './run/workflow-run-repository.js';
 export * from './compiler/strategy.js';
 export * from './compiler/dependency.compiler.js';
 export * from './runtime/content-store.js';

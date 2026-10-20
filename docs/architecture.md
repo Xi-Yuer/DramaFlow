@@ -6,7 +6,7 @@ DramaFlow 是面向团队自部署的 AI 视频生产工作流平台，漫剧优
 
 应用已有登录、平台鉴权、账户中心、项目管理和 React Flow 画布。画布注册通用节点 renderer、查询真实节点目录，并接入 Data / Control Edge 连线、重连与删除事件。目前目录为空，没有添加节点、Workflow 持久化、模型生成、工作流运行或业务对话。
 
-Next.js 使用 App Router、Ant Design 深色主题和 TanStack Query。认证通过同源代理接入 NestJS Better Auth 白名单入口，业务 API 默认受真实全局 AuthGuard 保护。PostgreSQL / Prisma 保存身份、资料、凭证、会话、认证限流、基础项目及 NodeRun 业务记录；Redis 与 RustFS 提供基础服务。会话与角色边界见 [认证实施](authentication.md)。
+Next.js 使用 App Router、Ant Design 深色主题和 TanStack Query。认证通过同源代理接入 NestJS Better Auth 白名单入口，业务 API 默认受真实全局 AuthGuard 保护。PostgreSQL / Prisma 保存身份、资料、凭证、会话、认证限流、基础项目及 WorkflowRun / NodeRun 业务记录；Redis 与 RustFS 提供基础服务。会话与角色边界见 [认证实施](authentication.md)。
 
 每项目恰好一张画布。项目保存所有者、名称、视口、revision 和时间，不保存节点、绑定或 WorkflowDefinition；读取与写入按所有者隔离。列表按更新时间与 id 倒序，游标保存毫秒精度更新时间和 id，并校验长度、编码与字段；相同更新时间用 id 确定边界。分页读取当前列表，不建立跨请求数据库快照。原子更新检查 revision，冲突返回 409。revision 是项目保存的修订号，不是工作流发布版本。目录与渲染器接入没有改变项目保存协议或数据库。
 
@@ -58,7 +58,11 @@ DataReferenceResolver、ArtifactWriter 与内容 Store 仍只有服务接口，�
 
 createWorkflowRunConfig 使用显式 Run.threadId，不从 Run.id 推断或允许其他配置覆盖，不创建运行或 checkpointer。contracts/workflow/node-run.ts 独立定义 NodeRun 的三状态、必填 ISO 开始时间、RuntimeValue inputs / outputs 和结构化错误，并从包入口导出。NodeRunError.stage 为非空字符串，code 可省略，不绑定 Runtime 的阶段枚举；NodeExecutionStage 仅在 workflow/runtime/node-execution-error.ts 内维护。run/node-run-repository.ts 定义 Repository 抽象，createRunning 只接收 workflowRunId / nodeId，不接收 attempt 或数据库字段；Executor 只依赖该抽象。
 
-API 的 workflow/node-runs 模块提供 NodeRunRepositories.forRun(ownerId, projectId, workflowRunId)，先验证项目所有者，返回限定项目 / 运行的 PostgreSQL Repository。projectId 来自该工厂作用域，不属于 CreateNodeRunInput。写入继续过滤所有者、项目、运行和 running 状态；输入只写一次，终态不可改写。createRunning 在 ReadCommitted 事务中按运行 / 节点获取 PostgreSQL advisory transaction lock 后分配 attempt，并受唯一约束保护。Prisma NodeRun 使用 String status，数据库继续约束三状态及终态字段一致性，包含 workflowRunId 和 workflowRunId / nodeId 索引。node_run 表关联 canvas_project；尚无 WorkflowRun 表，因此 workflowRunId 仍是内部逻辑身份，不新增运行 HTTP 入口或生命周期。
+API 的 workflow/node-runs 模块提供 NodeRunRepositories.forRun(ownerId, projectId, workflowRunId)，验证同项目真实父运行和所有者，返回限定项目 / 运行的 PostgreSQL Repository。projectId 来自该工厂作用域，不属于 CreateNodeRunInput。写入继续过滤所有者、项目、运行和 running 状态；输入只写一次，终态不可改写。createRunning 在 ReadCommitted 事务中按运行 / 节点获取 PostgreSQL advisory transaction lock 后分配 attempt，并受唯一约束保护。Prisma NodeRun 使用 String status，数据库继续约束三状态及终态字段一致性，包含 workflowRunId 和 workflowRunId / nodeId 索引。node_run 关联 canvas_project，并以 workflowRunId / projectId 复合外键关联 workflow_run，防止跨项目归属；删除父运行级联删除节点历史。
+
+contracts/workflow/workflow-run.ts 在既有元数据上补全 WorkflowRun，保存项目、明确版本、独立 threadId、六种状态、RuntimeValue inputs / 最终 outputs、结构化错误和 ISO 时间。run/workflow-run-repository.ts 定义 create 与五种明确状态操作，不暴露 updateStatus 或数据库实现。API 的 WorkflowRunRepositories.forProject(ownerId, projectId) 返回有权限作用域的 Prisma Repository；创建固定 pending、输入与版本，分别生成 id / threadId，所有写入继续检查所有者与项目。markRunning 首次写 startedAt，waiting 恢复保留它；其余操作以当前合法状态作为原子更新条件，终态不改写。数据库约束字段一致性、threadId 唯一、不可变身份 / 版本 / 输入及合法转换，规则见 [WorkflowRun](workflow-model.md#workflowrun一次实际运行)。Workflow / WorkflowVersion 尚无数据库实体，因此两个 ID 仍为显式逻辑引用，版本真实归属与发布校验须由后续版本服务落实。没有运行 HTTP 入口、WorkflowRunner、LangGraph invoke 或 Human Review 接入。
+
+WorkflowRun 测试检查协议 JSON 往返、输入输出 RuntimeValue map、独立 thread 与 ISO 时间；真实隔离 PostgreSQL 覆盖创建、等待再运行、首次时间保留、30 组状态操作、终态并发竞争、版本不可改、thread 唯一、权限隔离、同项目 NodeRun 外键与级联删除。记录中的最终输出只含调用方提交的对外 RuntimeValue map，Repository 不执行最终结果收集或业务 Schema 校验。
 
 真实隔离 PostgreSQL 测试覆盖仅用两个创建字段连续得到 attempt 1/2、可省略错误码及可扩展阶段，并覆盖视频节点首次失败、第二次成功的两条历史与有效 State 输出、Binding 失败无输入快照、12 次并发 attempt、数据库唯一约束、终态不可覆盖及项目 / 运行权限隔离。完成记录不可用的故障注入用例验证业务已成功时不会调用 markFailed，已创建的 running 记录和输入保留，且不写 State。内容 Resolver / Writer 仍显式使用测试替身；这些用例不证明真实视频或 Artifact 持久化。
 
@@ -81,13 +85,13 @@ GenericWorkflowNode 根据精确类型版本 Manifest 自动生成数据 Handle�
 | apps/worker        | 独立进程，只接入共享基础设施                         | 独立执行进程，不自建图调度语义         |
 | packages/server    | 数据库、Redis、对象存储和凭证加密                    | 不包含 HTTP、认证或业务流程            |
 | packages/contracts | 身份、项目、Workflow 与 Node 的中立 JSON 协议        | 不依赖前端、数据库或 Runtime 框架      |
-| packages/database  | Prisma 与身份、基础项目持久化                        | 模型、迁移按实际业务增加               |
+| packages/database  | Prisma 与身份、基础项目和运行记录持久化              | 模型、迁移按实际业务增加               |
 | packages/workflow  | 值契约、数据 / 节点 Registry、运行接口及编译包装     | 先确定 Graph Model，再接入执行与持久化 |
 | packages/plugins   | 空入口，保留模型 SDK                                 | 受信任外部能力，无隐式供应商选择       |
 | packages/context   | 空入口                                               | 独立构建明确选择的上下文               |
 
 不为附件目录示意重命名为 common / client，不为未来概念建立空壳执行器。API 与 worker 通过服务和契约协作；第三方类型在适配层转换，不进入 contracts。
 
-contracts/src 的 identity.ts 与 project.ts 分别承载身份与项目协议，workflow/ 和 node/ 承载工作流与节点协议，NodeRun 领域记录归 workflow/node-run.ts，data/ 和 content/ 承载值与内容协议。workflow/src 分为 definition/、data/、node/、runtime/、compiler/、run/；server/src 分为 database/、redis/、storage/、secrets/。API 的 health/ 与 http/ 保留 HTTP 职责，基础设施不反向依赖 API，worker 不再依赖 API 应用包。
+contracts/src 的 identity.ts 与 project.ts 分别承载身份与项目协议，workflow/ 和 node/ 承载工作流与节点协议，NodeRun / WorkflowRun 领域记录各归 workflow/ 下同名文件，data/ 和 content/ 承载值与内容协议。workflow/src 分为 definition/、data/、node/、runtime/、compiler/、run/；server/src 分为 database/、redis/、storage/、secrets/。API 的 health/ 与 http/ 保留 HTTP 职责，基础设施不反向依赖 API，worker 不再依赖 API 应用包。
 
 LangGraph 是核心 Runtime，平台不再建设图调度、Checkpoint 或暂停恢复状态机。Queue / Worker 后续处理长异步作业、跨运行与供应商限流，不决定图中下一个节点。一个项目一个逻辑 Workflow 的边界不变，子流程只引用其他项目固定版本；当前没有对应持久化、发布或运行应用接口。

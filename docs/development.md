@@ -20,7 +20,9 @@ Action NodeExecutor 测试用仅测试注册的 math.add 与真实 Registry / Bi
 
 State 测试用真实 WorkflowStateAnnotation 验证 outputs 缺省空 map、独立调用初始化、纯合并不修改输入、同 step 重复 nodeId 冲突与跨 step 隐式覆盖拒绝，包含原型相关键。使用真实 Registry / BindingResolver / Codec / Executor / Action 策略和 DependencyCompiler 构造 A、B → C，控制两种完成顺序，检查双方输出完整保留、C 通过 Data Edge 读取两份值且只执行一次。通过这些用例不代表完整 WorkflowCompiler、真实 Artifact 持久化或生产运行服务已接入。
 
-NodeRun contract 测试独立放在 contracts/test/node-run.test.ts，验证三状态、ISO 时间、RuntimeValue map、字符串阶段及可选错误码的 JSON 往返。NodeRun 的数据库集成测试使用真实 PostgreSQL、Repository 和 Executor，并经 Action wrapper / outputs reducer 验证先失败再成功的两条历史。另注入完成记录服务故障，验证 NodeRun 不反向 failed、输入仍保留、State 无输出。检查最小创建参数连续分配 attempt 1/2、任意非空错误阶段 / 可省略 code、Binding 失败、RuntimeValue 快照不含解码媒体 URL、并发 attempt、唯一约束、输入只写一次、终态不可覆盖及所有者 / 项目 / 运行隔离；内容服务仍是测试替身。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目及级联记录，不清空开发库。不得用这些测试声明已有 WorkflowRun、真实 Artifact 或生产 Checkpoint。
+NodeRun contract 测试独立放在 contracts/test/node-run.test.ts，验证三状态、ISO 时间、RuntimeValue map、字符串阶段及可选错误码的 JSON 往返。NodeRun 的数据库集成测试先经真实 WorkflowRun Repository 创建父运行，再使用真实 PostgreSQL、Repository 和 Executor，并经 Action wrapper / outputs reducer 验证先失败再成功的两条历史。另注入完成记录服务故障，验证 NodeRun 不反向 failed、输入仍保留、State 无输出。检查最小创建参数连续分配 attempt 1/2、任意非空错误阶段 / 可省略 code、Binding 失败、RuntimeValue 快照不含解码媒体 URL、并发 attempt、唯一约束、输入只写一次、终态不可覆盖及所有者 / 项目 / 运行隔离；内容服务仍是测试替身。
+
+WorkflowRun contract 测试检查六状态、独立 thread、ISO 时间、输入与最终输出 RuntimeValue map；现有配置适配测试同时接受完整运行对象。数据库用例不 invoke LangGraph，覆盖完整等待再运行路径、30 组合法 / 非法转换、首次时间不变、终态并发竞争、thread 唯一、固定版本与输入、权限隔离、NodeRun 同项目外键与级联删除。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目及级联记录，不清空开发库。单独验证运行记录可定向执行 test/workflow-runs.e2e-spec.ts 和 test/node-runs.e2e-spec.ts；这些测试不证明已有 WorkflowRunner、真实 Artifact 或生产 Checkpoint。
 
 节点类型开发对照 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。分别验证纯 JSON Manifest 的配置类型 / 默认值、输出 storagePolicy 可选且枚举合法 / 输入不接受该字段、服务端三组 Zod 与声明字段一致、精确类型版本注册以及 listManifests 的白名单与数据隔离。Preset 只测试配置模板行为，不作为 Registry 身份；保留 transform 和默认值不回写定义的回归。
 
@@ -67,4 +69,4 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 
 ## 定向验证范围
 
-按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / State 通道与并行增量 / 输入解析 / Codec / 存储策略 / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；NodeRun 生命周期另执行隔离 PostgreSQL 集成测试；State 增量适配和执行主干不代表已有真实 Artifact 写入、生产 Checkpoint 或完整图运行接口。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
+按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / State 通道与并行增量 / 输入解析 / Codec / 存储策略 / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；WorkflowRun / NodeRun 生命周期另执行隔离 PostgreSQL 集成测试；State 增量适配和执行主干不代表已有真实 Artifact 写入、生产 Checkpoint 或完整图运行接口。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。

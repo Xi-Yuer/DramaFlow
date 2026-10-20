@@ -9,7 +9,7 @@
 | node       | NodeType.execute、精确版本 Registry、值 Schema 与 Preset 校验                                            |
 | runtime    | WorkflowState Annotation / outputs reducer、输入组装、Codec 与 Action 输出编码，引用 / Artifact 服务接口 |
 | compiler   | CompilationStrategy、薄 action 包装、Data / Control Edge 依赖收集与 ALL Join 编译                        |
-| run        | 显式 Run.threadId 到 LangGraph 配置的映射、NodeRunRepository 持久化抽象                                  |
+| run        | 显式 Run.threadId 到 LangGraph 配置的映射、WorkflowRun / NodeRun Repository 持久化抽象                   |
 
 NodeType 不再自行 compile，普通业务只处理 input + config + context。NodeRegistry 的非 action 声明由独立结构策略处理，不伪装普通操作。createOperationNodeType 仅组合业务实现；invokeNodeOperation 保留独立真实值校验，不承担调度、Binding 或持久化。
 

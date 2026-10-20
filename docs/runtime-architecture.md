@@ -71,6 +71,14 @@ running 在 Registry / Binding 之前创建，Binding 成功后 updateInputs 保
 
 NodeRunError 的领域字段 stage 为字符串、code 可省略；Runtime 自己维护严格的执行阶段类型，并写入阶段码与阶段说明，不复制原始 cause、stack 或供应商错误文本；原始原因仍保留在抛出的执行错误中。NodeRun completed 表示业务调用及输出记录成功，不表示随后的 State reducer 或整个 Graph 一定成功；NodeRun、Artifact 与 Checkpoint 不承诺跨服务原子提交。普通 Action 禁止主动 interrupt。原生 interrupt / ParentCommand 仍原样穿透，已有 NodeRun 保持 running，不记 failed；本步不复用恢复关联。Human Review 再引入 waiting，并明确 resume 关联同一 NodeRun、不增加 attempt。
 
+### WorkflowRun 记录边界
+
+WorkflowRun 保存某个明确 WorkflowVersion 的一次完整运行，独立于 NodeRun 历史和 LangGraph Checkpoint。完整协议在 contracts/workflow/workflow-run.ts，Repository 抽象在 workflow/run/workflow-run-repository.ts，Prisma 实现在 API；不在 contracts 或 workflow Repository 中引入数据库依赖。create 必须接收 projectId / workflowId / workflowVersionId 和 RuntimeValue 输入，不解析最新版、不随草稿更新。id 与 threadId 是独立字段；配置适配只消费运行元数据，不传递输入输出到 RunnableConfig。
+
+Repository 创建 pending，使用明确的 markRunning / markWaiting / markCompleted / markFailed / markCancelled。合法转换、时间规则见 [Workflow 模型](workflow-model.md#workflowrun一次实际运行)；Repository 对当前状态原子检查，数据库保护不可变身份、版本、输入和合法转换。WorkflowRun waiting 只表示整图正在等待，NodeRun 仍只有普通 Action 的三种状态；这些记录操作不调用 LangGraph，不意味着已有 interrupt / resume 或人工审核实现。
+
+inputs / outputs 是 RuntimeValue map。outputs 只接收最终对外工作流结果，不复制按 nodeId 组织的 State.outputs；结果收集及版本业务契约校验由执行编排层承担。NodeRun 通过同项目复合外键引用真实 WorkflowRun，Checkpoint 继续独立。尚无版本数据库实体，因此版本归属验证与不可变定义加载仍由后续版本服务落实；当前固定的是记录中的明确版本身份。
+
 ## State 与持久化
 
 WorkflowStateAnnotation 与既有 State 接口共处 runtime/state.ts。outputs 使用 mergeNodeOutputs 合并局部 RuntimeValue map，缺省为空；重复 nodeId 写入明确失败。其余分区不由普通 Action wrapper 写入，定义、业务历史、内容存储与执行快照分离，完整规则见 [State 边界](workflow-state.md#并行与历史)。不以对象覆盖或业务状态轮询代替通道。[官方 Graph API](https://docs.langchain.com/oss/javascript/langgraph/graph-api) 说明图和状态机制。

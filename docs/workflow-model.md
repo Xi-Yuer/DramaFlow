@@ -125,26 +125,29 @@ interface WorkflowVersion {
 ## WorkflowRun：一次实际运行
 
 ```ts
-type RunStatus = 'pending' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
+type WorkflowRunStatus = 'pending' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
 
 interface WorkflowRun {
   id: string;
+  projectId: string;
   workflowId: string;
   workflowVersionId: string;
   threadId: string;
-  status: RunStatus;
-  inputs: Record<string, unknown>;
-  outputs?: Record<string, unknown>;
+  status: WorkflowRunStatus;
+  inputs: Record<string, RuntimeValue>;
+  outputs?: Record<string, RuntimeValue>;
+  error?: WorkflowRunError;
+  createdAt: string;
   startedAt?: string;
   completedAt?: string;
 }
 ```
 
-上述完整运行对象表达领域方向；当前只实现元数据契约，threadId 必填且独立于 Run.id，运行输入输出与业务数据库尚未接入。创建运行时可以选择相同的 ID 值，但不能在缺少 threadId 时推断或固定为相等。
+完整协议复用既有运行元数据和六种状态，threadId 必填且独立于 Run.id。创建时可以选择相同的 ID 值，但不能在缺少 threadId 时推断或固定为相等。协议、Repository 与数据库的实际范围见 [当前架构](architecture.md#数据与-node-基础库)。
 
 `workflowVersionId` 必须属于同一个 `workflowId`，读取或启动时都必须检查对应项目权限。同一版本可以多次运行，各次输入、State、资产引用、节点执行结果、错误及等待记录相互隔离，不反写进 WorkflowDefinition。
 
-`Record<string, unknown>` 仅表示本次输入输出值集合；实际值必须通过该版本契约校验，不能绕过边界验证。共享时间字段采用 ISO 字符串，值契约与快照拒绝非 JSON 值。
+inputs / outputs 保存 RuntimeValue map，不复制解码媒体或整个 State.outputs；outputs 是按工作流声明名称组织的最终对外结果。WorkflowRunError 保存 stage、可选 code 与 message 的稳定摘要，不保存原始异常。实际值仍须通过对应版本的业务契约校验；运行记录的结构校验不替代它。时间字段采用 ISO 字符串。
 
 | 状态        | 语义                                         |
 | ----------- | -------------------------------------------- |
@@ -154,6 +157,8 @@ interface WorkflowRun {
 | `completed` | 按定义完成，并形成符合输出契约的结果         |
 | `failed`    | 本次运行失败                                 |
 | `cancelled` | 本次运行被取消                               |
+
+合法转换固定为 pending → running；running → waiting / completed / failed / cancelled；waiting → running / cancelled。waiting 恢复后如遇失败，必须经过 running 再进入 failed；终态不再更新。首次进入 running 写 startedAt，waiting → running 保留首次开始时间，终态写 completedAt。Repository 只提供明确领域操作，不开放任意 updateStatus，也不靠状态记录调度 Graph。
 
 `waiting` 是等待人工审核、外部 API、子流程或批量结果等执行事实的业务投影，不能凭状态字符串驱动另一套暂停 / 恢复流程。人工介入使用 LangGraph interrupt / Command.resume；WorkflowRun.threadId 映射 thread_id，等待原因及业务审计与 checkpoint 分离，见 [WorkflowState 边界](workflow-state.md) 与 [技术职责](runtime-architecture.md)。
 

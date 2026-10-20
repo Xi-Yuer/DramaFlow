@@ -138,6 +138,17 @@ describe('LangGraph 原生恢复与运行定位', () => {
       '版本',
     );
   });
+  it('完整 WorkflowRun 可复用现有 thread 配置适配，不把运行数据传入配置', () => {
+    const fullRun = {
+      ...run,
+      projectId: 'project-1',
+      inputs: {},
+      createdAt: '2026-10-20T00:00:00.000Z',
+    };
+    expect(createWorkflowRunConfig(fullRun, version)).toEqual({
+      configurable: { thread_id: run.threadId },
+    });
+  });
   it('控制结构仍直接用原生 interrupt/Command，同一 thread 恢复且不影响其他线程', async () => {
     const TestState = Annotation.Root({
       value: Annotation<number>(),

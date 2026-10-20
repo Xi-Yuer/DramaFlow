@@ -25,6 +25,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { NodeRunRepositories } from '../src/workflow/node-runs/node-run-repository.js';
+import { WorkflowRunRepositories } from '../src/workflow/workflow-runs/workflow-run-repository.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
@@ -36,6 +37,7 @@ if (
 const database = new DatabaseService();
 const db = database.client;
 const repositories = new NodeRunRepositories(database);
+const workflowRuns = new WorkflowRunRepositories(database);
 const ownerId = randomUUID();
 const otherId = randomUUID();
 let projectId: string;
@@ -70,8 +72,23 @@ afterAll(async () => {
   await database.onModuleDestroy();
 });
 
+async function createParentRun(
+  owner = ownerId,
+  project = projectId,
+): Promise<string> {
+  const repository = await workflowRuns.forProject(owner, project);
+  const run = await repository.create({
+    projectId: project,
+    workflowId: 'workflow',
+    workflowVersionId: 'version',
+    inputs: {},
+  });
+  await repository.markRunning(run.id);
+  return run.id;
+}
+
 async function videoFixture() {
-  const workflowRunId = randomUUID();
+  const workflowRunId = await createParentRun();
   const repository = await repositories.forRun(
     ownerId,
     projectId,
@@ -210,7 +227,7 @@ describe('真实 PostgreSQL NodeRun', () => {
   });
 
   it('最小创建参数连续分配 attempt 1/2，并持久化完成与失败两条记录', async () => {
-    const workflowRunId = `logical-run-${randomUUID()}`;
+    const workflowRunId = await createParentRun();
     const repository = await repositories.forRun(
       ownerId,
       projectId,
@@ -353,7 +370,7 @@ describe('真实 PostgreSQL NodeRun', () => {
   });
 
   it('多个 Repository 实例并发创建时原子分配连续 attempt，数据库约束拒绝重复', async () => {
-    const workflowRunId = randomUUID();
+    const workflowRunId = await createParentRun();
     const first = await repositories.forRun(ownerId, projectId, workflowRunId);
     const second = await repositories.forRun(ownerId, projectId, workflowRunId);
     const input = { workflowRunId, nodeId: 'concurrent' };
@@ -377,7 +394,7 @@ describe('真实 PostgreSQL NodeRun', () => {
   });
 
   it('inputs 只记录一次，completed / failed 历史不被改写', async () => {
-    const workflowRunId = randomUUID();
+    const workflowRunId = await createParentRun();
     const repo = await repositories.forRun(ownerId, projectId, workflowRunId);
     const run = await repo.createRunning({
       workflowRunId,
@@ -423,7 +440,7 @@ describe('真实 PostgreSQL NodeRun', () => {
   });
 
   it('限定所有者、项目与运行，不能凭 NodeRun ID 写其他范围的历史', async () => {
-    const workflowRunId = randomUUID();
+    const workflowRunId = await createParentRun();
     await expect(
       repositories.forRun(otherId, projectId, workflowRunId),
     ).rejects.toThrow('无权访问');
@@ -431,12 +448,12 @@ describe('真实 PostgreSQL NodeRun', () => {
     const otherProject = await repositories.forRun(
       otherId,
       otherProjectId,
-      randomUUID(),
+      await createParentRun(otherId, otherProjectId),
     );
     const otherRun = await repositories.forRun(
       ownerId,
       projectId,
-      randomUUID(),
+      await createParentRun(),
     );
     const run = await first.createRunning({
       workflowRunId,
