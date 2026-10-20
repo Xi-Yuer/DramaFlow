@@ -54,7 +54,7 @@ describe('Workflow 提交 / 执行边界', () => {
     expect(f.runs.create).toHaveBeenCalledTimes(1);
   });
 
-  it('恢复提交仅返回意图并保留 waiting；实际执行者才 claim，两个意图只有一个 invoke', async () => {
+  it('恢复提交保存意图并保留 waiting；实际执行者才 claim，重投同一意图只 invoke 一次', async () => {
     const f = workflowRunnerFixture();
     const resumed = vi.fn();
     f.version.definition.outputs = [];
@@ -72,8 +72,13 @@ describe('Workflow 提交 / 执行边界', () => {
     await f.runner.executeStart(pending.id);
     f.compile.mockClear();
     const job = await f.submission.resume({ workflowRunId: pending.id, value: false });
-    const second = await f.submission.resume({ workflowRunId: pending.id, value: true });
-    expect(job).toEqual({ kind: 'resume', workflowRunId: pending.id, value: false });
+    const second = structuredClone(job);
+    expect(job).toMatchObject({
+      kind: 'resume',
+      workflowRunId: pending.id,
+      executionId: 'execution-1',
+      value: false,
+    });
     expect((await f.runs.getById(pending.id))?.status).toBe('waiting');
     expect(f.runs.claimWaitingForResume).not.toHaveBeenCalled();
     expect(f.compile).not.toHaveBeenCalled();

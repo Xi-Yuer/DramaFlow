@@ -18,7 +18,7 @@ async function bootstrap() {
       app.get(StorageService).ping(),
       app.get(WorkflowCheckpointerService).ping(),
     ]);
-    new Logger('Worker').log('基础设施连接就绪；当前未注册业务任务。');
+    new Logger('Worker').log('Workflow 执行队列与 Outbox Dispatcher 就绪。');
   } catch (error) {
     await app.close();
     throw error;

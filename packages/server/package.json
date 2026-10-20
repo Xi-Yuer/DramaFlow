@@ -27,6 +27,7 @@
     "@langchain/langgraph-checkpoint": "1.2.0",
     "@langchain/langgraph-checkpoint-postgres": "1.1.0",
     "@nestjs/common": "^12.0.1",
+    "bullmq": "6.3.18",
     "ioredis": "5.11.1",
     "pg": "^8.16.3",
     "zod": "^4.1.0"

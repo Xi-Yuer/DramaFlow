@@ -36,9 +36,11 @@ test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的版本、WorkflowRun
 
 test/persistent-checkpoint.e2e-spec.ts 是真实 PostgreSQL 跨进程测试，不用 MemorySaver：启动进程 A 的 Nest / Repository / Saver / Compiler / Runner，interrupt 后等待 A 完全退出；再启动 B，从原 workflowVersionId / threadId 恢复并完成。期间通过真实 WorkflowService 更新 / 发布新版本，检查原输入、已完成节点和原版本仍有效。两个全新进程另用 IPC 屏障先同时读到 waiting，释放后只有一个 claim 成功且进入 graph.invoke；第三项验证不可用 checkpoint 数据库使 Nest 初始化失败。子进程导入生产持久化模块与 Repository，原生 interrupt 图是测试专用 Compiler，不能视作 HumanReview 产品或 NodeRun waiting 实现。测试清理只调用官方 deleteThread 删除自建 thread，并关闭连接。health.e2e-spec 验证真正 API 启动和 checkpoint 读取健康项。
 
-test/workflow-runtime.e2e-spec.ts 在先完成应用 build 后，动态加载 API / Worker 的正式 AppModule 编译产物，保留 Nest 构造器 metadata，不覆盖 provider 或注册测试节点。检查生产 DI、权限作用域 Runner、提交服务产生 pending，执行服务完成同一 Run 并写入真实 checkpoint、未知节点拒绝、配置错误 cause、跨用户隔离，以及 waiting 缺少 checkpoint 时失败且不创建新线程。另验证 API 应用提交、独立 Worker 应用按同一 ID 完成，重复 start Job 不再次执行；空图完成只证明装配可运行，不代表业务节点已交付；Controller 由独立 HTTP 用例验证。普通 typecheck 不依赖 API / Worker 的 dist 产物。
+test/workflow-runtime.e2e-spec.ts 动态加载正式 API / Worker AppModule 编译产物，不覆盖生产 provider。验证 API 没有 Runner factory / ExecutionService、Worker 完整 DI、API 事务提交 pending / Outbox 后由实际队列 Consumer 完成同一 Run，以及权限、未知节点、引用未配置和缺失 checkpoint 的边界。生产 Registry 仍为空，不把空图当作已交付业务节点。
 
-test/workflow-run-api.e2e-spec.ts 使用两个真实 Nest HTTP 实例、真实密码会话与签名 Cookie，保留正式 Guard、Controller、Service、Repository 和 PostgresSaver。检查空版本经默认生产 factory 完成、严格请求和安全 DTO、未登录与 Origin、跨用户资源统一 404 且不进入 Runner、HTTP waiting / 跨实例恢复 / GET outputs、0 值恢复及两个 HTTP resume 的单胜者 / 409。中断与错误仅在专用测试项目装配原生图 / 故障注入，不提供生产交互节点；普通生产 Registry 仍为空。错误单测检查安全码、配置 cause 提取、修订冲突及循环 cause；contracts/test/workflow-run-api.test.ts 检查请求字段和响应不公开内部身份。定向运行前构建 API；隔离数据库、清理范围与既有测试相同。
+test/workflow-run-api.e2e-spec.ts 使用两个真实 HTTP API、密码会话 / 签名 Cookie，并启动独立 Worker 子进程。验证没有 Worker 时也能返回 202 / pending、GET 完成输出、API 进程不执行 Runner、两轮恢复 / 0 值、同等待周期并发提交单意图 / 409、跨用户不可见、字段严格校验及 Redis 入队未确认返回安全 503。原生等待图只存在于测试子进程，不注册生产交互节点。
+
+test/workflow-queue.e2e-spec.ts 使用真实 PostgreSQL / Redis、正式 Submission / Dispatcher / Consumer，并对独立子进程执行 SIGKILL。覆盖提交事务后未 enqueue、enqueue 后 published 尚未提交、Worker 收件或 claim 后死亡、BullMQ stalled 重投、连续两轮 resume 与 Redis 旧 Job 删除后重投的持久去重。额外验证数据库触发器强制 Outbox INSERT 失败时 Run 一同回滚、投递失败保留意图 / 尝试次数、claim 前临时基础设施故障重试，以及真实 NodeRun execute 失败只记 attempt 1、队列不跑五次业务执行。claim 后结果不明保留 running，意图 recovery_required；不以自动重跑冒充安全恢复。
 
 恢复的数据库用例另外验证同一运行经过两次 resume 完成、同一 State 输出保留、运行记录与 thread 数不增加、恢复失败结束同一记录。两个不同 Repository / Runner 实例通过屏障先都读到 waiting，图执行期间只有一个 claim 成功并 invoke，另一个收到 WORKFLOW_RUN_NOT_WAITING。Repository 用例另测试 12 个并发 claim 的单胜者、完整六状态读取、所有者 / 项目 / 过期权限与非 waiting 不更新；不以纯内存替身证明并发持久化正确。
 
@@ -54,7 +56,7 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 
 认证相关开发先阅读 authentication.md。新增业务 API 默认受 AuthGuard 保护，公开接口需显式 Public；修改角色、停用或会话逻辑后执行隔离数据库集成测试。
 
-项目接口或保存协议变更后，执行 pnpm check 和 pnpm test:integration，重点验证名称/视口边界、所有者隔离、分页、revision 冲突及旧节点/插件字段被拒绝；浏览器检查登录、新建项目、名称和视口保存、重新加载及账户中心。当前仅节点目录接入 API，项目接口不保存或执行节点；独立的 State / Action 适配测试覆盖确定性数据流，不覆盖应用运行入口、生产持久化、队列或真实模型。
+项目接口或保存协议变更后，执行 pnpm check 和 pnpm test:integration，重点验证名称/视口边界、所有者隔离、分页、revision 冲突及旧节点/插件字段被拒绝；浏览器检查登录、新建项目、名称和视口保存、重新加载及账户中心。画布当前仅查询节点目录，项目保存接口不保存或执行节点；独立的 State / Action 适配测试覆盖确定性数据流，不覆盖应用运行入口、生产持久化、队列或真实模型。
 
 仅更新架构和规划文档时，检查 Markdown 格式、相对链接、当前实现描述及模型约束的一致性；不把未运行的构建、集成测试或模型调用写成已通过。后续各步新增真实能力后，再更新相应验证范围。
 
@@ -89,4 +91,4 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 
 按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / State 通道与并行增量 / 输入解析 / Codec / 存储策略 / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；WorkflowRun / NodeRun 生命周期另执行隔离 PostgreSQL 集成测试；生产 Checkpointer 的恢复能力用跨进程数据库测试验证，不能用 MemorySaver 单元测试替代。State 增量适配和执行主干不代表已有真实 Artifact 写入或完整图运行接口。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
 
-WorkflowExecutionJob 契约单测检查仅携带业务 Run ID、严格拒绝 State / Definition / thread / version 副本及保留 falsy resume 值。workflow-run-submission.test.ts 使用内存 Repository / MemorySaver 验证提交无 Graph I/O、新 Runner 只按 ID 读取已保存输入、不重复创建 Run、并发 start 单次执行、resume 提交保留 waiting、竞争执行单胜者与执行时版本读取失败。workflow-runs.e2e-spec.ts 用两个生产 Repository 验证 12 个 pending claim 仅一成功及非 pending 无写入；这些与 waiting claim、跨进程 persistent checkpoint 和真实 HTTP 用例分别证明不同边界，不把返回意图当成已持久入队。
+WorkflowExecutionJob 契约单测检查仅携带业务 Run ID、resume executionId / value，严格拒绝 State / Definition / thread / version 副本并保留 falsy 值。workflow-run-submission.test.ts 的内存 Repository / MemorySaver 只验证提交与执行分离，不作为生产事务 / Queue 证明；实际事务回滚和崩溃重投由上述 PostgreSQL / Redis 集成覆盖。

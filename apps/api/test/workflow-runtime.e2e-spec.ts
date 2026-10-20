@@ -9,30 +9,22 @@ import {
   DatabaseService,
   NodeRunRepositories,
   WorkflowCheckpointerService,
-  WorkflowNodeRegistryModule,
-  WorkflowRunRepositories,
-  WorkflowRuntimeFactory,
+  WorkflowExecutionQueue,
   WorkflowExecutionService,
+  WorkflowOutboxDispatcher,
+  WorkflowRunRepositories,
   WorkflowRunSubmissionFactory,
+  WorkflowRuntimeFactory,
   WorkflowVersionRepositories,
 } from '@dramaflow/server';
-import {
-  DefaultDataStoragePolicyResolver,
-  DefaultRuntimeValueCodec,
-  DefaultWorkflowOutputResolver,
-  DefaultWorkflowRunner,
-  NodeRegistry,
-  type WorkflowRunner,
-  type StartWorkflowRunInput,
-  type ResumeWorkflowRunInput,
-} from '@dramaflow/workflow';
+import { DefaultRuntimeValueCodec, NodeRegistry } from '@dramaflow/workflow';
 import {
   type INestApplicationContext,
   NotFoundException,
   type Type,
 } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { WorkflowRuntimeService } from '../src/workflow/runtime/workflow-runtime.service.js';
 import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
@@ -40,91 +32,95 @@ import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
   new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test'
+    '/dramaflow_test' ||
+  !process.env.WORKFLOW_QUEUE_PREFIX?.startsWith('dramaflow-test-')
 )
-  throw new Error(
-    'Runtime 装配集成测试仅允许在 DramaFlow 的隔离测试数据库运行',
-  );
-
+  throw new Error('Runtime 装配仅允许独立测试库与队列');
 const database = new DatabaseService();
 const db = database.client;
 const ownerId = randomUUID();
 const outsiderId = randomUUID();
-const applications: {
-  name: string;
-  app: INestApplicationContext;
-  runtimeToken: Type<unknown>;
-}[] = [];
-
+let api: INestApplicationContext;
+let worker: INestApplicationContext;
+let apiRuntime: WorkflowRuntimeService;
 beforeAll(async () => {
   for (const id of [ownerId, outsiderId])
     await db.user.create({
-      data: { id, name: 'Runtime 装配测试', email: `${id}@example.test` },
+      data: { id, name: 'Runtime 装配', email: `${id}@example.test` },
     });
   const constructor = z.custom<Type<unknown>>(
     (value) => typeof value === 'function',
   );
-  for (const [name, directory] of [
-    ['api', '../dist/'],
-    ['worker', '../../worker/dist/'],
-  ] as const) {
-    // 集成入口先 build；动态加载真实产物保留 Nest metadata，普通 typecheck 不依赖应用 dist。
-    const module: unknown = await import(
-      new URL(`${directory}app.module.js`, import.meta.url).href
-    );
-    const runtime: unknown = await import(
-      new URL(
-        `${directory}workflow/runtime/workflow-runtime.service.js`,
-        import.meta.url,
-      ).href
-    );
-    const { AppModule } = z.object({ AppModule: constructor }).parse(module);
-    const { WorkflowRuntimeService } = z
-      .object({ WorkflowRuntimeService: constructor })
-      .parse(runtime);
-    const app = await NestFactory.createApplicationContext(AppModule, {
-      logger: false,
-      abortOnError: false,
-    });
-    applications.push({
-      name,
-      app,
-      runtimeToken: WorkflowRuntimeService,
-    });
-  }
+  const apiSource: unknown = await import(
+    new URL('../dist/app.module.js', import.meta.url).href
+  );
+  api = await NestFactory.createApplicationContext(
+    z.object({ AppModule: constructor }).parse(apiSource).AppModule,
+    { logger: false, abortOnError: false },
+  );
+  await api.get(WorkflowExecutionQueue).queue.pause();
+  const runtimeSource: unknown = await import(
+    new URL(
+      '../dist/workflow/runtime/workflow-runtime.service.js',
+      import.meta.url,
+    ).href
+  );
+  apiRuntime = api.get<WorkflowRuntimeService>(
+    z.object({ WorkflowRuntimeService: constructor }).parse(runtimeSource)
+      .WorkflowRuntimeService,
+  );
+  const workerSource: unknown = await import(
+    new URL('../../worker/dist/app.module.js', import.meta.url).href
+  );
+  worker = await NestFactory.createApplicationContext(
+    z.object({ AppModule: constructor }).parse(workerSource).AppModule,
+    { logger: false, abortOnError: false },
+  );
 });
-
 afterAll(async () => {
+  await worker?.close();
   try {
     const runs = await db.workflowRun.findMany({
       where: { project: { ownerId } },
       select: { threadId: true },
     });
-    const checkpointer = applications[0]?.app.get(WorkflowCheckpointerService);
     for (const run of runs)
-      await checkpointer?.saver.deleteThread(run.threadId);
+      await api
+        ?.get(WorkflowCheckpointerService)
+        .saver.deleteThread(run.threadId);
     await db.user.deleteMany({ where: { id: { in: [ownerId, outsiderId] } } });
+    await api?.get(WorkflowExecutionQueue).queue.obliterate({ force: true });
   } finally {
-    await Promise.all(applications.map(({ app }) => app.close()));
+    await api?.close();
     await database.onModuleDestroy();
   }
 });
-
-async function fixture(
-  definition: WorkflowDefinition = {
+async function fixture(unknownNode = false) {
+  const project = await db.project.create({
+    data: { ownerId, name: '装配', viewport: {} },
+  });
+  const definition: WorkflowDefinition = {
     inputs: [],
-    nodes: [],
     edges: [],
     outputs: [],
-  },
-) {
-  const project = await db.project.create({
-    data: { ownerId, name: 'Runtime 装配', viewport: {} },
-  });
+    nodes: unknownNode
+      ? [
+          {
+            id: 'missing',
+            type: 'missing.business_node',
+            typeVersion: 1,
+            name: '未安装节点',
+            inputs: {},
+            config: {},
+            ui: { position: { x: 0, y: 0 } },
+          },
+        ]
+      : [],
+  };
   const workflow = await db.workflow.create({
     data: {
       projectId: project.id,
-      name: 'Runtime 装配',
+      name: '装配',
       draft: z.record(z.string(), z.json()).parse(definition),
     },
   });
@@ -139,194 +135,130 @@ async function fixture(
     inputs: {},
   };
 }
-
-// 测试显式组合两个生产边界；生产 Worker 不接受创建参数。
-async function start(
-  app: INestApplicationContext,
-  owner: string,
-  input: StartWorkflowRunInput,
-) {
-  const submission = await app
-    .get(WorkflowRunSubmissionFactory)
-    .forProject(owner, input.projectId);
-  const pending = await submission.start(input);
-  expect(pending.status).toBe('pending');
-  expect(
-    await app
-      .get(WorkflowCheckpointerService)
-      .saver.getTuple({ configurable: { thread_id: pending.threadId } }),
-  ).toBeUndefined();
-  return app.get(WorkflowExecutionService).executeStart(pending.id);
-}
-
-async function resume(
-  app: INestApplicationContext,
-  owner: string,
-  projectId: string,
-  input: ResumeWorkflowRunInput,
-) {
-  const submission = await app
-    .get(WorkflowRunSubmissionFactory)
-    .forProject(owner, projectId);
-  const job = await submission.resume(input);
-  return app.get(WorkflowExecutionService).execute(job);
-}
-
-it('API 提交后由独立 Worker 应用执行同一个 pending Run；重复 start Job 不再次执行', async () => {
-  const api = applications.find((entry) => entry.name === 'api');
-  const worker = applications.find((entry) => entry.name === 'worker');
-  if (!api || !worker) throw new Error('应用未启动');
-  const submission = api.app.get<WorkflowRuntimeService>(api.runtimeToken);
-  const execution = worker.app.get<Pick<WorkflowExecutionService, 'execute'>>(
-    worker.runtimeToken,
+async function waitRun(id: string, status: string) {
+  await vi.waitFor(
+    async () =>
+      expect(
+        (await db.workflowRun.findUniqueOrThrow({ where: { id } })).status,
+      ).toBe(status),
+    { timeout: 10000 },
   );
-  const input = await fixture();
-  const run = await submission.submitStart(ownerId, input);
-  expect(run.status).toBe('pending');
-  expect(
-    await db.workflowRun.count({ where: { projectId: input.projectId } }),
-  ).toBe(1);
-  expect(
-    await api.app
-      .get(WorkflowCheckpointerService)
-      .saver.getTuple({ configurable: { thread_id: run.threadId } }),
-  ).toBeUndefined();
-  const result = await execution.execute({
-    kind: 'start',
-    workflowRunId: run.id,
+}
+describe('正式 Nest 应用的提交 / 队列 / 执行装配', () => {
+  it('API 只有提交 / Dispatcher，Worker 构造真实执行依赖，生产 Registry 仍为空', async () => {
+    for (const app of [api, worker]) {
+      await app.get(WorkflowCheckpointerService).ping();
+      expect(app.get(WorkflowRunRepositories)).toBeInstanceOf(
+        WorkflowRunRepositories,
+      );
+      expect(app.get(WorkflowVersionRepositories)).toBeInstanceOf(
+        WorkflowVersionRepositories,
+      );
+      expect(app.get(NodeRegistry).listManifests()).toEqual([]);
+    }
+    expect(api.get(WorkflowRunSubmissionFactory)).toBeInstanceOf(
+      WorkflowRunSubmissionFactory,
+    );
+    expect(api.get(WorkflowOutboxDispatcher)).toBeInstanceOf(
+      WorkflowOutboxDispatcher,
+    );
+    expect(() => api.get(WorkflowExecutionService)).toThrow();
+    expect(() => api.get(WorkflowRuntimeFactory)).toThrow();
+    expect(worker.get(WorkflowExecutionService)).toBeInstanceOf(
+      WorkflowExecutionService,
+    );
+    expect(worker.get(NodeRunRepositories)).toBeInstanceOf(NodeRunRepositories);
   });
-  expect(result).toMatchObject({
-    workflowRunId: run.id,
-    threadId: run.threadId,
-    status: 'completed',
-  });
-  await expect(
-    execution.execute({ kind: 'start', workflowRunId: run.id }),
-  ).rejects.toMatchObject({ code: 'WORKFLOW_RUN_NOT_PENDING' });
-  expect(
-    await db.workflowRun.count({ where: { projectId: input.projectId } }),
-  ).toBe(1);
-});
-
-describe.each(['api', 'worker'])('%s 正式 Nest Runtime 装配', (name) => {
-  function context() {
-    const application = applications.find((entry) => entry.name === name);
-    if (!application) throw new Error('正式应用尚未完成初始化');
-    return application;
-  }
-
-  it('完整 DI 构造生产 Repository / Codec / Registry / Runner，空图经真实服务与 PostgreSQL 完成', async () => {
-    const { app } = context();
-    await app.get(DatabaseService).client.$queryRaw`SELECT 1`;
-    await app.get(WorkflowCheckpointerService).ping();
-    expect(app.get(WorkflowVersionRepositories)).toBeInstanceOf(
-      WorkflowVersionRepositories,
-    );
-    expect(app.get(WorkflowRunRepositories)).toBeInstanceOf(
-      WorkflowRunRepositories,
-    );
-    expect(app.get(NodeRunRepositories)).toBeInstanceOf(NodeRunRepositories);
-    expect(app.get(DefaultRuntimeValueCodec)).toBeInstanceOf(
-      DefaultRuntimeValueCodec,
-    );
-    expect(app.get(DefaultDataStoragePolicyResolver)).toBeInstanceOf(
-      DefaultDataStoragePolicyResolver,
-    );
-    expect(app.get(DefaultWorkflowOutputResolver)).toBeInstanceOf(
-      DefaultWorkflowOutputResolver,
-    );
-    const registry = app.get(NodeRegistry);
-    expect(registry.listManifests()).toEqual([]);
-    expect(
-      app
-        .select(WorkflowNodeRegistryModule)
-        .get(NodeRegistry, { strict: true }),
-    ).toBe(registry);
-
+  it('API 提交与 Worker 消费同一 Run，不创建第二条记录；旧 Job 重投只返回 already_processed', async () => {
     const input = await fixture();
-    const runner: WorkflowRunner = await app
-      .get(WorkflowRuntimeFactory)
-      .forProject(ownerId, input.projectId);
-    expect(runner).toBeInstanceOf(DefaultWorkflowRunner);
-    const result = await start(app, ownerId, input);
-    expect(result).toMatchObject({ status: 'completed', outputs: {} });
-    const run = await db.workflowRun.findUniqueOrThrow({
-      where: { id: result.workflowRunId },
-    });
-    expect(run).toMatchObject({
-      ...input,
-      threadId: result.threadId,
-      status: 'completed',
-      outputs: {},
-    });
-    const checkpoint = await app
-      .get(WorkflowCheckpointerService)
-      .saver.getTuple({ configurable: { thread_id: run.threadId } });
-    expect(checkpoint?.checkpoint.channel_values.run).toMatchObject({
-      workflowRunId: run.id,
-      workflowVersionId: input.workflowVersionId,
-    });
-    expect(await db.nodeRun.count({ where: { workflowRunId: run.id } })).toBe(
-      0,
-    );
+    const run = await apiRuntime.submitStart(ownerId, input);
+    expect(run.status).toBe('pending');
+    expect(
+      await db.workflowExecutionOutbox.count({
+        where: { workflowRunId: run.id },
+      }),
+    ).toBe(1);
+    expect(
+      await api
+        .get(WorkflowCheckpointerService)
+        .saver.getTuple({ configurable: { thread_id: run.threadId } }),
+    ).toBeUndefined();
+    await api.get(WorkflowOutboxDispatcher).publishStart(run.id);
+    await api.get(WorkflowExecutionQueue).queue.resume();
+    try {
+      await waitRun(run.id, 'completed');
+      await vi.waitFor(async () =>
+        expect(
+          (
+            await db.workflowExecutionOutbox.findFirstOrThrow({
+              where: { workflowRunId: run.id },
+            })
+          ).status,
+        ).toBe('completed'),
+      );
+      expect(
+        await worker.get(WorkflowExecutionService).executeStart(run.id),
+      ).toMatchObject({ status: 'already_processed' });
+      expect(
+        await db.workflowRun.count({ where: { projectId: input.projectId } }),
+      ).toBe(1);
+      expect(await db.nodeRun.count({ where: { workflowRunId: run.id } })).toBe(
+        0,
+      );
+    } finally {
+      await api.get(WorkflowExecutionQueue).queue.pause();
+    }
+  });
+  it('提交按所有者限定权限，不能跨用户创建 Run 或恢复意图', async () => {
+    const input = await fixture();
     await expect(
-      resume(app, ownerId, input.projectId, {
-        workflowRunId: run.id,
+      apiRuntime.submitStart(outsiderId, input),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(
+      await db.workflowRun.count({ where: { projectId: input.projectId } }),
+    ).toBe(0);
+    await expect(
+      apiRuntime.submitResume(outsiderId, input.projectId, {
+        workflowRunId: 'missing',
         value: 1,
       }),
-    ).rejects.toMatchObject({ code: 'WORKFLOW_RUN_NOT_WAITING' });
-    expect(registry.listManifests()).toEqual([]);
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
-
-  it('无业务节点时明确拒绝未知类型并记录 compile 失败，不注入假节点或产生 NodeRun', async () => {
-    const input = await fixture({
-      inputs: [],
-      nodes: [
-        {
-          id: 'missing',
-          type: 'missing.business_node',
-          typeVersion: 1,
-          name: '未安装节点',
-          inputs: {},
-          config: {},
-          ui: { position: { x: 0, y: 0 } },
-        },
-      ],
-      edges: [],
-      outputs: [],
-    });
-    await expect(start(context().app, ownerId, input)).rejects.toMatchObject({
-      code: 'unavailable_type',
-    });
-    const run = await db.workflowRun.findFirstOrThrow({
-      where: { projectId: input.projectId },
-    });
-    expect(run).toMatchObject({
-      status: 'failed',
-      error: { stage: 'compile' },
-    });
-    expect(await db.nodeRun.count({ where: { workflowRunId: run.id } })).toBe(
-      0,
-    );
-    expect(context().app.get(NodeRegistry).listManifests()).toEqual([]);
+  it('未知节点由 Worker 记 compile 失败，Queue 不自动重跑或产生假 NodeRun', async () => {
+    const input = await fixture(true);
+    const run = await apiRuntime.submitStart(ownerId, input);
+    await api.get(WorkflowOutboxDispatcher).publishStart(run.id);
+    await api.get(WorkflowExecutionQueue).queue.resume();
+    try {
+      await waitRun(run.id, 'failed');
+      expect(
+        await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } }),
+      ).toMatchObject({ error: { stage: 'compile' } });
+      await vi.waitFor(async () =>
+        expect(
+          (
+            await db.workflowExecutionOutbox.findFirstOrThrow({
+              where: { workflowRunId: run.id },
+            })
+          ).status,
+        ).toBe('failed'),
+      );
+      expect(await db.nodeRun.count({ where: { workflowRunId: run.id } })).toBe(
+        0,
+      );
+    } finally {
+      await api.get(WorkflowExecutionQueue).queue.pause();
+    }
   });
-
-  it('引用能力未配置时保留明确错误码，inline 使用真实 Codec，reference 不降级', async () => {
-    const codec = context().app.get(DefaultRuntimeValueCodec);
-    const valueContext = { projectId: 'project', workflowRunId: 'run' };
+  it('引用实现未配置仍明确拒绝，inline 使用真实 Codec，不注入媒体兜底', async () => {
+    const codec = worker.get(DefaultRuntimeValueCodec);
+    const context = { projectId: 'project', workflowRunId: 'run' };
     expect(
       await codec.decode(
         { storage: 'inline', type: NumberType, value: 10 },
-        valueContext,
+        context,
       ),
     ).toBe(10);
-    expect(
-      await codec.encode(12.5, {
-        type: NumberType,
-        storagePolicy: 'auto',
-        context: { ...valueContext, nodeId: 'node', outputKey: 'duration' },
-      }),
-    ).toEqual({ storage: 'inline', type: NumberType, value: 12.5 });
     await expect(
       codec.decode(
         {
@@ -334,79 +266,50 @@ describe.each(['api', 'worker'])('%s 正式 Nest Runtime 装配', (name) => {
           type: ImageType,
           reference: { kind: 'asset', id: 'asset', versionId: 'v3' },
         },
-        valueContext,
+        context,
       ),
     ).rejects.toMatchObject({
       code: 'REFERENCE_RESOLUTION_FAILED',
       cause: { code: 'REFERENCE_RUNTIME_NOT_CONFIGURED' },
     });
-    for (const storagePolicy of ['reference', 'auto'] as const)
-      await expect(
-        codec.encode(
-          { id: 'image' },
-          {
-            type: ImageType,
-            storagePolicy,
-            context: { ...valueContext, nodeId: 'node', outputKey: 'image' },
-          },
-        ),
-      ).rejects.toMatchObject({ code: 'ARTIFACT_WRITER_NOT_CONFIGURED' });
-  });
-
-  it('显式所有者 / 项目限定 start 和 resume，不允许跨用户取得 Runner 或修改运行', async () => {
-    const input = await fixture();
-    const { app } = context();
     await expect(
-      app.get(WorkflowRuntimeFactory).forProject(outsiderId, input.projectId),
-    ).rejects.toBeInstanceOf(NotFoundException);
-    await expect(start(app, outsiderId, input)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
-    expect(
-      await db.workflowRun.count({ where: { projectId: input.projectId } }),
-    ).toBe(0);
-    const result = await start(app, ownerId, input);
-    await expect(
-      resume(app, outsiderId, input.projectId, {
-        workflowRunId: result.workflowRunId,
-        value: 1,
-      }),
-    ).rejects.toBeInstanceOf(NotFoundException);
-    expect(
-      await db.workflowRun.findUniqueOrThrow({
-        where: { id: result.workflowRunId },
-      }),
-    ).toMatchObject({ status: 'completed' });
+      codec.encode(
+        { id: 'image' },
+        {
+          type: ImageType,
+          storagePolicy: 'auto',
+          context: { ...context, nodeId: 'node', outputKey: 'image' },
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'ARTIFACT_WRITER_NOT_CONFIGURED' });
   });
-
-  it('resume 经生产服务读取原运行；waiting 但缺少 checkpoint 时失败，不重新初始化图', async () => {
+  it('waiting 缺少 checkpoint 时恢复同一记录失败，不初始化新线程', async () => {
     const input = await fixture();
-    const { app } = context();
-    const repository = await app
+    const run = await apiRuntime.submitStart(ownerId, input);
+    const repository = await api
       .get(WorkflowRunRepositories)
       .forProject(ownerId, input.projectId);
-    const run = await repository.create(input);
     await repository.markRunning(run.id);
     await repository.markWaiting(run.id);
-    await expect(
-      resume(app, ownerId, input.projectId, {
-        workflowRunId: run.id,
-        value: 1,
-      }),
-    ).rejects.toThrow();
-    expect(await repository.getById(run.id)).toMatchObject({
-      status: 'failed',
-      threadId: run.threadId,
-      workflowVersionId: input.workflowVersionId,
-      error: { stage: 'inspect_state' },
+    const job = await apiRuntime.submitResume(ownerId, input.projectId, {
+      workflowRunId: run.id,
+      value: 1,
     });
-    expect(
-      await app
-        .get(WorkflowCheckpointerService)
-        .saver.getTuple({ configurable: { thread_id: run.threadId } }),
-    ).toBeUndefined();
-    expect(
-      await db.workflowRun.count({ where: { projectId: input.projectId } }),
-    ).toBe(1);
+    await api.get(WorkflowOutboxDispatcher).publishExecution(job.executionId);
+    await api.get(WorkflowExecutionQueue).queue.resume();
+    try {
+      await waitRun(run.id, 'failed');
+      expect(await repository.getById(run.id)).toMatchObject({
+        threadId: run.threadId,
+        error: { stage: 'inspect_state' },
+      });
+      expect(
+        await api
+          .get(WorkflowCheckpointerService)
+          .saver.getTuple({ configurable: { thread_id: run.threadId } }),
+      ).toBeUndefined();
+    } finally {
+      await api.get(WorkflowExecutionQueue).queue.pause();
+    }
   });
 });

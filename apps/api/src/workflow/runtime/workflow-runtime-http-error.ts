@@ -3,6 +3,7 @@ import {
   NodeRegistrationError,
   WorkflowRunNotWaitingError,
   WorkflowRunNotPendingError,
+  WorkflowResumeAlreadySubmittedError,
   WorkflowRunRecordingError,
 } from '@dramaflow/workflow';
 import {
@@ -60,6 +61,20 @@ export function workflowRuntimeHttpError(
       },
       { cause: error },
     );
+  if (error instanceof WorkflowResumeAlreadySubmittedError)
+    return new ConflictException({
+      code: error.code,
+      message: '本轮等待已提交恢复请求',
+    });
+  if (
+    error instanceof HttpException &&
+    error.getStatus() === 503 &&
+    errorCode(error) === 'WORKFLOW_QUEUE_UNAVAILABLE'
+  )
+    return new ServiceUnavailableException({
+      code: 'WORKFLOW_QUEUE_UNAVAILABLE',
+      message: '执行命令已持久保存，队列暂不可用',
+    });
   if (error instanceof HttpException && error.getStatus() === 404)
     return workflowResourceNotFound(notFoundCode);
   if (

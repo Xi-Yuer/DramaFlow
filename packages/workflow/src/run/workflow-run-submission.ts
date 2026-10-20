@@ -2,13 +2,11 @@ import {
   runtimeValueMapSchema,
   workflowIdentifierSchema,
   workflowRunSchema,
-  workflowExecutionJobSchema,
   type WorkflowRun,
   type ResumeWorkflowExecutionJob,
 } from '@dramaflow/contracts';
 import { z } from 'zod';
-import { WorkflowRunNotWaitingError } from './workflow-run-error.js';
-import type { WorkflowRunRepository } from './workflow-run-repository.js';
+import type { WorkflowRunSubmissionRepository } from './workflow-run-submission-repository.js';
 import {
   loadWorkflowVersion,
   type WorkflowVersionRepository,
@@ -33,17 +31,17 @@ export interface WorkflowRunSubmissionService {
   resume(input: ResumeWorkflowRunInput): Promise<ResumeWorkflowExecutionJob>;
 }
 
-// 本层不执行 Graph、不抢占状态，也不承诺意图已持久入队；调用方须把意图交给执行适配层。
+// 本层不执行 Graph、不抢占状态；事务记录 Outbox，Dispatcher 负责持久投递。
 export class DefaultWorkflowRunSubmissionService implements WorkflowRunSubmissionService {
   constructor(
     private readonly versions: WorkflowVersionRepository,
-    private readonly runs: WorkflowRunRepository,
+    private readonly runs: WorkflowRunSubmissionRepository,
   ) {}
 
   async start(input: StartWorkflowRunInput): Promise<WorkflowRun> {
     const request = startInputSchema.parse(input);
     await loadWorkflowVersion(this.versions, request);
-    const run = workflowRunSchema.parse(await this.runs.create(request));
+    const run = workflowRunSchema.parse(await this.runs.createWithExecution(request));
     if (
       run.projectId !== request.projectId ||
       run.workflowId !== request.workflowId ||
@@ -55,13 +53,6 @@ export class DefaultWorkflowRunSubmissionService implements WorkflowRunSubmissio
   }
 
   async resume(input: ResumeWorkflowRunInput): Promise<ResumeWorkflowExecutionJob> {
-    const job = workflowExecutionJobSchema.parse({ ...input, kind: 'resume' });
-    if (job.kind !== 'resume') throw new Error('恢复意图类型错误');
-    const stored = await this.runs.getById(job.workflowRunId);
-    if (!stored || stored.status !== 'waiting')
-      throw new WorkflowRunNotWaitingError(job.workflowRunId);
-    const run = workflowRunSchema.parse(stored);
-    if (run.id !== job.workflowRunId) throw new Error('读取到的运行与恢复请求不匹配');
-    return job;
+    return this.runs.createResumeExecution(input);
   }
 }

@@ -7,10 +7,18 @@ import {
   type RuntimeValue,
   type WorkflowRun,
   type WorkflowRunError,
+  workflowExecutionJobSchema,
+  type ResumeWorkflowExecutionJob,
 } from '@dramaflow/contracts';
 import type { Prisma } from '@dramaflow/database';
 import { DatabaseService } from '../database/database.service.js';
-import type { CreateWorkflowRunInput, WorkflowRunRepository } from '@dramaflow/workflow';
+import {
+  WorkflowRunNotWaitingError,
+  WorkflowResumeAlreadySubmittedError,
+  type CreateWorkflowRunInput,
+  type WorkflowRunRepository,
+  type WorkflowRunSubmissionRepository,
+} from '@dramaflow/workflow';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 
@@ -30,6 +38,7 @@ function snapshot(values: Record<string, RuntimeValue>): Prisma.InputJsonObject 
 interface RepositoryScope {
   readonly ownerId: string;
   readonly projectId: string;
+  readonly executionId?: string;
 }
 
 function toWorkflowRun(row: Prisma.WorkflowRunGetPayload<Record<string, never>>): WorkflowRun {
@@ -49,30 +58,97 @@ function toWorkflowRun(row: Prisma.WorkflowRunGetPayload<Record<string, never>>)
   });
 }
 
-class PrismaWorkflowRunRepository implements WorkflowRunRepository {
+class PrismaWorkflowRunRepository
+  implements WorkflowRunRepository, WorkflowRunSubmissionRepository
+{
   constructor(
     private readonly db: DatabaseService,
     private readonly scope: RepositoryScope,
   ) {}
 
-  async create(input: CreateWorkflowRunInput): Promise<WorkflowRun> {
-    const parsed = createInputSchema.parse(input);
+  private async createRecord(
+    tx: Prisma.TransactionClient,
+    parsed: CreateWorkflowRunInput,
+  ): Promise<WorkflowRun> {
     if (parsed.projectId !== this.scope.projectId) throw new Error('运行与已授权项目不匹配');
-    return this.db.client.$transaction(async (tx) => {
-      const project = await tx.project.findFirst({
-        where: { id: parsed.projectId, ownerId: this.scope.ownerId },
-        select: { id: true },
-      });
-      if (!project) throw new NotFoundException('项目不存在或无权访问');
-      const row = await tx.workflowRun.create({
+    const project = await tx.project.findFirst({
+      where: { id: parsed.projectId, ownerId: this.scope.ownerId },
+      select: { id: true },
+    });
+    if (!project) throw new NotFoundException('项目不存在或无权访问');
+    return toWorkflowRun(
+      await tx.workflowRun.create({
         data: {
           ...parsed,
           id: randomUUID(),
           threadId: randomUUID(),
           inputs: snapshot(parsed.inputs),
         },
+      }),
+    );
+  }
+
+  async create(input: CreateWorkflowRunInput): Promise<WorkflowRun> {
+    const parsed = createInputSchema.parse(input);
+    return this.db.client.$transaction((tx) => this.createRecord(tx, parsed));
+  }
+
+  async createWithExecution(input: CreateWorkflowRunInput): Promise<WorkflowRun> {
+    const parsed = createInputSchema.parse(input);
+    return this.db.client.$transaction(async (tx) => {
+      const run = await this.createRecord(tx, parsed);
+      await tx.workflowExecutionOutbox.create({
+        data: {
+          kind: 'start',
+          workflowRunId: run.id,
+          payload: { kind: 'start', workflowRunId: run.id },
+        },
       });
-      return toWorkflowRun(row);
+      return run;
+    });
+  }
+
+  async createResumeExecution(input: {
+    workflowRunId: string;
+    value: unknown;
+  }): Promise<ResumeWorkflowExecutionJob> {
+    const request = z
+      .object({ workflowRunId: workflowIdentifierSchema, value: z.json() })
+      .strict()
+      .parse(input);
+    return this.db.client.$transaction(async (tx) => {
+      // 与执行 claim 使用同一 Run 行锁序列；waiting 状态保持不变。
+      await tx.$queryRaw`SELECT "id" FROM "workflow_run" WHERE "id" = ${request.workflowRunId} FOR UPDATE`;
+      const run = await tx.workflowRun.findFirst({ where: this.scoped(request.workflowRunId) });
+      if (!run || run.status !== 'waiting')
+        throw new WorkflowRunNotWaitingError(request.workflowRunId);
+      const existing = await tx.workflowExecutionOutbox.findUnique({
+        where: {
+          workflowRunId_kind_waitingRevision: {
+            workflowRunId: run.id,
+            kind: 'resume',
+            waitingRevision: run.waitingRevision,
+          },
+        },
+      });
+      if (existing) throw new WorkflowResumeAlreadySubmittedError();
+      const executionId = randomUUID();
+      const job: ResumeWorkflowExecutionJob = {
+        kind: 'resume',
+        executionId,
+        workflowRunId: run.id,
+        value: request.value,
+      };
+      await tx.workflowExecutionOutbox.create({
+        data: {
+          id: executionId,
+          kind: 'resume',
+          workflowRunId: run.id,
+          waitingRevision: run.waitingRevision,
+          payload: z.record(z.string(), z.json()).parse(workflowExecutionJobSchema.parse(job)),
+        },
+      });
+      return job;
     });
   }
 
@@ -95,30 +171,49 @@ class PrismaWorkflowRunRepository implements WorkflowRunRepository {
     return row ? toWorkflowRun(row) : null;
   }
 
-  async claimPendingForStart(workflowRunId: string): Promise<WorkflowRun | null> {
+  private async claimExecution(
+    workflowRunId: string,
+    kind: 'start' | 'resume',
+  ): Promise<WorkflowRun | null> {
     return this.db.client.$transaction(async (tx) => {
       const where = this.scoped(workflowRunId);
+      const executionId = this.scope.executionId;
+      const intent = executionId
+        ? await tx.workflowExecutionOutbox.findFirst({
+            where: {
+              id: executionId,
+              workflowRunId,
+              kind,
+              status: { in: ['pending', 'published'] },
+            },
+          })
+        : null;
+      if (executionId && !intent) return null;
       const changed = await tx.workflowRun.updateMany({
-        where: { ...where, status: 'pending' },
-        data: { status: 'running', startedAt: new Date() },
+        where: {
+          ...where,
+          status: kind === 'start' ? 'pending' : 'waiting',
+          ...(intent ? { waitingRevision: intent.waitingRevision } : {}),
+        },
+        data: { status: 'running', ...(kind === 'start' ? { startedAt: new Date() } : {}) },
       });
       if (changed.count === 0) return null;
+      if (intent) {
+        const claimed = await tx.workflowExecutionOutbox.updateMany({
+          where: { id: intent.id, status: { in: ['pending', 'published'] } },
+          data: { status: 'executing' },
+        });
+        if (claimed.count !== 1) throw new Error('执行意图抢占失败'); // 整体回滚 Run claim。
+      }
       return toWorkflowRun(await tx.workflowRun.findFirstOrThrow({ where }));
     });
   }
 
-  async claimWaitingForResume(workflowRunId: string): Promise<WorkflowRun | null> {
-    return this.db.client.$transaction(async (tx) => {
-      const where = this.scoped(workflowRunId);
-      const changed = await tx.workflowRun.updateMany({
-        where: { ...where, status: 'waiting' },
-        data: { status: 'running' },
-      });
-      if (changed.count === 0) return null;
-      // 更新锁一直保留到读取 / 校验后的提交，不在应用层先读再决定是否抢占。
-      const row = await tx.workflowRun.findFirstOrThrow({ where });
-      return toWorkflowRun(row);
-    });
+  claimPendingForStart(workflowRunId: string): Promise<WorkflowRun | null> {
+    return this.claimExecution(workflowRunId, 'start');
+  }
+  claimWaitingForResume(workflowRunId: string): Promise<WorkflowRun | null> {
+    return this.claimExecution(workflowRunId, 'resume');
   }
 
   async markRunning(workflowRunId: string): Promise<void> {
@@ -183,13 +278,21 @@ class PrismaWorkflowRunRepository implements WorkflowRunRepository {
 export class WorkflowRunRepositories {
   constructor(private readonly db: DatabaseService) {}
 
-  async forProject(ownerId: string, rawProjectId: string): Promise<WorkflowRunRepository> {
+  async forProject(
+    ownerId: string,
+    rawProjectId: string,
+    executionId?: string,
+  ): Promise<WorkflowRunRepository & WorkflowRunSubmissionRepository> {
     const projectId = z.uuid().parse(rawProjectId);
     const project = await this.db.client.project.findFirst({
       where: { id: projectId, ownerId },
       select: { id: true },
     });
     if (!project) throw new NotFoundException('项目不存在或无权访问');
-    return new PrismaWorkflowRunRepository(this.db, { ownerId, projectId });
+    return new PrismaWorkflowRunRepository(this.db, {
+      ownerId,
+      projectId,
+      ...(executionId ? { executionId } : {}),
+    });
   }
 }

@@ -16,6 +16,7 @@ export class WorkflowRunsController {
   constructor(private readonly runtime: WorkflowRuntimeService) {}
 
   @Post()
+  @HttpCode(202)
   @Header('Cache-Control', 'no-store')
   start(@Actor() actor: AuthActor, @Body() body: unknown) {
     return this.runtime.startVersion(actor.user.id, body);
@@ -28,7 +29,7 @@ export class WorkflowRunsController {
   }
 
   @Post(':runId/resume')
-  @HttpCode(200)
+  @HttpCode(202)
   @Header('Cache-Control', 'no-store')
   resume(
     @Actor() actor: AuthActor,

@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 
 if (existsSync('.env')) process.loadEnvFile('.env');
@@ -25,5 +26,6 @@ const url = new URL(process.env.DATABASE_URL);
 url.pathname = '/dramaflow_test';
 process.env.DATABASE_URL = url.toString();
 process.env.DRAMAFLOW_INTEGRATION = '1';
+process.env.WORKFLOW_QUEUE_PREFIX = `dramaflow-test-${randomUUID()}`;
 await run(['--filter', '@dramaflow/database', 'migrate:deploy']);
 await run(['--filter', '@dramaflow/api', 'test:e2e']);

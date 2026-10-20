@@ -1,27 +1,22 @@
 import 'reflect-metadata';
+import { fork, type ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import {
-  ImageType,
   NumberType,
   workflowRunResponseSchema,
   type WorkflowDefinition,
-  type WorkflowRun,
 } from '@dramaflow/contracts';
 import {
   DatabaseService,
   WorkflowCheckpointerService,
-  WorkflowRunRepositories,
+  WorkflowExecutionQueue,
+  WorkflowExecutionService,
   WorkflowRuntimeFactory,
-  WorkflowVersionRepositories,
+  WorkflowOutboxDispatcher,
+  workflowExecutionJobId,
 } from '@dramaflow/server';
-import {
-  DefaultRuntimeValueCodec,
-  DefaultWorkflowOutputResolver,
-  DefaultWorkflowRunner,
-  NodeExecutionError,
-  NodeRegistry,
-  type WorkflowCompiler,
-} from '@dramaflow/workflow';
+import { DefaultWorkflowRunner } from '@dramaflow/workflow';
 import type { Type } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -32,18 +27,14 @@ import { mountAuth } from '../src/auth/auth.http.js';
 import { authBaseUrl } from '../src/auth/trusted-origin.js';
 import { ApiExceptionFilter } from '../src/http/exception.filter.js';
 import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
-import {
-  persistentTestCompiler,
-  persistentTestDefinition,
-} from './fixtures/persistent-workflow-compiler.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
   new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test'
+    '/dramaflow_test' ||
+  !process.env.WORKFLOW_QUEUE_PREFIX?.startsWith('dramaflow-test-')
 )
-  throw new Error('Run HTTP 集成测试仅允许在 DramaFlow 的隔离测试数据库运行');
-
+  throw new Error('Run HTTP 仅允许独立测试库与队列');
 const database = new DatabaseService();
 const db = database.client;
 const applications: Awaited<ReturnType<typeof application>>[] = [];
@@ -51,13 +42,13 @@ const userIds: string[] = [];
 let ownerId: string;
 let cookieA: string;
 let cookieB: string;
+let worker: ChildProcess | undefined;
 const origin = new URL(authBaseUrl()).origin;
-const invocations: { threadId: string; resume: boolean }[] = [];
-interface Plan {
-  gate?: () => Promise<void>;
-  fail?: (run: WorkflowRun, app: NestExpressApplication) => Promise<never>;
-}
-const plans = new Map<string, Plan>();
+const executeStart = vi.spyOn(DefaultWorkflowRunner.prototype, 'executeStart');
+const executeResume = vi.spyOn(
+  DefaultWorkflowRunner.prototype,
+  'executeResume',
+);
 
 async function application() {
   const constructor = z.custom<Type<unknown>>(
@@ -84,52 +75,42 @@ async function application() {
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new ApiExceptionFilter());
   await app.listen(0, '127.0.0.1');
-  const base = await app.getUrl();
-  const factory = app.get(WorkflowRuntimeFactory);
-  const production = factory.forProject.bind(factory);
-  // 只有显式测试项目使用原生 interrupt / 故障图；普通空图仍走完整生产 factory。
-  // 不覆盖 AuthGuard、Runtime Service、Repository 或 Saver，也不向生产 Registry 注册节点。
-  const assemble = vi
-    .spyOn(factory, 'forProject')
-    .mockImplementation(async (owner, projectId) => {
-      const plan = plans.get(projectId);
-      if (!plan) return production(owner, projectId);
-      const native = persistentTestCompiler(
-        app.get(WorkflowCheckpointerService),
-        async (event) => {
-          invocations.push(event);
-        },
-      );
-      const compiler: WorkflowCompiler = {
-        async compile(definition, run) {
-          const graph = await native.compile(definition, run);
-          const fail = plan.fail;
-          if (!fail) return graph;
-          return { ...graph, invoke: () => fail(run, app) };
-        },
-      };
-      const runs = await app
-        .get(WorkflowRunRepositories)
-        .forProject(owner, projectId);
-      const read = runs.getById.bind(runs);
-      runs.getById = async (id) => {
-        const run = await read(id);
-        if (run?.status === 'waiting') await plan.gate?.();
-        return run;
-      };
-      return new DefaultWorkflowRunner(
-        await app.get(WorkflowVersionRepositories).forProject(owner, projectId),
-        runs,
-        compiler,
-        new DefaultWorkflowOutputResolver(),
-      );
-    });
-  return { app, auth, base, assemble };
+  return { app, auth, base: await app.getUrl() };
 }
-
+async function startWorker() {
+  const child = fork(
+    fileURLToPath(
+      new URL('./fixtures/queue-worker-process.ts', import.meta.url),
+    ),
+    [],
+    {
+      execArgv: ['--import', import.meta.resolve('tsx')],
+      env: process.env,
+      silent: true,
+    },
+  );
+  worker = child;
+  let ready = false;
+  let stderr = '';
+  child.on('message', (value) => {
+    if (z.object({ event: z.string() }).parse(value).event === 'ready')
+      ready = true;
+  });
+  child.stderr?.on('data', (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
+  child.send({ mode: 'worker' });
+  await vi.waitFor(
+    () => {
+      if (child.exitCode !== null) throw new Error(stderr);
+      expect(ready).toBe(true);
+    },
+    { timeout: 15000 },
+  );
+}
 beforeAll(async () => {
-  applications.push(await application());
-  applications.push(await application());
+  applications.push(await application(), await application());
+  await applications[0]!.app.get(WorkflowExecutionQueue).queue.pause();
   const password = randomBytes(24).toString('hex');
   for (const name of ['A', 'B']) {
     const email = `run-api-${randomUUID()}@example.test`;
@@ -138,7 +119,6 @@ beforeAll(async () => {
       body: { email, name: `Run API ${name}`, password, role: 'user' },
     });
     userIds.push(user.id);
-    // 使用真实密码 / 持久化会话与签名 Cookie；不伪造 Guard 或 session。
     const response = await auth.api.signInEmail({
       body: { email, password, rememberMe: true },
       asResponse: true,
@@ -155,25 +135,33 @@ beforeAll(async () => {
     } else cookieB = cookie;
   }
 });
-
 afterAll(async () => {
-  vi.restoreAllMocks();
   try {
-    const runs = await db.workflowRun.findMany({
+    if (worker && worker.exitCode === null && worker.signalCode === null) {
+      const exited = new Promise<void>((resolve) =>
+        worker!.once('exit', () => resolve()),
+      );
+      worker.send({ event: 'close' });
+      await exited;
+    }
+    const records = await db.workflowRun.findMany({
       where: { project: { ownerId: { in: userIds } } },
       select: { threadId: true },
     });
-    for (const run of runs)
+    for (const run of records)
       await applications[0]?.app
         .get(WorkflowCheckpointerService)
         .saver.deleteThread(run.threadId);
     await db.user.deleteMany({ where: { id: { in: userIds } } });
+    await applications[0]?.app
+      .get(WorkflowExecutionQueue)
+      .queue.obliterate({ force: true });
   } finally {
+    vi.restoreAllMocks();
     await Promise.all(applications.map(({ app }) => app.close()));
     await database.onModuleDestroy();
   }
 });
-
 function api(
   index: number,
   path: string,
@@ -195,18 +183,17 @@ function api(
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 }
-
-async function result(response: Response, status: number) {
+async function result(response: Response, status = 200) {
   expect(response.status).toBe(status);
   expect(response.headers.get('Cache-Control')).toBe('no-store');
-  const run = workflowRunResponseSchema.parse(await response.json());
-  expect(run).not.toHaveProperty('threadId');
-  expect(run).not.toHaveProperty('projectId');
-  return run;
+  const body: unknown = await response.json();
+  expect(body).not.toHaveProperty('threadId');
+  expect(body).not.toHaveProperty('projectId');
+  return workflowRunResponseSchema.parse(body);
 }
-
 async function failure(response: Response, status: number, code: string) {
   expect(response.status).toBe(status);
+  const body: unknown = await response.json();
   const error = z
     .object({
       code: z.string(),
@@ -215,28 +202,49 @@ async function failure(response: Response, status: number, code: string) {
       details: z.unknown().optional(),
     })
     .strict()
-    .parse(await response.json());
+    .parse(body);
   expect(error.code).toBe(code);
-  expect(error).not.toHaveProperty('stack');
-  expect(error).not.toHaveProperty('cause');
+  expect(body).not.toHaveProperty('stack');
+  expect(body).not.toHaveProperty('cause');
   return error;
 }
-
-async function version(
-  definition: WorkflowDefinition = {
-    inputs: [],
-    nodes: [],
-    edges: [],
-    outputs: [],
-  },
-) {
+async function version(native = false) {
   const project = await db.project.create({
     data: { ownerId, name: 'Run HTTP', viewport: {} },
   });
+  const definition: WorkflowDefinition = {
+    inputs: [],
+    nodes: native
+      ? ['first', 'second'].map((id) => ({
+          id,
+          type: 'test.queue_wait',
+          typeVersion: 1,
+          name: '原生测试等待',
+          inputs: {},
+          config: {},
+          ui: { position: { x: 0, y: 0 } },
+        }))
+      : [],
+    edges: [],
+    outputs: native
+      ? [
+          {
+            name: 'first',
+            type: NumberType,
+            source: { nodeId: 'first', outputKey: 'value' },
+          },
+          {
+            name: 'second',
+            type: NumberType,
+            source: { nodeId: 'second', outputKey: 'value' },
+          },
+        ]
+      : [],
+  };
   const workflow = await db.workflow.create({
     data: {
       projectId: project.id,
-      name: 'Run HTTP',
+      name: 'HTTP Queue',
       draft: z.record(z.string(), z.json()).parse(definition),
     },
   });
@@ -244,33 +252,34 @@ async function version(
     workflowId: workflow.id,
     expectedRevision: 1,
   });
-  return {
-    projectId: project.id,
-    workflowId: workflow.id,
-    workflowVersionId: published.id,
-  };
+  return { projectId: project.id, workflowVersionId: published.id };
 }
-
+async function waitRun(id: string, status: string, waitingRevision?: number) {
+  await vi.waitFor(
+    async () => {
+      const row = await db.workflowRun.findUniqueOrThrow({ where: { id } });
+      expect(row.status).toBe(status);
+      if (waitingRevision !== undefined)
+        expect(row.waitingRevision).toBe(waitingRevision);
+    },
+    { timeout: 15000 },
+  );
+}
 async function waiting() {
-  const identity = await version(persistentTestDefinition());
-  const plan: Plan = {};
-  plans.set(identity.projectId, plan);
-  const started = await result(
+  const identity = await version(true);
+  const run = await result(
     await api(0, '', 'POST', {
       workflowVersionId: identity.workflowVersionId,
-      inputs: { seed: { storage: 'inline', type: NumberType, value: 10 } },
+      inputs: {},
     }),
-    201,
+    202,
   );
-  expect(started.status).toBe('waiting');
-  const persisted = await db.workflowRun.findUniqueOrThrow({
-    where: { id: started.id },
-  });
-  return { ...identity, started, persisted, plan };
+  await waitRun(run.id, 'waiting', 1);
+  return { ...identity, run };
 }
 
-describe('真实 Workflow Run HTTP API', () => {
-  it('三个入口默认鉴权，未登录时不进入 Runtime；写入继续检查 Origin', async () => {
+describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker', () => {
+  it('三个入口默认鉴权，写请求校验 Origin；API DI 不含 Runner factory 或 ExecutionService', async () => {
     for (const [path, method, body] of [
       ['', 'POST', { workflowVersionId: 'missing', inputs: {} }],
       ['/missing', 'GET', undefined],
@@ -289,101 +298,54 @@ describe('真实 Workflow Run HTTP API', () => {
       403,
       'HTTP_403',
     );
-    expect(applications[0]!.assemble).not.toHaveBeenCalled();
+    for (const { app } of applications) {
+      expect(() => app.get(WorkflowRuntimeFactory)).toThrow();
+      expect(() => app.get(WorkflowExecutionService)).toThrow();
+    }
   });
 
-  it('仅提交真实版本和 inputs，经生产 Service / Runner / PostgreSQL 完成，再 GET 相同 DTO', async () => {
-    const identity = await version({
-      inputs: [{ name: 'novel', type: { kind: 'primitive', name: 'string' } }],
-      nodes: [],
-      edges: [],
-      outputs: [],
-    });
-    const inputs = {
-      novel: {
-        storage: 'inline',
-        type: { kind: 'primitive', name: 'string' },
-        value: '测试正文',
-      },
-    };
+  it('没有 Worker 时 POST 仍立即返回 202 + pending；新 Worker 进程完成原 Run，API 从不 invoke', async () => {
+    const identity = await version();
     const run = await result(
       await api(0, '', 'POST', {
         workflowVersionId: identity.workflowVersionId,
-        inputs,
+        inputs: {},
       }),
-      201,
+      202,
     );
-    expect(run).toMatchObject({
-      workflowId: identity.workflowId,
-      workflowVersionId: identity.workflowVersionId,
-      inputs,
-      outputs: {},
-      status: 'completed',
-    });
-    const stored = await db.workflowRun.findUniqueOrThrow({
+    expect(run.status).toBe('pending');
+    const saved = await db.workflowRun.findUniqueOrThrow({
       where: { id: run.id },
     });
-    expect(stored).toMatchObject({ ...identity, status: 'completed' });
-    expect(stored.threadId).not.toBe(run.id);
-    expect(await result(await api(1, `/${run.id}`), 200)).toEqual(run);
+    expect(saved.startedAt).toBeNull();
+    const queue = applications[0]!.app.get(WorkflowExecutionQueue);
+    const job = await queue.queue.getJob(
+      workflowExecutionJobId({ kind: 'start', workflowRunId: run.id }),
+    );
+    expect(job?.data).toEqual({ kind: 'start', workflowRunId: run.id });
     expect(
-      await applications[1]!.app
+      await applications[0]!.app
         .get(WorkflowCheckpointerService)
-        .saver.getTuple({ configurable: { thread_id: stored.threadId } }),
-    ).toBeDefined();
-    expect(applications[0]!.app.get(NodeRegistry).listManifests()).toEqual([]);
+        .saver.getTuple({ configurable: { thread_id: saved.threadId } }),
+    ).toBeUndefined();
+    await startWorker();
+    await queue.queue.resume();
+    await waitRun(run.id, 'completed');
+    expect(await result(await api(1, `/${run.id}`))).toMatchObject({
+      id: run.id,
+      status: 'completed',
+      outputs: {},
+    });
+    expect(executeStart).not.toHaveBeenCalled();
+    expect(executeResume).not.toHaveBeenCalled();
   });
 
-  it('拒绝身份拼接、状态及完整定义，start / resume 均使用严格请求协议', async () => {
-    const identity = await version();
-    for (const key of [
-      'projectId',
-      'workflowId',
-      'threadId',
-      'status',
-      'ownerId',
-      'definition',
-    ])
-      await failure(
-        await api(0, '', 'POST', {
-          workflowVersionId: identity.workflowVersionId,
-          inputs: {},
-          [key]: 'forged',
-        }),
-        400,
-        'VALIDATION_FAILED',
-      );
-    await failure(
-      await api(0, '', 'POST', {
-        workflowVersionId: identity.workflowVersionId,
-      }),
-      400,
-      'VALIDATION_FAILED',
-    );
-    await failure(
-      await api(0, '/missing/resume', 'POST', {}),
-      400,
-      'VALIDATION_FAILED',
-    );
-    await failure(
-      await api(0, '/missing/resume', 'POST', { value: 1, threadId: 'forged' }),
-      400,
-      'VALIDATION_FAILED',
-    );
-    expect(
-      await db.workflowRun.count({ where: { projectId: identity.projectId } }),
-    ).toBe(0);
-  });
-
-  it('缺失 / 无权版本及运行统一为 404，HTTP 权限拒绝发生在 Runner 之前', async () => {
+  it('跨用户的 Version / Run 统一 404，不能读取或提交恢复意图', async () => {
     const f = await waiting();
-    const before = applications[0]!.assemble.mock.calls.length;
-    const missingVersion = await failure(
-      await api(0, '', 'POST', { workflowVersionId: 'missing', inputs: {} }),
-      404,
-      'WORKFLOW_VERSION_NOT_FOUND',
-    );
-    const hiddenVersion = await failure(
+    const before = await db.workflowExecutionOutbox.count({
+      where: { workflowRunId: f.run.id },
+    });
+    await failure(
       await api(
         0,
         '',
@@ -394,189 +356,163 @@ describe('真实 Workflow Run HTTP API', () => {
       404,
       'WORKFLOW_VERSION_NOT_FOUND',
     );
-    expect(hiddenVersion.message).toBe(missingVersion.message);
-    for (const [path, method, body] of [
-      [`/${f.started.id}`, 'GET', undefined],
-      [`/${f.started.id}/resume`, 'POST', { value: 1 }],
-    ] as const)
-      await failure(
-        await api(0, path, method, body, cookieB),
-        404,
-        'WORKFLOW_RUN_NOT_FOUND',
-      );
-    await failure(await api(0, '/missing'), 404, 'WORKFLOW_RUN_NOT_FOUND');
     await failure(
-      await api(0, '/missing/resume', 'POST', { value: 1 }),
+      await api(1, `/${f.run.id}`, 'GET', undefined, cookieB),
       404,
       'WORKFLOW_RUN_NOT_FOUND',
     );
-    expect(applications[0]!.assemble.mock.calls.length).toBe(before);
-    expect(
-      await db.workflowRun.findUniqueOrThrow({ where: { id: f.started.id } }),
-    ).toMatchObject({ status: 'waiting', threadId: f.persisted.threadId });
-  });
-
-  it('HTTP start → waiting；另一 API 实例从原版本 / thread 的 PostgreSQL checkpoint 恢复并 GET outputs', async () => {
-    const f = await waiting();
-    const future = persistentTestDefinition();
-    const output = future.outputs[0];
-    if (!output) throw new Error('测试定义没有输出');
-    output.name = 'futureAnswer';
-    const workflows = new WorkflowService(database);
-    await workflows.updateDraft(ownerId, {
-      workflowId: f.workflowId,
-      expectedRevision: 1,
-      definition: future,
-    });
-    await workflows.publish(ownerId, {
-      workflowId: f.workflowId,
-      expectedRevision: 2,
-    });
-    const run = await result(
-      await api(1, `/${f.started.id}/resume`, 'POST', { value: 20 }),
-      200,
-    );
-    expect(run).toMatchObject({
-      id: f.started.id,
-      workflowVersionId: f.workflowVersionId,
-      status: 'completed',
-      outputs: { answer: { value: 31 } },
-    });
-    expect(run.startedAt).toBe(f.started.startedAt);
-    expect(await result(await api(0, `/${run.id}`), 200)).toEqual(run);
-    expect(
-      invocations.filter((event) => event.threadId === f.persisted.threadId),
-    ).toEqual([
-      { threadId: f.persisted.threadId, resume: false },
-      { threadId: f.persisted.threadId, resume: true },
-    ]);
-    expect(
-      await db.workflowRun.count({ where: { projectId: f.projectId } }),
-    ).toBe(1);
-    expect(
-      await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } }),
-    ).toMatchObject({
-      threadId: f.persisted.threadId,
-      workflowVersionId: f.workflowVersionId,
-    });
     await failure(
-      await api(0, `/${run.id}/resume`, 'POST', { value: 1 }),
-      409,
-      'WORKFLOW_RUN_NOT_WAITING',
+      await api(1, `/${f.run.id}/resume`, 'POST', { value: 1 }, cookieB),
+      404,
+      'WORKFLOW_RUN_NOT_FOUND',
     );
-  });
-
-  it('两个真实 HTTP resume 都读到 waiting，仅一个进入 Graph，另一个返回 409', async () => {
-    const f = await waiting();
-    let arrivals = 0;
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    f.plan.gate = async () => {
-      if (++arrivals === 2) release();
-      await gate;
-    };
-    const responses = await Promise.all([
-      api(0, `/${f.started.id}/resume`, 'POST', { value: 5 }),
-      api(1, `/${f.started.id}/resume`, 'POST', { value: 7 }),
-    ]);
-    expect(arrivals).toBe(2);
-    expect(responses.map((response) => response.status).sort()).toEqual([
-      200, 409,
-    ]);
-    for (const response of responses)
-      if (response.status === 200)
-        expect((await result(response, 200)).status).toBe('completed');
-      else await failure(response, 409, 'WORKFLOW_RUN_NOT_WAITING');
     expect(
-      invocations.filter(
-        (event) => event.threadId === f.persisted.threadId && event.resume,
-      ),
-    ).toHaveLength(1);
+      await db.workflowExecutionOutbox.count({
+        where: { workflowRunId: f.run.id },
+      }),
+    ).toBe(before);
+    expect(
+      (await db.workflowRun.findUniqueOrThrow({ where: { id: f.run.id } }))
+        .status,
+    ).toBe('waiting');
   });
 
-  it('数值 0 的 resume 保持原值，不被当作缺少请求参数', async () => {
+  it('两个等待周期通过两个独立 Outbox 意图恢复原版本 / thread；0 值保留', async () => {
     const f = await waiting();
-    const run = await result(
-      await api(1, `/${f.started.id}/resume`, 'POST', { value: 0 }),
-      200,
+    const original = await db.workflowRun.findUniqueOrThrow({
+      where: { id: f.run.id },
+    });
+    await result(
+      await api(1, `/${f.run.id}/resume`, 'POST', { value: 0 }),
+      202,
     );
-    expect(run.outputs).toMatchObject({ answer: { value: 11 } });
+    await waitRun(f.run.id, 'waiting', 2);
+    await result(
+      await api(0, `/${f.run.id}/resume`, 'POST', { value: 20 }),
+      202,
+    );
+    await waitRun(f.run.id, 'completed');
+    expect(await result(await api(1, `/${f.run.id}`))).toMatchObject({
+      status: 'completed',
+      outputs: { first: { value: 0 }, second: { value: 20 } },
+    });
+    expect(
+      await db.workflowRun.findUniqueOrThrow({ where: { id: f.run.id } }),
+    ).toMatchObject({
+      threadId: original.threadId,
+      workflowVersionId: original.workflowVersionId,
+      startedAt: original.startedAt,
+    });
+    const intents = await db.workflowExecutionOutbox.findMany({
+      where: { workflowRunId: f.run.id, kind: 'resume' },
+    });
+    expect(new Set(intents.map((intent) => intent.id)).size).toBe(2);
+    expect(executeStart).not.toHaveBeenCalled();
+    expect(executeResume).not.toHaveBeenCalled();
   });
 
-  it.each(['node', 'reference', 'artifact'] as const)(
-    '%s 运行错误返回安全摘要，不暴露 cause / stack / 上游内容',
-    async (kind) => {
-      const f = await version(persistentTestDefinition());
-      plans.set(f.projectId, {
-        async fail(run, app) {
-          if (kind === 'node')
-            throw new NodeExecutionError(
-              'private-node',
-              'private-type',
-              'execute',
-              new Error('provider-secret-test-value'),
-            );
-          const codec = app.get(DefaultRuntimeValueCodec);
-          if (kind === 'reference')
-            await codec.decode(
-              {
-                storage: 'reference',
-                type: ImageType,
-                reference: {
-                  kind: 'asset',
-                  id: 'private-asset',
-                  versionId: 'v3',
-                },
-              },
-              { projectId: run.projectId, workflowRunId: run.id },
-            );
-          else
-            await codec.encode(
-              { private: 'provider-secret-test-value' },
-              {
-                type: ImageType,
-                storagePolicy: 'reference',
-                context: {
-                  projectId: run.projectId,
-                  workflowRunId: run.id,
-                  nodeId: 'node',
-                  outputKey: 'image',
-                },
-              },
-            );
-          throw new Error('未配置内容能力没有拒绝执行');
-        },
-      });
-      const code =
-        kind === 'node'
-          ? 'NODE_EXECUTION_FAILED'
-          : kind === 'reference'
-            ? 'REFERENCE_RUNTIME_NOT_CONFIGURED'
-            : 'ARTIFACT_WRITER_NOT_CONFIGURED';
-      const error = await failure(
+  it('两个 API 同时提交同一 waiting 周期，只有一个恢复意图，另一个 409', async () => {
+    const f = await waiting();
+    const queue = applications[0]!.app.get(WorkflowExecutionQueue);
+    await queue.queue.pause();
+    try {
+      const responses = await Promise.all([
+        api(0, `/${f.run.id}/resume`, 'POST', { value: 5 }),
+        api(1, `/${f.run.id}/resume`, 'POST', { value: 7 }),
+      ]);
+      expect(responses.map((response) => response.status).sort()).toEqual([
+        202, 409,
+      ]);
+      for (const response of responses)
+        if (response.status === 202) await result(response, 202);
+        else await failure(response, 409, 'WORKFLOW_RESUME_ALREADY_SUBMITTED');
+      expect(
+        await db.workflowExecutionOutbox.count({
+          where: { workflowRunId: f.run.id, kind: 'resume' },
+        }),
+      ).toBe(1);
+      expect(
+        (await db.workflowRun.findUniqueOrThrow({ where: { id: f.run.id } }))
+          .status,
+      ).toBe('waiting');
+    } finally {
+      await queue.queue.resume();
+    }
+    await waitRun(f.run.id, 'waiting', 2);
+  });
+
+  it('严格校验 start / resume 字段，不能指定 thread、身份、版本副本或省略 value', async () => {
+    const f = await version();
+    for (const key of [
+      'threadId',
+      'projectId',
+      'workflowId',
+      'status',
+      'definition',
+    ])
+      await failure(
         await api(0, '', 'POST', {
           workflowVersionId: f.workflowVersionId,
           inputs: {},
+          [key]: 'injected',
         }),
-        kind === 'node' ? 500 : 503,
-        code,
+        400,
+        'VALIDATION_FAILED',
       );
-      expect(JSON.stringify(error)).not.toMatch(
-        /private-|provider-secret|stack|cause/,
+    const waitingRun = await waiting();
+    await failure(
+      await api(0, `/${waitingRun.run.id}/resume`, 'POST', {}),
+      400,
+      'VALIDATION_FAILED',
+    );
+    await failure(
+      await api(0, `/${waitingRun.run.id}/resume`, 'POST', {
+        value: 0,
+        executionId: 'injected',
+      }),
+      400,
+      'VALIDATION_FAILED',
+    );
+    expect(
+      await db.workflowRun.count({ where: { projectId: f.projectId } }),
+    ).toBe(0);
+  });
+
+  it('Redis enqueue 未确认时不返回 202；安全 503，Outbox 仍存在且后台能继续投递', async () => {
+    const identity = await version();
+    const queue = applications[0]!.app.get(WorkflowExecutionQueue);
+    await queue.queue.pause();
+    const publish = vi
+      .spyOn(queue, 'publish')
+      .mockRejectedValue(new Error('redis-secret-marker'));
+    try {
+      const error = await failure(
+        await api(0, '', 'POST', {
+          workflowVersionId: identity.workflowVersionId,
+          inputs: {},
+        }),
+        503,
+        'WORKFLOW_QUEUE_UNAVAILABLE',
       );
-      const stored = await db.workflowRun.findFirstOrThrow({
-        where: { projectId: f.projectId },
+      expect(JSON.stringify(error)).not.toContain('secret-marker');
+      const run = await db.workflowRun.findFirstOrThrow({
+        where: { projectId: identity.projectId },
       });
-      const failed = await result(await api(0, `/${stored.id}`), 200);
-      expect(failed).toMatchObject({
-        status: 'failed',
-        error: { stage: 'invoke' },
-      });
-      expect(JSON.stringify(failed)).not.toMatch(
-        /private-|provider-secret|stack|cause/,
-      );
-    },
-  );
+      expect(run.status).toBe('pending');
+      expect(
+        await db.workflowExecutionOutbox.count({
+          where: { workflowRunId: run.id },
+        }),
+      ).toBe(1);
+      publish.mockRestore();
+      await applications[0]!.app
+        .get(WorkflowOutboxDispatcher)
+        .publishStart(run.id);
+      await queue.queue.resume();
+      await waitRun(run.id, 'completed');
+    } finally {
+      publish.mockRestore();
+      await queue.queue.resume();
+    }
+  });
 });

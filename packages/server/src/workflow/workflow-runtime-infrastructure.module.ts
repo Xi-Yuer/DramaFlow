@@ -12,18 +12,19 @@ import {
   UnconfiguredDataReferenceResolver,
 } from './unconfigured-reference-runtime.js';
 import { WorkflowNodeRegistryModule } from './workflow-node-registry.module.js';
-import { WorkflowRunRepositories } from './workflow-run-repository.js';
 import { WorkflowExecutionService } from './workflow-execution.service.js';
-import { WorkflowRunSubmissionFactory } from './workflow-run-submission.factory.js';
+import { WorkflowSubmissionModule } from './workflow-submission.module.js';
 import { WorkflowRuntimeFactory } from './workflow-runtime.factory.js';
-import { WorkflowVersionRepositories } from './workflow-version-repository.js';
 
 @Module({
-  imports: [DatabaseModule, WorkflowCheckpointerModule, WorkflowNodeRegistryModule],
+  imports: [
+    DatabaseModule,
+    WorkflowCheckpointerModule,
+    WorkflowNodeRegistryModule,
+    WorkflowSubmissionModule,
+  ],
   providers: [
     NodeRunRepositories,
-    WorkflowRunRepositories,
-    WorkflowVersionRepositories,
     DefaultDataStoragePolicyResolver,
     DefaultWorkflowOutputResolver,
     UnconfiguredArtifactWriter,
@@ -42,9 +43,8 @@ import { WorkflowVersionRepositories } from './workflow-version-repository.js';
       ],
     },
     WorkflowRuntimeFactory,
-    WorkflowRunSubmissionFactory,
     WorkflowExecutionService,
   ],
-  exports: [WorkflowRuntimeFactory, WorkflowRunSubmissionFactory, WorkflowExecutionService],
+  exports: [WorkflowRuntimeFactory, WorkflowSubmissionModule, WorkflowExecutionService],
 })
 export class WorkflowRuntimeInfrastructureModule {}

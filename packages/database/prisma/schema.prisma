@@ -151,20 +151,22 @@ model WorkflowVersion {
 
 // 运行仍保存逻辑版本 ID，由 Runner 经版本 Repository 核对归属；本轮不调整运行外键。
 model WorkflowRun {
-  id                String    @id @default(uuid())
-  projectId         String    @db.Uuid
+  id                String                    @id @default(uuid())
+  projectId         String                    @db.Uuid
   workflowId        String
   workflowVersionId String
-  threadId          String    @unique
-  status            String    @default("pending")
+  threadId          String                    @unique
+  status            String                    @default("pending")
   inputs            Json
   outputs           Json?
   error             Json?
-  createdAt         DateTime  @default(now())
+  createdAt         DateTime                  @default(now())
   startedAt         DateTime?
   completedAt       DateTime?
-  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project           Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   nodeRuns          NodeRun[]
+  waitingRevision   Int                       @default(0)
+  executions        WorkflowExecutionOutbox[]
 
   @@unique([id, projectId])
   @@index([projectId])
@@ -194,4 +196,24 @@ model NodeRun {
   @@index([workflowRunId, nodeId])
   @@index([projectId, workflowRunId])
   @@map("node_run")
+}
+
+// 执行命令的持久交付及去重记录，payload 只保存共享 Job，不保存图状态。
+model WorkflowExecutionOutbox {
+  id              String      @id @default(uuid())
+  kind            String
+  workflowRunId   String
+  waitingRevision Int         @default(0)
+  payload         Json
+  status          String      @default("pending")
+  createdAt       DateTime    @default(now())
+  publishedAt     DateTime?
+  completedAt     DateTime?
+  attempts        Int         @default(0)
+  availableAt     DateTime    @default(now())
+  workflowRun     WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowRunId, kind, waitingRevision])
+  @@index([status, availableAt, createdAt])
+  @@map("workflow_execution_outbox")
 }

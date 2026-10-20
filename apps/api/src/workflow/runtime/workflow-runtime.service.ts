@@ -8,7 +8,7 @@ import {
 import {
   DatabaseService,
   WorkflowRunSubmissionFactory,
-  WorkflowExecutionService,
+  WorkflowOutboxDispatcher,
 } from '@dramaflow/server';
 import type {
   ResumeWorkflowRunInput,
@@ -25,7 +25,7 @@ import {
 export class WorkflowRuntimeService {
   constructor(
     private readonly submissions: WorkflowRunSubmissionFactory,
-    private readonly execution: WorkflowExecutionService,
+    private readonly dispatcher: WorkflowOutboxDispatcher,
     private readonly database: DatabaseService,
   ) {}
 
@@ -51,15 +51,13 @@ export class WorkflowRuntimeService {
           workflowVersionId: request.workflowVersionId,
           inputs: request.inputs,
         });
-        // 临时同步桥接；后续 Queue 仅替换此执行调用，不改变提交服务或 HTTP 契约。
-        await this.execution.execute({
-          kind: 'start',
-          workflowRunId: pending.id,
-        });
+        // 成功响应前确认 Redis 入队；故障时 PostgreSQL Outbox 仍可由 Worker 重投。
+        await this.dispatcher.publishStart(pending.id);
         return pending;
       },
     );
-    return this.getRun(ownerId, run.id);
+    const { projectId: _projectId, threadId: _threadId, ...response } = run;
+    return workflowRunResponseSchema.parse(response);
   }
 
   async getRun(ownerId: string, rawId: string): Promise<WorkflowRunResponse> {
@@ -99,7 +97,7 @@ export class WorkflowRuntimeService {
         workflowRunId: runId,
         value: request.value,
       });
-      await this.execution.execute(job);
+      await this.dispatcher.publishExecution(job.executionId);
     });
     return this.getRun(ownerId, runId);
   }

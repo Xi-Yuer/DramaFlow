@@ -17,11 +17,27 @@ describe('Workflow execution job 契约', () => {
 
   it('resume 保持 unknown，接受 falsy 值并要求显式提供 value', () => {
     for (const value of [false, 0, '', null, { approved: true }]) {
-      const job: WorkflowExecutionJob = { kind: 'resume', workflowRunId: 'run-1', value };
+      const job: WorkflowExecutionJob = {
+        kind: 'resume',
+        workflowRunId: 'run-1',
+        executionId: 'execution-1',
+        value,
+      };
       expect(workflowExecutionJobSchema.parse(job)).toEqual(job);
     }
     expect(
       workflowExecutionJobSchema.safeParse({ kind: 'resume', workflowRunId: 'run-1' }).success,
+    ).toBe(false);
+    expect(
+      workflowExecutionJobSchema.safeParse({ kind: 'resume', workflowRunId: 'run-1', value: 0 })
+        .success,
+    ).toBe(false);
+    expect(
+      workflowExecutionJobSchema.safeParse({
+        kind: 'resume',
+        workflowRunId: 'run-1',
+        executionId: 'intent-1',
+      }).success,
     ).toBe(false);
     expect(
       workflowExecutionJobSchema.safeParse({ kind: 'start', workflowRunId: 'run-1', value: 1 })

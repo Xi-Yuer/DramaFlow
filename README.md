@@ -4,7 +4,7 @@ DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，�
 
 当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录、注册通用 renderer，并接入 Data / Control Edge 连线、重连与删除事件；生产目录为空，画布仍无添加节点、Workflow 保存 / 发布或运行交互，尚无模型调用。
 
-基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。PostgreSQL 已有 Workflow 草稿、完整不可变 WorkflowVersion 快照及 WorkflowRun / NodeRun；API 应用服务支持 Draft 乐观锁与绑定修订的并发安全发布，同一修订仅生成一个版本，版本读取 Repository 保持只读。提交服务只创建 pending Run，WorkflowRunner 通过 executeStart 按已有 Run 的明确版本启动 Action 图，并以原 thread 的 Command 恢复 waiting 运行；pending / waiting 原子 claim 防止重复首次执行或并发恢复，结束时只记录声明的最终输出。API / Worker 共用官方 PostgreSQL Checkpointer 基础设施，启动时初始化、关闭时释放连接，已验证跨进程恢复。API / Worker 已通过应用 Service 和共享 factory 装配生产 Runner，按所有者 / 项目创建权限作用域。已有受鉴权保护的 Run start / get / resume HTTP，服务端派生身份且响应不公开 thread；当前 API 显式桥接提交服务与 ExecutionService，仍同步执行；Worker 已可按仅含 Run ID 的 Job 执行现有运行，尚无 Queue / Consumer。生产节点目录仍为空，尚无发布 HTTP 或队列消费者；reference decode / encode 明确报未配置错误；实现范围见 [当前架构](docs/architecture.md)。
+基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。PostgreSQL 已有 Workflow 草稿、完整不可变 WorkflowVersion 快照及 WorkflowRun / NodeRun；API 应用服务支持 Draft 乐观锁与绑定修订的并发安全发布，同一修订仅生成一个版本，版本读取 Repository 保持只读。提交服务在同一事务创建 pending Run 与执行 Outbox，WorkflowRunner 通过 executeStart 按已有 Run 的明确版本启动 Action 图，并以原 thread 的 Command 恢复 waiting 运行；pending / waiting 原子 claim 防止重复首次执行或并发恢复，结束时只记录声明的最终输出。API / Worker 共用官方 PostgreSQL Checkpointer 基础设施，启动时初始化、关闭时释放连接，已验证跨进程恢复。API 装配提交与队列，独立 Worker 通过共享 factory 构造权限 / 执行意图作用域的生产 Runner。已有受鉴权保护的 Run start / get / resume HTTP，服务端派生身份且响应不公开 thread；API 确认入队后返回 202，Worker 经 BullMQ 执行，Outbox 负责投递故障恢复。Resume 意图具有固定 executionId 与等待周期，结果不明的执行停在 recovery_required 而不重跑业务。生产节点目录仍为空，尚无发布 HTTP；reference decode / encode 明确报未配置错误；实现范围见 [当前架构](docs/architecture.md)。
 
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 
@@ -24,7 +24,7 @@ pnpm auth:bootstrap
 pnpm dev
 ```
 
-前端 http://localhost:3000 未登录时进入登录页。初始管理员邮箱与密码查看本机 .env 的 ADMIN_EMAIL / ADMIN_PASSWORD，公开注册关闭。API http://localhost:3001/api/v1/health 检查真实基础设施；独立 worker 尚不消费业务任务。账号资料、密码和会话操作见 [认证实施说明](docs/authentication.md)。
+前端 http://localhost:3000 未登录时进入登录页。初始管理员邮箱与密码查看本机 .env 的 ADMIN_EMAIL / ADMIN_PASSWORD，公开注册关闭。API http://localhost:3001/api/v1/health 检查真实基础设施；独立 worker 消费 Workflow 执行命令并重投待发布 Outbox。账号资料、密码和会话操作见 [认证实施说明](docs/authentication.md)。
 
 基础设施默认端口保持 **5432 / 6379 / 9000 / 9001**，仅绑定宿主 127.0.0.1。RustFS 控制台为 http://localhost:9001/rustfs/console/，凭证位于本机 `.env` 的 `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`，不要提交该文件。
 

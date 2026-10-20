@@ -188,7 +188,21 @@ export function workflowRunnerFixture() {
     return resolveOutputs(definition, state);
   });
   const runner = new DefaultWorkflowRunner({ getVersion }, runs, { compile }, resolver);
-  const submission = new DefaultWorkflowRunSubmissionService({ getVersion }, runs);
+  let intent = 0;
+  const submissionRepository = {
+    createWithExecution: (request: Parameters<typeof runs.create>[0]) => runs.create(request),
+    async createResumeExecution(request: { workflowRunId: string; value: unknown }) {
+      const run = await runs.getById(request.workflowRunId);
+      if (!run || run.status !== 'waiting') throw new Error('运行不在 waiting');
+      return {
+        kind: 'resume' as const,
+        workflowRunId: run.id,
+        executionId: `execution-${++intent}`,
+        value: request.value,
+      };
+    },
+  };
+  const submission = new DefaultWorkflowRunSubmissionService({ getVersion }, submissionRepository);
   const start = async (request: typeof input) => {
     const pending = await submission.start(request);
     return runner.executeStart(pending.id);

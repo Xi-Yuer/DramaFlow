@@ -32,6 +32,20 @@ API 与 Worker 的 InfrastructureModule 在 Nest 启动期间创建应用级 Wor
 
 备份和恢复必须同时覆盖业务表与 langgraph schema。仅恢复 WorkflowRun 或仅保留 threadId 不能恢复图；checkpoint 表也不替代业务运行历史。API / Worker 重启后，用原 WorkflowVersion / threadId 连接同一库即可读取已有 checkpoint。跨进程测试使用隔离 dramaflow_test；真实业务删除的 checkpoint 保留 / 清理策略暂未实现，不依赖 Prisma 级联自动删除原生 checkpoint。
 
+## Workflow 执行队列
+
+[Outbox 迁移](../packages/database/prisma/migrations/20261020050000_workflow_execution_outbox/migration.sql)仅新增 workflow_execution_outbox 和内部 waitingRevision，不删除既有 Run、版本或素材，不重建旧迁移。Run 与 start 命令同事务提交；恢复意图按 waiting 周期唯一。新增数据库触发器保护意图身份 / payload，并在 running → waiting 时递增内部周期。
+
+BullMQ 6.3.18 使用既有 REDIS_URL，队列名 workflow-execution；连接独立于业务 RedisService，不使用 Prisma 冒充 Queue。Compose 已启用 Redis AOF 和 noeviction，端口仍为 6379。所有 API / Worker 实例必须使用相同数据库、Redis 和 WORKFLOW_QUEUE_PREFIX（默认 dramaflow-workflow）；同一前缀不能连接两个不同的业务数据库。运行隔离测试使用随机 dramaflow-test-* 前缀，不清生产 Redis。
+
+Worker 并发由 WORKFLOW_WORKER_CONCURRENCY 配置（默认 4，1—64）。WORKFLOW_OUTBOX_INTERVAL_MS 默认 1000、最小 100；WORKFLOW_QUEUE_LOCK_DURATION_MS / WORKFLOW_QUEUE_STALLED_INTERVAL_MS 默认 30000、最小 1000，生产调整前须按事件循环负载验证，不能靠减小锁期限恢复业务副作用。Consumer 关闭时等待活跃任务，OutboxPump 停止扫描后关闭连接；强制退出依赖 BullMQ stalled 重投。
+
+投递失败在 Outbox 记录 attempts、指数退避至最多 30 秒；Consumer 对 claim 前已识别基础设施故障最多执行 5 次投递尝试，业务失败不自动重跑。Redis 完成 Job 保留最多 1 天 / 10000 条，失败 Job 最多 7 天 / 10000 条；PostgreSQL 意图记录继续作为持久去重依据。队列记录不保存业务 outputs，不依赖 Redis 完成记录保留来保证正确性。
+
+API 在 enqueue 确认前不返回成功受理，Redis 不可用返回 WORKFLOW_QUEUE_UNAVAILABLE / 503，Run / Outbox 仍已持久保存，后续可能继续执行。不要因 503 或连接中断盲目重提收费生成。Worker 在 claim 后死亡或基础设施结果不明时，将意图记为 recovery_required，原 Run 保持 running；若已有 completed / 下一 waiting 记录则只补记意图完成。不实现自动重跑或人工恢复入口。核查须同时查看 Run / NodeRun / Outbox / 官方 checkpoint，不能只删除 Job 或把 running 改回 pending。
+
+部署时保持 Worker 常驻运行，否则 API 可以受理入队但无法执行；只运行 API 不会隐式执行 Graph。备份覆盖 PostgreSQL 业务与 checkpoint、Redis AOF；Outbox 本身没有独立的清理任务，业务 Run 删除按 FK 清理其意图。检查入口见 [开发指南](development.md)。
+
 ## 开发数据变更与授权
 
 当前开发阶段不要求兼容旧数据、表结构、字段或业务协议。优先保持领域模型和代码清晰，不为临时开发数据增加兼容层、双写或历史迁移逻辑。

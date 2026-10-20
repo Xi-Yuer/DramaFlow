@@ -4,6 +4,8 @@ x-app-environment: &app-environment
   NODE_ENV: production
   DATABASE_URL: postgresql://dramaflow:${POSTGRES_PASSWORD:?请先运行 pnpm env:init}@postgres:5432/dramaflow
   REDIS_URL: redis://redis:6379
+  WORKFLOW_QUEUE_PREFIX: ${WORKFLOW_QUEUE_PREFIX:-dramaflow-workflow}
+  WORKFLOW_WORKER_CONCURRENCY: ${WORKFLOW_WORKER_CONCURRENCY:-4}
   CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?请先运行 pnpm env:init}
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?请先运行 pnpm env:init}
   TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}

@@ -29,9 +29,13 @@ export class WorkflowRuntimeFactory {
     private readonly checkpointer: WorkflowCheckpointerService,
   ) {}
 
-  async forProject(ownerId: string, projectId: string): Promise<WorkflowRunner> {
+  async forProject(
+    ownerId: string,
+    projectId: string,
+    executionId?: string,
+  ): Promise<WorkflowRunner> {
     const versions = await this.versions.forProject(ownerId, projectId);
-    const runs = await this.runs.forProject(ownerId, projectId);
+    const runs = await this.runs.forProject(ownerId, projectId, executionId);
     const compiler = new DefaultWorkflowCompiler(
       this.registry,
       async (run) =>

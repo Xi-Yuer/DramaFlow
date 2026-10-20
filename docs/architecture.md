@@ -12,7 +12,7 @@ Next.js 使用 App Router、Ant Design 深色主题和 TanStack Query。认证�
 
 项目 API 为 GET / POST /api/v1/projects、GET / PUT /api/v1/projects/:id。新增 GET /api/v1/workflow/node-types 默认认证，响应 Cache-Control: no-store。NodeTypesModule 复用共享 WorkflowNodeRegistryModule，与本应用 Runtime 共用服务端 Registry；当前返回真实空数组，没有注册占位 LLM / 视频类型。
 
-worker 仍是独立 NestJS 应用上下文，通过 `@dramaflow/server` 复用数据库、持久 Checkpointer、Redis 与对象存储，不消费业务队列；plugins、context 保留空入口。LangGraph 普通节点适配在基础库验证，未接入运行 API / worker，LangChain 模型调用与供应商适配未实现。
+worker 是独立 NestJS 应用上下文，通过 `@dramaflow/server` 复用基础设施，运行 Outbox Pump 和 BullMQ Consumer。异步 Run HTTP 只提交，Graph 在 Worker 执行；plugins、context 仍保留空入口，LangChain 模型调用与供应商适配未实现。
 
 ## Workflow 基础库
 
@@ -28,37 +28,51 @@ workflow 包已有 parseWorkflowInputs、collectWorkflowOutputs、createWorkflow
 
 API 的 workflows/WorkflowService 提供 updateDraft 与 publish，WorkflowsModule 注册并导出服务。两者都显式接收操作者和 expectedRevision，并检查 Workflow 所属项目的所有者。updateDraft 以身份 / 权限 / revision 为条件原子更新 draft、递增 revision，冲突返回 WORKFLOW_REVISION_CONFLICT，不存在或无权访问返回 404。publish 在 ReadCommitted 事务内 SELECT FOR UPDATE 锁定 Workflow，检查修订、拒绝重复发布，经 createWorkflowDefinitionSnapshot 内部的正式 Schema 校验与完整快照后，按已锁定工作流的 max(version) + 1 创建版本。发布结果包含 sourceRevision，发布不修改 draft 或 revision；同修订再次发布返回 WORKFLOW_REVISION_ALREADY_PUBLISHED，不以唯一冲突作为正常分配机制。版本读取接口不承担发布，尚无编辑 / 发布 HTTP 或 Registry / port / type / resource 发布级语义校验。
 
-`packages/workflow/src/compiler/dependency.compiler.ts` 导出 collectNodeDependencies：接收当前 WorkflowEdge 列表，Data / Control Edge 均按两端 nodeId 收集执行依赖，按 target 聚合、按 source 去重并保留首次出现顺序，输出 NodeDependency。同一节点对的不同端口数据边及重复 Data / Control 关系只形成一个上游。DependencyCompiler.compile 直接接收 edges 并调用收集函数，单上游生成字符串 addEdge，多上游只生成一条数组 addEdge（ALL Join），不会拆成多个独立触发边。它保留原始边，不读取或修改 portKey、不获取输出或构造输入；这些仍属 BindingResolver / NodeExecutor。真实 LangGraph 测试覆盖混合边去重后的两种完成顺序、不同路径长度、仅执行一次和上游失败；测试另验证端口不被读取及冻结边保持完整。不新增 NodeDefinition.joinMode 或平台 Join Runtime。If / Switch / Conditional Edge / Send / Batch 候选分支不适用；普通 Action 整图组装复用此 Compiler，运行 HTTP 已接入，队列入口尚未接入。
+`packages/workflow/src/compiler/dependency.compiler.ts` 导出 collectNodeDependencies：接收当前 WorkflowEdge 列表，Data / Control Edge 均按两端 nodeId 收集执行依赖，按 target 聚合、按 source 去重并保留首次出现顺序，输出 NodeDependency。同一节点对的不同端口数据边及重复 Data / Control 关系只形成一个上游。DependencyCompiler.compile 直接接收 edges 并调用收集函数，单上游生成字符串 addEdge，多上游只生成一条数组 addEdge（ALL Join），不会拆成多个独立触发边。它保留原始边，不读取或修改 portKey、不获取输出或构造输入；这些仍属 BindingResolver / NodeExecutor。真实 LangGraph 测试覆盖混合边去重后的两种完成顺序、不同路径长度、仅执行一次和上游失败；测试另验证端口不被读取及冻结边保持完整。不新增 NodeDefinition.joinMode 或平台 Join Runtime。If / Switch / Conditional Edge / Send / Batch 候选分支不适用；普通 Action 整图组装复用此 Compiler，运行 HTTP 与执行队列已接入。
 
 compiler/workflow-compiler.ts 提供普通 Action 的 WorkflowCompiler / DefaultWorkflowCompiler，复制并冻结领域定义，复用 Registry 精确版本、Action 策略与 DependencyCompiler，连接根节点到 START、叶节点到 END，空定义直接结束。调用方显式注入 Checkpointer 与按运行限定权限的 Executor 工厂；Compiler 不生成 thread、不写运行状态、不处理候选分支。真实 LangGraph 用例验证完整 A/B → C 在两种完成顺序下保留 ALL Join 与双方 State 输出。
 
-run/workflow-run-submission.ts 提供 DefaultWorkflowRunSubmissionService：start 校验明确版本与项目 / 工作流归属后仅创建 pending Run，返回持久化记录；resume 校验 waiting 并返回恢复意图，不修改状态。提交只依赖版本 / 运行 Repository，不编译或调用 Graph。contracts/workflow/workflow-execution-job.ts 定义严格的 start / resume Job，只携带 workflowRunId 及恢复时的 unknown value，不复制 Definition、State、版本或 thread；当前不持久入队。
+run/workflow-run-submission.ts 提供 DefaultWorkflowRunSubmissionService：start 校验明确版本与项目 / 工作流归属后通过 createWithExecution 在同一 PostgreSQL 事务写入 pending Run 与 start Outbox；resume 在 Run 行锁下校验 waiting，按本轮 waitingRevision 创建恢复意图，不修改 Run 状态。提交只依赖版本 / 运行 Repository，不编译或调用 Graph。contracts/workflow/workflow-execution-job.ts 定义严格的 start / resume Job，只携带 workflowRunId，resume 另有由 Outbox 分配的 executionId / unknown value，不复制 Definition、State、版本或 thread。
 
 run/workflow-runner.ts 提供 DefaultWorkflowRunner.executeStart / executeResume，只执行已存在的 Run。executeStart 读取 pending，原子 claimPendingForStart 转 running 并写 startedAt；竞争失败报 WORKFLOW_RUN_NOT_PENDING，不加载版本或执行 Graph。抢占后重新读取原 workflowVersionId、核对归属并冻结定义，再编译、invoke；初始 State 与 thread_id 唯一取自已保存的运行及输入快照，不创建新 Run。
 Runner 在 invoke 返回后检查原生 StateSnapshot 的 next / tasks 与 isInterrupted，并核对快照的运行 / 版本 / 项目 / thread。存在待执行任务时仅 markWaiting；没有待执行任务时由 WorkflowOutputResolver 按声明名称及 source.nodeId / outputKey 收集 RuntimeValue，检查缺失来源与类型兼容，再 markCompleted。原有 collectWorkflowOutputs 是业务值 Zod 工具，不承担 RuntimeValue / checkpoint 解析。Node / Graph 失败记录整图稳定摘要后原样抛回；版本读取 / 编译失败在成功 claim 后按 running → failed 记录。记录服务本身失败不反向 markFailed，双重失败保留两种原因。生命周期不放进 Compiler 或 NodeExecutor，规则见 [Runtime](runtime-architecture.md#workflowrunner-首次启动)。
 
 executeResume 只接受 workflowRunId 与 unknown value，getById 校验 waiting 后通过 claimWaitingForResume 原子转为 running，再加载原版本和编译；非 waiting 或 claim 竞争失败报 WORKFLOW_RUN_NOT_WAITING 且不 invoke。Prisma 的读取和 claim 继续按项目 / 所有者过滤；claim 在事务中有条件更新后读回完整记录，保留 startedAt 与身份。恢复前先检查原 checkpoint，再传 Command，不传 initialState、不新建 Run 或线程；与 start 共用结果分类、最终输出解析及状态落库逻辑。再次暂停可回 waiting，错误由已 claim 的调用方写 failed。Runner 不查询 interaction NodeRun；其 waiting / resume 关联仍独立设计。当前 LangGraph 对 falsy resume 的行为以单个原生 interrupt ID 映射适配，interaction node 接收的业务值不变，细节见 [恢复边界](runtime-architecture.md#workflowrunner-恢复)。
 
-版本读取已有生产 Prisma 实现，并用于真实 PostgreSQL / LangGraph 的 Runner 集成；生产 Runner 已通过 API / Worker 的 Runtime Service 装配；业务节点目录与队列消费者仍未接入；Run HTTP 已接入应用 Service。MemorySaver 和测试节点仅用于测试，不构成生产兜底。版本测试经真实 WorkflowService 更新 / 发布，验证 A → Version 1、草稿改 B → Version 2 后旧版本不变，以及新 Repository / 独立数据库连接读取。发布测试使用两个独立连接验证 12 次并发编辑单胜者、过期发布无版本、12 次同修订发布单版本、新修订递增版本号；另以 PostgreSQL 阻塞信息确认发布等待未提交编辑行锁，并在编辑提交后拒绝过期修订。覆盖发布时无效定义拒绝、所有者隔离、输入校验及 sourceRevision 数据库约束。Runner 与 Run Repository 的既有失败、恢复、并发 claim 和权限边界保持独立。
+版本读取已有生产 Prisma 实现，并用于真实 PostgreSQL / LangGraph 的 Runner 集成；生产 Runner 已通过 Worker Runtime Service 装配；队列消费者已接入，业务节点目录仍为空；Run HTTP 已接入应用 Service。MemorySaver 和测试节点仅用于测试，不构成生产兜底。版本测试经真实 WorkflowService 更新 / 发布，验证 A → Version 1、草稿改 B → Version 2 后旧版本不变，以及新 Repository / 独立数据库连接读取。发布测试使用两个独立连接验证 12 次并发编辑单胜者、过期发布无版本、12 次同修订发布单版本、新修订递增版本号；另以 PostgreSQL 阻塞信息确认发布等待未提交编辑行锁，并在编辑提交后拒绝过期修订。覆盖发布时无效定义拒绝、所有者隔离、输入校验及 sourceRevision 数据库约束。Runner 与 Run Repository 的既有失败、恢复、并发 claim 和权限边界保持独立。
 
 ## 生产 Runtime 装配
 
-API 与 Worker 各有 workflow/runtime/WorkflowRuntimeModule 和 WorkflowRuntimeService，AppModule 显式引入。共享 WorkflowRunSubmissionFactory.forProject(ownerId, projectId) 创建限定权限的提交服务，独立于 Compiler / Checkpointer。WorkflowExecutionService 接收受信任的 Job，按 Run ID 从数据库读取项目及所有者，再经 WorkflowRuntimeFactory.forProject 装配权限作用域 Runner；版本 / thread 仍由 Runner 从持久记录读取，不缓存跨用户 Runner。执行服务是内部执行端边界，HTTP 必须在交付 Job 前校验当前用户权限。Worker Service 暴露 execute(job)、executeStart(id)、executeResume(input)，不再创建 Run。
-packages/server/workflow 复用原有 Prisma 版本 / Run / NodeRun Repository 实现，权限过滤、原子 attempt 与 claim 语义不变，移除 API 私有实现和重复模块，Worker 不依赖 API 包。WorkflowRuntimeInfrastructureModule 提供 Repository 工厂、Codec、统一存储策略、最终输出解析与装配 factory。factory 使用既有 DefaultWorkflowCompiler / Action 策略，注入应用级 PostgresSaver；按真实 Run 创建限定权限的 DefaultNodeExecutor，复用 BindingResolver 与 Codec。未新增策略注册框架或修改 Runtime 内核。
+API 与 Worker 各有 workflow/runtime/WorkflowRuntimeModule 和 WorkflowRuntimeService，AppModule 显式引入。API 仅引入 WorkflowSubmissionModule / WorkflowQueueModule，不提供 Runner factory 或 ExecutionService；执行基础设施、Consumer 和 Outbox Pump 仅在 Worker 装配。共享 WorkflowRunSubmissionFactory.forProject(ownerId, projectId) 创建限定权限的提交服务，独立于 Compiler / Checkpointer。WorkflowExecutionService 接收受信任的 Job，核对持久 Outbox 的身份、payload 和 waiting 周期，再按 Run ID 从数据库读取项目及所有者，再经 WorkflowRuntimeFactory.forProject 装配权限与 executionId 作用域的 Runner；版本 / thread 仍由 Runner 从持久记录读取，不缓存跨用户 Runner。执行服务是内部执行端边界，HTTP 必须在交付 Job 前校验当前用户权限。Worker Service 暴露 execute(job)、executeStart(id)、executeResume(input)，不再创建 Run。
+packages/server/workflow 复用原有 Prisma 版本 / Run / NodeRun Repository 实现，权限过滤、原子 attempt 与 claim 语义不变，移除 API 私有实现和重复模块，Worker 不依赖 API 包。WorkflowRuntimeInfrastructureModule 提供 Repository 工厂、Codec、统一存储策略、最终输出解析与装配 factory。factory 使用既有 DefaultWorkflowCompiler / Action 策略，注入应用级 PostgresSaver；按真实 Run 创建限定权限的 DefaultNodeExecutor，复用 BindingResolver 与 Codec。未新增策略注册框架或修改 Runner 图执行语义。
 
 WorkflowNodeRegistryModule 为每个应用提供同一个生产 Registry；API 目录与 Runtime 共用，仍未注册业务节点。UnconfiguredDataReferenceResolver / UnconfiguredArtifactWriter 是明确拒绝适配，不提供内容实现：reference decode 的 REFERENCE_RESOLUTION_FAILED.cause.code 为 REFERENCE_RUNTIME_NOT_CONFIGURED，reference / media auto encode 报 ARTIFACT_WRITER_NOT_CONFIGURED；Executor 继续保留阶段包装和 cause，不回退 inline。
 
-workflow-runtime.e2e-spec 启动两个正式 AppModule 的编译产物，不覆盖 provider，验证真实 DI、项目作用域 Runner、API 提交 pending、独立 Worker 应用按同一 ID 经 PostgreSQL 完成并写入官方 checkpoint、未知类型 compile 失败、跨用户 start / resume 隔离、未配置引用错误和缺失 checkpoint 拒绝重启。空图验证装配，不证明已有业务节点；已有 Run Controller，尚无队列消费者、Plugin、Human Review 或真实生成调用。
+workflow-runtime.e2e-spec 启动正式 API / Worker AppModule，检查 API 不装配执行依赖、Worker 构造生产依赖、空版本从提交到消费、权限、未知节点与缺失 checkpoint 的失败边界、引用服务明确未配置。测试目录仍为空，测试用故障节点和原生等待图不会进入生产源码。
 
 ## Workflow Run HTTP API
 
-API 的 WorkflowRuntimeModule 注册 WorkflowRunsController，三个路由默认受真实 AuthGuard / Origin 策略保护，返回 Cache-Control: no-store。POST /api/v1/workflow-runs 只接受 workflowVersionId 与 RuntimeValue inputs；Service.startVersion 按当前用户查询版本所属 Workflow / Project，派生内部身份，先 submitStart 创建 pending，再显式交付 start Job 给 ExecutionService。GET /api/v1/workflow-runs/:runId 和 POST /api/v1/workflow-runs/:runId/resume 先按 Run 的项目所有者检查权限，后者只接受必填的 unknown value，再 submitResume 取得意图并交付 ExecutionService；提交不 claim，Controller 不组装 Runtime。
+API 的 WorkflowRuntimeModule 注册 WorkflowRunsController，三个路由默认受真实 AuthGuard / Origin 策略保护，返回 Cache-Control: no-store。POST /api/v1/workflow-runs 只接受 workflowVersionId 与 RuntimeValue inputs；Service.startVersion 按当前用户查询版本所属 Workflow / Project，派生内部身份，先 submitStart 创建 pending，再通过 Dispatcher 确认 start Job 已入 Redis。GET /api/v1/workflow-runs/:runId 和 POST /api/v1/workflow-runs/:runId/resume 先按 Run 的项目所有者检查权限，后者只接受必填的 unknown value，再 submitResume 取得持久意图并确认入队；提交不 claim，Controller 不组装 Runtime。
 
 contracts/workflow/workflow-run-api.ts 提供严格请求与 WorkflowRunResponse Schema。响应只包含 Run 业务 ID、版本、状态、RuntimeValue 输入 / 最终输出、稳定错误摘要与 ISO 时间，不公开 projectId / threadId、State 或 checkpoint。不存在与无权访问分别统一为 WORKFLOW_VERSION_NOT_FOUND / WORKFLOW_RUN_NOT_FOUND（404），非 waiting / 原子 claim 失败为 409；配置缺失为 503，节点执行或未知 Runtime 故障返回安全的 500，不返回原始 message、stack 或 cause。既有草稿修订冲突保持 409，不因此增加发布 Controller。
 
-workflow-run-api.e2e-spec 启动两个真实 API HTTP 实例，使用真实密码会话 / 签名 Cookie、生产资源查询、Runtime Service、Runner、Prisma 和 PostgresSaver。空图经默认生产 factory 完成；专用测试项目以原生中断图验证 HTTP waiting → 另一实例 resume → completed、原版本 / thread 保留、GET outputs、0 值恢复，以及屏障同步的两次 HTTP resume 仅一次 invoke / 另一次 409。另覆盖未登录、Origin、字段注入、跨用户 404 且不调用 Runner、错误脱敏。中断 / 故障编译器只在测试中装配，不注册生产节点或冒充 Human Review。
+workflow-run-api.e2e-spec 使用两个真实 API HTTP 实例、真实密码会话和签名 Cookie，并启动独立 Worker 子进程。检查 202 / pending / GET、API 进程不调用 Runner、原版本与 thread 的两轮异步恢复、0 值、同等待周期并发提交单意图 / 409、跨用户 404、严格字段和队列不可用时安全 503。中断图只存在于测试 Worker 编译器。
 
-当前 POST 仍在 API 进程同步桥接「提交 → ExecutionService」，不宣称已异步受理；HTTP contract 支持完整运行状态，不把同步执行固化到 Controller、Runner 或未来队列协议。Worker 仍没有队列消费者，生产节点目录仍为空，Web 画布尚未接入运行交互。
+POST start / resume 成功均为 202，返回 Run DTO；GET 查询实际运行状态。API 不执行 Graph，Worker 经共享执行服务处理队列；生产节点目录仍为空，Web 画布尚未接入运行交互。
+
+## Workflow Execution Queue
+
+PostgreSQL 的 workflow_execution_outbox 保存 id、kind、workflowRunId、payload、status、createdAt、publishedAt、attempts，以及 waitingRevision / completedAt / availableAt。start 与 Run 同事务提交；resume 在 Run 行锁下生成独立 executionId，同一 waitingRevision 只能创建一个意图，重复提交报 WORKFLOW_RESUME_ALREADY_SUBMITTED。waitingRevision 是数据库管理的内部周期，每次 running → waiting 自动递增，不进入公开 Run DTO / WorkflowState。Outbox 的身份、payload、周期不可修改。
+
+packages/server/workflow/queue 使用 BullMQ 6.3.18，复用 REDIS_URL 服务，独立连接、固定 workflow-execution queue 与可配置 prefix。Job ID 由 kind / Run ID / resume executionId 的 SHA-256 确定性生成，使用不含冒号的编码；Redis 只保存共享 Job，不保存 Definition、State、thread 或 outputs。成功 / 失败 Job 有界保留，PostgreSQL Outbox 完成标记继续防止 Redis Job 被清理后的重复执行。
+
+API 只提交和显式 publish；Worker 的 WorkflowOutboxPump 在启动后扫描 pending，Dispatcher 以 FOR UPDATE SKIP LOCKED 并发选取行，在事务中 enqueue 再记 published。enqueue 前死亡仍有 pending；enqueue 成功但记录前死亡，事务回滚后按相同 Job ID 重投。Redis 故障保存尝试次数与指数退避，不改变 Run；HTTP 不返回成功受理，而是安全的 WORKFLOW_QUEUE_UNAVAILABLE / 503，持久意图之后仍可能执行，调用方不能盲目重提为新 Run。
+
+Worker Consumer 校验 Job，再调用 WorkflowExecutionService。执行服务校验 Outbox，Runner 使用带 executionId 的 Repository；原子 Run claim 同时把对应意图转 executing，并检查 waitingRevision。API、Dispatcher、Queue 不执行 Run claim。Graph 成功 / 再次等待后意图 completed，业务失败后意图 failed；Consumer 用 UnrecoverableError 停止业务重试。临时数据库连接 / 超时等 claim 前故障最多重试五次，指数退避；stalled redelivery 由 BullMQ 管理。
+
+Worker 在 claim 前死亡，重投可继续执行；claim 后死亡且 Run 仍 running，结果无法确认时记录 recovery_required，队列停止自动执行，Run / NodeRun 不伪装为业务 failed。若 Run 已 completed 或已进入紧接着的 waiting 周期，仅补记意图 completed，不再次 invoke。此边界防止重复生成副作用，不承诺收费调用 exactly-once，不实现业务 Retry 或自动核查恢复。
+
+workflow-queue.e2e-spec 使用真实 PostgreSQL / Redis 与 SIGKILL 子进程，验证提交后未 enqueue、enqueue 后未记 published、Worker 收件 / claim 后死亡、两次 resume、清理 Redis 旧 Job 后重投、事务回滚、投递失败、临时基础设施重试及 NodeRun 业务失败不重跑。跨进程 checkpoint 恢复仍由原有独立用例验证；测试原生等待图不等于 Human Review 产品能力。
 
 ## PostgreSQL Checkpointer
 

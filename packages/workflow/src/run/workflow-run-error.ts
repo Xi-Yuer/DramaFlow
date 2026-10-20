@@ -13,3 +13,11 @@ export class WorkflowRunNotPendingError extends Error {
     this.name = 'WorkflowRunNotPendingError';
   }
 }
+
+export class WorkflowResumeAlreadySubmittedError extends Error {
+  readonly code = 'WORKFLOW_RESUME_ALREADY_SUBMITTED';
+  constructor() {
+    super('本轮等待已提交恢复请求');
+    this.name = 'WorkflowResumeAlreadySubmittedError';
+  }
+}

@@ -8,6 +8,7 @@ export const workflowExecutionJobSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.literal('resume'),
       workflowRunId: workflowIdentifierSchema,
+      executionId: workflowIdentifierSchema,
       value: z.unknown().refine((value): boolean => value !== undefined, '必须提供恢复值'),
     })
     .strict(),

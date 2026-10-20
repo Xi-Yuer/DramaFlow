@@ -29,3 +29,4 @@ export * from './compiler/dependency.compiler.js';
 export * from './runtime/content-store.js';
 export * from './run/workflow-run-submission.js';
 export * from './run/workflow-run-error.js';
+export * from './run/workflow-run-submission-repository.js';

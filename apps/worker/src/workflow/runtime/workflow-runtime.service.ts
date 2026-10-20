@@ -1,6 +1,8 @@
-import type { WorkflowExecutionJob } from '@dramaflow/contracts';
+import type {
+  WorkflowExecutionJob,
+  ResumeWorkflowExecutionJob,
+} from '@dramaflow/contracts';
 import { WorkflowExecutionService } from '@dramaflow/server';
-import type { ResumeWorkflowRunInput } from '@dramaflow/workflow';
 import { Injectable } from '@nestjs/common';
 
 // 后续 Consumer 只交付 Job；Worker 执行已有 Run，不创建第二条运行记录。
@@ -16,7 +18,7 @@ export class WorkflowRuntimeService {
     return this.execution.executeStart(workflowRunId);
   }
 
-  executeResume(input: ResumeWorkflowRunInput) {
+  executeResume(input: ResumeWorkflowExecutionJob) {
     return this.execution.executeResume(input);
   }
 }
