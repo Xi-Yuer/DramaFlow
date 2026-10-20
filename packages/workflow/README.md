@@ -8,7 +8,7 @@
 | data       | DataTypeDefinition / Registry，递归真实值 Zod 校验                                            |
 | node       | NodeType.execute、精确版本 Registry、值 Schema 与 Preset 校验                                 |
 | runtime    | typed WorkflowState 与 Codec / BindingResolver / Executor / 内容 Store / NodeRunRecorder 接口 |
-| compiler   | CompilationStrategy 接口与薄 action 包装，不含完整整图编译                                    |
+| compiler   | CompilationStrategy、薄 action 包装与普通确定性依赖的 ALL Join 编译，不含完整整图编译         |
 | run        | 显式 Run.threadId 到 LangGraph 配置的映射                                                     |
 
 NodeType 不再自行 compile，普通业务只处理 input + config + context。NodeRegistry 的非 action 声明由独立结构策略处理，不伪装普通操作。createOperationNodeType 仅组合业务实现；invokeNodeOperation 保留独立真实值校验，不承担调度、Binding 或持久化。

@@ -32,4 +32,4 @@ WorkflowRun.threadId 独立必填，createWorkflowRunConfig 将它映射到 conf
 
 审核继续用 LangGraph interrupt / Command.resume，waiting 是业务投影。节点恢复从开头重入，副作用需幂等，审核决策记录独立于 Checkpoint；当前没有生产审核 API 或 Run Store。[官方 Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts) 解释原生恢复机制。
 
-Send 使用 branch-local 输入，不能争写全局 currentEpisode。SubWorkflow 通过明确输入输出映射组合，不复制整个父 State。Control Edge 声明显式执行先后，不写 State 输入值，也不因允许多个上游就确定 Join 规则；实际依赖、分支、父子运行与 Join 的执行映射仍需后续设计，不自建 ready 轮询或恢复状态机。
+Send 使用 branch-local 输入，不能争写全局 currentEpisode。SubWorkflow 通过明确输入输出映射组合，不复制整个父 State。Control Edge 声明显式执行先后，不写 State 输入值；哪些边计入确定性执行依赖仍需分析。普通多上游的 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join) 由 LangGraph waiting edge 承担，不在 State 增加平台 ready 计数。条件分支、Send / Batch 与父子运行的执行映射单独设计，不把候选路径当作静态 ALL 等待集合，不自建轮询或恢复状态机。

@@ -13,4 +13,5 @@ export * from './runtime/state.js';
 export * from './runtime/binding-resolver.js';
 export * from './runtime/node-executor.js';
 export * from './compiler/strategy.js';
+export * from './compiler/dependency.compiler.js';
 export * from './runtime/content-store.js';
