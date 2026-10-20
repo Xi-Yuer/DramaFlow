@@ -4,6 +4,7 @@ import {
   DatabaseService,
   RedisService,
   StorageService,
+  WorkflowCheckpointerService,
 } from '@dramaflow/server';
 import { AppModule } from './app.module.js';
 
@@ -15,6 +16,7 @@ async function bootstrap() {
       app.get(DatabaseService).client.$queryRaw`SELECT 1`,
       app.get(RedisService).ping(),
       app.get(StorageService).ping(),
+      app.get(WorkflowCheckpointerService).ping(),
     ]);
     new Logger('Worker').log('基础设施连接就绪；当前未注册业务任务。');
   } catch (error) {

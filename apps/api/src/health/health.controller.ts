@@ -2,6 +2,7 @@ import {
   DatabaseService,
   RedisService,
   StorageService,
+  WorkflowCheckpointerService,
 } from '@dramaflow/server';
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { Public } from '../auth/auth.guard.js';
@@ -13,6 +14,7 @@ export class HealthController {
     private readonly db: DatabaseService,
     private readonly redis: RedisService,
     private readonly storage: StorageService,
+    private readonly checkpointer: WorkflowCheckpointerService,
   ) {}
   @Get() async health() {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -22,6 +24,7 @@ export class HealthController {
           this.db.client.$queryRaw`SELECT 1`,
           this.redis.ping(),
           this.storage.ping(),
+          this.checkpointer.ping(),
         ]),
         new Promise<never>((_, reject) => {
           timer = setTimeout(
@@ -32,7 +35,12 @@ export class HealthController {
       ]);
       return {
         status: 'ok',
-        services: { postgres: 'up', redis: 'up', storage: 'up' },
+        services: {
+          postgres: 'up',
+          redis: 'up',
+          storage: 'up',
+          checkpointer: 'up',
+        },
       };
     } catch {
       throw new ServiceUnavailableException('基础设施尚未就绪');

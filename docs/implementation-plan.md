@@ -4,11 +4,11 @@
 
 ## 当前阶段
 
-2026-10-20：以实际代码为基线，完成绑定 expectedRevision 的 Draft 乐观锁和并发安全发布，同一草稿修订只对应一个不可变版本。应用服务、数据库约束及验证范围见 [当前架构](architecture.md#workflow-基础库)。
+2026-10-20：以实际代码为基线，推进 PostgreSQL Persistent Checkpointer，应用级初始化与关闭、多进程共享 checkpoint store 和进程退出后恢复的实现及验证见 [当前架构](architecture.md#postgresql-checkpointer)。
 
 数据语义与承载见 [数据模型](data-model.md)。两类边的静态联合无环检查、执行依赖收集和运行输入绑定职责分离。完整生产执行管线、大小预算、权限解析、业务持久化及控制结构通道语义仍待后续阶段接入；本步不扩大项目保存与节点目录的应用边界，不预设条件路由。
 
-**下一步：Persistent Checkpointer。** 不继续扩展 Workflow CRUD；本轮不增加编辑 / 发布 HTTP、运行入口、Worker、Human Review、Artifact 或 Plugin，不提前加入 Registry / port / type / resource 发布级语义校验。
+**下一步范围待确认：生产 Runner 装配与受理边界。** 不继续扩展 Workflow CRUD；本轮不增加编辑 / 发布 HTTP、运行入口、Worker queue、Human Review、Artifact 或 Plugin，不提前加入 Registry / port / type / resource 发布级语义校验。
 
 本文件是当前阶段、下一步与待决策项的唯一维护入口；推进时原地修订，不堆叠旧计划或逐轮交付流水。文档维护方式见 [开发指南](development.md#文档维护)。
 
@@ -39,9 +39,9 @@ Workflow 的可组合性与固定被调用版本原则已在 [Workflow 模型](w
 
 WorkflowRun 记录整次运行，NodeRun 记录节点历史，Checkpoint 负责原生图恢复。以下议题留待单独明确，不构成本轮实施范围：
 
-1. 生产 Checkpointer 如何配置、初始化与注入，以及如何验证重启 / 跨实例恢复？
-2. interaction 节点如何定义 waiting 并在 resume 时复用同一 NodeRun、不增加 attempt？
-3. API / worker 如何受理、查询运行及处理记录状态与 Checkpoint 不一致的基础设施故障？
+1. API / worker 如何装配生产 Runner、受理 / 查询运行，并处理记录状态与 Checkpoint 不一致的基础设施故障？
+2. 运行删除与 checkpoint 的保留 / 清理策略如何定义？
+3. interaction 节点如何定义 waiting 并在 resume 时复用同一 NodeRun、不增加 attempt？
 
 不提前实现 Retry、Human Review、Control Node、真实模型或完整生成流程。普通 Action 禁止主动 interrupt；原生控制异常保持穿透，已有 NodeRun 保持 running。Human Review 阶段再引入 NodeRun.waiting，明确 resume 复用同一 NodeRun、不增加 attempt；本步不恢复关联，不靠 reducer 静默覆盖已有有效输出。
 

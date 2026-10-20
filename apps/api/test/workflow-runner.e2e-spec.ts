@@ -4,14 +4,11 @@ import {
   type WorkflowDefinition,
   type WorkflowRun,
 } from '@dramaflow/contracts';
-import { DatabaseService } from '@dramaflow/server';
 import {
-  END,
-  interrupt,
-  MemorySaver,
-  START,
-  StateGraph,
-} from '@langchain/langgraph';
+  DatabaseService,
+  WorkflowCheckpointerService,
+} from '@dramaflow/server';
+import { END, interrupt, START, StateGraph } from '@langchain/langgraph';
 import {
   createBindingResolver,
   DefaultDataStoragePolicyResolver,
@@ -43,8 +40,10 @@ if (
 const database = new DatabaseService();
 const db = database.client;
 const ownerId = randomUUID();
+const checkpointer = new WorkflowCheckpointerService();
 
 beforeAll(async () => {
+  await checkpointer.onModuleInit();
   await db.user.create({
     data: {
       id: ownerId,
@@ -54,8 +53,19 @@ beforeAll(async () => {
   });
 });
 afterAll(async () => {
-  await db.user.deleteMany({ where: { id: ownerId } });
-  await database.onModuleDestroy();
+  try {
+    const runs = await db.workflowRun.findMany({
+      where: { project: { ownerId } },
+      select: { threadId: true },
+    });
+    for (const run of runs) await checkpointer.saver.deleteThread(run.threadId);
+    await db.user.deleteMany({ where: { id: ownerId } });
+  } finally {
+    await Promise.all([
+      checkpointer.onModuleDestroy(),
+      database.onModuleDestroy(),
+    ]);
+  }
 });
 
 async function fixture(
@@ -156,7 +166,6 @@ async function fixture(
     projectId,
   );
   const nodeRuns = new NodeRunRepositories(database);
-  const checkpointer = new MemorySaver(); // 只验证原生状态机制，生产 Saver 不在本轮建设。
   const codec = new DefaultRuntimeValueCodec(
     { resolve: vi.fn() },
     { write: vi.fn() },
@@ -171,7 +180,7 @@ async function fixture(
         codec,
         await nodeRuns.forRun(ownerId, projectId, run.id),
       ),
-    checkpointer,
+    checkpointer.saver,
   );
   const compileNative = compiler.compile.bind(compiler);
   const graphs: CompiledWorkflow[] = [];
@@ -199,7 +208,7 @@ async function fixture(
 
 async function resumeFixture(onResume: () => Promise<void> = async () => {}) {
   const f = await fixture();
-  const saver = new MemorySaver();
+  const saver = checkpointer.saver;
   const values: unknown[] = [];
   const prepared = vi.fn(() => ({
     outputs: {
@@ -317,7 +326,7 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
       })
       .addEdge(START, 'native_wait')
       .addEdge('native_wait', END)
-      .compile({ checkpointer: new MemorySaver() });
+      .compile({ checkpointer: checkpointer.saver });
     f.compile.mockResolvedValue(graph);
     const result = await f.runner.start(f.input);
     const run = await db.workflowRun.findUniqueOrThrow({

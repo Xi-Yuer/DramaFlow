@@ -32,12 +32,17 @@ afterAll(async () => {
   await stopped;
 });
 
-it('健康接口验证真实 PostgreSQL、Redis 和对象存储', async () => {
+it('健康接口验证真实 PostgreSQL、持久 Checkpointer、Redis 和对象存储', async () => {
   const response = await fetch(`${origin}/api/v1/health`);
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
     status: 'ok',
-    services: { postgres: 'up', redis: 'up', storage: 'up' },
+    services: {
+      postgres: 'up',
+      redis: 'up',
+      storage: 'up',
+      checkpointer: 'up',
+    },
   });
 });
 

@@ -34,18 +34,18 @@
 
 ## 接口与代码入口
 
-| 接口                                        | 权限/行为                                                |
-| ------------------------------------------- | -------------------------------------------------------- |
-| GET /api/v1/health                          | 显式公开，检查 PostgreSQL、Redis、RustFS                 |
-| POST /api/auth/sign-in/email                | 同源登录；每 IP 每 60 秒最多 10 次                       |
-| POST /api/auth/sign-out                     | 同源退出当前会话                                         |
-| GET /api/auth/get-session                   | 认证库会话接口；停用账号不能绕过检查                     |
-| POST /api/auth/change-password              | 当前会话与旧密码；每 60 秒最多 5 次；强制撤销其他会话    |
-| GET /api/v1/users/me                        | 当前用户安全资料与当前会话标识                           |
-| PATCH /api/v1/users/me                      | 仅允许 name、bio、timeZone                               |
-| GET /api/v1/users/me/sessions               | 当前用户最近 100 条未过期会话摘要                        |
-| POST /api/v1/users/me/revoke-other-sessions | 撤销当前用户其他会话，保留当前设备                       |
-| GET /api/v1/users                           | 仅平台管理员；最近 100 个账号的安全目录，当前没有管理 UI |
+| 接口                                        | 权限/行为                                                   |
+| ------------------------------------------- | ----------------------------------------------------------- |
+| GET /api/v1/health                          | 显式公开，检查 PostgreSQL、持久 Checkpointer、Redis、RustFS |
+| POST /api/auth/sign-in/email                | 同源登录；每 IP 每 60 秒最多 10 次                          |
+| POST /api/auth/sign-out                     | 同源退出当前会话                                            |
+| GET /api/auth/get-session                   | 认证库会话接口；停用账号不能绕过检查                        |
+| POST /api/auth/change-password              | 当前会话与旧密码；每 60 秒最多 5 次；强制撤销其他会话       |
+| GET /api/v1/users/me                        | 当前用户安全资料与当前会话标识                              |
+| PATCH /api/v1/users/me                      | 仅允许 name、bio、timeZone                                  |
+| GET /api/v1/users/me/sessions               | 当前用户最近 100 条未过期会话摘要                           |
+| POST /api/v1/users/me/revoke-other-sessions | 撤销当前用户其他会话，保留当前设备                          |
+| GET /api/v1/users                           | 仅平台管理员；最近 100 个账号的安全目录，当前没有管理 UI    |
 
 NestJS 的鉴权与 Public/PlatformAdmin/Actor 装饰器在 apps/api/src/auth；用户资料服务在 users。认证 HTTP 入口通过白名单挂载；注册、管理插件、模拟登录、删除账号和未经授权的认证端点不公开。密码散列及 Cookie 处理复用认证库，不另建 JWT 系统。
 

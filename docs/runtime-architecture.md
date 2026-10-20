@@ -6,7 +6,7 @@ LangGraph 是核心图 Runtime。平台实现定义协议、编译适配、业�
 
 React Flow 负责编辑器与交互，平台定义经适配保存；contracts 不依赖 React Flow、NestJS、Prisma 或 LangGraph。LangChain 提供模型 / Tool / Agent 等节点内部抽象。Zod 验证协议和实际值，可执行 Schema 留在服务端。
 
-NestJS 承担认证、权限与业务入口；PostgreSQL 保存业务记录并承接未来持久 checkpointer；RustFS / S3 保存内容。Redis / Worker 后续承担长任务、配额与唤醒，不决定图中下一个节点。
+NestJS 承担认证、权限与业务入口；PostgreSQL 分别保存 Prisma 业务记录和官方 LangGraph checkpoint；RustFS / S3 保存内容。Redis / Worker 后续承担长任务、配额与唤醒，不决定图中下一个节点。
 
 ## 编译与执行分离
 
@@ -89,7 +89,7 @@ invoke 返回后仍调用原生 getState(config)。Runner 检查 result 的 isIn
 
 业务 / 图执行错误由 Runner 记录整图 failed 后原样上抛；阶段区分 load_version（恢复准备）、compile、invoke、inspect_state、resolve_output，持久化稳定摘要，原始原因保留在异常中。NodeRun 仍由 NodeExecutor 单独维护，节点 completed 不等于整图 completed。编译失败发生在 pending，按既定 pending → running → failed 路径记录，不 invoke，也不新增 pending → failed 转换。markRunning / markWaiting / markCompleted 自身失败原样作为基础设施异常上抛，不反向 markFailed；markFailed 再失败时 WorkflowRunRecordingError 同时保留原异常与记录异常。正常 interrupt 由 LangGraph 返回暂停快照并投影 waiting；若原生 GraphBubbleUp 异常仍逃出 Graph，则原样交还上层，不猜测其等待状态或记为业务失败。
 
-Runner 不实现 cancel / retry、HumanReviewRecord、SubWorkflow 或 Batch。生产版本读取已有 Prisma 实现和模块，运行服务装配、持久 Checkpointer 与运行 HTTP / worker 入口仍未接入；没有内存或 draft 生产兜底。API 集成使用真实版本 / 运行 Repository 和测试 MemorySaver，单元测试保留版本替身；持久 checkpoint 重启恢复尚未验证。
+Runner 不实现 cancel / retry、HumanReviewRecord、SubWorkflow 或 Batch。生产版本读取已有 Prisma 实现和模块，共享服务已有官方 PostgreSQL Checkpointer；生产 Runner 装配与运行 HTTP / worker 入口仍未接入，没有内存或 draft 生产兜底。API 集成以真实版本 / 运行 Repository 和官方 saver 验证 Action 编译；独立进程测试另以原生中断测试图验证进程退出后恢复，单元测试仍可显式使用 MemorySaver 和版本替身。
 
 ### WorkflowRunner 恢复
 
@@ -105,7 +105,15 @@ Runner 不查询或关联 interaction NodeRun；Human Review 后续单独定义�
 
 WorkflowStateAnnotation 与既有 State 接口共处 runtime/state.ts。outputs 使用 mergeNodeOutputs 合并局部 RuntimeValue map，缺省为空；重复 nodeId 写入明确失败。其余分区不由普通 Action wrapper 写入，定义、业务历史、内容存储与执行快照分离，完整规则见 [State 边界](workflow-state.md#并行与历史)。不以对象覆盖或业务状态轮询代替通道。[官方 Graph API](https://docs.langchain.com/oss/javascript/langgraph/graph-api) 说明图和状态机制。
 
-运行配置使用必填 Run.threadId；恢复必须加载原不可变 WorkflowVersion，以兼容实现重建图，接回原 thread 与持久 checkpointer，而不是当前草稿。知道 thread_id 不等于拥有资源权限。已有 start / resume 协调器与普通 Action 整图编译，没有生产运行接口或持久 checkpointer 实现。[官方 Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence) 说明原生持久化机制。
+运行配置使用必填 Run.threadId；恢复必须加载原不可变 WorkflowVersion，以兼容实现重建图，接回原 thread 与持久 checkpointer，而不是当前草稿。知道 thread_id 不等于拥有资源权限。已有 start / resume 协调器与普通 Action 整图编译，没有生产运行接口。[官方 Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence) 说明原生持久化机制。
+
+### PostgreSQL Checkpointer
+
+packages/server 的 WorkflowCheckpointerModule 提供应用级 WorkflowCheckpointerService，API / Worker 经 InfrastructureModule 引入。官方 `@langchain/langgraph-checkpoint-postgres@1.1.0` 的 PostgresSaver 使用独立 pg.Pool，读取同一 DATABASE_URL，在固定 langgraph schema 保存 checkpoint、blobs 和 pending writes；Prisma 仍只管理业务表。平台不实现 BaseCheckpointSaver、序列化或 checkpoint 表迁移。具体 API 以安装包类型 / 实现和[官方 PostgreSQL 使用说明](https://docs.langchain.com/oss/javascript/langgraph/add-memory#postgres)为准。
+
+Nest 初始化期间先获取数据库级 advisory transaction lock，串行调用官方 setup() 并经 getTuple() 验证读取，完成后才开放 service.saver。setup 的 DDL 仍由官方实现执行；锁只防止 API / Worker 多实例同时初始化官方迁移。失败抛 WORKFLOW_CHECKPOINT_UNAVAILABLE 并关闭池，应用不得就绪；健康检查通过官方读取路径探测，应用关闭调用官方 end()。Compiler 仅接收 BaseCheckpointSaver 并传给 graph.compile，Runner.start / resume 不创建 saver 或执行 setup，也不降级到内存。
+
+多个进程的 Saver 对象与连接池相互独立，恢复依赖相同数据库 / schema、原 threadId 和原 WorkflowVersion。进程退出后数据仍在 PostgreSQL；两个新进程竞争同一 waiting Run 时，业务 Repository 的原子 claim 只允许一个进入 invoke。Checkpoint 与 WorkflowRun / NodeRun 分属不同持久化路径，不承诺跨两者原子提交；故障后的对账及业务删除后的 checkpoint 保留策略仍需单独设计。初始化权限、备份和验证见 [部署说明](deployment.md#langgraph-postgresql-checkpointer)与[开发指南](development.md)。
 
 ## 人工介入、并行与副作用
 

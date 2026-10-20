@@ -4,7 +4,7 @@ DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，�
 
 当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录、注册通用 renderer，并接入 Data / Control Edge 连线、重连与删除事件；生产目录为空，没有添加节点、Workflow 保存 / 发布入口、工作流运行或模型调用。
 
-基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。PostgreSQL 已有 Workflow 草稿、完整不可变 WorkflowVersion 快照及 WorkflowRun / NodeRun；API 应用服务支持 Draft 乐观锁与绑定修订的并发安全发布，同一修订仅生成一个版本，版本读取 Repository 保持只读。WorkflowRunner 按明确版本首次启动 Action 图，并以原 thread 的 Command 恢复 waiting 运行；原子 claim 防止并发恢复，结束时只记录声明的最终输出。尚无发布 HTTP、生产持久 Checkpointer 或运行入口，引用解析与 Artifact 写入仍是接口；实现范围见 [当前架构](docs/architecture.md)。
+基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。PostgreSQL 已有 Workflow 草稿、完整不可变 WorkflowVersion 快照及 WorkflowRun / NodeRun；API 应用服务支持 Draft 乐观锁与绑定修订的并发安全发布，同一修订仅生成一个版本，版本读取 Repository 保持只读。WorkflowRunner 按明确版本首次启动 Action 图，并以原 thread 的 Command 恢复 waiting 运行；原子 claim 防止并发恢复，结束时只记录声明的最终输出。API / Worker 共用官方 PostgreSQL Checkpointer 基础设施，启动时初始化、关闭时释放连接，已验证跨进程恢复。尚无生产 Runner 装配、发布 / 运行 HTTP 或 Worker 执行入口，引用解析与 Artifact 写入仍是接口；实现范围见 [当前架构](docs/architecture.md)。
 
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 
@@ -30,17 +30,17 @@ pnpm dev
 
 ## 保留的结构
 
-| 目录               | 当前内容                                                 |
-| ------------------ | -------------------------------------------------------- |
-| apps/web           | 身份与项目画布、目录查询、通用节点 renderer 和协议适配   |
-| apps/api           | NestJS、Better Auth、资料、项目与受保护节点目录 API      |
-| apps/worker        | 独立 NestJS 应用上下文，尚未注册业务任务                 |
-| packages/database  | Prisma、身份/资料/凭证/会话及基础项目模型、pgvector      |
-| packages/server    | API 与 worker 共用的数据库、Redis、对象存储和凭证加密    |
-| packages/contracts | 身份、项目、Workflow / Node、DataType 及静态类型声明     |
-| packages/workflow  | 值契约、类型 / 节点 Registry、运行接口和 action 编译包装 |
-| packages/plugins   | 插件包空入口，保留模型 SDK 依赖                          |
-| packages/context   | 上下文包空入口，待逐步定义                               |
+| 目录               | 当前内容                                                                 |
+| ------------------ | ------------------------------------------------------------------------ |
+| apps/web           | 身份与项目画布、目录查询、通用节点 renderer 和协议适配                   |
+| apps/api           | NestJS、Better Auth、资料、项目与受保护节点目录 API                      |
+| apps/worker        | 独立 NestJS 应用上下文，尚未注册业务任务                                 |
+| packages/database  | Prisma、身份/资料/凭证/会话及基础项目模型、pgvector                      |
+| packages/server    | API 与 worker 共用的数据库、持久 Checkpointer、Redis、对象存储和凭证加密 |
+| packages/contracts | 身份、项目、Workflow / Node、DataType 及静态类型声明                     |
+| packages/workflow  | 值契约、类型 / 节点 Registry、运行接口和 action 编译包装                 |
+| packages/plugins   | 插件包空入口，保留模型 SDK 依赖                                          |
+| packages/context   | 上下文包空入口，待逐步定义                                               |
 
 上述目录是当前工程结构，不为每个一级概念预建独立包。contracts 按 identity / project 协议与 workflow / node 分组，workflow 按 definition / data / node / runtime / compiler / run 分组；server 只承载服务端基础设施。具体职责见 [架构与目录职责](docs/architecture.md)。
 
@@ -53,7 +53,7 @@ pnpm test:integration
 pnpm stack:up
 ```
 
-`test` 运行现有单元测试，包括 Workflow / Node 契约、manifest、React Flow 转换与真实 LangGraph 编译适配；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、项目、基础设施、完整版本快照与独立连接读取、Run 生命周期及并发 claim，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。测试中的图执行不代表完整工作流产品可运行；生产 checkpointer、运行接口和真实模型调用尚未接入。
+`test` 运行现有单元测试，包括 Workflow / Node 契约、manifest、React Flow 转换与真实 LangGraph 编译适配；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、项目、基础设施、完整版本快照、Run 生命周期、PostgreSQL checkpoint 跨进程恢复及多实例 claim，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。持久化恢复测试使用原生中断测试图，不代表 Human Review、运行接口或真实模型调用已接入。
 
 `stack:up` 构建镜像，启动基础设施、初始化存储桶、迁移和初始管理员，再启动 API、worker 和前端。已有数据卷不会因更新代码而自动删除。
 

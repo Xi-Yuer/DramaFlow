@@ -22,6 +22,16 @@ NodeRun 的[初始化迁移](../packages/database/prisma/migrations/202610200000
 
 Compose 的 migrate 服务执行 db:migrate 和幂等 auth:bootstrap，创建初始管理员。storage-init 初始化 RustFS 桶。API 等迁移与存储初始化成功后启动；worker 和 web 等 API 健康后启动。
 
+## LangGraph PostgreSQL Checkpointer
+
+API 与 Worker 的 InfrastructureModule 在 Nest 启动期间创建应用级 WorkflowCheckpointerService，使用 DATABASE_URL 和官方 PostgresSaver 的独立 pg 连接池。相同数据库中的 langgraph schema 是共享 checkpoint store；不同进程不需要共享 JS 对象。不要把 Prisma Client 传给 saver，也不要在 start / resume 中初始化池。
+
+初始化先用事务级 advisory lock 串行化官方 setup()，再用 getTuple() 验证读取；成功后应用才可就绪，失败报告 WORKFLOW_CHECKPOINT_UNAVAILABLE 并关闭连接。API 健康接口同时检查官方 checkpoint 读取路径；正常关闭通过 end() 释放池。连接池上限为每进程 10，连接超时 5 秒、单条 SQL 超时 10 秒，多实例部署需计入 PostgreSQL 总连接预算。
+
+官方 setup() 管理独立 schema 内的 checkpoint_migrations、checkpoints、checkpoint_blobs、checkpoint_writes，不由 Prisma schema / migration 管理，也没有自定义 workflow_checkpoints 表。启动数据库角色须有创建该 schema、表和索引及后续读写权限。升级官方包时需在独立环境验证其 setup / 数据兼容性；不要把 checkpoint 初始化放到用户首次运行请求。
+
+备份和恢复必须同时覆盖业务表与 langgraph schema。仅恢复 WorkflowRun 或仅保留 threadId 不能恢复图；checkpoint 表也不替代业务运行历史。API / Worker 重启后，用原 WorkflowVersion / threadId 连接同一库即可读取已有 checkpoint。跨进程测试使用隔离 dramaflow_test；真实业务删除的 checkpoint 保留 / 清理策略暂未实现，不依赖 Prisma 级联自动删除原生 checkpoint。
+
 ## 开发数据变更与授权
 
 当前开发阶段不要求兼容旧数据、表结构、字段或业务协议。优先保持领域模型和代码清晰，不为临时开发数据增加兼容层、双写或历史迁移逻辑。

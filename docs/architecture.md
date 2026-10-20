@@ -12,7 +12,7 @@ Next.js 使用 App Router、Ant Design 深色主题和 TanStack Query。认证�
 
 项目 API 为 GET / POST /api/v1/projects、GET / PUT /api/v1/projects/:id。新增 GET /api/v1/workflow/node-types 默认认证，响应 Cache-Control: no-store。NodeTypesModule 导出服务端 Registry 供后续显式注册；当前返回真实空数组，没有注册占位 LLM / 视频类型。
 
-worker 仍是独立 NestJS 应用上下文，通过 `@dramaflow/server` 复用数据库、Redis 与对象存储，不消费业务队列；plugins、context 保留空入口。LangGraph 普通节点适配在基础库验证，未接入运行 API / worker，LangChain 模型调用与供应商适配未实现。
+worker 仍是独立 NestJS 应用上下文，通过 `@dramaflow/server` 复用数据库、持久 Checkpointer、Redis 与对象存储，不消费业务队列；plugins、context 保留空入口。LangGraph 普通节点适配在基础库验证，未接入运行 API / worker，LangChain 模型调用与供应商适配未实现。
 
 ## Workflow 基础库
 
@@ -38,7 +38,13 @@ Runner 在 invoke 返回后检查原生 StateSnapshot 的 next / tasks 与 isInt
 
 resume 只接受 workflowRunId 与 unknown value，getById 校验 waiting 后按原版本编译，通过 claimWaitingForResume 原子转为 running；非 waiting 或 claim 竞争失败报 WORKFLOW_RUN_NOT_WAITING 且不 invoke。Prisma 的读取和 claim 继续按项目 / 所有者过滤；claim 在事务中有条件更新后读回完整记录，保留 startedAt 与身份。恢复前先检查原 checkpoint，再传 Command，不传 initialState、不新建 Run 或线程；与 start 共用结果分类、最终输出解析及状态落库逻辑。再次暂停可回 waiting，错误由已 claim 的调用方写 failed。Runner 不查询 interaction NodeRun；其 waiting / resume 关联仍独立设计。当前 LangGraph 对 falsy resume 的行为以单个原生 interrupt ID 映射适配，interaction node 接收的业务值不变，细节见 [恢复边界](runtime-architecture.md#workflowrunner-恢复)。
 
-版本读取已有生产 Prisma 实现，并用于真实 PostgreSQL / LangGraph 的 Runner 集成；生产 Runner 装配、节点目录、持久 Checkpointer 与运行 API / worker 服务仍未接入。MemorySaver 和测试节点仅用于测试，不构成生产兜底。版本测试经真实 WorkflowService 更新 / 发布，验证 A → Version 1、草稿改 B → Version 2 后旧版本不变，以及新 Repository / 独立数据库连接读取。发布测试使用两个独立连接验证 12 次并发编辑单胜者、过期发布无版本、12 次同修订发布单版本、新修订递增版本号；另以 PostgreSQL 阻塞信息确认发布等待未提交编辑行锁，并在编辑提交后拒绝过期修订。覆盖发布时无效定义拒绝、所有者隔离、输入校验及 sourceRevision 数据库约束。Runner 与 Run Repository 的既有失败、恢复、并发 claim 和权限边界保持独立。
+版本读取已有生产 Prisma 实现，并用于真实 PostgreSQL / LangGraph 的 Runner 集成；生产 Runner 装配、节点目录与运行 API / worker 服务仍未接入。MemorySaver 和测试节点仅用于测试，不构成生产兜底。版本测试经真实 WorkflowService 更新 / 发布，验证 A → Version 1、草稿改 B → Version 2 后旧版本不变，以及新 Repository / 独立数据库连接读取。发布测试使用两个独立连接验证 12 次并发编辑单胜者、过期发布无版本、12 次同修订发布单版本、新修订递增版本号；另以 PostgreSQL 阻塞信息确认发布等待未提交编辑行锁，并在编辑提交后拒绝过期修订。覆盖发布时无效定义拒绝、所有者隔离、输入校验及 sourceRevision 数据库约束。Runner 与 Run Repository 的既有失败、恢复、并发 claim 和权限边界保持独立。
+
+## PostgreSQL Checkpointer
+
+packages/server 的 checkpoint/WorkflowCheckpointerModule 提供应用级 WorkflowCheckpointerService，API / Worker 经 InfrastructureModule 启动和关闭。使用官方 @langchain/langgraph-checkpoint-postgres 1.1.0 的 PostgresSaver 和独立 pg.Pool，DATABASE_URL 指向的数据库中固定使用 langgraph schema；Prisma 不管理 checkpoint 表。启动先用 advisory transaction lock 串行化官方 setup()，再经 getTuple() 验证读取，成功后开放 saver；失败报告 WORKFLOW_CHECKPOINT_UNAVAILABLE 并释放连接，应用不就绪。健康接口通过相同读取路径探测；应用关闭调用 end()。Compiler 继续只接收 BaseCheckpointSaver 并传给 graph.compile，不创建连接或初始化表。
+
+API 的 workflow-runner.e2e-spec 已使用生产 provider 和官方 saver 验证普通 Action Compiler。persistent-checkpoint.e2e-spec 通过独立子进程启动 / 恢复：A 在 interrupt 后真实退出并关闭 Nest / Prisma / Saver，B 用全新实例与原 thread / 版本恢复；期间发布新版本仍不改变原运行，保留输入与已完成节点输出。另以进程间屏障让两个实例都读到 waiting，真实 PostgreSQL claim 只允许一个 graph.invoke；数据库不可用时应用启动失败。测试使用原生中断专用编译器，不提供 HumanReview 节点或 NodeRun waiting，也没有把主动 interrupt 加进普通 Action。初始化、连接预算与备份见 [部署说明](deployment.md#langgraph-postgresql-checkpointer)。
 
 ## 数据与 Node 基础库
 
@@ -68,7 +74,7 @@ runtime/node-executor.ts 提供 DefaultNodeExecutor，显式注入 Registry、Bi
 
 node-execution-error.ts 提供 NodeExecutionError，保留 nodeId、nodeType、stage、code 和 cause。Executor 记录的业务阶段为 resolve_input / decode_input / validate_input / validate_config / execute / validate_output / encode_output；输出编码及 Writer 失败使用 NODE_OUTPUT_ENCODING_FAILED，与输出业务校验区分。业务管线异常按准确阶段先 markFailed 再抛出；创建、输入记录与完成记录方法均在该 catch 外，Repository 故障保留原始异常上抛，不反向 markFailed。失败记录写入也失败时沿用 NodeRunRecordingError，同时保留原 cause 与 recordingError。GraphBubbleUp 原样传播、记录保持 running，不记 failed；普通 Action 不得主动 interrupt，恢复关联未实现。测试用真实 Registry / BindingResolver / Codec 验证 math.add、Schema 转换后编码、三类真实 Binding 错误的 resolve_input 阶段、业务失败记录、三个 Repository 方法故障原样上抛、等待完成记录确认及 State 不变；测试视频输出得到 Artifact 引用和内联 duration，检查 Writer 上下文与失败停止。独立 TestState / MemorySaver 仅验证原生中断与 Command 恢复，不代表生产 Checkpoint 或审核服务。
 
-DataReferenceResolver、ArtifactWriter 与内容 Store 仍只有服务接口，真实内容读写、项目授权、版本检查及 signed URL 未接入。math.add 与视频节点仅在测试注册，生产目录为空。State.outputs 使用 NodeOutputMap，execution 保留为空；已提供 outputs 通道与 Action 增量适配，没有内容持久化、生产 checkpointer 或完整图运行服务，不提供内存 / 本地存储降级。
+DataReferenceResolver、ArtifactWriter 与内容 Store 仍只有服务接口，真实内容读写、项目授权、版本检查及 signed URL 未接入。math.add 与视频节点仅在测试注册，生产目录为空。State.outputs 使用 NodeOutputMap，execution 保留为空；已提供 outputs 通道、Action 增量适配和持久 Checkpointer，没有内容持久化或完整图运行服务，不提供内存 / 本地存储降级。
 
 createWorkflowRunConfig 使用显式 Run.threadId，不从 Run.id 推断或允许其他配置覆盖，不创建运行或 checkpointer。contracts/workflow/node-run.ts 独立定义 NodeRun 的三状态、必填 ISO 开始时间、RuntimeValue inputs / outputs 和结构化错误，并从包入口导出。NodeRunError.stage 为非空字符串，code 可省略，不绑定 Runtime 的阶段枚举；NodeExecutionStage 仅在 workflow/runtime/node-execution-error.ts 内维护。run/node-run-repository.ts 定义 Repository 抽象，createRunning 只接收 workflowRunId / nodeId，不接收 attempt 或数据库字段；Executor 只依赖该抽象。
 
@@ -97,7 +103,7 @@ GenericWorkflowNode 根据精确类型版本 Manifest 自动生成数据 Handle�
 | apps/web           | 身份、账户、项目画布、目录查询、通用 renderer 与适配 | 创作交互，不加载服务端插件或密钥       |
 | apps/api           | 认证、资料、项目和节点目录                           | 模块化业务入口、权限与应用服务         |
 | apps/worker        | 独立进程，只接入共享基础设施                         | 独立执行进程，不自建图调度语义         |
-| packages/server    | 数据库、Redis、对象存储和凭证加密                    | 不包含 HTTP、认证或业务流程            |
+| packages/server    | 数据库、持久 Checkpointer、Redis、对象存储和凭证加密 | 不包含 HTTP、认证或业务流程            |
 | packages/contracts | 身份、项目、Workflow 与 Node 的中立 JSON 协议        | 不依赖前端、数据库或 Runtime 框架      |
 | packages/database  | Prisma 与身份、基础项目和运行记录持久化              | 模型、迁移按实际业务增加               |
 | packages/workflow  | 值契约、数据 / 节点 Registry、运行接口及编译包装     | 先确定 Graph Model，再接入执行与持久化 |
@@ -106,6 +112,6 @@ GenericWorkflowNode 根据精确类型版本 Manifest 自动生成数据 Handle�
 
 不为附件目录示意重命名为 common / client，不为未来概念建立空壳执行器。API 与 worker 通过服务和契约协作；第三方类型在适配层转换，不进入 contracts。
 
-contracts/src 的 identity.ts 与 project.ts 分别承载身份与项目协议，workflow/ 和 node/ 承载工作流与节点协议，NodeRun / WorkflowRun 领域记录各归 workflow/ 下同名文件，data/ 和 content/ 承载值与内容协议。workflow/src 分为 definition/、data/、node/、runtime/、compiler/、run/；server/src 分为 database/、redis/、storage/、secrets/。API 的 health/ 与 http/ 保留 HTTP 职责，基础设施不反向依赖 API，worker 不再依赖 API 应用包。
+contracts/src 的 identity.ts 与 project.ts 分别承载身份与项目协议，workflow/ 和 node/ 承载工作流与节点协议，NodeRun / WorkflowRun 领域记录各归 workflow/ 下同名文件，data/ 和 content/ 承载值与内容协议。workflow/src 分为 definition/、data/、node/、runtime/、compiler/、run/；server/src 分为 database/、checkpoint/、redis/、storage/、secrets/。API 的 health/ 与 http/ 保留 HTTP 职责，基础设施不反向依赖 API，worker 不再依赖 API 应用包。
 
 LangGraph 是核心 Runtime，平台不再建设图调度、Checkpoint 或暂停恢复状态机。Queue / Worker 后续处理长异步作业、跨运行与供应商限流，不决定图中下一个节点。一个项目一个逻辑 Workflow 的边界不变，子流程只引用其他项目固定版本；当前没有对应持久化、发布或运行应用接口。
