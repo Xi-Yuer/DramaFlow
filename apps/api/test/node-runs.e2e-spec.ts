@@ -187,6 +187,28 @@ async function videoFixture() {
 }
 
 describe('真实 PostgreSQL NodeRun', () => {
+  it('业务已成功但完成记录不可用时保留 running，不反向记录为 failed 或写入 State', async () => {
+    const f = await videoFixture();
+    const failure = new Error('完成记录服务不可用');
+    vi.spyOn(f.repository, 'markCompleted').mockRejectedValue(failure);
+    const markFailed = vi.spyOn(f.repository, 'markFailed');
+    await expect(f.graph.invoke(f.initial)).rejects.toBe(failure);
+    expect(f.execute).toHaveBeenCalledTimes(1);
+    expect(markFailed).not.toHaveBeenCalled();
+    const rows = await db.nodeRun.findMany({
+      where: { workflowRunId: f.workflowRunId },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      status: 'running',
+      inputs: expect.any(Object),
+      outputs: null,
+      error: null,
+      completedAt: null,
+    });
+    expect(f.initial.outputs).toEqual({});
+  });
+
   it('最小创建参数连续分配 attempt 1/2，并持久化完成与失败两条记录', async () => {
     const workflowRunId = `logical-run-${randomUUID()}`;
     const repository = await repositories.forRun(

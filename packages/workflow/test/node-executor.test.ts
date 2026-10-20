@@ -246,6 +246,47 @@ describe('普通 Action Node 执行主链', () => {
 });
 
 describe('NodeExecutor 错误阶段', () => {
+  it.each([
+    'SOURCE_NODE_OUTPUT_MISSING',
+    'WORKFLOW_INPUT_MISSING',
+    'INPUT_SOURCE_CONFLICT',
+  ] as const)('真实 Binding 失败 %s 已有 NodeRun，并记录 resolve_input', async (code) => {
+    const f = fixture();
+    let context = f.context;
+    if (code === 'WORKFLOW_INPUT_MISSING') {
+      context = { ...context, state: { ...context.state, inputs: {} } };
+    } else {
+      context = {
+        ...context,
+        workflow: {
+          ...context.workflow,
+          nodes: [{ ...f.node, id: 'upstream' }, f.node],
+          edges: [
+            {
+              id: 'upstream-sum',
+              kind: 'data',
+              source: { nodeId: 'upstream', portKey: 'result' },
+              target: { nodeId: f.node.id, portKey: 'a' },
+            },
+          ],
+        },
+      };
+      if (code === 'SOURCE_NODE_OUTPUT_MISSING') {
+        f.node.inputs = { b: { type: 'constant', value: 20 } };
+      }
+    }
+    const invocation = f.executor.execute(f.node, context);
+    await expect(invocation).rejects.toMatchObject({ stage: 'resolve_input', cause: { code } });
+    expect(f.nodeRuns.createRunning).toHaveBeenCalledTimes(1);
+    expect(f.nodeRuns.markFailed).toHaveBeenCalledExactlyOnceWith(
+      'node-run-1',
+      expect.objectContaining({ stage: 'resolve_input' }),
+    );
+    expect(f.nodeRuns.updateInputs).not.toHaveBeenCalled();
+    expect(f.decodeRecord).not.toHaveBeenCalled();
+    expect(f.execute).not.toHaveBeenCalled();
+  });
+
   it('失败记录写入失败时同时报告两种原因，保留业务阶段 / cause，不重试执行', async () => {
     const f = fixture();
     const cause = new Error('业务错误');
@@ -277,33 +318,18 @@ describe('NodeExecutor 错误阶段', () => {
   });
 
   it.each<NodeExecutionStage>([
-    'create_run',
     'resolve_input',
-    'record_inputs',
     'decode_input',
     'validate_input',
     'validate_config',
     'execute',
     'validate_output',
     'encode_output',
-    'complete_run',
   ])('失败准确标记 %s，保留 cause，并停止后续步骤', async (stage) => {
     const f = fixture();
     let context = f.context;
     let cause: unknown;
     switch (stage) {
-      case 'create_run':
-        cause = new Error('创建执行记录失败');
-        f.nodeRuns.createRunning.mockRejectedValue(cause);
-        break;
-      case 'record_inputs':
-        cause = new Error('输入记录失败');
-        f.nodeRuns.updateInputs.mockRejectedValue(cause);
-        break;
-      case 'complete_run':
-        cause = new Error('完成记录失败');
-        f.nodeRuns.markCompleted.mockRejectedValue(cause);
-        break;
       case 'resolve_input':
         cause = new BindingResolutionError('WORKFLOW_INPUT_MISSING', '缺失输入', {
           nodeId: 'sum',
@@ -377,12 +403,10 @@ describe('NodeExecutor 错误阶段', () => {
       'complete_run',
     ];
     for (const step of steps.slice(stages.indexOf(stage) + 1)) expect(step).not.toHaveBeenCalled();
-    if (stage === 'create_run') expect(f.nodeRuns.markFailed).not.toHaveBeenCalled();
-    else
-      expect(f.nodeRuns.markFailed).toHaveBeenCalledExactlyOnceWith(
-        'node-run-1',
-        expect.objectContaining({ stage }),
-      );
+    expect(f.nodeRuns.markFailed).toHaveBeenCalledExactlyOnceWith(
+      'node-run-1',
+      expect.objectContaining({ stage }),
+    );
     expect(f.context.state.outputs).toEqual({});
   });
 
@@ -425,6 +449,52 @@ describe('NodeExecutor 错误阶段', () => {
   );
 });
 
+describe('NodeRun Repository 基础设施异常', () => {
+  it.each(['createRunning', 'updateInputs', 'markCompleted'] as const)(
+    '%s 失败保留原异常，不调用 markFailed，不改为业务执行失败',
+    async (method) => {
+      const f = fixture();
+      const cause = new Error('数据库不可用');
+      f.nodeRuns[method].mockRejectedValue(cause);
+      const invocation = f.executor.execute(f.node, f.context);
+      await expect(invocation).rejects.toBe(cause);
+      await expect(invocation).rejects.not.toBeInstanceOf(NodeExecutionError);
+      expect(f.nodeRuns.markFailed).not.toHaveBeenCalled();
+      expect(f.execute).toHaveBeenCalledTimes(method === 'markCompleted' ? 1 : 0);
+      expect(f.context.state.outputs).toEqual({});
+      if (method === 'createRunning') expect(f.resolveInputs).not.toHaveBeenCalled();
+      if (method === 'updateInputs') expect(f.decodeRecord).not.toHaveBeenCalled();
+      if (method !== 'markCompleted') expect(f.nodeRuns.markCompleted).not.toHaveBeenCalled();
+    },
+  );
+
+  it('markCompleted 确认写入前，不返回 NodeExecutionResult', async () => {
+    const f = fixture();
+    let acknowledge!: () => void;
+    const persisted = new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    });
+    f.nodeRuns.markCompleted.mockReturnValue(persisted);
+    let returned = false;
+    const invocation = f.executor.execute(f.node, f.context).then((result) => {
+      returned = true;
+      return result;
+    });
+    try {
+      await vi.waitFor(() => expect(f.nodeRuns.markCompleted).toHaveBeenCalledTimes(1));
+      expect(returned).toBe(false);
+      expect(f.nodeRuns.markFailed).not.toHaveBeenCalled();
+      acknowledge();
+      expect(await invocation).toEqual({
+        output: { result: { storage: 'inline', type: NumberType, value: 30 } },
+      });
+    } finally {
+      acknowledge();
+      await invocation;
+    }
+  });
+});
+
 describe('LangGraph 原生控制异常边界', () => {
   it.each([new GraphInterrupt(), new ParentCommand(new Command({ goto: 'parent-node' }))])(
     '原样传播 $name，不包装为 NodeExecutionError',
@@ -434,6 +504,7 @@ describe('LangGraph 原生控制异常边界', () => {
       await expect(f.executor.execute(f.node, f.context)).rejects.toBe(error);
       expect(f.outputParse).not.toHaveBeenCalled();
       expect(f.nodeRuns.markFailed).not.toHaveBeenCalled();
+      expect(f.nodeRuns.markCompleted).not.toHaveBeenCalled();
     },
   );
 

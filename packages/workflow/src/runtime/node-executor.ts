@@ -1,9 +1,4 @@
-import type {
-  NodeDefinition,
-  NodeRun,
-  RuntimeValue,
-  WorkflowDefinition,
-} from '@dramaflow/contracts';
+import type { NodeDefinition, RuntimeValue, WorkflowDefinition } from '@dramaflow/contracts';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { isGraphBubbleUp } from '@langchain/langgraph';
 import { NodeRegistry } from '../node/registry.js';
@@ -43,31 +38,35 @@ export class DefaultNodeExecutor implements NodeExecutor {
     private readonly nodeRegistry: NodeRegistry,
     private readonly bindingResolver: BindingResolver,
     private readonly runtimeValueCodec: RuntimeValueCodec,
-    private readonly nodeRuns: NodeRunRepository,
+    private readonly nodeRunRepository: NodeRunRepository,
   ) {}
 
   async execute(node: NodeDefinition, context: NodeExecutionContext): Promise<NodeExecutionResult> {
-    let stage: NodeExecutionStage = 'create_run';
-    let nodeRun: NodeRun | undefined;
+    // Repository 故障属于基础设施异常，必须位于业务失败的 catch 范围之外。
+    const nodeRun = await this.nodeRunRepository.createRunning({
+      workflowRunId: context.workflowRunId,
+      nodeId: node.id,
+    });
+    let nodeType: ReturnType<NodeRegistry['getAction']>;
+    let runtimeInputs: Record<string, RuntimeValue>;
     try {
-      nodeRun = await this.nodeRuns.createRunning({
-        workflowRunId: context.workflowRunId,
-        nodeId: node.id,
-      });
-      stage = 'resolve_input';
       // getAction 复用 get 的精确类型版本查找，并拒绝所有非 action 声明。
-      const nodeType = this.nodeRegistry.getAction(node.type, node.typeVersion);
-      const runtimeInputs = await this.bindingResolver.resolveInputs({
+      nodeType = this.nodeRegistry.getAction(node.type, node.typeVersion);
+      runtimeInputs = await this.bindingResolver.resolveInputs({
         node,
         nodeType: nodeType.manifest,
         edges: context.workflow.edges,
         state: context.state,
       });
+    } catch (cause) {
+      return this.failNodeRun(node, nodeRun.id, 'resolve_input', cause);
+    }
 
-      stage = 'record_inputs';
-      await this.nodeRuns.updateInputs(nodeRun.id, runtimeInputs);
+    await this.nodeRunRepository.updateInputs(nodeRun.id, runtimeInputs);
 
-      stage = 'decode_input';
+    let stage: NodeExecutionStage = 'decode_input';
+    const encodedOutputs: Record<string, RuntimeValue> = {};
+    try {
       const rawInputs = await this.runtimeValueCodec.decodeRecord(runtimeInputs, {
         projectId: context.projectId,
         workflowRunId: context.workflowRunId,
@@ -85,7 +84,6 @@ export class DefaultNodeExecutor implements NodeExecutor {
       stage = 'validate_output';
       const output = nodeType.outputSchema.parse(rawOutput);
       stage = 'encode_output';
-      const encodedOutputs: Record<string, RuntimeValue> = {};
       for (const port of nodeType.manifest.outputs) {
         encodedOutputs[port.key] = await this.runtimeValueCodec.encode(output[port.key], {
           type: port.dataType,
@@ -98,21 +96,28 @@ export class DefaultNodeExecutor implements NodeExecutor {
           },
         });
       }
-      stage = 'complete_run';
-      await this.nodeRuns.markCompleted(nodeRun.id, encodedOutputs);
-      return { output: encodedOutputs };
     } catch (cause) {
-      // 中断、父图 Command 等原生控制异常必须交还 LangGraph，不能记为业务失败。
-      if (cause !== null && isGraphBubbleUp(cause)) throw cause;
-      const error = new NodeExecutionError(node.id, node.type, stage, cause);
-      if (nodeRun !== undefined) {
-        try {
-          await this.nodeRuns.markFailed(nodeRun.id, toNodeRunError(error));
-        } catch (recordingError) {
-          throw new NodeRunRecordingError(nodeRun.id, error, recordingError);
-        }
-      }
-      throw error;
+      return this.failNodeRun(node, nodeRun.id, stage, cause);
     }
+
+    await this.nodeRunRepository.markCompleted(nodeRun.id, encodedOutputs);
+    return { output: encodedOutputs };
+  }
+
+  private async failNodeRun(
+    node: NodeDefinition,
+    nodeRunId: string,
+    stage: NodeExecutionStage,
+    cause: unknown,
+  ): Promise<never> {
+    // 中断、父图 Command 等原生控制异常必须交还 LangGraph，不能记为业务失败。
+    if (cause !== null && isGraphBubbleUp(cause)) throw cause;
+    const error = new NodeExecutionError(node.id, node.type, stage, cause);
+    try {
+      await this.nodeRunRepository.markFailed(nodeRunId, toNodeRunError(error));
+    } catch (recordingError) {
+      throw new NodeRunRecordingError(nodeRunId, error, recordingError);
+    }
+    throw error;
   }
 }
