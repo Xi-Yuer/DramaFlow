@@ -89,7 +89,7 @@ invoke 返回后仍调用原生 getState(config)。Runner 检查 result 的 isIn
 
 业务 / 图执行错误由 Runner 记录整图 failed 后原样上抛；阶段区分 load_version（恢复准备）、compile、invoke、inspect_state、resolve_output，持久化稳定摘要，原始原因保留在异常中。NodeRun 仍由 NodeExecutor 单独维护，节点 completed 不等于整图 completed。编译失败发生在 pending，按既定 pending → running → failed 路径记录，不 invoke，也不新增 pending → failed 转换。markRunning / markWaiting / markCompleted 自身失败原样作为基础设施异常上抛，不反向 markFailed；markFailed 再失败时 WorkflowRunRecordingError 同时保留原异常与记录异常。正常 interrupt 由 LangGraph 返回暂停快照并投影 waiting；若原生 GraphBubbleUp 异常仍逃出 Graph，则原样交还上层，不猜测其等待状态或记为业务失败。
 
-Runner 不实现 cancel / retry、HumanReviewRecord、SubWorkflow 或 Batch。生产版本读取已有 Prisma 实现和模块，共享服务已有官方 PostgreSQL Checkpointer；API / Worker 已装配生产 Runtime Service，运行 HTTP / 队列消费者仍未接入，没有内存或 draft 生产兜底。API 集成以真实版本 / 运行 Repository 和官方 saver 验证 Action 编译；独立进程测试另以原生中断测试图验证进程退出后恢复，单元测试仍可显式使用 MemorySaver 和版本替身。
+Runner 不实现 cancel / retry、HumanReviewRecord、SubWorkflow 或 Batch。生产版本读取已有 Prisma 实现和模块，共享服务已有官方 PostgreSQL Checkpointer；API / Worker 已装配生产 Runtime Service，Run HTTP 已接入，队列消费者仍未接入，没有内存或 draft 生产兜底。API 集成以真实版本 / 运行 Repository 和官方 saver 验证 Action 编译；独立进程测试另以原生中断测试图验证进程退出后恢复，单元测试仍可显式使用 MemorySaver 和版本替身。
 
 ### WorkflowRunner 恢复
 
@@ -107,13 +107,21 @@ API / Worker 的 WorkflowRuntimeModule 导出各自 WorkflowRuntimeService，只
 
 共享 WorkflowRuntimeInfrastructureModule 提供真实 Codec / 存储策略 / 最终输出解析，factory 连接精确版本 NodeRegistry、既有 Action Compiler、应用级 PostgresSaver 和按运行创建的 NodeExecutor。编译器仍只支持现有 Action 策略，没有新增 CompilationStrategyRegistry。NodeRegistry 在同一应用的目录与 Runtime 中共享，默认空目录不构成业务执行能力。
 
-内容服务尚未接入时，显式拒绝适配器抛 REFERENCE_RUNTIME_NOT_CONFIGURED / ARTIFACT_WRITER_NOT_CONFIGURED；Codec 的既有引用错误将前者保留在 REFERENCE_RESOLUTION_FAILED.cause.code，Executor 继续增加执行阶段与 cause。inline 使用真实 Codec，reference 不返回占位产物或降级 inline。Nest 生产装配与真实 PostgreSQL 空图已验证，尚无 Run HTTP Controller 或队列消费者。
+内容服务尚未接入时，显式拒绝适配器抛 REFERENCE_RUNTIME_NOT_CONFIGURED / ARTIFACT_WRITER_NOT_CONFIGURED；Codec 的既有引用错误将前者保留在 REFERENCE_RESOLUTION_FAILED.cause.code，Executor 继续增加执行阶段与 cause。inline 使用真实 Codec，reference 不返回占位产物或降级 inline。Nest 生产装配与真实 PostgreSQL 空图已验证，Run HTTP Controller 已接入，尚无队列消费者。
+
+### Run HTTP 边界
+
+WorkflowRunsController 只从 Actor 取得当前用户，并调用 API WorkflowRuntimeService.startVersion / getRun / resumeRun。start 请求为 { workflowVersionId, inputs }，严格拒绝 projectId / workflowId / threadId / status 等额外字段；服务端按当前用户反查版本归属，内部 start 继续使用已派生身份。get / resume 先按 Run 的项目所有者检查访问权限，权限拒绝不调用 Runner；底层 Repository 仍重新检查。resume 只接受显式 value，null / 0 / false 等不是缺少参数，具体交互数据契约留给未来节点。
+
+所有成功响应使用 WorkflowRunResponse，只公开业务 Run ID、固定版本、状态、RuntimeValue 输入 / 最终输出、稳定错误摘要和 ISO 时间。threadId 仅保留在领域运行、配置适配和 checkpoint 中。资源缺失 / 无权统一 404，非 waiting / claim 竞争失败为 409，引用 / Writer 配置缺失为 503；执行故障只返回白名单阶段码与安全说明，cause、stack、供应商及数据库文本留在服务端。现有统一 ApiExceptionFilter 负责请求标识和错误 envelope。
+
+当前 start / resume 同步 await Runner，实际执行发生在 API 进程。同步细节只在应用 Service 中，Controller 和请求 / 响应协议不依赖队列或 HTTP 连接作为执行身份；客户端始终操作 Run ID。Worker / Queue 迁移单独实施，不在本轮添加后台 fire-and-forget、盲目重试或基于请求断开的取消逻辑。
 
 ## State 与持久化
 
 WorkflowStateAnnotation 与既有 State 接口共处 runtime/state.ts。outputs 使用 mergeNodeOutputs 合并局部 RuntimeValue map，缺省为空；重复 nodeId 写入明确失败。其余分区不由普通 Action wrapper 写入，定义、业务历史、内容存储与执行快照分离，完整规则见 [State 边界](workflow-state.md#并行与历史)。不以对象覆盖或业务状态轮询代替通道。[官方 Graph API](https://docs.langchain.com/oss/javascript/langgraph/graph-api) 说明图和状态机制。
 
-运行配置使用必填 Run.threadId；恢复必须加载原不可变 WorkflowVersion，以兼容实现重建图，接回原 thread 与持久 checkpointer，而不是当前草稿。知道 thread_id 不等于拥有资源权限。已有 start / resume 协调器与普通 Action 整图编译，没有运行 HTTP / 队列入口。[官方 Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence) 说明原生持久化机制。
+运行配置使用必填 Run.threadId；恢复必须加载原不可变 WorkflowVersion，以兼容实现重建图，接回原 thread 与持久 checkpointer，而不是当前草稿。知道 thread_id 不等于拥有资源权限。已有 start / resume 协调器与普通 Action 整图编译，已有 Run HTTP，尚无队列入口。[官方 Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence) 说明原生持久化机制。
 
 ### PostgreSQL Checkpointer
 
@@ -129,4 +137,4 @@ Nest 初始化期间先获取数据库级 advisory transaction lock，串行调�
 
 Data Edge 保存值来源，Control Edge 保存显式执行先后；定义层的联合 DAG 只检查无环，执行依赖由独立收集函数生成。普通确定性 fan-in 遵循上述 ALL Join，条件分支、Send、Batch 与子图的精确映射留待各自结构策略。单次图调用 maxConcurrency 位于顶层配置；跨运行与供应商配额由后续 Queue / Worker 处理，不把 Send 当作全部容量控制。[官方 Graph API 示例](https://docs.langchain.com/oss/javascript/langgraph/use-graph-api) 展示这些执行机制。
 
-当前没有控制 / 交互结构策略、运行 HTTP / 队列入口、模型调用、Queue、审核或内容 Store。生产节点目录仍为空；首次启动基础库不代表已有真实生成服务，不得将测试适配、类型接口或规划标为可用业务能力。
+当前没有控制 / 交互结构策略、队列消费者、模型调用、审核或内容 Store。生产节点目录仍为空；首次启动基础库不代表已有真实生成服务，不得将测试适配、类型接口或规划标为可用业务能力。

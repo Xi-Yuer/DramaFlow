@@ -36,7 +36,9 @@ test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的版本、WorkflowRun
 
 test/persistent-checkpoint.e2e-spec.ts 是真实 PostgreSQL 跨进程测试，不用 MemorySaver：启动进程 A 的 Nest / Repository / Saver / Compiler / Runner，interrupt 后等待 A 完全退出；再启动 B，从原 workflowVersionId / threadId 恢复并完成。期间通过真实 WorkflowService 更新 / 发布新版本，检查原输入、已完成节点和原版本仍有效。两个全新进程另用 IPC 屏障先同时读到 waiting，释放后只有一个 claim 成功且进入 graph.invoke；第三项验证不可用 checkpoint 数据库使 Nest 初始化失败。子进程导入生产持久化模块与 Repository，原生 interrupt 图是测试专用 Compiler，不能视作 HumanReview 产品或 NodeRun waiting 实现。测试清理只调用官方 deleteThread 删除自建 thread，并关闭连接。health.e2e-spec 验证真正 API 启动和 checkpoint 读取健康项。
 
-test/workflow-runtime.e2e-spec.ts 在先完成应用 build 后，动态加载 API / Worker 的正式 AppModule 编译产物，保留 Nest 构造器 metadata，不覆盖 provider 或注册测试节点。检查生产 DI、权限作用域 Runner、空 WorkflowVersion 通过应用 Service 完成并写入真实 checkpoint、未知节点拒绝、配置错误 cause、跨用户隔离，以及 waiting 缺少 checkpoint 时失败且不创建新线程。两个应用各验证相同边界；空图完成只证明装配可运行，不代表业务节点或 Controller 已交付。普通 typecheck 不依赖 API / Worker 的 dist 产物。
+test/workflow-runtime.e2e-spec.ts 在先完成应用 build 后，动态加载 API / Worker 的正式 AppModule 编译产物，保留 Nest 构造器 metadata，不覆盖 provider 或注册测试节点。检查生产 DI、权限作用域 Runner、空 WorkflowVersion 通过应用 Service 完成并写入真实 checkpoint、未知节点拒绝、配置错误 cause、跨用户隔离，以及 waiting 缺少 checkpoint 时失败且不创建新线程。两个应用各验证相同边界；空图完成只证明装配可运行，不代表业务节点已交付；Controller 由独立 HTTP 用例验证。普通 typecheck 不依赖 API / Worker 的 dist 产物。
+
+test/workflow-run-api.e2e-spec.ts 使用两个真实 Nest HTTP 实例、真实密码会话与签名 Cookie，保留正式 Guard、Controller、Service、Repository 和 PostgresSaver。检查空版本经默认生产 factory 完成、严格请求和安全 DTO、未登录与 Origin、跨用户资源统一 404 且不进入 Runner、HTTP waiting / 跨实例恢复 / GET outputs、0 值恢复及两个 HTTP resume 的单胜者 / 409。中断与错误仅在专用测试项目装配原生图 / 故障注入，不提供生产交互节点；普通生产 Registry 仍为空。错误单测检查安全码、配置 cause 提取、修订冲突及循环 cause；contracts/test/workflow-run-api.test.ts 检查请求字段和响应不公开内部身份。定向运行前构建 API；隔离数据库、清理范围与既有测试相同。
 
 恢复的数据库用例另外验证同一运行经过两次 resume 完成、同一 State 输出保留、运行记录与 thread 数不增加、恢复失败结束同一记录。两个不同 Repository / Runner 实例通过屏障先都读到 waiting，图执行期间只有一个 claim 成功并 invoke，另一个收到 WORKFLOW_RUN_NOT_WAITING。Repository 用例另测试 12 个并发 claim 的单胜者、完整六状态读取、所有者 / 项目 / 过期权限与非 waiting 不更新；不以纯内存替身证明并发持久化正确。
 

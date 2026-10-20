@@ -46,8 +46,13 @@
 | GET /api/v1/users/me/sessions               | 当前用户最近 100 条未过期会话摘要                           |
 | POST /api/v1/users/me/revoke-other-sessions | 撤销当前用户其他会话，保留当前设备                          |
 | GET /api/v1/users                           | 仅平台管理员；最近 100 个账号的安全目录，当前没有管理 UI    |
+| POST /api/v1/workflow-runs                  | 登录后按当前用户反查固定版本归属，仅接受版本 ID / inputs    |
+| GET /api/v1/workflow-runs/:runId            | 仅运行所属项目的所有者可见，响应不包含 threadId             |
+| POST /api/v1/workflow-runs/:runId/resume    | 先检查项目所有者权限，再恢复 waiting Run；竞争失败 409      |
 
 NestJS 的鉴权与 Public/PlatformAdmin/Actor 装饰器在 apps/api/src/auth；用户资料服务在 users。认证 HTTP 入口通过白名单挂载；注册、管理插件、模拟登录、删除账号和未经授权的认证端点不公开。密码散列及 Cookie 处理复用认证库，不另建 JWT 系统。
+
+Run HTTP 的资源缺失 / 无权访问统一为 404，不向其他用户泄漏 Version / Run 是否存在；请求字段严格校验，执行身份从数据库派生。完整契约与测试边界见 [Run API](architecture.md#workflow-run-http-api)。
 
 ## 业务权限与密钥边界
 
