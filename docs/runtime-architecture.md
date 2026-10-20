@@ -40,9 +40,9 @@ If / Switch / Conditional Edge / Send / Batch 产生的候选分支不属于普�
 
 ### Data Edge 与节点输入
 
-BindingResolver.resolveInputs 的上下文包含 node、edges、state。仅处理 kind=data 且 target.nodeId 等于当前节点的边，把 `state.outputs[source.nodeId][source.portKey]` 原样绑定到 `inputs[target.portKey]`，再合并静态 Binding 解析产生的 RuntimeValue。静态转换通过必须显式注入的服务进行，不提供占位或默认实现；其具体规则另行确定，见 [数据模型](data-model.md#codecbinding-与执行服务接口)。
+BindingResolver.resolveInputs 的上下文包含 node、nodeType、edges、state。上层按节点精确类型版本提供 Manifest，Resolver 不访问 NodeRegistry，按 nodeType.inputs 建立端口索引。仅处理 kind=data 且 target.nodeId 等于当前节点的边，把 `state.outputs[source.nodeId][source.portKey]` 原样绑定到 `inputs[target.portKey]`，再合并静态 Binding。constant 按端口 dataType 包装为 inline；workflow_input 按协议字段 key 直接复用 State.inputs；asset 按端口类型生成含 assetId / versionId 的固定版本引用。完整规则见 [数据模型](data-model.md#codecbinding-与执行服务接口)。
 
-在读取上游输出或调用静态解析服务前，先检查静态 Binding 与数据边的来源冲突；同一目标端口的多条数据边也必须报 INPUT_SOURCE_CONFLICT，不定义覆盖优先级。上游节点结果或指定输出键缺失时，报 SOURCE_NODE_OUTPUT_MISSING，并附带目标节点、输入键、边及来源定位；不返回 undefined 或借静态值补齐。原型继承属性不视为已有输出。Resolver 不调用 Codec、NodeType、Zod 业务值校验或 Artifact Store。
+在取值与静态转换前，先检查静态 Binding 与数据边的来源冲突及已绑定的目标输入端口；同一目标端口的多条数据边也必须报 INPUT_SOURCE_CONFLICT，不定义覆盖优先级。上游节点结果或指定输出键缺失时，报 SOURCE_NODE_OUTPUT_MISSING；缺失工作流输入报 WORKFLOW_INPUT_MISSING；未声明的目标输入端口报 INPUT_PORT_NOT_FOUND。错误附带目标节点、输入键及相应边 / 来源定位，不返回 undefined 或借静态值补齐，原型继承属性不视为已有值。Resolver 无外部 I/O，不调用 Codec、NodeType、Zod 或内容 Store，不下载内容、生成 signed URL 或解析引用；未绑定的必填端口与实际类型校验继续留给执行层。
 
 ## State 与持久化
 

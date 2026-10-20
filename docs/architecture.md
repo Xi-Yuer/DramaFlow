@@ -40,9 +40,9 @@ createOperationNodeType 只组合 Manifest、三组 Zod 与 operation。parseNod
 
 ActionNodeCompilationStrategy 校验节点类型版本，复制定义并仅生成调用统一 NodeExecutor 的 LangGraph 包装。编译时不执行业务，不编译控制边，不管理调度或暂停恢复。完整 WorkflowCompiler 和结构策略尚未实现。
 
-runtime/binding-resolver.ts 已实现 resolveDataEdgeInputs 和 createBindingResolver。BindingResolver.resolveInputs 接收 node / edges / state，只读取当前目标的数据边，将上游指定输出原样映射为目标输入 RuntimeValue，并合并显式注入的 StaticBindingResolver.resolveValue 对三类静态 Binding 的解析结果。未重新引入 ConnectionBinding，也不 decode、调用 NodeType 或持久化 Artifact。静态 / 连线来源冲突、重复目标数据输入和缺失上游输出抛 BindingResolutionError，code 分别为 INPUT_SOURCE_CONFLICT / SOURCE_NODE_OUTPUT_MISSING，details 提供节点、端口与边定位。正式 WorkflowDefinition 的两种输入冲突校验同时在 issue.params.code 标记 INPUT_SOURCE_CONFLICT。
+runtime/binding-resolver.ts 已实现 resolveDataEdgeInputs 和无参数 createBindingResolver。BindingResolver.resolveInputs 接收 node / nodeType / edges / state，按传入 Manifest 的 inputs 索引校验已绑定目标端口，只读取当前目标的数据边，将上游指定输出原样映射为目标输入 RuntimeValue。三类静态 Binding 使用实际实现：constant 按端口 dataType 包装为 inline；workflow_input 按既有 key 直接复用 State.inputs 的 RuntimeValue；asset 按端口类型生成包含 assetId / versionId 的 reference，不查内容或最新版。未重新引入 ConnectionBinding，也不 decode、调用 NodeType、Zod 或持久化 Artifact，Resolver 没有数据库、对象存储或网络依赖。
 
-静态转换服务当前仅有接口，必须由调用方显式提供；constant 的类型与承载、workflow_input 的具体转换及 asset 固定版本的运行解析尚未实现。测试中的静态解析替身只验证委托与合并，不是生产默认值或已完成的资产能力。RuntimeValueCodec、NodeExecutor、内容 Store 和 NodeRunRecorder 仍为接口；State.outputs 使用 NodeOutputMap（RuntimeValue），execution 暂不启用控制字段，没有生产通道、reducer、内容持久化或完整执行服务，不提供内存 / 本地存储降级。
+BindingResolutionError 包含 INPUT_SOURCE_CONFLICT、SOURCE_NODE_OUTPUT_MISSING、WORKFLOW_INPUT_MISSING、INPUT_PORT_NOT_FOUND；details 提供节点、输入键及可选边、来源端口或工作流输入键。正式 WorkflowDefinition 的两种输入冲突校验继续在 issue.params.code 标记 INPUT_SOURCE_CONFLICT。测试覆盖四类来源真实合并、端口声明类型、空值 / 数组等常量、inline / reference 工作流输入的身份保留、固定资产版本及四类错误，使用真实静态转换实现。上层提供精确版本 Manifest 的 NodeExecutor 仍仅有接口，资产存在性 / 权限、引用解码、业务类型与必填校验尚未接入。RuntimeValueCodec、内容 Store 和 NodeRunRecorder 同样为接口；State.outputs 使用 NodeOutputMap（RuntimeValue），execution 暂不启用控制字段，没有生产通道、reducer、内容持久化或完整执行服务，不提供内存 / 本地存储降级。
 
 createWorkflowRunConfig 使用显式 Run.threadId，不从 Run.id 推断或允许其他配置覆盖，不创建运行或 checkpointer。NodeRun 保留 attempt、可选 JSON 快照、状态、结构化错误和 ISO 时间契约；业务记录、权限与持久化仍待接入。
 

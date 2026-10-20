@@ -4,46 +4,46 @@
 
 ## 当前阶段
 
-2026-10-20：Data Edge 到节点 RuntimeValue 输入组装、来源冲突与上游输出缺失检查阶段已完成；实际能力与静态转换限制见 [当前架构](architecture.md#数据与-node-基础库)，职责边界见 [Runtime](runtime-architecture.md#data-edge-与节点输入)。
+2026-10-20：StaticInputBinding 到 RuntimeValue 的转换阶段已完成；实际能力与执行层限制见 [当前架构](architecture.md#数据与-node-基础库)，职责边界见 [Runtime](runtime-architecture.md#data-edge-与节点输入)。
 
 数据语义与承载见 [数据模型](data-model.md)。两类边的静态联合无环检查、执行依赖收集和运行输入绑定职责分离。生产执行管线、大小预算、权限解析、业务持久化及 LangGraph 通道 / reducer 仍待后续阶段接入；本步不扩大项目保存与节点目录的应用边界，不预设条件路由。
 
-**下一步只解决 StaticInputBinding 的 constant / workflow_input / asset 分别怎样转换成 RuntimeValue，尤其是 AssetBinding 的固定版本解析。** 不提前扩展命名控制端口交互、Branch、完整运行服务或生成流程。
+**下一步只解决 RuntimeValueCodec 如何把 RuntimeValue 解码为 NodeType.execute() 接收的业务输入。** 不提前扩展命名控制端口交互、Branch、完整运行服务或生成流程。
 
 本文件是当前阶段、下一步与待决策项的唯一维护入口；推进时原地修订，不堆叠旧计划或逐轮交付流水。文档维护方式见 [开发指南](development.md#文档维护)。
 
 ## 设计顺序
 
-| 顺序 | 议题                                      | 本步需要回答的问题                               | 状态                                          |
-| ---- | ----------------------------------------- | ------------------------------------------------ | --------------------------------------------- |
-| ①    | 平台是什么                                | 平台定位、一级概念、领域层与执行底座             | 已记录顶层决策                                |
-| ②    | Workflow 工作流模型                       | 静态定义、版本、输入输出及 WorkflowRun           | 已确定边界并实施基础库                        |
-| ③    | Node 节点模型                             | Manifest、服务端实现、实例、端口、版本与编译边界 | 已实施基础设施与目录接入                      |
-| ④    | State / 数据流模型                        | 单次状态、绑定求值、结果传递与并行隔离           | Data Edge 输入组装已明确，待静态 Binding 转换 |
-| ⑤    | Runtime 执行模型                          | LangGraph 编译与服务接入、持久化、恢复及事件投影 | 待逐步设计                                    |
-| ⑥    | Tool 工具体系                             | 可调用操作、调用契约、权限及 Node / Agent 关系   | 待逐步设计                                    |
-| ⑦    | Plugin 外部能力体系                       | 能力声明、模型、凭证、版本与供应商适配           | 待逐步设计                                    |
-| ⑧    | Middleware 中间件体系                     | 日志、权限、成本、重试的介入边界                 | 待逐步设计                                    |
-| ⑨    | Human Review / Interrupt 人工介入         | 暂停、确认、恢复与生成副作用边界                 | 待逐步设计                                    |
-| ⑩    | Asset 资产体系                            | 生产资料、媒体引用、版本、归属与生命周期         | 待逐步设计                                    |
-| ⑪    | Batch / Parallel / SubWorkflow 长任务体系 | 显式批量、并行、结果收集及子流程生命周期         | 待逐步设计                                    |
-| ⑫    | Agent 智能体体系                          | 模型、工具、上下文与人工确认边界                 | 待逐步设计                                    |
-| ⑬    | 漫剧领域节点与模板                        | 在已确定底座上表达漫剧生产与领域资料             | 待逐步设计                                    |
-| ⑭    | 广告 / 产品 / 口播等扩展                  | 复用底座并补充领域节点和模板                     | 待逐步设计                                    |
+| 顺序 | 议题                                      | 本步需要回答的问题                               | 状态                                        |
+| ---- | ----------------------------------------- | ------------------------------------------------ | ------------------------------------------- |
+| ①    | 平台是什么                                | 平台定位、一级概念、领域层与执行底座             | 已记录顶层决策                              |
+| ②    | Workflow 工作流模型                       | 静态定义、版本、输入输出及 WorkflowRun           | 已确定边界并实施基础库                      |
+| ③    | Node 节点模型                             | Manifest、服务端实现、实例、端口、版本与编译边界 | 已实施基础设施与目录接入                    |
+| ④    | State / 数据流模型                        | 单次状态、绑定求值、结果传递与并行隔离           | 输入 RuntimeValue 组装已明确，待 Codec 解码 |
+| ⑤    | Runtime 执行模型                          | LangGraph 编译与服务接入、持久化、恢复及事件投影 | 待逐步设计                                  |
+| ⑥    | Tool 工具体系                             | 可调用操作、调用契约、权限及 Node / Agent 关系   | 待逐步设计                                  |
+| ⑦    | Plugin 外部能力体系                       | 能力声明、模型、凭证、版本与供应商适配           | 待逐步设计                                  |
+| ⑧    | Middleware 中间件体系                     | 日志、权限、成本、重试的介入边界                 | 待逐步设计                                  |
+| ⑨    | Human Review / Interrupt 人工介入         | 暂停、确认、恢复与生成副作用边界                 | 待逐步设计                                  |
+| ⑩    | Asset 资产体系                            | 生产资料、媒体引用、版本、归属与生命周期         | 待逐步设计                                  |
+| ⑪    | Batch / Parallel / SubWorkflow 长任务体系 | 显式批量、并行、结果收集及子流程生命周期         | 待逐步设计                                  |
+| ⑫    | Agent 智能体体系                          | 模型、工具、上下文与人工确认边界                 | 待逐步设计                                  |
+| ⑬    | 漫剧领域节点与模板                        | 在已确定底座上表达漫剧生产与领域资料             | 待逐步设计                                  |
+| ⑭    | 广告 / 产品 / 口播等扩展                  | 复用底座并补充领域节点和模板                     | 待逐步设计                                  |
 
 这是设计顺序，不要求逐个建设相互脱离的子系统；已经明确且能独立验证的内容同步落到代码。外部生成涉及的 Plugin、Asset、凭证和安全策略不能用占位实现跨过。后续路线不构成一次性实施授权。
 
 Workflow 的可组合性与固定被调用版本原则已在 [Workflow 模型](workflow-model.md#workflow-组合与-subworkflow-边界) 确定。第 ⑪ 步继续细化父子运行与批量生命周期，不授权任意循环、递归调用或项目下多个独立画布 / 工作流。
 
-## 下一步：三类静态 Binding 转换
+## 下一步：RuntimeValueCodec 解码边界
 
-Data Edge 读取上游 RuntimeValue，静态 Binding 通过显式解析接口参与组装，职责见 [数据模型](data-model.md#codecbinding-与执行服务接口)。下一步只回答：
+BindingResolver 定位或包装 RuntimeValue，保持纯数据转换、端口声明与固定资产版本，规则见 [数据模型](data-model.md#codecbinding-与执行服务接口)。下一步只回答：
 
-1. constant 的 DataType、承载方式与必要转换依据是什么，怎样避免无依据的类型猜测？
-2. workflow_input 怎样从本次 State.inputs 获取 RuntimeValue，缺失引用或类型不符时由哪一层报告？
-3. AssetBinding 怎样保持明确 assetId / versionId，完成所需类型与权限检查，且不选择最新版或提前 decode？
+1. inline 值怎样解码为业务值，实际类型与目标端口的兼容检查放在哪里？
+2. reference 怎样经内容服务与项目权限解析固定版本引用，媒体业务对象应是什么形态？
+3. 资源不存在、版本不可用、权限不足或值不合格时怎样明确失败，并与 NodeExecutor 的完整 Zod 校验分工？
 
-结论明确后再实现静态转换服务，不用测试替身、绑定描述或默认类型冒充 RuntimeValue。BindingResolver 继续只返回 RuntimeValue；Codec decode、NodeExecutor Zod 校验及业务调用保持分层。Control Edge 只提供执行先后，Dependency Compiler 不取值。普通多上游固定 ALL，条件候选分支不能套用此规则；继续使用 LangGraph 调度、Checkpoint、Send 和 Interrupt，不自建 ready 轮询或第二套状态机，不授权任意循环或项目下多个独立画布。
+结论明确后再实现 Codec 解码，不把资产读取、下载或 signed URL 生成塞进 BindingResolver，不把 RuntimeValue 描述当成已解析的业务值。Codec decode、NodeExecutor Zod 校验及业务调用保持分层。Control Edge 只提供执行先后，Dependency Compiler 不取值。普通多上游固定 ALL，条件候选分支不能套用此规则；继续使用 LangGraph 调度、Checkpoint、Send 和 Interrupt，不自建 ready 轮询或第二套状态机，不授权任意循环或项目下多个独立画布。
 
 ## 从设计进入代码
 

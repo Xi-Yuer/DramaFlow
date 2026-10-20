@@ -12,7 +12,7 @@
 
 普通确定性依赖编译须检查 Data / Control Edge 均计入依赖、按目标聚合与来源去重，同一节点对的混合边或不同数据端口不重复计数。验证原始边及 portKey 保持完整、依赖编译不读取端口；单上游生成字符串边、多上游只生成一条数组 Join Edge。使用真实 LangGraph 验证混合边去重后，两种上游完成顺序及不同长度路径下均等待全部完成且目标只执行一次，并覆盖上游失败。条件候选分支不套用此规则；这些测试不代表输入绑定、生产 WorkflowState、整图编译或真实模型调用已接入。
 
-BindingResolver 测试检查只读取当前目标的数据边、来源输出键到目标输入键的映射、inline / reference 原样保留，以及显式静态解析结果的合并。覆盖三类静态 Binding 与数据边冲突、多条数据边指向同一输入、缺失来源节点或输出键、继承属性不可作为输出、静态服务错误原样传播。冲突与缺失输出应在调用静态解析服务或后续 Codec / Zod 前明确失败；静态校验的冲突 issue.params.code 与运行错误均使用 INPUT_SOURCE_CONFLICT。静态解析替身只验证委托与合并，不证明具体转换、资产版本 / 权限或完整 NodeExecutor 已实现。
+BindingResolver 测试使用真实静态转换实现，检查 Data Edge 端口映射、常量按目标声明 dataType 内联包装、workflow_input 原样复用 inline / reference，以及 asset 引用保留明确版本。上下文显式提供精确版本 Manifest，测试未知静态 / 数据目标端口报 INPUT_PORT_NOT_FOUND、缺失工作流输入报 WORKFLOW_INPUT_MISSING，并保留来源冲突、缺失上游输出及继承属性不可作为值的回归。覆盖空值 / 数组等常量、不做类型猜测或业务 Zod 校验、不同资产版本不互相改写、引用不被 decode、输入上下文不被修改及网络调用防护。静态校验的冲突 issue.params.code 与运行错误均使用 INPUT_SOURCE_CONFLICT。引用包装不证明资产存在、版本 / 权限可访问或完整 NodeExecutor 已接入。
 
 节点类型开发对照 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。分别验证纯 JSON Manifest 的配置类型 / 默认值、服务端三组 Zod 与声明字段一致、精确类型版本注册以及 listManifests 的白名单与数据隔离。Preset 只测试配置模板行为，不作为 Registry 身份；保留 transform 和默认值不回写定义的回归。
 
@@ -59,4 +59,4 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 
 ## 定向验证范围
 
-按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / 输入解析测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；局部输入组装与静态转换 / Codec / Executor 接口不代表已运行整条管线。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
+按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / 输入解析测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；局部输入组装与 Codec / Executor 接口不代表已运行整条管线。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。

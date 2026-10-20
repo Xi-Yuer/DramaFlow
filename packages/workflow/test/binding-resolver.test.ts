@@ -1,21 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   ImageType,
+  DocumentType,
+  JsonType,
   StringType,
+  type ConstantBinding,
   type DataEdgeDefinition,
   type NodeDefinition,
   type NodeOutputMap,
+  type NodeTypeManifest,
   type RuntimeValue,
   type StaticInputBinding,
   type WorkflowEdge,
 } from '@dramaflow/contracts';
-import {
-  BindingResolutionError,
-  createBindingResolver,
-  resolveDataEdgeInputs,
-  type StaticBindingResolver,
-  type WorkflowState,
-} from '../src/index.js';
+import { createBindingResolver, resolveDataEdgeInputs, type WorkflowState } from '../src/index.js';
 
 const image: RuntimeValue = {
   storage: 'reference',
@@ -23,11 +21,15 @@ const image: RuntimeValue = {
   reference: { kind: 'artifact', id: 'image-artifact' },
 };
 const prompt: RuntimeValue = { storage: 'inline', type: StringType, value: '让人物向前走' };
-const topic: RuntimeValue = { storage: 'inline', type: StringType, value: '工作流输入' };
+const document: RuntimeValue = {
+  storage: 'reference',
+  type: DocumentType,
+  reference: { kind: 'artifact', id: 'novel-artifact' },
+};
 const reference: RuntimeValue = {
   storage: 'reference',
   type: ImageType,
-  reference: { kind: 'asset', id: 'asset-1', versionId: 'version-1' },
+  reference: { kind: 'asset', id: 'asset-1', versionId: 'version-3' },
 };
 const imageEdge: DataEdgeDefinition = {
   id: 'image-edge',
@@ -44,22 +46,28 @@ const node: NodeDefinition = {
   config: {},
   ui: { position: { x: 0, y: 0 } },
 };
+const nodeType: NodeTypeManifest = {
+  type: node.type,
+  version: node.typeVersion,
+  executionKind: 'action',
+  metadata: { name: '目标节点', category: 'video' },
+  inputs: [
+    { key: 'image', name: '图片', dataType: ImageType, required: true },
+    { key: 'prompt', name: '提示词', dataType: StringType },
+    { key: 'reference', name: '参考图', dataType: ImageType },
+    { key: 'document', name: '小说', dataType: DocumentType },
+  ],
+  outputs: [],
+  config: [],
+};
 
 function state(outputs: NodeOutputMap = { A: { generatedImage: image } }): WorkflowState {
   return {
     run: { workflowId: 'w', workflowVersionId: 'v', workflowRunId: 'r', projectId: 'p' },
-    inputs: { novel: topic },
+    inputs: { novel: document },
     outputs,
     variables: {},
     execution: {},
-  };
-}
-
-function staticBindings() {
-  return {
-    resolveValue: vi
-      .fn<StaticBindingResolver['resolveValue']>()
-      .mockRejectedValue(new Error('本用例不应调用静态绑定解析')),
   };
 }
 
@@ -152,46 +160,142 @@ describe('Data Edge 输入解析', () => {
   });
 });
 
-describe('BindingResolver 输入组装', () => {
-  it('将 Data Edge 与三种显式静态解析结果合并为完整 RuntimeValue map', async () => {
+describe('BindingResolver 完整输入组装', () => {
+  const bindingResolver = createBindingResolver();
+
+  it('实际解析四类来源，保留输入和上游值，整个过程不发生外部 I/O', async () => {
     const target: NodeDefinition = {
       ...node,
       inputs: {
-        reference: { type: 'asset', assetId: 'asset-1', versionId: 'version-1' },
+        reference: { type: 'asset', assetId: 'asset-1', versionId: 'version-3' },
         prompt: { type: 'constant', value: '让人物向前走' },
-        topic: { type: 'workflow_input', key: 'novel' },
+        document: { type: 'workflow_input', key: 'novel' },
       },
     };
-    const context = { node: target, edges: [imageEdge], state: state() };
+    const context = { node: target, nodeType, edges: [imageEdge], state: state() };
     const snapshot = structuredClone(context);
-    const expectedValues = { reference, prompt, topic };
-    const resolveValue = vi
-      .fn<StaticBindingResolver['resolveValue']>()
-      .mockImplementation(async (binding, staticContext) => {
-        expect(binding).toBe(target.inputs[staticContext.inputKey]);
-        expect(staticContext.node).toBe(target);
-        expect(staticContext.edges).toBe(context.edges);
-        expect(staticContext.state).toBe(context.state);
-        switch (binding.type) {
-          case 'asset':
-            expect(binding.versionId).toBe('version-1');
-            return expectedValues.reference;
-          case 'constant':
-            return expectedValues.prompt;
-          case 'workflow_input':
-            return staticContext.state.inputs[binding.key]!;
-        }
-      });
-    const bindingResolver = createBindingResolver({ resolveValue });
-    const inputs = await bindingResolver.resolveInputs(context);
-    expect(inputs).toEqual({ image, reference, prompt, topic });
-    for (const [key, value] of Object.entries({ image, reference, prompt, topic })) {
-      expect(inputs[key]).toBe(value);
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+      throw new Error('BindingResolver 不得访问网络');
+    });
+    try {
+      const inputs = await bindingResolver.resolveInputs(context);
+      expect(inputs).toEqual({ image, reference, prompt, document });
+      expect(inputs.image).toBe(image);
+      expect(inputs.document).toBe(document);
+      expect(inputs.prompt?.type).toBe(StringType);
+      expect(inputs.reference?.type).toBe(ImageType);
+      expect(context).toEqual(snapshot);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
     }
-    expect(resolveValue).toHaveBeenCalledTimes(3);
-    expect(context.node.inputs).not.toHaveProperty('image');
-    expect(context.edges).toEqual([imageEdge]);
-    expect(context).toEqual(snapshot);
+  });
+
+  it.each<{ value: ConstantBinding['value'] }>([
+    { value: null },
+    { value: false },
+    { value: 0 },
+    { value: '' },
+    { value: [0, false] },
+    { value: { nested: ['值'] } },
+  ])('常量保留 JSON 值并使用目标端口类型，不推断实际值类型：$value', async ({ value }) => {
+    const inputs = await bindingResolver.resolveInputs({
+      node: { ...node, inputs: { prompt: { type: 'constant', value } } },
+      nodeType: {
+        ...nodeType,
+        inputs: [{ key: 'prompt', name: 'JSON', dataType: JsonType }],
+      },
+      edges: [],
+      state: state(),
+    });
+    expect(inputs.prompt).toEqual({ storage: 'inline', type: JsonType, value });
+    if (inputs.prompt?.storage === 'inline') expect(inputs.prompt.value).toBe(value);
+  });
+
+  it('业务值与端口类型不符时仍只构造 RuntimeValue，校验留给 NodeExecutor', async () => {
+    const inputs = await bindingResolver.resolveInputs({
+      node: { ...node, inputs: { prompt: { type: 'constant', value: 123 } } },
+      nodeType,
+      edges: [],
+      state: state(),
+    });
+    expect(inputs.prompt).toEqual({ storage: 'inline', type: StringType, value: 123 });
+  });
+
+  it.each<RuntimeValue>([{ storage: 'inline', type: StringType, value: '短文本' }, document])(
+    '工作流输入原样复用 RuntimeValue，不按目标端口重新包装：$storage',
+    async (value) => {
+      const inputs = await bindingResolver.resolveInputs({
+        node: { ...node, inputs: { document: { type: 'workflow_input', key: 'novel' } } },
+        nodeType,
+        edges: [],
+        state: { ...state(), inputs: { novel: value } },
+      });
+      expect(inputs.document).toBe(value);
+    },
+  );
+
+  it('缺失的工作流输入抛 WORKFLOW_INPUT_MISSING，不返回 undefined', async () => {
+    await expect(
+      bindingResolver.resolveInputs({
+        node: { ...node, inputs: { document: { type: 'workflow_input', key: 'missing' } } },
+        nodeType,
+        edges: [],
+        state: state(),
+      }),
+    ).rejects.toMatchObject({
+      name: 'BindingResolutionError',
+      code: 'WORKFLOW_INPUT_MISSING',
+      details: { nodeId: 'B', inputKey: 'document', workflowInputKey: 'missing' },
+    });
+  });
+
+  it('继承属性不作为已有工作流输入', async () => {
+    const inputs: Record<string, RuntimeValue> = {};
+    Object.setPrototypeOf(inputs, { novel: document });
+    await expect(
+      bindingResolver.resolveInputs({
+        node: { ...node, inputs: { document: { type: 'workflow_input', key: 'novel' } } },
+        nodeType,
+        edges: [],
+        state: { ...state(), inputs },
+      }),
+    ).rejects.toMatchObject({ code: 'WORKFLOW_INPUT_MISSING' });
+  });
+
+  it('工作流输入的内部引用不读取，保留给后续 Codec', async () => {
+    const value: RuntimeValue = {
+      storage: 'reference',
+      type: DocumentType,
+      get reference(): never {
+        throw new Error('BindingResolver 不应解析工作流输入引用');
+      },
+    };
+    const inputs = await bindingResolver.resolveInputs({
+      node: { ...node, inputs: { document: { type: 'workflow_input', key: 'novel' } } },
+      nodeType,
+      edges: [],
+      state: { ...state(), inputs: { novel: value } },
+    });
+    expect(inputs.document).toBe(value);
+  });
+
+  it('同一资产的不同绑定固定各自版本，后续解析不改写先前的引用', async () => {
+    const resolveVersion = (versionId: string) =>
+      bindingResolver.resolveInputs({
+        node: { ...node, inputs: { reference: { type: 'asset', assetId: 'asset-1', versionId } } },
+        nodeType,
+        edges: [],
+        state: state(),
+      });
+    const first = await resolveVersion('version-3');
+    const second = await resolveVersion('version-4');
+    expect(first.reference).toEqual(reference);
+    expect(second.reference).toEqual({
+      storage: 'reference',
+      type: ImageType,
+      reference: { kind: 'asset', id: 'asset-1', versionId: 'version-4' },
+    });
   });
 
   it.each<StaticInputBinding>([
@@ -201,11 +305,10 @@ describe('BindingResolver 输入组装', () => {
   ])(
     '任意静态绑定与 Data Edge 冲突时，在取值前抛 INPUT_SOURCE_CONFLICT：$type',
     async (binding) => {
-      const statics = staticBindings();
-      const resolver = createBindingResolver(statics);
       await expect(
-        resolver.resolveInputs({
+        bindingResolver.resolveInputs({
           node: { ...node, inputs: { image: binding } },
+          nodeType,
           edges: [imageEdge],
           // 来源输出也缺失，仍须先报来源冲突；不能用静态值掩盖缺失输出。
           state: state({}),
@@ -214,55 +317,66 @@ describe('BindingResolver 输入组装', () => {
         code: 'INPUT_SOURCE_CONFLICT',
         details: imageErrorDetails,
       });
-      expect(statics.resolveValue).not.toHaveBeenCalled();
     },
   );
 
-  it('上游输出缺失时不调用任何静态解析服务，直接抛原始问题', async () => {
-    const statics = staticBindings();
+  it('上游输出缺失时直接抛原始问题，不用静态值补齐', async () => {
     await expect(
-      createBindingResolver(statics).resolveInputs({
+      bindingResolver.resolveInputs({
         node: { ...node, inputs: { prompt: { type: 'constant', value: '提示词' } } },
+        nodeType,
         edges: [imageEdge],
         state: state({ A: {} }),
       }),
-    ).rejects.toBeInstanceOf(BindingResolutionError);
-    expect(statics.resolveValue).not.toHaveBeenCalled();
+    ).rejects.toMatchObject({ code: 'SOURCE_NODE_OUTPUT_MISSING' });
   });
 
-  it('没有输入时返回空 map，控制边不触发取值或来源冲突', async () => {
-    const statics = staticBindings();
-    const resolver = createBindingResolver(statics);
+  it('没有绑定时返回空 map，必填检查留到执行层，控制边不触发取值', async () => {
     expect(
-      await resolver.resolveInputs({
+      await bindingResolver.resolveInputs({
         node,
+        nodeType,
         edges: [
           { id: 'control', kind: 'control', source: { nodeId: 'A' }, target: { nodeId: 'B' } },
         ],
         state: state({}),
       }),
     ).toEqual({});
-    expect(statics.resolveValue).not.toHaveBeenCalled();
   });
 
-  it('静态解析服务失败时原样传播错误，不用缺失值或占位结果补齐', async () => {
-    const error = new Error('静态绑定解析失败');
-    const statics = staticBindings();
-    statics.resolveValue.mockRejectedValue(error);
+  it.each<StaticInputBinding>([
+    { type: 'constant', value: '常量' },
+    { type: 'workflow_input', key: 'novel' },
+    { type: 'asset', assetId: 'asset-1', versionId: 'version-3' },
+  ])('未声明的静态输入端口抛 INPUT_PORT_NOT_FOUND：$type', async (binding) => {
     await expect(
-      createBindingResolver(statics).resolveInputs({
-        node: { ...node, inputs: { prompt: { type: 'constant', value: '提示词' } } },
+      bindingResolver.resolveInputs({
+        node: { ...node, inputs: { undeclared: binding } },
+        nodeType,
         edges: [],
         state: state(),
       }),
-    ).rejects.toBe(error);
+    ).rejects.toMatchObject({
+      code: 'INPUT_PORT_NOT_FOUND',
+      details: { nodeId: 'B', inputKey: 'undeclared' },
+    });
+  });
+
+  it('数据边的目标端口未声明时抛 INPUT_PORT_NOT_FOUND', async () => {
+    await expect(
+      bindingResolver.resolveInputs({
+        node,
+        nodeType: { ...nodeType, inputs: [] },
+        edges: [imageEdge],
+        state: state({}),
+      }),
+    ).rejects.toMatchObject({ code: 'INPUT_PORT_NOT_FOUND', details: imageErrorDetails });
   });
 
   it('控制边的同名端口不占用静态输入，也不读取上游输出', async () => {
-    const statics = staticBindings();
-    statics.resolveValue.mockResolvedValue(prompt);
-    const inputs = await createBindingResolver(statics).resolveInputs({
+    const inputs = await bindingResolver.resolveInputs({
       node: { ...node, inputs: { prompt: { type: 'constant', value: '让人物向前走' } } },
+      nodeType,
       edges: [
         {
           id: 'named-control',
@@ -274,6 +388,5 @@ describe('BindingResolver 输入组装', () => {
       state: state({}),
     });
     expect(inputs).toEqual({ prompt });
-    expect(statics.resolveValue).toHaveBeenCalledTimes(1);
   });
 });
