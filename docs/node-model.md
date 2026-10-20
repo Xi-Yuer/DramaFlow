@@ -28,13 +28,15 @@ assertNodeSchemas 核对公开输入、输出、配置字段集合和默认值�
 
 ActionNodeCompilationStrategy 只包装统一 NodeExecutor，传入当前 State 并将结果映射为当前 nodeId 的 outputs 增量，不展开旧 State；合并与冲突检查由 LangGraph 通道负责。编译不执行业务、不解析 Binding、不自行 addEdge，拒绝不匹配版本或非 action。整图 Compiler 与结构策略保持独立，不为每个业务类型复制编译策略，详见 [State 边界](workflow-state.md#并行与历史)。
 
-普通 Action NodeExecutor 串联精确 Registry、绑定、decode、输入 / 配置校验、业务调用、输出校验和逐端口编码，返回 RuntimeValue map，不按 node.type 分支。NodeExecutionContext 包含领域 workflow / state 与项目运行定位，不含 React Flow 对象；普通节点接收已校验的业务输入和配置，不自行调度或解析绑定。输出存储策略由 Runtime 统一处理，Artifact 写入与内容 / 审计使用独立服务端口，能力见 [架构](architecture.md#数据与-node-基础库)，错误规则见 [Runtime](runtime-architecture.md#action-执行错误阶段)。
+普通 Action NodeExecutor 串联精确 Registry、绑定、decode、输入 / 配置校验、业务调用、输出校验和逐端口编码，返回 RuntimeValue map，不按 node.type 分支。NodeExecutionContext 包含领域 workflow / state 与项目运行定位，不含 React Flow 对象；普通节点接收已校验的业务输入和配置，不自行调度或解析绑定。输出存储策略由 Runtime 统一处理，Artifact 写入与内容服务使用独立端口，NodeRun 由注入的 Repository 记录，能力见 [架构](architecture.md#数据与-node-基础库)，错误规则见 [Runtime](runtime-architecture.md#action-执行错误阶段)。
 
 ## Preset 与 NodeRun
 
 Preset 是所属 type / typeVersion 的配置模板，不是 Runtime 身份。applyNodePreset 检查归属、合并模板与实例覆盖，不执行节点。剧本、广告、口播等可复用机制，不按业务名称复制 Executor。
 
-NodeRun 契约包含 attempt、可选输入输出快照、八种状态、结构化错误和时间。它是业务历史，不驱动调度；运行服务、持久化及投影一致性尚未接入。State 只保存当前有效 RuntimeValue 输出，详细分工见 [WorkflowState](workflow-state.md)。
+NodeRun 记录每次普通 Action 的业务历史，只有 running / completed / failed 三种状态。startedAt 必填，completedAt 随终态记录；共享协议沿用 ISO 时间，数据库为 DateTime。inputs / outputs 仅保存 RuntimeValue map，不使用 unknown 或原始业务对象快照；error 只保留 code、stage 和安全的阶段说明。attempt 由 Repository / 数据库按 workflowRunId + nodeId 原子分配，新执行创建新记录，不改写已结束历史。
+
+NodeRun 不驱动调度，也不从 Checkpoint 临时推导。State 只保存当前有效 RuntimeValue，Artifact 保存实际内容，Checkpoint 负责图恢复。普通 Action 不得主动 interrupt；原生控制异常的记录边界见 [Runtime](runtime-architecture.md#节点业务记录与-checkpoint)。恢复复用同一 NodeRun 和不增加 attempt 的语义由 Human Review 独立处理。
 
 ## 视频领域能力与厂商边界
 

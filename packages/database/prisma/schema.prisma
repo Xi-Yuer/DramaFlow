@@ -101,17 +101,46 @@ model RateLimit {
   @@map("auth_rate_limit")
 }
 
-// 一个项目就是一张空白画布；具体业务模型等待重新规划。
+// 项目保存基础画布信息；Workflow 定义与运行入口独立接入。
 model Project {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String    @id @default(uuid()) @db.Uuid
   ownerId   String
-  name      String   @db.VarChar(80)
-  revision  Int      @default(1)
+  name      String    @db.VarChar(80)
+  revision  Int       @default(1)
   viewport  Json
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  owner     User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  nodeRuns  NodeRun[]
 
   @@index([ownerId, updatedAt, id])
   @@map("canvas_project")
+}
+
+enum NodeRunStatus {
+  running
+  completed
+  failed
+
+  @@map("node_run_status")
+}
+
+// workflowRunId 保留逻辑运行身份；WorkflowRun 模型由后续生命周期阶段接入。
+model NodeRun {
+  id            String        @id @default(uuid()) @db.Uuid
+  projectId     String        @db.Uuid
+  workflowRunId String
+  nodeId        String
+  attempt       Int
+  status        NodeRunStatus @default(running)
+  inputs        Json?
+  outputs       Json?
+  error         Json?
+  startedAt     DateTime      @default(now())
+  completedAt   DateTime?
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowRunId, nodeId, attempt])
+  @@index([projectId, workflowRunId])
+  @@map("node_run")
 }

@@ -1,3 +1,4 @@
+import { nodeRunRepositoryFixture } from './node-run-fixture.js';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
@@ -26,6 +27,7 @@ import {
   DefaultDataStoragePolicyResolver,
   type ArtifactWriter,
   NodeExecutionError,
+  NodeRunRecordingError,
   NodeRegistry,
   ReferenceResolutionError,
   type DataReferenceResolver,
@@ -87,7 +89,8 @@ function fixture() {
   const inputParse = vi.spyOn(schemas.inputSchema, 'parse');
   const configParse = vi.spyOn(schemas.configSchema, 'parse');
   const outputParse = vi.spyOn(schemas.outputSchema, 'parse');
-  const executor = new DefaultNodeExecutor(registry, bindings, codec);
+  const nodeRuns = nodeRunRepositoryFixture();
+  const executor = new DefaultNodeExecutor(registry, bindings, codec, nodeRuns);
   const context: NodeExecutionContext = {
     projectId: 'p',
     workflowRunId: 'r',
@@ -123,6 +126,7 @@ function fixture() {
     execute,
     outputParse,
     executor,
+    nodeRuns,
     context,
   };
 }
@@ -135,14 +139,17 @@ describe('普通 Action Node 执行主链', () => {
       output: { result: { storage: 'inline', type: NumberType, value: 30 } },
     });
     const pipeline = [
+      f.nodeRuns.createRunning,
       f.get,
       f.resolveInputs,
+      f.nodeRuns.updateInputs,
       f.decodeRecord,
       f.inputParse,
       f.configParse,
       f.execute,
       f.outputParse,
       f.encode,
+      f.nodeRuns.markCompleted,
     ];
     for (const step of pipeline) expect(step).toHaveBeenCalledTimes(1);
     const order = pipeline.flatMap((step) => step.mock.invocationCallOrder);
@@ -161,13 +168,30 @@ describe('普通 Action Node 执行主链', () => {
       },
       { projectId: 'p', workflowRunId: 'r' },
     );
-    expect(f.execute).toHaveBeenCalledWith({ a: 10, b: 20 }, {}, f.context);
+    expect(f.execute).toHaveBeenCalledWith(
+      { a: 10, b: 20 },
+      {},
+      { ...f.context, nodeRunId: 'node-run-1' },
+    );
     expect(f.encode).toHaveBeenCalledExactlyOnceWith(30, {
       type: NumberType,
       storagePolicy: 'auto',
       context: { projectId: 'p', workflowRunId: 'r', nodeId: 'sum', outputKey: 'result' },
     });
     expect(f.write).not.toHaveBeenCalled();
+    expect(f.nodeRuns.createRunning).toHaveBeenCalledExactlyOnceWith({
+      projectId: 'p',
+      workflowRunId: 'r',
+      nodeId: 'sum',
+    });
+    expect(f.nodeRuns.updateInputs).toHaveBeenCalledExactlyOnceWith('node-run-1', {
+      a: { storage: 'inline', type: NumberType, value: 10 },
+      b: { storage: 'inline', type: NumberType, value: 20 },
+    });
+    expect(f.nodeRuns.markCompleted).toHaveBeenCalledExactlyOnceWith('node-run-1', {
+      result: { storage: 'inline', type: NumberType, value: 30 },
+    });
+    expect(f.nodeRuns.markFailed).not.toHaveBeenCalled();
     expect(f.referenceResolver.resolve).not.toHaveBeenCalled();
     expect({ node: f.node, context: f.context }).toEqual(snapshot);
     expect(f.context.state.outputs).toEqual({});
@@ -209,29 +233,78 @@ describe('普通 Action Node 执行主链', () => {
       },
     };
     const snapshot = structuredClone({ node: f.node, context });
-    const executor = new DefaultNodeExecutor(registry, f.bindings, f.codec);
+    const executor = new DefaultNodeExecutor(registry, f.bindings, f.codec, f.nodeRuns);
     expect(await executor.execute(f.node, context)).toEqual({
       output: { result: { storage: 'inline', type: NumberType, value: 61 } },
     });
-    expect(execute).toHaveBeenCalledWith({ a: 10, b: 20 }, { factor: 2 }, context);
+    expect(execute).toHaveBeenCalledWith(
+      { a: 10, b: 20 },
+      { factor: 2 },
+      { ...context, nodeRunId: 'node-run-1' },
+    );
     expect({ node: f.node, context }).toEqual(snapshot);
   });
 });
 
 describe('NodeExecutor 错误阶段', () => {
+  it('失败记录写入失败时同时报告两种原因，保留业务阶段 / cause，不重试执行', async () => {
+    const f = fixture();
+    const cause = new Error('业务错误');
+    const recordingError = new Error('审计写入失败');
+    f.execute.mockRejectedValue(cause);
+    f.nodeRuns.markFailed.mockRejectedValue(recordingError);
+    const invocation = f.executor.execute(f.node, f.context);
+    await expect(invocation).rejects.toBeInstanceOf(NodeRunRecordingError);
+    await expect(invocation).rejects.toMatchObject({
+      stage: 'execute',
+      cause,
+      recordingError,
+      nodeRunId: 'node-run-1',
+    });
+    expect(f.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('持久化错误只保存结构化阶段信息，不序列化原始 cause / stack / 供应商文本', async () => {
+    const f = fixture();
+    const cause = new Error('signed-url-and-credential-test-marker');
+    f.execute.mockRejectedValue(cause);
+    await expect(f.executor.execute(f.node, f.context)).rejects.toHaveProperty('cause', cause);
+    expect(f.nodeRuns.markFailed).toHaveBeenCalledExactlyOnceWith('node-run-1', {
+      code: 'NODE_EXECUTION_FAILED',
+      stage: 'execute',
+      message: '节点 sum（math.add）在 execute 阶段执行失败',
+    });
+    expect(JSON.stringify(f.nodeRuns.markFailed.mock.calls)).not.toContain(cause.message);
+  });
+
   it.each<NodeExecutionStage>([
+    'create_run',
     'resolve_input',
+    'record_inputs',
     'decode_input',
     'validate_input',
     'validate_config',
     'execute',
     'validate_output',
     'encode_output',
+    'complete_run',
   ])('失败准确标记 %s，保留 cause，并停止后续步骤', async (stage) => {
     const f = fixture();
     let context = f.context;
     let cause: unknown;
     switch (stage) {
+      case 'create_run':
+        cause = new Error('创建执行记录失败');
+        f.nodeRuns.createRunning.mockRejectedValue(cause);
+        break;
+      case 'record_inputs':
+        cause = new Error('输入记录失败');
+        f.nodeRuns.updateInputs.mockRejectedValue(cause);
+        break;
+      case 'complete_run':
+        cause = new Error('完成记录失败');
+        f.nodeRuns.markCompleted.mockRejectedValue(cause);
+        break;
       case 'resolve_input':
         cause = new BindingResolutionError('WORKFLOW_INPUT_MISSING', '缺失输入', {
           nodeId: 'sum',
@@ -281,24 +354,36 @@ describe('NodeExecutor 错误阶段', () => {
     if (stage === 'encode_output')
       await expect(invocation).rejects.toHaveProperty('code', 'NODE_OUTPUT_ENCODING_FAILED');
     const steps = [
+      f.nodeRuns.createRunning,
       f.resolveInputs,
+      f.nodeRuns.updateInputs,
       f.decodeRecord,
       f.inputParse,
       f.configParse,
       f.execute,
       f.outputParse,
       f.encode,
+      f.nodeRuns.markCompleted,
     ];
     const stages: NodeExecutionStage[] = [
+      'create_run',
       'resolve_input',
+      'record_inputs',
       'decode_input',
       'validate_input',
       'validate_config',
       'execute',
       'validate_output',
       'encode_output',
+      'complete_run',
     ];
     for (const step of steps.slice(stages.indexOf(stage) + 1)) expect(step).not.toHaveBeenCalled();
+    if (stage === 'create_run') expect(f.nodeRuns.markFailed).not.toHaveBeenCalled();
+    else
+      expect(f.nodeRuns.markFailed).toHaveBeenCalledExactlyOnceWith(
+        'node-run-1',
+        expect.objectContaining({ stage }),
+      );
     expect(f.context.state.outputs).toEqual({});
   });
 
@@ -318,7 +403,7 @@ describe('NodeExecutor 错误阶段', () => {
       const registry = new NodeRegistry([
         { ...f.schemas, manifest: { ...f.manifest, executionKind } },
       ]);
-      const executor = new DefaultNodeExecutor(registry, f.bindings, f.codec);
+      const executor = new DefaultNodeExecutor(registry, f.bindings, f.codec, f.nodeRuns);
       await expect(executor.execute(f.node, f.context)).rejects.toMatchObject({
         stage: 'resolve_input',
       });
@@ -349,11 +434,13 @@ describe('LangGraph 原生控制异常边界', () => {
       f.execute.mockRejectedValue(error);
       await expect(f.executor.execute(f.node, f.context)).rejects.toBe(error);
       expect(f.outputParse).not.toHaveBeenCalled();
+      expect(f.nodeRuns.markFailed).not.toHaveBeenCalled();
     },
   );
 
   it('真实 LangGraph interrupt 可穿过 Executor 暂停，并由原生 Command 恢复', async () => {
     const f = fixture();
+    // 人为注入控制异常仅验证原生边界；普通 Action 业务禁止主动 interrupt。
     f.execute.mockImplementation(async (input) => ({
       result: interrupt<string, number>('提供 A') + input.b,
     }));
@@ -422,6 +509,7 @@ describe('NodeExecutor 按输出端口编码', () => {
       ]),
       f.bindings,
       f.codec,
+      f.nodeRuns,
     );
     const context = { ...f.context, workflow: { ...f.context.workflow, nodes: [node] } };
     return { ...f, executor, context, node, video, execute };

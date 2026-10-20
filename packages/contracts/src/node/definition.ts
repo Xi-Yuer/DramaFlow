@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { contentIdentifierSchema } from '../data/reference.js';
+import { runtimeValueMapSchema } from '../data/runtime-value.js';
 import { nodeTypeIdSchema, nodeTypeVersionSchema } from './manifest.js';
 import { workflowIdentifierSchema, workflowPortNameSchema } from '../workflow/metadata.js';
 
@@ -54,23 +55,26 @@ export const nodePresetSchema = z
   })
   .strict();
 
-export const nodeRunStatusSchema = z.enum([
-  'pending',
-  'ready',
-  'running',
-  'waiting',
-  'completed',
-  'failed',
-  'skipped',
-  'cancelled',
+export const nodeRunStatusSchema = z.enum(['running', 'completed', 'failed']);
+
+export const nodeExecutionStageSchema = z.enum([
+  'create_run',
+  'resolve_input',
+  'record_inputs',
+  'decode_input',
+  'validate_input',
+  'validate_config',
+  'execute',
+  'validate_output',
+  'encode_output',
+  'complete_run',
 ]);
 
 export const nodeRunErrorSchema = z
-  .object({ code: workflowIdentifierSchema, message: z.string() })
+  .object({ code: workflowIdentifierSchema, message: z.string(), stage: nodeExecutionStageSchema })
   .strict();
 
-// 运行历史契约，尚非数据库 Store；快照仅校验 JSON，不代替 RuntimeValue、大小及脱敏策略。
-// attempt 由后续运行服务分配，不在这里因恢复重入自动递增。
+// 业务历史只保存 RuntimeValue；attempt 由 Repository 原子分配，时间沿用 JSON 协议。
 export const nodeRunSchema = z
   .object({
     id: workflowIdentifierSchema,
@@ -78,10 +82,10 @@ export const nodeRunSchema = z
     nodeId: workflowIdentifierSchema,
     attempt: z.number().int().positive(),
     status: nodeRunStatusSchema,
-    inputSnapshot: z.record(z.string(), z.json()).optional(),
-    outputSnapshot: z.record(z.string(), z.json()).optional(),
+    inputs: runtimeValueMapSchema.optional(),
+    outputs: runtimeValueMapSchema.optional(),
     error: nodeRunErrorSchema.optional(),
-    startedAt: z.iso.datetime().optional(),
+    startedAt: z.iso.datetime(),
     completedAt: z.iso.datetime().optional(),
   })
   .strict();
@@ -95,3 +99,4 @@ export type NodePreset = z.infer<typeof nodePresetSchema>;
 export type NodeRunError = z.infer<typeof nodeRunErrorSchema>;
 export type NodeRun = z.infer<typeof nodeRunSchema>;
 export type NodeRunStatus = z.infer<typeof nodeRunStatusSchema>;
+export type NodeExecutionStage = z.infer<typeof nodeExecutionStageSchema>;

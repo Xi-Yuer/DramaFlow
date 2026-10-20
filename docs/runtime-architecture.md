@@ -12,13 +12,16 @@ NestJS 承担认证、权限与业务入口；PostgreSQL 保存业务记录并�
 
 ```text
 NodeDefinition + NodeExecutionContext
+  → NodeRunRepository.createRunning
   → NodeRegistry.getAction(type, version)
   → BindingResolver.resolveInputs
+  → NodeRunRepository.updateInputs(RuntimeValue map)
   → RuntimeValueCodec.decodeRecord
   → inputSchema.parse / configSchema.parse
   → NodeType.execute(input, config, context)
   → outputSchema.parse
   → 按 OutputPortDefinition 调用 RuntimeValueCodec.encode
+  → NodeRunRepository.markCompleted(RuntimeValue map)
   → NodeExecutionResult { output: Record<string, RuntimeValue> }
   → Action wrapper 返回 { outputs: { [nodeId]: output } }
   → WorkflowStateAnnotation.outputs reducer 合并
@@ -26,11 +29,11 @@ NodeDefinition + NodeExecutionContext
 
 普通 NodeType 不再 compile，也不取得 Graph builder。ActionNodeCompilationStrategy 只包装统一 Executor，注入调用时的当前 State 与 state.run 中的项目 / 运行 ID，再将结果映射为当前 nodeId 的 WorkflowStateUpdate。wrapper 不展开旧 outputs，不解析 Binding、校验业务 Schema 或操作 Artifact；这些仍由 Executor 与注入服务承担。control / composite / interaction 使用独立结构策略，不强行套普通 action。
 
-普通 Action NodeExecutor 主干固定为精确版本查找、绑定、decode、输入 / 配置 Zod 校验、业务调用、输出 Zod 校验和逐端口 encode，返回 RuntimeValue map。NodeExecutionContext 包含领域 workflow / state、项目运行定位及可选信号 / 能力 / 配置，不传 React Flow 对象；Codec 接收单独构造的项目运行定位；encode 额外携带 nodeId / outputKey，Writer 另收到 DataType。不按 node.type 分支，不直接访问 Artifact 存储，不处理 State 增量、NodeRun、Retry 或 Human Review，实际范围见 [架构](architecture.md#数据与-node-基础库)。
+普通 Action NodeExecutor 先创建 running 记录，再执行精确版本查找、绑定、记录输入、decode、输入 / 配置 Zod 校验、业务调用、输出 Zod 校验和逐端口 encode；完成记录成功后才返回 RuntimeValue map。NodeExecutionContext 包含领域 workflow / state、项目运行定位及可选信号 / 能力 / 配置，不传 React Flow 对象；Codec 接收单独构造的项目运行定位；encode 额外携带 nodeId / outputKey，Writer 另收到 DataType。不按 node.type 分支，不直接访问 Artifact 存储，通过独立 Repository 记录 NodeRun，不处理 State 增量、Retry 或 Human Review，实际范围见 [架构](architecture.md#数据与-node-基础库)。
 
 ### Action 执行错误阶段
 
-NodeExecutionError 保留 nodeId、nodeType、stage、code 和原始 cause。七个 stage 为 resolve_input、decode_input、validate_input、validate_config、execute、validate_output、encode_output；Registry 缺少版本或非 action 拒绝归入 resolve_input。普通失败停止后续步骤，不自动重试。输入校验使用 NODE_INPUT_VALIDATION_FAILED，引用错误保留在 decode_input 的 cause 中，输出编码或 Artifact 写入失败使用 encode_output / NODE_OUTPUT_ENCODING_FAILED，不与 validate_output 混淆。
+NodeExecutionError 保留 nodeId、nodeType、stage、code 和原始 cause。stage 为 create_run、resolve_input、record_inputs、decode_input、validate_input、validate_config、execute、validate_output、encode_output、complete_run；Registry 缺少版本或非 action 拒绝归入 resolve_input。普通失败停止后续步骤，不自动重试。输入校验使用 NODE_INPUT_VALIDATION_FAILED，引用错误保留在 decode_input 的 cause 中，输出编码或 Artifact 写入失败使用 encode_output / NODE_OUTPUT_ENCODING_FAILED，不与 validate_output 混淆。
 
 LangGraph GraphBubbleUp（含 interrupt / 父图 Command 控制异常）原样传播，不包装为业务失败，不自建恢复状态机。[官方 Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts) 说明中断必须交还图 Runtime；这里只守住异常边界，不引入审核实现。
 
@@ -59,6 +62,14 @@ BindingResolver.resolveInputs 的上下文包含 node、nodeType、edges、state
 RuntimeValueCodec.decode 只接收 RuntimeValue 与 projectId / workflowRunId，返回 unknown。inline 原样返回实际值；reference 只调用 DataReferenceResolver，具体授权与内容访问由该引用服务实现承担。媒体可以返回含临时访问 URL 的 MediaResource，其他领域返回相应业务对象，不统一转换成 Buffer 或 URL。decodeRecord 使用 Promise.all 并行解码，再保留输入键组装结果；任何引用失败都使批量调用失败，不提供部分结果或重试。
 
 decode 不读取 Registry、不依赖数据库或对象存储实现、不生成 URL，也不执行业务 Schema 校验。引用失败用 REFERENCE_RESOLUTION_FAILED 保留边界与 cause；NodeExecutor 解码后执行 inputSchema.parse，按 NODE_INPUT_VALIDATION_FAILED 区分业务校验。NodeType.execute 只接收校验后的业务输入。输出 encode 根据端口存储策略，经统一 DataStoragePolicyResolver 选择 inline / reference；reference 只委托 ArtifactWriter。inline 只检查可持久化 JSON 边界，不调用业务 Schema；默认类型规则、最小上下文及失败约束见 [数据模型](data-model.md#codecbinding-与执行服务接口)。
+
+### 节点业务记录与 Checkpoint
+
+NodeRun 是实际业务执行历史，Checkpoint 是 LangGraph 恢复快照，二者不互相推导。NodeRunRepository 位于 workflow 包，数据库实现与权限工厂位于 API；Executor 不依赖 Prisma 或数据库。Repository 实例限定所有者、项目和运行，attempt 由数据库原子分配；Executor 不读取或递增旧 attempt。每次明确的新普通 Action 执行创建新记录，旧终态不能覆盖。
+
+running 在 Registry / Binding 之前创建，Binding 成功后 updateInputs 保存 RuntimeValue，decode 后业务大对象不进入记录；校验与编码成功后 markCompleted 保存 RuntimeValue 输出。业务上下文的 nodeRunId 来自本次创建结果，不从调用上下文推断恢复关联。普通异常 markFailed 后抛回带阶段的 NodeExecutionError。create_run 失败时没有可用记录，必须中止业务，不提供内存或本地兜底；输入 / 完成记录失败也中止返回结果。markFailed 再失败时 NodeRunRecordingError 同时保留原 stage / cause 和 recordingError，不隐藏记录服务故障、不重试业务。
+
+持久错误仅包含阶段码与阶段说明，不复制原始 cause、stack 或供应商错误文本；原始原因仍保留在抛出的执行错误中。NodeRun completed 表示业务调用及输出记录成功，不表示随后的 State reducer 或整个 Graph 一定成功；NodeRun、Artifact 与 Checkpoint 不承诺跨服务原子提交。普通 Action 禁止主动 interrupt。原生 interrupt / ParentCommand 仍原样穿透，已有 NodeRun 保持 running，不记 failed；本步不复用恢复关联。Human Review 再引入 waiting，并明确 resume 关联同一 NodeRun、不增加 attempt。
 
 ## State 与持久化
 

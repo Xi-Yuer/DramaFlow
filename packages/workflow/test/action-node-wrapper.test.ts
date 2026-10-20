@@ -1,3 +1,4 @@
+import { nodeRunRepositoryFixture } from './node-run-fixture.js';
 import { END, START, StateGraph } from '@langchain/langgraph';
 import {
   NumberType,
@@ -140,6 +141,7 @@ function parallelFixture() {
     registry,
     bindings,
     new DefaultRuntimeValueCodec({ resolve }, { write }, new DefaultDataStoragePolicyResolver()),
+    nodeRunRepositoryFixture(),
   );
   const strategy = new ActionNodeCompilationStrategy();
   const wrapped = new Map<string, LangGraphNode>();

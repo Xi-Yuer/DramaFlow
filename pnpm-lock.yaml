@@ -69,6 +69,9 @@ importers:
         specifier: ^4.1.0
         version: 4.6.7
     devDependencies:
+      '@langchain/langgraph':
+        specifier: ^1.5.0
+        version: 1.5.0(@langchain/core@1.2.18(openai@7.34.0(@aws-sdk/credential-provider-node@3.972.86)(@smithy/signature-v4@5.7.4)(zod@4.6.7)))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zod@4.6.7)
       '@nestjs/cli':
         specifier: ^12.0.0
         version: 12.0.8(@types/node@24.19.2)(prettier@3.9.10)

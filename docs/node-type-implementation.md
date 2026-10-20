@@ -26,6 +26,6 @@ GenericWorkflowNode 按精确 Manifest 生成数据 Handle，其 ID 必须等于
 
 ## 实施边界
 
-数据类型校验与共享兼容算法已实现；RuntimeValue、版本化引用、Artifact / Asset、State 及 Codec / Resolver / Executor / Store / Recorder 已有类型或协议。具体 Runtime、内容持久化、大小预算、权限解析与审计投影尚未接入，不使用测试替身提供生产降级。
+数据类型校验与共享兼容算法已实现；RuntimeValue、版本化引用、Artifact / Asset、State 及 Codec / Resolver / Executor / Store / Repository 已有类型或协议。完整 Runtime、内容持久化、大小预算、引用权限与审核投影保持独立；节点业务记录与实现范围见 [架构](architecture.md#数据与-node-基础库)，不使用测试替身提供生产降级。
 
 Data Edge 表达值来源，Control Edge 表达显式执行先后；联合无环检查与执行依赖编译职责分离，普通确定性依赖按目标聚合为 ALL Join。后续议题统一见 [实施方案](implementation-plan.md)，不先跳入 Plugin、Batch 或完整生成流程。
