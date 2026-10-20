@@ -206,8 +206,8 @@ React Flow Edge 通过 edge.data.kind 区分两类边，并保留边 ID 和两�
 
 正式 workflowDefinitionSchema 检查顶层唯一性、输出引用节点、两类边全局 ID 唯一与端点节点、workflow_input 名称、自连接及两类关系合并后的无环约束；目标数据端口单连接与静态 Binding 冲突只适用于 Data Edge。它没有 Manifest，不能判断端口是否声明、端口类型兼容或资源权限，也不解析运行值。显式数据连线需再对照节点精确类型版本的 Manifest 检查源输出、目标输入及共享 isTypeAssignable；一个目标数据端口至多一条 Data Edge，数组类型表示输入值是数组，不表示多条连接自动聚合。
 
-联合 DAG 只验证图结构无环。执行依赖收集独立读取两类边的节点 ID，按目标聚合、按来源去重，不增加 parallelNodes / sequentialNodes 等列表；多上游映射为一条 LangGraph 数组 Join Edge。原始 Data Edge 的两端 portKey 保留给后续输入绑定，依赖编译不读取端口或构造输入。条件候选分支不能直接放入 ALL 等待集合。图调度、Checkpoint 和暂停恢复由 LangGraph 提供。
+联合 DAG 只验证图结构无环。执行依赖收集独立读取两类边的节点 ID，按目标聚合、按来源去重，不增加 parallelNodes / sequentialNodes 等列表；多上游映射为一条 LangGraph 数组 Join Edge。原始 Data Edge 的两端 portKey 保留给 BindingResolver 读取上游输出，依赖编译不读取端口或构造输入。条件候选分支不能直接放入 ALL 等待集合。图调度、Checkpoint 和暂停恢复由 LangGraph 提供。
 
-WorkflowState.outputs 已使用携带 DataType 的 RuntimeValue，语义与承载规则见 [数据模型](data-model.md)。当前 Codec / Resolver / Executor 为服务接口，完整图编译和运行仍未接入。
+WorkflowState.outputs 使用携带 DataType 的 RuntimeValue，BindingResolver 定位并组装这些值，不 decode。静态转换 / Codec / Executor 仍为服务接口，语义与承载规则见 [数据模型](data-model.md)，实际能力见 [架构](architecture.md#数据与-node-基础库)；完整图编译和运行仍未接入。
 
 项目保存协议仍未接入 WorkflowDefinition，阶段与下一步统一见 [实施方案](implementation-plan.md)。

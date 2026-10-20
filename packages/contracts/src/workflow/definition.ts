@@ -79,6 +79,7 @@ export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
             code: 'custom',
             path: ['edges', index, 'target', 'portKey'],
             message: '每个输入端口最多连接一条数据边',
+            params: { code: 'INPUT_SOURCE_CONFLICT' },
           });
         }
         targetPorts.add(edge.target.portKey);
@@ -90,6 +91,7 @@ export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
             code: 'custom',
             path: ['edges', index, 'target', 'portKey'],
             message: '数据边目标端口不能同时保存静态输入绑定',
+            params: { code: 'INPUT_SOURCE_CONFLICT' },
           });
         }
       }

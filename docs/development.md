@@ -12,6 +12,8 @@
 
 普通确定性依赖编译须检查 Data / Control Edge 均计入依赖、按目标聚合与来源去重，同一节点对的混合边或不同数据端口不重复计数。验证原始边及 portKey 保持完整、依赖编译不读取端口；单上游生成字符串边、多上游只生成一条数组 Join Edge。使用真实 LangGraph 验证混合边去重后，两种上游完成顺序及不同长度路径下均等待全部完成且目标只执行一次，并覆盖上游失败。条件候选分支不套用此规则；这些测试不代表输入绑定、生产 WorkflowState、整图编译或真实模型调用已接入。
 
+BindingResolver 测试检查只读取当前目标的数据边、来源输出键到目标输入键的映射、inline / reference 原样保留，以及显式静态解析结果的合并。覆盖三类静态 Binding 与数据边冲突、多条数据边指向同一输入、缺失来源节点或输出键、继承属性不可作为输出、静态服务错误原样传播。冲突与缺失输出应在调用静态解析服务或后续 Codec / Zod 前明确失败；静态校验的冲突 issue.params.code 与运行错误均使用 INPUT_SOURCE_CONFLICT。静态解析替身只验证委托与合并，不证明具体转换、资产版本 / 权限或完整 NodeExecutor 已实现。
+
 节点类型开发对照 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。分别验证纯 JSON Manifest 的配置类型 / 默认值、服务端三组 Zod 与声明字段一致、精确类型版本注册以及 listManifests 的白名单与数据隔离。Preset 只测试配置模板行为，不作为 Registry 身份；保留 transform 和默认值不回写定义的回归。
 
 正式 WorkflowDefinition 测试检查三类 StaticInputBinding、两类边引用与全局 ID 唯一、自连接及联合 DAG；Data Edge 另检查目标数据端口单连接与静态 Binding 冲突，Control Edge 不占用输入并允许多个控制上游。检查控制端口可省略或命名，拒绝旧 ConnectionBinding。通用 factory 继续用独立自定义 Schema 测试，不强加正式 Node 协议。静态成功不证明端口存在、真实值有效或资产可访问，也不替代独立依赖收集与运行输入绑定检查；assetId / versionId 只是明确版本的引用声明。
@@ -57,4 +59,4 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 
 ## 定向验证范围
 
-按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；Codec / Resolver / Executor 的接口不代表已运行整条管线。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
+按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / 输入解析测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；局部输入组装与静态转换 / Codec / Executor 接口不代表已运行整条管线。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。

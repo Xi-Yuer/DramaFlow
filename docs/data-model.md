@@ -68,7 +68,9 @@ RuntimeValueContext 明确 projectId、workflowRunId 和可选 nodeRunId。Runti
 
 媒体解析应返回 ResolvedMediaObject：明确引用、MIME、可选尺寸/时长与临时 access.url，不机械下载成 Buffer，也不把临时 URL 写回持久 RuntimeValue。ArtifactStore / AssetStore 的所有访问都带项目运行上下文，不能仅凭知道引用 ID 就获得读取权限。
 
-BindingResolver 接收 StaticInputBinding，只解析 workflow_input / constant / asset。resolveValue 保留本次绑定使用的 RuntimeValue，供执行管线 decode 和记录输入快照；resolve(binding, expectedType, context) 接收包含 WorkflowState 的上下文，再经 Codec 返回节点实际输入。这样不必把含临时访问 URL 的已解析媒体对象重新 encode 成快照。Data Edge 连接的上游结果读取属于后续执行适配，不再编码为 ConnectionBinding。Codec、Resolver 与内容 Store 当前是服务接口，尚无生产实现；不会悄悄把绑定描述当作已解析值。
+BindingResolver.resolveInputs 接收 NodeDefinition、WorkflowEdge 列表和 WorkflowState，返回完整的 `Record<string, RuntimeValue>`。Data Edge 按目标 nodeId / portKey 绑定输入，按来源 nodeId / portKey 读取 State.outputs；Control Edge 不取值。Node.inputs 继续只保存 constant / workflow_input / asset，不重新引入 ConnectionBinding。静态 Binding 由显式注入的 StaticBindingResolver.resolveValue 转换；具体转换规则独立于 Data Edge 输入组装，不把绑定描述直接当作 RuntimeValue，也不隐式选择类型、厂商或资产版本。
+
+Resolver 只定位并合并 RuntimeValue，保留上游值和引用，不 decode reference。后续由 RuntimeValueCodec decode，再由 NodeExecutor 完整 Zod 校验并调用 NodeType；输入快照仍保存 RuntimeValue，不把临时媒体 URL 重新 encode 进历史。静态绑定与 Data Edge 指向同一目标输入、或多条 Data Edge 指向同一输入时，直接报 INPUT_SOURCE_CONFLICT；找不到上游节点输出或端口时直接报 SOURCE_NODE_OUTPUT_MISSING，不延迟成必填参数错误。Workflow 静态校验提前拒绝来源冲突，运行时继续防御检查。实际能力与静态转换限制见 [当前架构](architecture.md#数据与-node-基础库)。
 
 NodeExecutor 的统一管线契约是：解析绑定、decode、输入/配置 Zod 校验、NodeType.execute、输出校验、encode、持久化 Artifact、记录 NodeRun，最后返回本节点的 outputs 增量。NodeRunRecorder 的 begin / complete / fail 与 Checkpoint 分离，输入输出快照使用 RuntimeValue，不能把凭证或临时访问 URL 写入快照。attempt 不等于节点函数重入次数。
 

@@ -28,7 +28,7 @@ assertNodeSchemas 核对公开输入、输出、配置字段集合和默认值�
 
 ActionNodeCompilationStrategy 只生成调用统一 NodeExecutor 的 LangGraph 包装，不执行业务、不解析 Binding、不自行 addEdge。它拒绝不匹配的版本及非 action 类型。WorkflowCompiler / 其他结构策略待 Graph Model 明确后实施，不为每个 LLM、TTS 或图生视频类型创建独立编译策略。
 
-NodeExecutor 的职责与 Codec、Resolver、内容服务和 NodeRunRecorder 端口见 [数据模型](data-model.md)。这些执行服务当前只有接口；普通节点只知道业务输入、配置和调用上下文，不知道上下游、存储实现或 Checkpoint。
+NodeExecutor 的职责与 Codec、BindingResolver、内容服务和 NodeRunRecorder 端口见 [数据模型](data-model.md)。BindingResolver 只组装 RuntimeValue，静态转换与其他执行服务仍为接口，实际范围见 [架构](architecture.md#数据与-node-基础库)；普通节点只知道业务输入、配置和调用上下文，不知道上下游、存储实现或 Checkpoint。
 
 ## Preset 与 NodeRun
 

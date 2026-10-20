@@ -201,12 +201,16 @@ describe('正式 WorkflowDefinition 静态校验', () => {
   it('每个目标输入最多接收一条边，不隐式聚合数组', () => {
     const source = definition();
     source.nodes.push(node('c'));
-    expect(
-      workflowDefinitionSchema.safeParse({
-        ...source,
-        edges: [edge('first', 'a', 'b', 'videos'), edge('second', 'c', 'b', 'videos')],
-      }).success,
-    ).toBe(false);
+    const result = workflowDefinitionSchema.safeParse({
+      ...source,
+      edges: [edge('first', 'a', 'b', 'videos'), edge('second', 'c', 'b', 'videos')],
+    });
+    expect(result.error?.issues).toContainEqual(
+      expect.objectContaining({
+        path: ['edges', 1, 'target', 'portKey'],
+        params: { code: 'INPUT_SOURCE_CONFLICT' },
+      }),
+    );
   });
 
   it('数据边目标与任意静态绑定互斥，包括空值与数组常量', () => {
@@ -217,13 +221,18 @@ describe('正式 WorkflowDefinition 静态校验', () => {
       { type: 'workflow_input', key: 'novel' },
       { type: 'asset', assetId: 'asset', versionId: 'v1' },
     ];
-    for (const binding of bindings)
-      expect(
-        workflowDefinitionSchema.safeParse({
-          ...source,
-          nodes: [node('a'), node('b', { text: binding })],
-        }).success,
-      ).toBe(false);
+    for (const binding of bindings) {
+      const result = workflowDefinitionSchema.safeParse({
+        ...source,
+        nodes: [node('a'), node('b', { text: binding })],
+      });
+      expect(result.error?.issues).toContainEqual(
+        expect.objectContaining({
+          path: ['edges', 0, 'target', 'portKey'],
+          params: { code: 'INPUT_SOURCE_CONFLICT' },
+        }),
+      );
+    }
   });
 
   it('控制边不占用静态输入或数据端口，多个上游控制关系可以共同到达目标', () => {

@@ -24,7 +24,7 @@ Node.inputs 只接受 constant / workflow_input / asset 三类 StaticInputBindin
 
 workflow 包已有 parseWorkflowInputs、collectWorkflowOutputs、createWorkflowVersionSnapshot、assertWorkflowRunVersion：按显式 Zod 契约校验值、按声明来源收集最终结果、复制并冻结 JSON 快照、检查运行版本身份。这些函数不发布版本或创建运行；快照只保证内存隔离，不替代数据库不可变性、权限与并发控制。
 
-`packages/workflow/src/compiler/dependency.compiler.ts` 导出 collectNodeDependencies：接收当前 WorkflowEdge 列表，Data / Control Edge 均按两端 nodeId 收集执行依赖，按 target 聚合、按 source 去重并保留首次出现顺序，输出 NodeDependency。同一节点对的不同端口数据边及重复 Data / Control 关系只形成一个上游。DependencyCompiler.compile 直接接收 edges 并调用收集函数，单上游生成字符串 addEdge，多上游只生成一条数组 addEdge（ALL Join），不会拆成多个独立触发边。它保留原始边，不读取或修改 portKey、不获取输出或构造输入；这些仍属 BindingResolver / NodeExecutor。真实 LangGraph 测试覆盖混合边去重后的两种完成顺序、不同路径长度、仅执行一次和上游失败；测试另验证端口不被读取及冻结边保持完整。不新增 NodeDefinition.joinMode 或平台 Join Runtime。If / Switch / Conditional Edge / Send / Batch 候选分支不适用；完整 WorkflowCompiler、Data Edge 输入绑定与生产运行服务尚未接入。
+`packages/workflow/src/compiler/dependency.compiler.ts` 导出 collectNodeDependencies：接收当前 WorkflowEdge 列表，Data / Control Edge 均按两端 nodeId 收集执行依赖，按 target 聚合、按 source 去重并保留首次出现顺序，输出 NodeDependency。同一节点对的不同端口数据边及重复 Data / Control 关系只形成一个上游。DependencyCompiler.compile 直接接收 edges 并调用收集函数，单上游生成字符串 addEdge，多上游只生成一条数组 addEdge（ALL Join），不会拆成多个独立触发边。它保留原始边，不读取或修改 portKey、不获取输出或构造输入；这些仍属 BindingResolver / NodeExecutor。真实 LangGraph 测试覆盖混合边去重后的两种完成顺序、不同路径长度、仅执行一次和上游失败；测试另验证端口不被读取及冻结边保持完整。不新增 NodeDefinition.joinMode 或平台 Join Runtime。If / Switch / Conditional Edge / Send / Batch 候选分支不适用；完整 WorkflowCompiler 与生产运行服务尚未接入。
 
 ## 数据与 Node 基础库
 
@@ -40,7 +40,9 @@ createOperationNodeType 只组合 Manifest、三组 Zod 与 operation。parseNod
 
 ActionNodeCompilationStrategy 校验节点类型版本，复制定义并仅生成调用统一 NodeExecutor 的 LangGraph 包装。编译时不执行业务，不编译控制边，不管理调度或暂停恢复。完整 WorkflowCompiler 和结构策略尚未实现。
 
-runtime/ 已有 WorkflowState、RuntimeValueCodec、BindingResolver、NodeExecutor、内容 Store 和 NodeRunRecorder 接口。State.outputs 正式使用 NodeOutputMap（RuntimeValue），execution 暂不启用控制字段；没有生产通道、reducer、绑定解析、内容持久化或完整执行服务实现，不提供内存 / 本地存储降级。
+runtime/binding-resolver.ts 已实现 resolveDataEdgeInputs 和 createBindingResolver。BindingResolver.resolveInputs 接收 node / edges / state，只读取当前目标的数据边，将上游指定输出原样映射为目标输入 RuntimeValue，并合并显式注入的 StaticBindingResolver.resolveValue 对三类静态 Binding 的解析结果。未重新引入 ConnectionBinding，也不 decode、调用 NodeType 或持久化 Artifact。静态 / 连线来源冲突、重复目标数据输入和缺失上游输出抛 BindingResolutionError，code 分别为 INPUT_SOURCE_CONFLICT / SOURCE_NODE_OUTPUT_MISSING，details 提供节点、端口与边定位。正式 WorkflowDefinition 的两种输入冲突校验同时在 issue.params.code 标记 INPUT_SOURCE_CONFLICT。
+
+静态转换服务当前仅有接口，必须由调用方显式提供；constant 的类型与承载、workflow_input 的具体转换及 asset 固定版本的运行解析尚未实现。测试中的静态解析替身只验证委托与合并，不是生产默认值或已完成的资产能力。RuntimeValueCodec、NodeExecutor、内容 Store 和 NodeRunRecorder 仍为接口；State.outputs 使用 NodeOutputMap（RuntimeValue），execution 暂不启用控制字段，没有生产通道、reducer、内容持久化或完整执行服务，不提供内存 / 本地存储降级。
 
 createWorkflowRunConfig 使用显式 Run.threadId，不从 Run.id 推断或允许其他配置覆盖，不创建运行或 checkpointer。NodeRun 保留 attempt、可选 JSON 快照、状态、结构化错误和 ISO 时间契约；业务记录、权限与持久化仍待接入。
 

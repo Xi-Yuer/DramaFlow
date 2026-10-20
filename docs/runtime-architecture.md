@@ -22,7 +22,7 @@ WorkflowDefinition / Version
 
 普通 NodeType 不再 compile，也不取得 Graph builder。ActionNodeCompilationStrategy 仅注册调用统一 Executor 的函数，不为每个 LLM、TTS 或视频业务复制编译策略。control / composite / interaction 具有不同图语义，后续由相应结构策略处理，不强行套普通 action。
 
-NodeExecutor 负责输入绑定与 decode、完整 Zod 校验、业务调用、输出校验与 encode、Artifact 持久化、NodeRun 和自身 State 更新。普通节点不解析资产、写其他节点结果或自行判断 ready。Codec / Resolver / Executor / Store 当前只有服务接口，完整生产执行链未接入。
+NodeExecutor 负责依次调用 BindingResolver 定位 RuntimeValue、RuntimeValueCodec decode，再执行完整输入 / 配置 Zod 校验、业务调用、输出校验与 encode、Artifact 持久化、NodeRun 和自身 State 更新。普通节点不解析资产、写其他节点结果或自行判断 ready。Codec / Executor / Store 仍是服务接口，BindingResolver 的实际范围见 [架构](architecture.md#数据与-node-基础库)，完整生产执行链未接入。
 
 原有 invokeNodeOperation 是独立值校验工具，不是第二套 Runtime。测试中直接使用原生 StateGraph / MemorySaver 只验证适配与线程机制，不能作为生产持久化或真实生成能力。
 
@@ -34,9 +34,15 @@ NodeExecutor 负责输入绑定与 decode、完整 Zod 校验、业务调用、�
 
 DependencyCompiler 接收 edges 并使用收集后的 NodeDependency。单上游使用 `graph.addEdge(sourceNodeIds[0], targetNodeId)`，多上游使用 `graph.addEdge(sourceNodeIds, targetNodeId)`，例如 `graph.addEdge(['character', 'scene'], 'script')`。多上游不能拆成多个独立 addEdge；等待由 LangGraph 原生 waiting edge 承担，不建立平台 ready 计数、轮询或 Join Runtime。[官方 addEdge API](https://reference.langchain.com/javascript/langchain-langgraph/index/StateGraph/addEdge) 定义了数组上游参数。
 
-执行依赖只决定什么时候执行，不替代输入绑定。原始 Data Edge 和 source / target.portKey 保持完整，后续由 BindingResolver / NodeExecutor 定位上游输出、解析 RuntimeValue 并组装目标完整 input。Dependency Compiler 不读取数据端口、不获取 A.output、不 decode 或构造 B.input；Control Edge 不提供输入值。
+执行依赖只决定什么时候执行，不替代输入绑定。原始 Data Edge 和 source / target.portKey 保持完整，由 BindingResolver 定位上游 RuntimeValue 并组装目标输入 map；decode 与完整输入校验继续留在后续执行层。Dependency Compiler 不读取数据端口、不获取 A.output、不 decode 或构造 B.input；Control Edge 不提供输入值。
 
-If / Switch / Conditional Edge / Send / Batch 产生的候选分支不属于此处的确定性上游。即使 A / B 到目标的边是静态的，只要条件路由可能跳过其中一条路径，也不能把 `[A, B]` 作为普通 ALL Join 的等待集合，否则目标可能永远无法触发。本规则仅覆盖当前普通确定性 Data / Control Edge；未来控制结构须先区分候选路径，不能直接沿用此收集规则，本层不推断分支可达性。
+If / Switch / Conditional Edge / Send / Batch 产生的候选分支不属于普通确定性上游。即使 A / B 到目标的边是静态的，只要条件路由可能跳过其中一条路径，也不能把 `[A, B]` 作为普通 ALL Join 的等待集合，否则目标可能永远无法触发。依赖收集规则仅覆盖当前普通确定性 Data / Control Edge；未来控制结构须先区分候选路径，不能直接沿用此规则，Compiler 不推断分支可达性。
+
+### Data Edge 与节点输入
+
+BindingResolver.resolveInputs 的上下文包含 node、edges、state。仅处理 kind=data 且 target.nodeId 等于当前节点的边，把 `state.outputs[source.nodeId][source.portKey]` 原样绑定到 `inputs[target.portKey]`，再合并静态 Binding 解析产生的 RuntimeValue。静态转换通过必须显式注入的服务进行，不提供占位或默认实现；其具体规则另行确定，见 [数据模型](data-model.md#codecbinding-与执行服务接口)。
+
+在读取上游输出或调用静态解析服务前，先检查静态 Binding 与数据边的来源冲突；同一目标端口的多条数据边也必须报 INPUT_SOURCE_CONFLICT，不定义覆盖优先级。上游节点结果或指定输出键缺失时，报 SOURCE_NODE_OUTPUT_MISSING，并附带目标节点、输入键、边及来源定位；不返回 undefined 或借静态值补齐。原型继承属性不视为已有输出。Resolver 不调用 Codec、NodeType、Zod 业务值校验或 Artifact Store。
 
 ## State 与持久化
 
