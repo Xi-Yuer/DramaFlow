@@ -8,7 +8,7 @@ NodeDefinition 固定 id、type、typeVersion、name、config、inputs 及 ui.po
 
 React Flow type 选择 workflowNode renderer，实际运行类型在 data.nodeType / data.typeVersion。selected、dragging、measured 等临时字段不进入定义。Data / Control Edge 的种类、ID、节点与可选端口可往返 React Flow Edge；显式数据连接对照唯一目录检查精确版本、端口与共享类型兼容规则，控制连接使用独立 Handle。断连和重连检查种类及完整旧边快照，防止过期事件误改现有连接。
 
-Data Edge 声明输入值来源，Control Edge 声明显式执行先后，两者都只保存在 WorkflowDefinition.edges，不自动相互补齐。Control Edge 不占用 Node.inputs；哪些边计入执行依赖仍须单独分析。普通节点对已确定的多个执行上游固定采用 ALL Join，不增加 NodeDefinition.joinMode；ANY / N_OF_M 留给专门控制节点，边界见 [Runtime](runtime-architecture.md#普通确定性依赖的-all-join)。
+Data Edge 声明输入值来源，Control Edge 声明显式执行先后，两者都只保存在 WorkflowDefinition.edges，不自动相互补齐。Control Edge 不占用 Node.inputs；当前两类边均产生确定性执行依赖，相同节点对去重。Dependency Compiler 只读两端 nodeId，数据端口与取值保留给 BindingResolver / NodeExecutor。普通节点对已确定的多个执行上游固定采用 ALL Join，不增加 NodeDefinition.joinMode；ANY / N_OF_M 留给专门控制节点，边界见 [Runtime](runtime-architecture.md#普通确定性依赖的-all-join)。
 
 ## Manifest 与端口
 

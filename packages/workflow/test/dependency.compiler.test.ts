@@ -1,6 +1,28 @@
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
+import type { ControlEdgeDefinition, DataEdgeDefinition, WorkflowEdge } from '@dramaflow/contracts';
 import { describe, expect, it, vi } from 'vitest';
-import { DependencyCompiler, type DeterministicDependency } from '../src/index.js';
+import { collectNodeDependencies, DependencyCompiler } from '../src/index.js';
+
+function controlEdge(
+  sourceNodeId: string,
+  targetNodeId: string,
+  id = `${sourceNodeId}-${targetNodeId}`,
+): ControlEdgeDefinition {
+  return {
+    id,
+    kind: 'control',
+    source: { nodeId: sourceNodeId },
+    target: { nodeId: targetNodeId },
+  };
+}
+
+const imageEdge: DataEdgeDefinition = {
+  id: 'A-image-C-image',
+  kind: 'data',
+  source: { nodeId: 'A', portKey: 'image' },
+  target: { nodeId: 'C', portKey: 'image' },
+};
+const mixedEdges: WorkflowEdge[] = [imageEdge, controlEdge('B', 'C'), controlEdge('A', 'C')];
 
 function deferred() {
   let resolve!: () => void;
@@ -21,13 +43,13 @@ describe('普通确定性依赖编译', () => {
   const compiler = new DependencyCompiler();
 
   it('按目标聚合、去重并保留首次出现顺序，不修改输入', () => {
-    const dependencies = Object.freeze([
-      Object.freeze({ sourceNodeId: 'A', targetNodeId: 'D' }),
-      Object.freeze({ sourceNodeId: 'C', targetNodeId: 'E' }),
-      Object.freeze({ sourceNodeId: 'B', targetNodeId: 'D' }),
-      Object.freeze({ sourceNodeId: 'A', targetNodeId: 'D' }),
+    const edges = Object.freeze([
+      Object.freeze(controlEdge('A', 'D')),
+      Object.freeze(controlEdge('C', 'E')),
+      Object.freeze(controlEdge('B', 'D')),
+      Object.freeze(controlEdge('A', 'D', 'A-D-again')),
     ]);
-    expect(compiler.aggregate(dependencies)).toEqual([
+    expect(collectNodeDependencies(edges)).toEqual([
       { targetNodeId: 'D', sourceNodeIds: ['A', 'B'] },
       { targetNodeId: 'E', sourceNodeIds: ['C'] },
     ]);
@@ -36,11 +58,11 @@ describe('普通确定性依赖编译', () => {
   it('每个目标只生成一条边，多上游使用数组 Join，单上游使用字符串', () => {
     const addEdge = vi.fn();
     compiler.compile({
-      dependencies: [
-        { sourceNodeId: 'A', targetNodeId: 'D' },
-        { sourceNodeId: 'B', targetNodeId: 'D' },
-        { sourceNodeId: 'C', targetNodeId: 'E' },
-        { sourceNodeId: 'C', targetNodeId: 'E' },
+      edges: [
+        controlEdge('A', 'D'),
+        controlEdge('B', 'D'),
+        controlEdge('C', 'E'),
+        controlEdge('C', 'E', 'C-E-again'),
       ],
       addEdge,
     });
@@ -52,9 +74,70 @@ describe('普通确定性依赖编译', () => {
 
   it('没有依赖时不生成边，也不自行接入 START 或 END', () => {
     const addEdge = vi.fn();
-    expect(compiler.aggregate([])).toEqual([]);
-    compiler.compile({ dependencies: [], addEdge });
+    expect(collectNodeDependencies([])).toEqual([]);
+    compiler.compile({ edges: [], addEdge });
     expect(addEdge).not.toHaveBeenCalled();
+  });
+
+  it('Data / Control Edge 混合时按节点对去重，并保留原始边及端口', () => {
+    const snapshot = structuredClone(mixedEdges);
+    const edges = Object.freeze(
+      structuredClone(mixedEdges).map((edge) => {
+        Object.freeze(edge.source);
+        Object.freeze(edge.target);
+        return Object.freeze(edge);
+      }),
+    );
+    expect(collectNodeDependencies(edges)).toEqual([
+      { targetNodeId: 'C', sourceNodeIds: ['A', 'B'] },
+    ]);
+    const addEdge = vi.fn();
+    compiler.compile({ edges, addEdge });
+    expect(addEdge.mock.calls).toEqual([[['A', 'B'], 'C']]);
+    expect(edges).toEqual(snapshot);
+    expect(edges[0]).toEqual(imageEdge);
+  });
+
+  it('同一来源的多个 Data Edge 只形成一个上游，单个 Data Edge 也产生依赖', () => {
+    const edges: DataEdgeDefinition[] = [
+      imageEdge,
+      {
+        id: 'A-text-C-prompt',
+        kind: 'data',
+        source: { nodeId: 'A', portKey: 'text' },
+        target: { nodeId: 'C', portKey: 'prompt' },
+      },
+    ];
+    expect(collectNodeDependencies([imageEdge])).toEqual([
+      { targetNodeId: 'C', sourceNodeIds: ['A'] },
+    ]);
+    const addEdge = vi.fn();
+    compiler.compile({ edges, addEdge });
+    expect(addEdge.mock.calls).toEqual([['A', 'C']]);
+    expect(edges).toHaveLength(2);
+  });
+
+  it('收集与编译均不读取 Data Edge 的端口', () => {
+    const edge: DataEdgeDefinition = {
+      id: 'A-image-C-image',
+      kind: 'data',
+      source: {
+        nodeId: 'A',
+        get portKey(): string {
+          throw new Error('依赖编译不得读取数据端口');
+        },
+      },
+      target: {
+        nodeId: 'C',
+        get portKey(): string {
+          throw new Error('依赖编译不得读取数据端口');
+        },
+      },
+    };
+    expect(collectNodeDependencies([edge])).toEqual([{ targetNodeId: 'C', sourceNodeIds: ['A'] }]);
+    const addEdge = vi.fn();
+    compiler.compile({ edges: [edge], addEdge });
+    expect(addEdge.mock.calls).toEqual([['A', 'C']]);
   });
 
   it.each([
@@ -85,10 +168,7 @@ describe('普通确定性依赖编译', () => {
       .addEdge(START, 'B')
       .addEdge('C', END);
     compiler.compile({
-      dependencies: [
-        { sourceNodeId: 'A', targetNodeId: 'C' },
-        { sourceNodeId: 'B', targetNodeId: 'C' },
-      ],
+      edges: mixedEdges,
       addEdge: (source, target) => {
         graph.addEdge(source, target);
       },
@@ -131,13 +211,8 @@ describe('普通确定性依赖编译', () => {
       .addEdge(START, 'A')
       .addEdge(START, 'prepareB')
       .addEdge('C', END);
-    const dependencies: DeterministicDependency[] = [
-      { sourceNodeId: 'prepareB', targetNodeId: 'B' },
-      { sourceNodeId: 'A', targetNodeId: 'C' },
-      { sourceNodeId: 'B', targetNodeId: 'C' },
-    ];
     compiler.compile({
-      dependencies,
+      edges: [controlEdge('prepareB', 'B'), ...mixedEdges],
       addEdge: (source, target) => {
         graph.addEdge(source, target);
       },
@@ -159,10 +234,7 @@ describe('普通确定性依赖编译', () => {
       .addEdge(START, 'B')
       .addEdge('C', END);
     compiler.compile({
-      dependencies: [
-        { sourceNodeId: 'A', targetNodeId: 'C' },
-        { sourceNodeId: 'B', targetNodeId: 'C' },
-      ],
+      edges: mixedEdges,
       addEdge: (source, target) => {
         graph.addEdge(source, target);
       },

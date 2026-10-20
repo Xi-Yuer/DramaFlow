@@ -30,9 +30,13 @@ NodeExecutor 负责输入绑定与 decode、完整 Zod 校验、业务调用、�
 
 普通节点具有多个已确定的执行上游时，必须等全部上游完成后执行一次。NodeDefinition 不增加 joinMode；ANY / N_OF_M 等语义以后由专门控制节点表达。
 
-Dependency Compiler 的输入是已分析确认的普通确定性依赖，不直接接收 Data / Control Edge。按 target 聚合且对 source 去重后，单上游使用 `graph.addEdge(sourceNodeIds[0], targetNodeId)`，多上游使用 `graph.addEdge(sourceNodeIds, targetNodeId)`，例如 `graph.addEdge(['character', 'scene'], 'script')`。多上游不能拆成多个独立 addEdge；等待由 LangGraph 原生 waiting edge 承担，不建立平台 ready 计数、轮询或 Join Runtime。[官方 addEdge API](https://reference.langchain.com/javascript/langchain-langgraph/index/StateGraph/addEdge) 定义了数组上游参数。
+当前 WorkflowEdge 只有 Data / Control Edge，两者均产生确定性执行依赖：Data Edge 表示目标需要上游输出，Control Edge 表示目标须在上游完成后执行。collectNodeDependencies 只读取两端 nodeId，按 target 聚合且对 source 去重；同一 A → C 的 Data Edge 与 Control Edge 只算一个上游，不按边 ID、端口或边种类重复计数。
 
-If / Switch / Conditional Edge / Send / Batch 产生的候选分支不属于此处的确定性上游。即使 A / B 到目标的边是静态的，只要条件路由可能跳过其中一条路径，也不能把 `[A, B]` 作为普通 ALL Join 的等待集合，否则目标可能永远无法触发。候选分支的排除与依赖集合的确认是调用方前置条件；本层不推断分支可达性，也不决定哪些 Data / Control Edge 计入依赖。
+DependencyCompiler 接收 edges 并使用收集后的 NodeDependency。单上游使用 `graph.addEdge(sourceNodeIds[0], targetNodeId)`，多上游使用 `graph.addEdge(sourceNodeIds, targetNodeId)`，例如 `graph.addEdge(['character', 'scene'], 'script')`。多上游不能拆成多个独立 addEdge；等待由 LangGraph 原生 waiting edge 承担，不建立平台 ready 计数、轮询或 Join Runtime。[官方 addEdge API](https://reference.langchain.com/javascript/langchain-langgraph/index/StateGraph/addEdge) 定义了数组上游参数。
+
+执行依赖只决定什么时候执行，不替代输入绑定。原始 Data Edge 和 source / target.portKey 保持完整，后续由 BindingResolver / NodeExecutor 定位上游输出、解析 RuntimeValue 并组装目标完整 input。Dependency Compiler 不读取数据端口、不获取 A.output、不 decode 或构造 B.input；Control Edge 不提供输入值。
+
+If / Switch / Conditional Edge / Send / Batch 产生的候选分支不属于此处的确定性上游。即使 A / B 到目标的边是静态的，只要条件路由可能跳过其中一条路径，也不能把 `[A, B]` 作为普通 ALL Join 的等待集合，否则目标可能永远无法触发。本规则仅覆盖当前普通确定性 Data / Control Edge；未来控制结构须先区分候选路径，不能直接沿用此收集规则，本层不推断分支可达性。
 
 ## State 与持久化
 
@@ -44,6 +48,6 @@ WorkflowState.outputs 使用 RuntimeValue map，定义、业务历史、内容�
 
 人工介入继续使用 interrupt / Command.resume，不能吞掉中断控制异常或把它记为普通失败；恢复可能使节点从开头重入。审核决策是独立业务审计，waiting 仅业务投影；生成副作用与审核分离，受理结果不明不盲目重试，不承诺外部 exactly-once。[官方 Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts) 描述原生规则。
 
-Data Edge 保存值来源，Control Edge 保存显式执行先后；定义层的联合 DAG 只检查无环，不完成实际依赖分析。普通确定性 fan-in 遵循上述 ALL Join，条件分支、Send、Batch 与子图的精确映射留待各自结构策略。单次图调用 maxConcurrency 位于顶层配置；跨运行与供应商配额由后续 Queue / Worker 处理，不把 Send 当作全部容量控制。[官方 Graph API 示例](https://docs.langchain.com/oss/javascript/langgraph/use-graph-api) 展示这些执行机制。
+Data Edge 保存值来源，Control Edge 保存显式执行先后；定义层的联合 DAG 只检查无环，执行依赖由独立收集函数生成。普通确定性 fan-in 遵循上述 ALL Join，条件分支、Send、Batch 与子图的精确映射留待各自结构策略。单次图调用 maxConcurrency 位于顶层配置；跨运行与供应商配额由后续 Queue / Worker 处理，不把 Send 当作全部容量控制。[官方 Graph API 示例](https://docs.langchain.com/oss/javascript/langgraph/use-graph-api) 展示这些执行机制。
 
 当前没有结构策略、完整 Compiler、生产 Runtime、模型调用、Queue、审核或内容 Store。生产节点目录仍为空；不得将测试适配、类型接口或规划标为可用业务能力。

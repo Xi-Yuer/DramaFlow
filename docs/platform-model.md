@@ -62,7 +62,7 @@ Project、Canvas、Workflow 的职责不同，不据此新增“项目 → 多�
 
 Workflow 定义与 WorkflowRun / State 分离，草稿修改不能改变已有运行。State 以单次运行为边界；跨运行复用生产资料通过显式 Asset 引用表达，不能靠复用可变运行状态实现。
 
-Workflow.edges 是节点间连接的唯一来源：Data Edge 声明输入值来源，Control Edge 声明显式执行先后，创建数据连接不自动补控制边。Node.inputs 只保存固定值、Workflow Input 与 Asset 等非连线输入。两类关系合并后必须无环；数据输入端口至多接收一条 Data Edge，数组值不隐含多连接聚合。Control Edge 不占用输入值，可有多个控制上游；普通节点对已确定的多个执行上游固定采用 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join)，条件候选分支不适用。Binding 运行求值、两类边的依赖分析及生产调度尚未接入。
+Workflow.edges 是节点间连接的唯一来源：Data Edge 声明输入值来源，Control Edge 声明显式执行先后，创建数据连接不自动补控制边。Node.inputs 只保存固定值、Workflow Input 与 Asset 等非连线输入。两类关系合并后必须无环；数据输入端口至多接收一条 Data Edge，数组值不隐含多连接聚合。Control Edge 不占用输入值，可有多个控制上游。当前两类边均产生执行依赖，相同节点对去重；普通节点对多个确定性上游固定采用 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join)，条件候选分支不适用。执行依赖不消费数据端口绑定，运行取值与生产调度仍属独立执行层。
 
 所有新素材对象写入 RustFS，通过 S3 接口访问，不静默回退本地文件，存储实施说明见 [RustFS 存储](object-storage.md)。资产的领域元数据、版本、权限及生命周期在第 ⑩ 步设计。角色等生产资料不能简单等同于一张图片；其描述与媒体关联留到资产和领域模型阶段确定。
 
