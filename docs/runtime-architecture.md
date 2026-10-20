@@ -22,7 +22,7 @@ WorkflowDefinition / Version
 
 普通 NodeType 不再 compile，也不取得 Graph builder。ActionNodeCompilationStrategy 仅注册调用统一 Executor 的函数，不为每个 LLM、TTS 或视频业务复制编译策略。control / composite / interaction 具有不同图语义，后续由相应结构策略处理，不强行套普通 action。
 
-NodeExecutor 负责依次调用 BindingResolver 定位 RuntimeValue、RuntimeValueCodec decode，再执行完整输入 / 配置 Zod 校验、业务调用、输出校验与 encode、Artifact 持久化、NodeRun 和自身 State 更新。普通节点不解析资产、写其他节点结果或自行判断 ready。Codec / Executor / Store 仍是服务接口，BindingResolver 的实际范围见 [架构](architecture.md#数据与-node-基础库)，完整生产执行链未接入。
+NodeExecutor 负责依次调用 BindingResolver 定位 RuntimeValue、RuntimeValueCodec.decodeRecord 得到业务输入，再执行完整输入 / 配置 Zod 校验、业务调用、输出校验与输出编码、Artifact 持久化、NodeRun 和自身 State 更新。普通节点不解析资产、写其他节点结果或自行判断 ready。Executor、输出编码与内容 Store 仍是服务接口，BindingResolver 与 decode 适配的实际范围见 [架构](architecture.md#数据与-node-基础库)，完整生产执行链未接入。
 
 原有 invokeNodeOperation 是独立值校验工具，不是第二套 Runtime。测试中直接使用原生 StateGraph / MemorySaver 只验证适配与线程机制，不能作为生产持久化或真实生成能力。
 
@@ -43,6 +43,12 @@ If / Switch / Conditional Edge / Send / Batch 产生的候选分支不属于普�
 BindingResolver.resolveInputs 的上下文包含 node、nodeType、edges、state。上层按节点精确类型版本提供 Manifest，Resolver 不访问 NodeRegistry，按 nodeType.inputs 建立端口索引。仅处理 kind=data 且 target.nodeId 等于当前节点的边，把 `state.outputs[source.nodeId][source.portKey]` 原样绑定到 `inputs[target.portKey]`，再合并静态 Binding。constant 按端口 dataType 包装为 inline；workflow_input 按协议字段 key 直接复用 State.inputs；asset 按端口类型生成含 assetId / versionId 的固定版本引用。完整规则见 [数据模型](data-model.md#codecbinding-与执行服务接口)。
 
 在取值与静态转换前，先检查静态 Binding 与数据边的来源冲突及已绑定的目标输入端口；同一目标端口的多条数据边也必须报 INPUT_SOURCE_CONFLICT，不定义覆盖优先级。上游节点结果或指定输出键缺失时，报 SOURCE_NODE_OUTPUT_MISSING；缺失工作流输入报 WORKFLOW_INPUT_MISSING；未声明的目标输入端口报 INPUT_PORT_NOT_FOUND。错误附带目标节点、输入键及相应边 / 来源定位，不返回 undefined 或借静态值补齐，原型继承属性不视为已有值。Resolver 无外部 I/O，不调用 Codec、NodeType、Zod 或内容 Store，不下载内容、生成 signed URL 或解析引用；未绑定的必填端口与实际类型校验继续留给执行层。
+
+### RuntimeValue Decode 边界
+
+RuntimeValueCodec.decode 只接收 RuntimeValue 与 projectId / workflowRunId，返回 unknown。inline 原样返回实际值；reference 只调用 DataReferenceResolver，具体授权与内容访问由该引用服务实现承担。媒体可以返回含临时访问 URL 的 MediaResource，其他领域返回相应业务对象，不统一转换成 Buffer 或 URL。decodeRecord 使用 Promise.all 并行解码，再保留输入键组装结果；任何引用失败都使批量调用失败，不提供部分结果或重试。
+
+Codec 不读取 Registry、不依赖数据库或对象存储实现、不生成 URL，也不执行 Zod。引用服务失败用 REFERENCE_RESOLUTION_FAILED 保留边界与 cause；未来 NodeExecutor 在解码完成后执行完整 inputSchema.parse，按 NODE_INPUT_VALIDATION_FAILED 区分业务输入校验问题。NodeType.execute 只接收校验后的业务输入，不接触 RuntimeValue。输出 encode 单独保留 RuntimeValueEncoder 端口，不扩展本轮 decode 范围。详细协议见 [数据模型](data-model.md#codecbinding-与执行服务接口)。
 
 ## State 与持久化
 

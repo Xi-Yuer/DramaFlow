@@ -9,6 +9,8 @@ export { isTypeAssignable } from '@dramaflow/contracts';
 export * from './data/registry.js';
 export * from './node/type.js';
 export * from './runtime/value-codec.js';
+export * from './runtime/runtime-value-codec.js';
+export * from './runtime/data-reference-resolver.js';
 export * from './runtime/state.js';
 export * from './runtime/binding-resolver.js';
 export * from './runtime/binding-resolution-error.js';

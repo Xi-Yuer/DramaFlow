@@ -6,7 +6,7 @@
 
 WorkflowDefinition / Version 保存静态流程；WorkflowRun 保存运行身份与独立 threadId；WorkflowState 保存当前执行必需值；NodeRun 保存业务执行历史；Artifact / Asset 保存持久内容；Checkpoint 保存恢复图所需快照。它们互不替代。
 
-State 不包含整个数据库、全部日志或原始媒体。图片、视频、音频及大型文档通过明确引用传递，具体 Codec、字节预算与存储服务尚未实现，不能用 JSON 结构校验冒充完成内容大小和权限策略。
+State 不包含整个数据库、全部日志或原始媒体。图片、视频、音频及大型文档通过明确引用传递；输入 decode 只委托引用服务，字节预算与真实存储 / 授权服务仍须独立落实，不能用 JSON 结构校验冒充完成内容大小和权限策略。
 
 ## 五个分区
 

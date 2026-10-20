@@ -50,7 +50,7 @@ RuntimeValue 只有两类：
 
 ArtifactReference 为 {kind:"artifact", id}，ID 指向不可变产物。AssetReference 为 {kind:"asset", id, versionId}；AssetBinding 同样显式携带 assetId 与 versionId，禁止缺少版本时选择最新版。增加 versionId 保留已有的版本化资产约束。
 
-StoragePolicy 包含 inline、reference、auto：小型值可内联，媒体及大型文档必须引用；auto 的大小预算由统一 Codec 决定，不能分散在每个 Node。短文本和小型领域元数据适合内联；大型小说也须引用，不能因其为字符串就反复进入 Checkpoint。
+StoragePolicy 包含 inline、reference、auto：小型值可内联，媒体及大型文档必须引用；auto 的大小预算由统一编码层决定，不能分散在每个 Node 或混入输入解码。短文本和小型领域元数据适合内联；大型小说也须引用，不能因其为字符串就反复进入 Checkpoint。
 
 ## Artifact、Asset 与领域对象
 
@@ -64,13 +64,17 @@ Asset 契约保存项目、名字、DataType、明确 versionId、来源和内�
 
 ## Codec、Binding 与执行服务接口
 
-RuntimeValueContext 明确 projectId、workflowRunId 和可选 nodeRunId。RuntimeValueCodec.encode 负责实际值验证、StoragePolicy 与产物持久化后返回 RuntimeValue；decode 负责类型兼容与授权引用解析，返回业务可用值。
+RuntimeValueCodec.decode(value, context) 只把 RuntimeValue 转成业务值 unknown；decodeRecord 并行解码自有输入字段并按原键返回业务输入 map。RuntimeValueDecodeContext 只包含 projectId / workflowRunId，不接收整个 WorkflowState、NodeExecutionContext 或目标端口类型。inline 直接返回 value.value，无 I/O；reference 只委托显式注入的 DataReferenceResolver.resolve(reference, context)，保留资产的固定版本与项目运行定位，不直接查数据库、访问对象存储或拼接 URL。
 
-媒体解析应返回 ResolvedMediaObject：明确引用、MIME、可选尺寸/时长与临时 access.url，不机械下载成 Buffer，也不把临时 URL 写回持久 RuntimeValue。ArtifactStore / AssetStore 的所有访问都带项目运行上下文，不能仅凭知道引用 ID 就获得读取权限。
+DataReferenceResolver 的具体实现负责项目授权、固定资产版本和内容访问，可以通过 Artifact / Asset Repository 与对象存储协作；Codec 不依赖这些基础设施实现。解析结果随领域而异，例如 Character 对象、MediaResource 或文档资源，不统一强制成 Buffer 或 URL。MediaResource 提供 id、mediaType、可选 mimeType / size 和必填 access.url；access.url 可为临时 signed URL，不能回写持久 RuntimeValue 或输入快照。插件只消费业务资源，不解释平台存储 key / bucket 或资产引用。ArtifactStore / AssetStore 的访问仍须检查项目归属及明确版本，不能只凭知道 ID 获得权限。
+
+Codec 不执行 inputSchema.parse，不做业务类型、必填或配置校验。引用解析失败以 ReferenceResolutionError / REFERENCE_RESOLUTION_FAILED 标识，保留原始 cause；已有此类错误直接传播。它与后续 NodeExecutor 的 NODE_INPUT_VALIDATION_FAILED 分属不同边界，不能都当成 ZodError。并行批量解码任一引用失败则整体失败，不返回缺失字段或占位结果。
+
+输出编码单独保留 RuntimeValueEncoder.encode(value, type, context) 端口，RuntimeValueContext 包含项目、运行和可选 nodeRunId；实际值验证、StoragePolicy 与产物持久化后返回 RuntimeValue 属于该输出侧职责，不由输入 decode 承担。编码及引用服务的实际接入范围见 [当前架构](architecture.md#数据与-node-基础库)。
 
 BindingResolver.resolveInputs 接收 NodeDefinition、上层提供的 NodeTypeManifest、WorkflowEdge 列表和 WorkflowState，返回完整的 `Record<string, RuntimeValue>`。上层按节点精确 type / typeVersion 从 Registry 取得 Manifest，Resolver 不访问 Registry；它按 nodeType.inputs 建立端口索引。Data Edge 按目标 nodeId / portKey 绑定输入，按来源 nodeId / portKey 读取 State.outputs；Control Edge 不取值。Node.inputs 继续只保存 constant / workflow_input / asset，不重新引入 ConnectionBinding。
 
-三类静态 Binding 的转换固定为：constant 使用目标 InputPortDefinition.dataType 作为 type，将 binding.value 原样包装为 InlineRuntimeValue；workflow_input 沿用协议字段 key，直接复用 State.inputs[key] 的 RuntimeValue，保留实际类型及 inline / reference 承载；asset 使用端口声明类型包装为 ReferenceRuntimeValue，reference 固定 kind=asset、id=binding.assetId、versionId=binding.versionId。Binding 不重复保存 DataType，Resolver 不根据常量猜测类型，不查资产内容或最新版。常量在此层始终内联包装，不证明其实际值、大小或承载合法；相应检查仍属于后续 Codec / 执行层。
+三类静态 Binding 的转换固定为：constant 使用目标 InputPortDefinition.dataType 作为 type，将 binding.value 原样包装为 InlineRuntimeValue；workflow_input 沿用协议字段 key，直接复用 State.inputs[key] 的 RuntimeValue，保留实际类型及 inline / reference 承载；asset 使用端口声明类型包装为 ReferenceRuntimeValue，reference 固定 kind=asset、id=binding.assetId、versionId=binding.versionId。Binding 不重复保存 DataType，Resolver 不根据常量猜测类型，不查资产内容或最新版。常量在此层始终内联包装，不证明其实际值、大小或承载合法；相应实际值检查与存储策略不由输入 decode 推断。
 
 Resolver 只定位、包装并合并 RuntimeValue，保留上游值和引用，不 decode reference，不做数据库、对象存储或网络 I/O。后续由 RuntimeValueCodec decode，再由 NodeExecutor 完整 Zod 校验并调用 NodeType；输入快照仍保存 RuntimeValue，不把临时媒体 URL 重新 encode 进历史。静态绑定与 Data Edge 指向同一目标输入、或多条 Data Edge 指向同一输入时，直接报 INPUT_SOURCE_CONFLICT；找不到上游节点输出或端口时直接报 SOURCE_NODE_OUTPUT_MISSING；工作流输入不存在时直接报 WORKFLOW_INPUT_MISSING，静态绑定或当前数据边的目标输入端口未声明时报 INPUT_PORT_NOT_FOUND。必填检查、类型兼容与业务值校验留给后续执行层，不延迟来源问题成为误导性的必填参数错误。Workflow 静态校验提前拒绝来源冲突，运行时继续防御检查。实际能力与执行层限制见 [当前架构](architecture.md#数据与-node-基础库)。
 

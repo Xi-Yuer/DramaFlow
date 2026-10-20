@@ -42,7 +42,11 @@ ActionNodeCompilationStrategy 校验节点类型版本，复制定义并仅生�
 
 runtime/binding-resolver.ts 已实现 resolveDataEdgeInputs 和无参数 createBindingResolver。BindingResolver.resolveInputs 接收 node / nodeType / edges / state，按传入 Manifest 的 inputs 索引校验已绑定目标端口，只读取当前目标的数据边，将上游指定输出原样映射为目标输入 RuntimeValue。三类静态 Binding 使用实际实现：constant 按端口 dataType 包装为 inline；workflow_input 按既有 key 直接复用 State.inputs 的 RuntimeValue；asset 按端口类型生成包含 assetId / versionId 的 reference，不查内容或最新版。未重新引入 ConnectionBinding，也不 decode、调用 NodeType、Zod 或持久化 Artifact，Resolver 没有数据库、对象存储或网络依赖。
 
-BindingResolutionError 包含 INPUT_SOURCE_CONFLICT、SOURCE_NODE_OUTPUT_MISSING、WORKFLOW_INPUT_MISSING、INPUT_PORT_NOT_FOUND；details 提供节点、输入键及可选边、来源端口或工作流输入键。正式 WorkflowDefinition 的两种输入冲突校验继续在 issue.params.code 标记 INPUT_SOURCE_CONFLICT。测试覆盖四类来源真实合并、端口声明类型、空值 / 数组等常量、inline / reference 工作流输入的身份保留、固定资产版本及四类错误，使用真实静态转换实现。上层提供精确版本 Manifest 的 NodeExecutor 仍仅有接口，资产存在性 / 权限、引用解码、业务类型与必填校验尚未接入。RuntimeValueCodec、内容 Store 和 NodeRunRecorder 同样为接口；State.outputs 使用 NodeOutputMap（RuntimeValue），execution 暂不启用控制字段，没有生产通道、reducer、内容持久化或完整执行服务，不提供内存 / 本地存储降级。
+BindingResolutionError 包含 INPUT_SOURCE_CONFLICT、SOURCE_NODE_OUTPUT_MISSING、WORKFLOW_INPUT_MISSING、INPUT_PORT_NOT_FOUND；details 提供节点、输入键及可选边、来源端口或工作流输入键。正式 WorkflowDefinition 的两种输入冲突校验继续在 issue.params.code 标记 INPUT_SOURCE_CONFLICT。测试覆盖四类来源真实合并、端口声明类型、空值 / 数组等常量、inline / reference 工作流输入的身份保留、固定资产版本及四类错误，使用真实静态转换实现。
+
+runtime/runtime-value-codec.ts 提供 RuntimeValueCodec、最小 RuntimeValueDecodeContext 和 DefaultRuntimeValueCodec。decode 对 inline 原样返回值，reference 委托显式注入的 DataReferenceResolver；decodeRecord 并行解码并保留自有输入键，任一引用失败时整体失败。引用失败包装为 ReferenceResolutionError，code 为 REFERENCE_RESOLUTION_FAILED，保留 reference 与原始 cause；已有结构化引用错误原样传播。Codec 没有数据库、对象存储或 Zod 依赖，不查内容或拼 URL。data-reference-resolver.ts 同时提供 MediaResource 业务资源描述，媒体 access.url 必填；value-codec.ts 保留独立 RuntimeValueEncoder 接口与通用 RuntimeValueContext，没有输出编码实现。
+
+DataReferenceResolver 只有接口，真实资产 / 产物读取、项目授权、版本检查和 signed URL 生成尚未接入；测试显式引用替身只验证委托、媒体 / 领域对象返回、并行与错误边界，不作为生产内容服务。上层提供精确版本 Manifest、完整业务输入 / 输出校验与调用的 NodeExecutor 仍仅有接口，NODE_INPUT_VALIDATION_FAILED 属于其后续校验边界。内容 Store 和 NodeRunRecorder 同样为接口；State.outputs 使用 NodeOutputMap（RuntimeValue），execution 暂不启用控制字段，没有生产通道、reducer、内容持久化或完整执行服务，不提供内存 / 本地存储降级。
 
 createWorkflowRunConfig 使用显式 Run.threadId，不从 Run.id 推断或允许其他配置覆盖，不创建运行或 checkpointer。NodeRun 保留 attempt、可选 JSON 快照、状态、结构化错误和 ISO 时间契约；业务记录、权限与持久化仍待接入。
 
