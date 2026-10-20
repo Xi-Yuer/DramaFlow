@@ -1,7 +1,6 @@
 import type { NodeRun, NodeRunError, RuntimeValue } from '@dramaflow/contracts';
 
 export interface CreateNodeRunInput {
-  readonly projectId: string;
   readonly workflowRunId: string;
   readonly nodeId: string;
 }

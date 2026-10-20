@@ -39,8 +39,8 @@ class PrismaNodeRunRepository implements NodeRunRepository {
 
   async createRunning(input: CreateNodeRunInput): Promise<NodeRun> {
     const { projectId, workflowRunId, ownerId } = this.scope;
-    if (input.projectId !== projectId || input.workflowRunId !== workflowRunId)
-      throw new Error('节点执行记录与已授权项目 / 运行不匹配');
+    if (input.workflowRunId !== workflowRunId)
+      throw new Error('节点执行记录与已授权运行不匹配');
     const nodeId = workflowIdentifierSchema.parse(input.nodeId);
     return this.db.client.$transaction(
       async (tx) => {

@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-2026-10-20：普通 Action 的 NodeRun 协议、Repository、数据库原子 attempt 与执行记录生命周期已完成；能力与输出适配限制见 [当前架构](architecture.md#数据与-node-基础库)，职责边界见 [Runtime](runtime-architecture.md#action-执行错误阶段)。
+2026-10-20：NodeRun 领域协议、run 层 Repository 与数据库持久化边界已按当前目录落实；最小创建契约与原子 attempt 分配已明确；能力与输出适配限制见 [当前架构](architecture.md#数据与-node-基础库)，职责边界见 [Runtime](runtime-architecture.md#action-执行错误阶段)。
 
 数据语义与承载见 [数据模型](data-model.md)。两类边的静态联合无环检查、执行依赖收集和运行输入绑定职责分离。完整生产执行管线、大小预算、权限解析、业务持久化及控制结构通道语义仍待后续阶段接入；本步不扩大项目保存与节点目录的应用边界，不预设条件路由。
 

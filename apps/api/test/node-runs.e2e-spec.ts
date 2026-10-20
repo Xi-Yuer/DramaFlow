@@ -187,6 +187,63 @@ async function videoFixture() {
 }
 
 describe('真实 PostgreSQL NodeRun', () => {
+  it('最小创建参数连续分配 attempt 1/2，并持久化完成与失败两条记录', async () => {
+    const workflowRunId = `logical-run-${randomUUID()}`;
+    const repository = await repositories.forRun(
+      ownerId,
+      projectId,
+      workflowRunId,
+    );
+    const first = await repository.createRunning({
+      workflowRunId,
+      nodeId: 'image-1',
+    });
+    const second = await repository.createRunning({
+      workflowRunId,
+      nodeId: 'image-1',
+    });
+    expect([first.attempt, second.attempt]).toEqual([1, 2]);
+    expect(first.id).not.toBe(second.id);
+    expect(first.status).toBe('running');
+    expect(JSON.parse(JSON.stringify(first))).toEqual(first);
+    expect(first.startedAt).toEqual(expect.any(String));
+    const inputs = {
+      prompt: { storage: 'inline', type: StringType, value: '生成图片' },
+    } as const;
+    const outputs = {
+      image: {
+        storage: 'reference',
+        type: ImageType,
+        reference: { kind: 'artifact', id: 'image-artifact' },
+      },
+    } as const;
+    await repository.updateInputs(first.id, inputs);
+    await repository.markCompleted(first.id, outputs);
+    const error = { stage: 'provider_request', message: '请求失败' };
+    await repository.markFailed(second.id, error);
+    const rows = await db.nodeRun.findMany({
+      where: { workflowRunId },
+      orderBy: { attempt: 'asc' },
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      id: first.id,
+      status: 'completed',
+      inputs,
+      outputs,
+      error: null,
+      completedAt: expect.any(Date),
+    });
+    expect(rows[1]).toMatchObject({
+      id: second.id,
+      status: 'failed',
+      inputs: null,
+      outputs: null,
+      error,
+      completedAt: expect.any(Date),
+    });
+  });
+
   it('第一次业务失败、第二次成功形成两条历史，State 仅包含成功输出引用', async () => {
     const f = await videoFixture();
     f.execute.mockRejectedValueOnce(
@@ -277,7 +334,7 @@ describe('真实 PostgreSQL NodeRun', () => {
     const workflowRunId = randomUUID();
     const first = await repositories.forRun(ownerId, projectId, workflowRunId);
     const second = await repositories.forRun(ownerId, projectId, workflowRunId);
-    const input = { projectId, workflowRunId, nodeId: 'concurrent' };
+    const input = { workflowRunId, nodeId: 'concurrent' };
     const runs = await Promise.all(
       Array.from({ length: 12 }, (_, index) =>
         (index % 2 ? first : second).createRunning(input),
@@ -301,7 +358,6 @@ describe('真实 PostgreSQL NodeRun', () => {
     const workflowRunId = randomUUID();
     const repo = await repositories.forRun(ownerId, projectId, workflowRunId);
     const run = await repo.createRunning({
-      projectId,
       workflowRunId,
       nodeId: 'terminal',
     });
@@ -323,17 +379,19 @@ describe('真实 PostgreSQL NodeRun', () => {
       await db.nodeRun.findUniqueOrThrow({ where: { id: run.id } }),
     ).toEqual(before);
     const failed = await repo.createRunning({
-      projectId,
       workflowRunId,
       nodeId: 'terminal',
     });
     await repo.markFailed(failed.id, {
-      code: 'failure',
       message: '执行失败',
-      stage: 'execute',
+      stage: 'provider_request',
     });
     const failedSnapshot = await db.nodeRun.findUniqueOrThrow({
       where: { id: failed.id },
+    });
+    expect(failedSnapshot.error).toEqual({
+      stage: 'provider_request',
+      message: '执行失败',
     });
     await expect(repo.markCompleted(failed.id, {})).rejects.toThrow();
     await expect(repo.updateInputs(failed.id, {})).rejects.toThrow();
@@ -359,7 +417,6 @@ describe('真实 PostgreSQL NodeRun', () => {
       randomUUID(),
     );
     const run = await first.createRunning({
-      projectId,
       workflowRunId,
       nodeId: 'scoped',
     });
@@ -376,8 +433,7 @@ describe('真实 PostgreSQL NodeRun', () => {
     }
     await expect(
       first.createRunning({
-        projectId: otherProjectId,
-        workflowRunId,
+        workflowRunId: randomUUID(),
         nodeId: 'invalid',
       }),
     ).rejects.toThrow('不匹配');

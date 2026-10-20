@@ -65,11 +65,11 @@ decode 不读取 Registry、不依赖数据库或对象存储实现、不生成 
 
 ### 节点业务记录与 Checkpoint
 
-NodeRun 是实际业务执行历史，Checkpoint 是 LangGraph 恢复快照，二者不互相推导。NodeRunRepository 位于 workflow 包，数据库实现与权限工厂位于 API；Executor 不依赖 Prisma 或数据库。Repository 实例限定所有者、项目和运行，attempt 由数据库原子分配；Executor 不读取或递增旧 attempt。每次明确的新普通 Action 执行创建新记录，旧终态不能覆盖。
+NodeRun 是实际业务执行历史，Checkpoint 是 LangGraph 恢复快照，二者不互相推导。领域协议位于 contracts/workflow/node-run.ts，NodeRunRepository 位于 workflow/run/node-run-repository.ts，数据库模型位于 database/prisma/schema.prisma，实现与权限工厂位于 API；Executor 不依赖 Prisma 或数据库。createRunning 只接收 workflowRunId / nodeId；Repository 实例由工厂限定所有者、项目和运行，projectId 不由创建参数传递。attempt 由数据库在分配与插入的同一事务锁内原子确定；Executor 不读取或递增旧 attempt。每次明确的新普通 Action 执行创建新记录，旧终态不能覆盖。
 
 running 在 Registry / Binding 之前创建，Binding 成功后 updateInputs 保存 RuntimeValue，decode 后业务大对象不进入记录；校验与编码成功后 markCompleted 保存 RuntimeValue 输出。业务上下文的 nodeRunId 来自本次创建结果，不从调用上下文推断恢复关联。普通异常 markFailed 后抛回带阶段的 NodeExecutionError。create_run 失败时没有可用记录，必须中止业务，不提供内存或本地兜底；输入 / 完成记录失败也中止返回结果。markFailed 再失败时 NodeRunRecordingError 同时保留原 stage / cause 和 recordingError，不隐藏记录服务故障、不重试业务。
 
-持久错误仅包含阶段码与阶段说明，不复制原始 cause、stack 或供应商错误文本；原始原因仍保留在抛出的执行错误中。NodeRun completed 表示业务调用及输出记录成功，不表示随后的 State reducer 或整个 Graph 一定成功；NodeRun、Artifact 与 Checkpoint 不承诺跨服务原子提交。普通 Action 禁止主动 interrupt。原生 interrupt / ParentCommand 仍原样穿透，已有 NodeRun 保持 running，不记 failed；本步不复用恢复关联。Human Review 再引入 waiting，并明确 resume 关联同一 NodeRun、不增加 attempt。
+NodeRunError 的领域字段 stage 为字符串、code 可省略；Runtime 自己维护严格的执行阶段类型，并写入阶段码与阶段说明，不复制原始 cause、stack 或供应商错误文本；原始原因仍保留在抛出的执行错误中。NodeRun completed 表示业务调用及输出记录成功，不表示随后的 State reducer 或整个 Graph 一定成功；NodeRun、Artifact 与 Checkpoint 不承诺跨服务原子提交。普通 Action 禁止主动 interrupt。原生 interrupt / ParentCommand 仍原样穿透，已有 NodeRun 保持 running，不记 failed；本步不复用恢复关联。Human Review 再引入 waiting，并明确 resume 关联同一 NodeRun、不增加 attempt。
 
 ## State 与持久化
 

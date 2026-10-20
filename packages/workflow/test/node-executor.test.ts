@@ -180,7 +180,6 @@ describe('普通 Action Node 执行主链', () => {
     });
     expect(f.write).not.toHaveBeenCalled();
     expect(f.nodeRuns.createRunning).toHaveBeenCalledExactlyOnceWith({
-      projectId: 'p',
       workflowRunId: 'r',
       nodeId: 'sum',
     });

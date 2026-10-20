@@ -20,7 +20,7 @@ Action NodeExecutor 测试用仅测试注册的 math.add 与真实 Registry / Bi
 
 State 测试用真实 WorkflowStateAnnotation 验证 outputs 缺省空 map、独立调用初始化、纯合并不修改输入、同 step 重复 nodeId 冲突与跨 step 隐式覆盖拒绝，包含原型相关键。使用真实 Registry / BindingResolver / Codec / Executor / Action 策略和 DependencyCompiler 构造 A、B → C，控制两种完成顺序，检查双方输出完整保留、C 通过 Data Edge 读取两份值且只执行一次。通过这些用例不代表完整 WorkflowCompiler、真实 Artifact 持久化或生产运行服务已接入。
 
-NodeRun 的数据库集成测试使用真实 PostgreSQL、Repository 和 Executor，并经 Action wrapper / outputs reducer 验证先失败再成功的两条历史。检查 Binding 失败、RuntimeValue 快照不含解码媒体 URL、并发 attempt、唯一约束、输入只写一次、终态不可覆盖及所有者 / 项目 / 运行隔离；内容服务仍是测试替身。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目及级联记录，不清空开发库。不得用这些测试声明已有 WorkflowRun、真实 Artifact 或生产 Checkpoint。
+NodeRun contract 测试独立放在 contracts/test/node-run.test.ts，验证三状态、ISO 时间、RuntimeValue map、字符串阶段及可选错误码的 JSON 往返。NodeRun 的数据库集成测试使用真实 PostgreSQL、Repository 和 Executor，并经 Action wrapper / outputs reducer 验证先失败再成功的两条历史。检查最小创建参数连续分配 attempt 1/2、任意非空错误阶段 / 可省略 code、Binding 失败、RuntimeValue 快照不含解码媒体 URL、并发 attempt、唯一约束、输入只写一次、终态不可覆盖及所有者 / 项目 / 运行隔离；内容服务仍是测试替身。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目及级联记录，不清空开发库。不得用这些测试声明已有 WorkflowRun、真实 Artifact 或生产 Checkpoint。
 
 节点类型开发对照 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。分别验证纯 JSON Manifest 的配置类型 / 默认值、输出 storagePolicy 可选且枚举合法 / 输入不接受该字段、服务端三组 Zod 与声明字段一致、精确类型版本注册以及 listManifests 的白名单与数据隔离。Preset 只测试配置模板行为，不作为 Registry 身份；保留 transform 和默认值不回写定义的回归。
 

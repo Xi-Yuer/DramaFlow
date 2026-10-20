@@ -1,5 +1,4 @@
-import type { NodeRunError, NodeExecutionStage } from '@dramaflow/contracts';
-export type { NodeExecutionStage } from '@dramaflow/contracts';
+import type { NodeRunError } from '@dramaflow/contracts';
 
 const stageCodes = {
   create_run: 'NODE_RUN_CREATION_FAILED',
@@ -12,8 +11,9 @@ const stageCodes = {
   validate_output: 'NODE_OUTPUT_VALIDATION_FAILED',
   encode_output: 'NODE_OUTPUT_ENCODING_FAILED',
   complete_run: 'NODE_RUN_COMPLETION_FAILED',
-} as const satisfies Record<NodeExecutionStage, string>;
+} as const;
 
+export type NodeExecutionStage = keyof typeof stageCodes;
 export type NodeExecutionErrorCode = (typeof stageCodes)[NodeExecutionStage];
 
 export class NodeExecutionError extends Error {

@@ -34,7 +34,7 @@ ActionNodeCompilationStrategy 只包装统一 NodeExecutor，传入当前 State 
 
 Preset 是所属 type / typeVersion 的配置模板，不是 Runtime 身份。applyNodePreset 检查归属、合并模板与实例覆盖，不执行节点。剧本、广告、口播等可复用机制，不按业务名称复制 Executor。
 
-NodeRun 记录每次普通 Action 的业务历史，只有 running / completed / failed 三种状态。startedAt 必填，completedAt 随终态记录；共享协议沿用 ISO 时间，数据库为 DateTime。inputs / outputs 仅保存 RuntimeValue map，不使用 unknown 或原始业务对象快照；error 只保留 code、stage 和安全的阶段说明。attempt 由 Repository / 数据库按 workflowRunId + nodeId 原子分配，新执行创建新记录，不改写已结束历史。
+NodeRun 的共享定义归 contracts/workflow/node-run.ts，记录每次普通 Action 的业务历史，只有 running / completed / failed 三种状态。startedAt 必填，completedAt 随终态记录；共享协议沿用 ISO 时间，数据库为 DateTime。inputs / outputs 仅保存 RuntimeValue map，不使用 unknown 或原始业务对象快照；error 保存字符串 stage、可选 code 和安全的阶段说明；领域协议不要求使用 Runtime 的固定阶段枚举。attempt 由 Repository / 数据库按 workflowRunId + nodeId 原子分配，新执行创建新记录，不改写已结束历史。
 
 NodeRun 不驱动调度，也不从 Checkpoint 临时推导。State 只保存当前有效 RuntimeValue，Artifact 保存实际内容，Checkpoint 负责图恢复。普通 Action 不得主动 interrupt；原生控制异常的记录边界见 [Runtime](runtime-architecture.md#节点业务记录与-checkpoint)。恢复复用同一 NodeRun 和不增加 attempt 的语义由 Human Review 独立处理。
 

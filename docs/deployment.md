@@ -8,7 +8,7 @@
 
 Prisma 迁移保留 vector 扩展及用户身份、资料、凭证、会话、限流和基础项目表，不包含工作空间或 WorkflowRun 生命周期模型。当前 canvas_project 保存项目所有者、名称、视口、revision 及时间字段。
 
-[NodeRun 迁移](../packages/database/prisma/migrations/20261020000000_node_runs/migration.sql) 只新增 node_run 与三状态枚举，关联现有项目；不删除现有数据。workflowRunId 暂为逻辑身份，WorkflowRun 表及生命周期另行处理。数据库约束 workflowRunId + nodeId + attempt 唯一、attempt 为正数、输入输出为 JSON 对象及终态字段一致性。Repository 在事务锁内原子分配 attempt；事务级锁随提交或回滚释放，见 [PostgreSQL 官方说明](https://www.postgresql.org/docs/17/explicit-locking.html#ADVISORY-LOCKS)。不重写已有迁移或重置数据。
+NodeRun 的[初始化迁移](../packages/database/prisma/migrations/20261020000000_node_runs/migration.sql)和[字段 / 索引迁移](../packages/database/prisma/migrations/20261020010000_node_run_boundary/migration.sql)建立 node_run，关联现有项目。status 使用 String，并保留数据库三状态校验；字段调整把已有状态转为 text，保留记录与唯一约束，补充 workflowRunId、workflowRunId / nodeId 索引，不删除现有数据。workflowRunId 暂为逻辑身份，WorkflowRun 表及生命周期另行处理。数据库约束 workflowRunId + nodeId + attempt 唯一、attempt 为正数、输入输出为 JSON 对象及终态字段一致性。Repository 在事务锁内原子分配 attempt；事务级锁随提交或回滚释放，见 [PostgreSQL 官方说明](https://www.postgresql.org/docs/17/explicit-locking.html#ADVISORY-LOCKS)。不重写已有迁移或重置数据。
 
 [项目基础迁移](../packages/database/prisma/migrations/20261019000000_project_foundation/migration.sql) 删除 canvas_project 的 definition、nodeCount 列及 plugin_installation 表。尚未应用该迁移的环境执行时会清除旧节点、连线、数据绑定及插件安装记录，包括其中的配置与加密凭证；保留项目基础信息与身份数据，不操作 Redis、RustFS 或其他数据卷。当前协议不兼容这些旧业务字段。
 

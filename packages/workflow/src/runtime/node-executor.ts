@@ -14,7 +14,7 @@ import {
   toNodeRunError,
   type NodeExecutionStage,
 } from './node-execution-error.js';
-import type { NodeRunRepository } from './node-run-repository.js';
+import type { NodeRunRepository } from '../run/node-run-repository.js';
 import type { RuntimeValueCodec } from './runtime-value-codec.js';
 import type { RuntimeValueContext } from './value-codec.js';
 import type { WorkflowState } from './state.js';
@@ -51,7 +51,6 @@ export class DefaultNodeExecutor implements NodeExecutor {
     let nodeRun: NodeRun | undefined;
     try {
       nodeRun = await this.nodeRuns.createRunning({
-        projectId: context.projectId,
         workflowRunId: context.workflowRunId,
         nodeId: node.id,
       });
