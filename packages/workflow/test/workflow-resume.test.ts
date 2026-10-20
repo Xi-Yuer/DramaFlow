@@ -171,6 +171,23 @@ describe('WorkflowRunner 从原 checkpoint 恢复', () => {
     expect(f.runs.markFailed).not.toHaveBeenCalled();
   });
 
+  it('原版本读取返回 null 时只由 claim 成功者记录 load_version 失败，不重新开始', async () => {
+    const f = fixture();
+    const run = await f.runner.start(f.input);
+    f.getVersion.mockResolvedValue(null);
+    f.compile.mockClear();
+    await expect(
+      f.runner.resume({ workflowRunId: run.workflowRunId, value: true }),
+    ).rejects.toThrow('工作流版本不存在或无权访问');
+    expect(f.runs.claimWaitingForResume).toHaveBeenCalledExactlyOnceWith(run.workflowRunId);
+    expect(f.runs.markFailed).toHaveBeenCalledWith(
+      run.workflowRunId,
+      expect.objectContaining({ stage: 'load_version' }),
+    );
+    expect(f.compile).not.toHaveBeenCalled();
+    expect(f.runs.create).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['load_version', 'compile'] as const)(
     '恢复准备阶段 %s 失败后只由 claim 成功者记 failed',
     async (stage) => {

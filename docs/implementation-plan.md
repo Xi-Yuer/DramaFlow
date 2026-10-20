@@ -4,11 +4,11 @@
 
 ## 当前阶段
 
-2026-10-20：WorkflowRunner 的 start → waiting → resume → completed 主生命周期及并发 claim 边界已落实；能力与生产接入限制见 [当前架构](architecture.md#workflow-基础库)，恢复职责见 [Runtime](runtime-architecture.md#workflowrunner-恢复)。
+2026-10-20：以实际代码审计为基线，补齐 Workflow / WorkflowVersion 数据库模型与不可变完整快照的生产读取基础；已有 Runner 的 start / resume 集成改用真实版本 Repository。能力与生产接入限制见 [当前架构](architecture.md#workflow-基础库)。
 
 数据语义与承载见 [数据模型](data-model.md)。两类边的静态联合无环检查、执行依赖收集和运行输入绑定职责分离。完整生产执行管线、大小预算、权限解析、业务持久化及控制结构通道语义仍待后续阶段接入；本步不扩大项目保存与节点目录的应用边界，不预设条件路由。
 
-**下一步范围待用户确定。** interaction NodeRun 的恢复关联、持久版本读取与生产 Checkpointer 尚需单独明确边界；不自动扩展 Retry、Human Review、Control Node 或生成流程。
+**下一步：发布的并发版本号分配与 draft revision 乐观锁。** 此后再进入 Persistent Checkpointer；本轮不实现发布服务 / HTTP、运行入口、Worker、Human Review、Artifact 或 Plugin。
 
 本文件是当前阶段、下一步与待决策项的唯一维护入口；推进时原地修订，不堆叠旧计划或逐轮交付流水。文档维护方式见 [开发指南](development.md#文档维护)。
 
@@ -39,7 +39,7 @@ Workflow 的可组合性与固定被调用版本原则已在 [Workflow 模型](w
 
 WorkflowRun 记录整次运行，NodeRun 记录节点历史，Checkpoint 负责原生图恢复。以下议题留待单独明确，不构成本轮实施范围：
 
-1. 已发布版本的真实持久化、权限读取和生产 Checkpointer 如何配置与注入？
+1. 如何原子固定发布所依据的草稿修订并分配工作流内版本号？生产 Checkpointer 的配置与注入在其后单独处理。
 2. interaction 节点如何定义 waiting 并在 resume 时复用同一 NodeRun、不增加 attempt？
 3. API / worker 如何受理、查询运行及处理记录状态与 Checkpoint 不一致的基础设施故障？
 

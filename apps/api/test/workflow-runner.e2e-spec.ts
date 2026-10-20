@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { NumberType, type WorkflowRun } from '@dramaflow/contracts';
+import {
+  NumberType,
+  type WorkflowDefinition,
+  type WorkflowRun,
+} from '@dramaflow/contracts';
 import { DatabaseService } from '@dramaflow/server';
 import {
   END,
@@ -25,6 +29,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { NodeRunRepositories } from '../src/workflow/node-runs/node-run-repository.js';
 import { WorkflowRunRepositories } from '../src/workflow/workflow-runs/workflow-run-repository.js';
+import { WorkflowVersionRepositories } from '../src/workflow/workflow-versions/workflow-version-repository.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
@@ -38,7 +43,6 @@ if (
 const database = new DatabaseService();
 const db = database.client;
 const ownerId = randomUUID();
-let projectId: string;
 
 beforeAll(async () => {
   await db.user.create({
@@ -48,18 +52,20 @@ beforeAll(async () => {
       email: `${ownerId}@example.test`,
     },
   });
-  projectId = (
-    await db.project.create({
-      data: { ownerId, name: '首次启动测试', viewport: {} },
-    })
-  ).id;
 });
 afterAll(async () => {
   await db.user.deleteMany({ where: { id: ownerId } });
   await database.onModuleDestroy();
 });
 
-async function fixture() {
+async function fixture(
+  editDefinition?: (definition: WorkflowDefinition) => void,
+) {
+  const projectId = (
+    await db.project.create({
+      data: { ownerId, name: '运行版本测试', viewport: {} },
+    })
+  ).id;
   const execute = vi.fn(async (input: { a: number; b: number }) => ({
     result: input.a + input.b,
     internal: -1,
@@ -87,11 +93,11 @@ async function fixture() {
       execute,
     },
   ]);
-  // 版本持久化尚未接入；这里明确注入已发布版本测试记录，不从 draft 读取，也不提供生产兜底。
+  // 测试显式保存完整快照；Runner 使用真实生产 Repository，不提供 draft / 内存版本兜底。
   const version: WorkflowVersionRecord = {
     id: randomUUID(),
     projectId,
-    workflowId: 'workflow-1',
+    workflowId: randomUUID(),
     version: 3,
     publishedAt: '2026-10-20T00:00:00.000Z',
     definition: {
@@ -120,7 +126,30 @@ async function fixture() {
       ],
     },
   };
-  const getVersion = vi.fn(async () => version);
+  editDefinition?.(version.definition);
+  const snapshot = z.record(z.string(), z.json()).parse(version.definition);
+  await db.workflow.create({
+    data: {
+      id: version.workflowId,
+      projectId,
+      name: '运行测试',
+      draft: snapshot,
+    },
+  });
+  await db.workflowVersion.create({
+    data: {
+      id: version.id,
+      workflowId: version.workflowId,
+      version: version.version,
+      definition: snapshot,
+      createdAt: new Date(version.publishedAt),
+    },
+  });
+  const versions = await new WorkflowVersionRepositories(database).forProject(
+    ownerId,
+    projectId,
+  );
+  const getVersion = vi.spyOn(versions, 'getVersion');
   const runs = await new WorkflowRunRepositories(database).forProject(
     ownerId,
     projectId,
@@ -153,7 +182,7 @@ async function fixture() {
       return graph;
     });
   const runner = new DefaultWorkflowRunner(
-    { getVersion },
+    versions,
     runs,
     compiler,
     new DefaultWorkflowOutputResolver(),
@@ -224,7 +253,7 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
       include: { nodeRuns: true },
     });
     expect(run).toMatchObject({
-      projectId,
+      projectId: f.input.projectId,
       workflowVersionId: f.version.id,
       status: 'completed',
       inputs: f.input.inputs,
@@ -310,8 +339,9 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
   });
 
   it('最终输出来源缺失时 NodeRun completed 与 WorkflowRun failed 保持独立', async () => {
-    const f = await fixture();
-    f.version.definition.outputs[0]!.source.outputKey = 'missing';
+    const f = await fixture((definition) => {
+      definition.outputs[0]!.source.outputKey = 'missing';
+    });
     await expect(f.runner.start(f.input)).rejects.toMatchObject({
       code: 'WORKFLOW_OUTPUT_MISSING',
     });
@@ -328,8 +358,9 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
   });
 
   it('编译失败按既定状态约束留下 failed 运行，不产生节点执行', async () => {
-    const f = await fixture();
-    f.version.definition.nodes[0]!.typeVersion = 999;
+    const f = await fixture((definition) => {
+      definition.nodes[0]!.typeVersion = 999;
+    });
     await expect(f.runner.start(f.input)).rejects.toMatchObject({
       code: 'unavailable_type',
     });
@@ -430,10 +461,13 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 恢复', () => {
     const started = await f.runner.start(f.input);
     const other = await new WorkflowRunRepositories(database).forProject(
       ownerId,
-      projectId,
+      f.input.projectId,
     );
     const secondRunner = new DefaultWorkflowRunner(
-      { getVersion: f.getVersion },
+      await new WorkflowVersionRepositories(database).forProject(
+        ownerId,
+        f.input.projectId,
+      ),
       other,
       { compile: f.compile },
       new DefaultWorkflowOutputResolver(),

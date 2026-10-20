@@ -126,6 +126,14 @@ describe('WorkflowRunner 首次启动', () => {
     expect(f.runs.create).not.toHaveBeenCalled();
   });
 
+  it('版本 Repository 返回 null 时明确拒绝，不创建运行或编译图', async () => {
+    const f = workflowRunnerFixture();
+    f.getVersion.mockResolvedValue(null);
+    await expect(f.runner.start(f.input)).rejects.toThrow('工作流版本不存在或无权访问');
+    expect(f.runs.create).not.toHaveBeenCalled();
+    expect(f.compile).not.toHaveBeenCalled();
+  });
+
   it('Node business error 先记录 NodeRun failed，再记录 WorkflowRun failed 并保留原错误', async () => {
     const f = workflowRunnerFixture();
     const cause = new Error('provider-secret-marker');

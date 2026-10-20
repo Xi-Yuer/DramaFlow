@@ -28,7 +28,9 @@ WorkflowRunner 单元测试用真实 StateGraph / MemorySaver、Registry、Bindi
 
 workflow-resume.test.ts 用同一 MemorySaver 重新编译原图，验证 waiting → running → waiting → running → completed、只传 Command 和原 thread、已完成节点不重跑、State 输出与首次时间保留，且不查询或关联 NodeRun。覆盖 false / 0 / 空字符串 / null / 特殊对象键的值原样进入中断节点、非 waiting / 缺失记录拒绝、调用方版本 / thread 覆盖拒绝、claim 失败不 invoke、原 checkpoint 缺失 / END / 身份错配、准备 / 执行 / 记录故障边界。Runner 的 start / resume 共用结束分类与最终输出解析。
 
-test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的两类 Repository 和原生 LangGraph，验证首次成功、节点失败、原生暂停、NodeRun completed 但最终输出解析失败、编译失败、完成记录不可用时不反向 failed。版本读取使用明确测试记录，MemorySaver 只验证原生快照机制，不是生产持久化兜底。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目及级联记录，不清空开发库。可定向执行 test/workflow-runner.e2e-spec.ts、test/workflow-runs.e2e-spec.ts 和 test/node-runs.e2e-spec.ts；这些测试不证明真实版本发布服务、Artifact 或生产 Checkpointer 已接入。
+test/workflow-versions.e2e-spec.ts 在真实 PostgreSQL 显式写入草稿与完整版本快照，验证 V1 = A、修改草稿后 V2 = B 且 draft = B，新 Repository 和独立数据库连接仍能读取 V1。覆盖版本更新拒绝、单项目单 Workflow、版本唯一及正数约束、项目 / 过期权限、无效 Definition 拒绝和删除级联；测试指定版本号，不冒充发布并发分配或草稿乐观锁。
+
+test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的版本、WorkflowRun、NodeRun Repository 和原生 LangGraph，验证首次成功、节点失败、原生暂停、NodeRun completed 但最终输出解析失败、编译失败、完成记录不可用时不反向 failed。版本快照在测试中显式建数，Runner 经生产读取实现获取；MemorySaver 不是生产持久化兜底。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目及级联记录，不清空开发库。可定向执行 workflow-versions、workflow-runner、workflow-runs、node-runs 四个 e2e-spec；这些测试不证明发布服务、Artifact、运行 HTTP 入口或生产 Checkpointer 已接入。workflow 包另验证版本读取返回 null 时 start 不创建运行，resume 只由 claim 成功者记录 load_version 失败。
 
 恢复的数据库用例另外验证同一运行经过两次 resume 完成、同一 State 输出保留、运行记录与 thread 数不增加、恢复失败结束同一记录。两个不同 Repository / Runner 实例通过屏障先都读到 waiting，图执行期间只有一个 claim 成功并 invoke，另一个收到 WORKFLOW_RUN_NOT_WAITING。Repository 用例另测试 12 个并发 claim 的单胜者、完整六状态读取、所有者 / 项目 / 过期权限与非 waiting 不更新；不以纯内存替身证明并发持久化正确。
 
@@ -36,7 +38,7 @@ test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的两类 Repository �
 
 正式 WorkflowDefinition 测试检查三类 StaticInputBinding、两类边引用与全局 ID 唯一、自连接及联合 DAG；Data Edge 另检查目标数据端口单连接与静态 Binding 冲突，Control Edge 不占用输入并允许多个控制上游。检查控制端口可省略或命名，拒绝旧 ConnectionBinding。通用 factory 继续用独立自定义 Schema 测试，不强加正式 Node 协议。静态成功不证明端口存在、真实值有效或资产可访问，也不替代独立依赖收集与运行输入绑定检查；assetId / versionId 只是明确版本的引用声明。
 
-React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Handle 命名空间、控制端口省略与命名映射、跨类连线拒绝，以及删除 / 重连按边种类与完整快照防止误改。数据连线还检查精确版本 Manifest、共享 isTypeAssignable、目标单连接与数组输入不聚合、移除被显式替换的静态 Binding；节点转换检查临时字段剔除，renderer 检查数据端口 key、普通控制 Handle 与不可用状态。目录 API 使用真实默认鉴权与 no-store，前端处理加载、错误与空态；生产 Registry 为空，不用假类型填充。画布已接入两类边事件，但没有节点添加与 Workflow 持久化，项目保存继续只处理名称、视口和 revision。
+React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Handle 命名空间、控制端口省略与命名映射、跨类连线拒绝，以及删除 / 重连按边种类与完整快照防止误改。数据连线还检查精确版本 Manifest、共享 isTypeAssignable、目标单连接与数组输入不聚合、移除被显式替换的静态 Binding；节点转换检查临时字段剔除，renderer 检查数据端口 key、普通控制 Handle 与不可用状态。目录 API 使用真实默认鉴权与 no-store，前端处理加载、错误与空态；生产 Registry 为空，不用假类型填充。画布已接入两类边事件，但没有节点添加与 Workflow 保存入口，项目保存继续只处理名称、视口和 revision。
 
 数据库模型在 packages/database/prisma/schema.prisma 定义。执行迁移前核对 DATABASE_URL 仅指向本项目开发库，再运行 pnpm db:migrate。迁移影响范围与操作方式统一见 [部署与数据库](deployment.md)。
 

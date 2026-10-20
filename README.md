@@ -2,9 +2,9 @@
 
 DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，以漫剧生产为核心场景，同时支持广告、产品宣传、口播等视频生产流程**，面向团队自部署。
 
-当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录、注册通用 renderer，并接入 Data / Control Edge 连线、重连与删除事件；生产目录为空，没有添加节点、Workflow 持久化、工作流运行或模型调用。
+当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录、注册通用 renderer，并接入 Data / Control Edge 连线、重连与删除事件；生产目录为空，没有添加节点、Workflow 保存 / 发布入口、工作流运行或模型调用。
 
-基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。WorkflowRun / NodeRun 通过独立 Repository 落 PostgreSQL；WorkflowRunner 按明确版本首次启动 Action 图，并以原 thread 的 Command 恢复 waiting 运行；原子 claim 防止并发恢复，结束时只记录声明的最终输出。版本读取和 Checkpointer 由外部注入，引用解析与 Artifact 写入仍是接口；尚无生产运行入口或 Human Review NodeRun 恢复关联，见 [数据模型](docs/data-model.md) 与 [当前架构](docs/architecture.md)。
+基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。PostgreSQL 已有 Workflow 草稿、完整不可变 WorkflowVersion 快照及 WorkflowRun / NodeRun；API 提供按项目 / 所有者限定的只读版本 Repository。WorkflowRunner 按明确版本首次启动 Action 图，并以原 thread 的 Command 恢复 waiting 运行；原子 claim 防止并发恢复，结束时只记录声明的最终输出。尚无发布服务、生产持久 Checkpointer 或运行入口，引用解析与 Artifact 写入仍是接口；实现范围见 [当前架构](docs/architecture.md)。
 
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 
@@ -53,7 +53,7 @@ pnpm test:integration
 pnpm stack:up
 ```
 
-`test` 运行现有单元测试，包括 Workflow / Node 契约、manifest、React Flow 转换与真实 LangGraph 编译适配；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、会话、角色、来源校验、项目隔离、分页与修订冲突和基础设施，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。测试中的图执行不代表完整工作流产品可运行；生产 checkpointer、运行接口和真实模型调用尚未接入。
+`test` 运行现有单元测试，包括 Workflow / Node 契约、manifest、React Flow 转换与真实 LangGraph 编译适配；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、项目、基础设施、完整版本快照与独立连接读取、Run 生命周期及并发 claim，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。测试中的图执行不代表完整工作流产品可运行；生产 checkpointer、运行接口和真实模型调用尚未接入。
 
 `stack:up` 构建镜像，启动基础设施、初始化存储桶、迁移和初始管理员，再启动 API、worker 和前端。已有数据卷不会因更新代码而自动删除。
 

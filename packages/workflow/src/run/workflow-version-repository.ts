@@ -13,6 +13,6 @@ export const workflowVersionRecordSchema = workflowVersionMetadataSchema.extend(
 export type WorkflowVersionRecord = z.infer<typeof workflowVersionRecordSchema>;
 
 export interface WorkflowVersionRepository {
-  // 实现须在已授权范围内读取不可变版本；不解析 draft 或 latest。
-  getVersion(workflowVersionId: string): Promise<WorkflowVersionRecord>;
+  // 实现须在已授权范围内读取不可变版本；不存在或无权访问返回 null，不解析 draft 或 latest。
+  getVersion(workflowVersionId: string): Promise<WorkflowVersionRecord | null>;
 }

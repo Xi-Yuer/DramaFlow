@@ -77,7 +77,7 @@ WorkflowRun 保存某个明确 WorkflowVersion 的一次完整运行，独立于
 
 Repository 创建 pending，使用明确的 markRunning / markWaiting / markCompleted / markFailed / markCancelled。合法转换、时间规则见 [Workflow 模型](workflow-model.md#workflowrun一次实际运行)；Repository 对当前状态原子检查，数据库保护不可变身份、版本、输入和合法转换。getById 读取限定权限的完整记录，claimWaitingForResume 原子完成 waiting → running 并返回已抢占记录；无权访问、记录不存在或已不在 waiting 时返回 null。WorkflowRun waiting 只表示整图正在等待，NodeRun 仍只有普通 Action 的三种状态；记录操作不调用 LangGraph，start / resume 由 Runner 协调，人工审核尚未实现。
 
-inputs / outputs 是 RuntimeValue map。outputs 只接收最终对外工作流结果，不复制按 nodeId 组织的 State.outputs；结果收集由 WorkflowOutputResolver 承担，完整业务值校验继续由节点三组 Schema 负责。NodeRun 通过同项目复合外键引用真实 WorkflowRun，Checkpoint 继续独立。版本读取经 WorkflowVersionRepository 边界提供明确版本、项目与工作流身份；真实版本持久化与发布服务尚未接入，不能把测试记录作为生产版本来源。
+inputs / outputs 是 RuntimeValue map。outputs 只接收最终对外工作流结果，不复制按 nodeId 组织的 State.outputs；结果收集由 WorkflowOutputResolver 承担，完整业务值校验继续由节点三组 Schema 负责。NodeRun 通过同项目复合外键引用真实 WorkflowRun，Checkpoint 继续独立。WorkflowVersionRepository 是纯读取接口，返回完整版本 / 项目 / 工作流身份或 null。API 的有权限作用域 Prisma 实现读取独立、不可更新的 workflow_version.definition，经正式 Schema 校验，不读取 draft 或 latest；发布服务尚未实现。
 
 ### WorkflowRunner 首次启动
 
@@ -89,7 +89,7 @@ invoke 返回后仍调用原生 getState(config)。Runner 检查 result 的 isIn
 
 业务 / 图执行错误由 Runner 记录整图 failed 后原样上抛；阶段区分 load_version（恢复准备）、compile、invoke、inspect_state、resolve_output，持久化稳定摘要，原始原因保留在异常中。NodeRun 仍由 NodeExecutor 单独维护，节点 completed 不等于整图 completed。编译失败发生在 pending，按既定 pending → running → failed 路径记录，不 invoke，也不新增 pending → failed 转换。markRunning / markWaiting / markCompleted 自身失败原样作为基础设施异常上抛，不反向 markFailed；markFailed 再失败时 WorkflowRunRecordingError 同时保留原异常与记录异常。正常 interrupt 由 LangGraph 返回暂停快照并投影 waiting；若原生 GraphBubbleUp 异常仍逃出 Graph，则原样交还上层，不猜测其等待状态或记为业务失败。
 
-Runner 不实现 cancel / retry、HumanReviewRecord、SubWorkflow 或 Batch。生产版本读取实现、持久 Checkpointer 与运行 HTTP / worker 入口仍未接入；没有内存或 draft 生产兜底。测试明确注入 MemorySaver 和版本记录，真实运行历史使用隔离 PostgreSQL 验证。
+Runner 不实现 cancel / retry、HumanReviewRecord、SubWorkflow 或 Batch。生产版本读取已有 Prisma 实现和模块，运行服务装配、持久 Checkpointer 与运行 HTTP / worker 入口仍未接入；没有内存或 draft 生产兜底。API 集成使用真实版本 / 运行 Repository 和测试 MemorySaver，单元测试保留版本替身；持久 checkpoint 重启恢复尚未验证。
 
 ### WorkflowRunner 恢复
 

@@ -7,6 +7,7 @@ import { HealthController } from './health/health.controller.js';
 import { NodeTypesModule } from './workflow/node-types/node-types.module.js';
 import { NodeRunsModule } from './workflow/node-runs/node-runs.module.js';
 import { WorkflowRunsModule } from './workflow/workflow-runs/workflow-runs.module.js';
+import { WorkflowVersionsModule } from './workflow/workflow-versions/workflow-versions.module.js';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { WorkflowRunsModule } from './workflow/workflow-runs/workflow-runs.modul
     NodeTypesModule,
     NodeRunsModule,
     WorkflowRunsModule,
+    WorkflowVersionsModule,
   ],
   controllers: [HealthController],
 })

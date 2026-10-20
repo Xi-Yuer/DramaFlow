@@ -180,9 +180,9 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
   private async loadVersion(
     identity: Pick<WorkflowRun, 'projectId' | 'workflowId' | 'workflowVersionId'>,
   ): Promise<WorkflowVersionRecord> {
-    const loaded = workflowVersionRecordSchema.parse(
-      await this.versions.getVersion(identity.workflowVersionId),
-    );
+    const stored = await this.versions.getVersion(identity.workflowVersionId);
+    if (stored === null) throw new Error('工作流版本不存在或无权访问');
+    const loaded = workflowVersionRecordSchema.parse(stored);
     if (
       loaded.id !== identity.workflowVersionId ||
       loaded.workflowId !== identity.workflowId ||

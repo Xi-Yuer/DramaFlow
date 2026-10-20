@@ -111,6 +111,7 @@ model Project {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  workflow     Workflow?
   nodeRuns     NodeRun[]
   workflowRuns WorkflowRun[]
 
@@ -118,7 +119,35 @@ model Project {
   @@map("canvas_project")
 }
 
-// workflowId / workflowVersionId 是逻辑引用，不为尚未持久化的版本补造实体。
+model Workflow {
+  id        String            @id @default(uuid())
+  projectId String            @unique @db.Uuid
+  name      String            @db.VarChar(80)
+  draft     Json
+  revision  Int               @default(1)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versions  WorkflowVersion[]
+
+  @@map("workflow")
+}
+
+// 每个版本独立保存完整定义；迁移中的触发器禁止更新已创建版本。
+model WorkflowVersion {
+  id         String   @id @default(uuid())
+  workflowId String
+  version    Int
+  definition Json
+  createdAt  DateTime @default(now())
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, version])
+  @@index([workflowId])
+  @@map("workflow_version")
+}
+
+// 运行仍保存逻辑版本 ID，由 Runner 经版本 Repository 核对归属；本轮不调整运行外键。
 model WorkflowRun {
   id                String    @id @default(uuid())
   projectId         String    @db.Uuid
