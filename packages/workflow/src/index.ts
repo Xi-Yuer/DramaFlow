@@ -27,3 +27,5 @@ export * from './compiler/workflow-compiler.js';
 export * from './compiler/strategy.js';
 export * from './compiler/dependency.compiler.js';
 export * from './runtime/content-store.js';
+export * from './run/workflow-run-submission.js';
+export * from './run/workflow-run-error.js';

@@ -20,6 +20,7 @@ import {
   DefaultWorkflowCompiler,
   DefaultWorkflowOutputResolver,
   DefaultWorkflowRunner,
+  DefaultWorkflowRunSubmissionService,
   NodeRegistry,
   WorkflowStateAnnotation,
   type CompiledWorkflow,
@@ -203,7 +204,21 @@ async function fixture(
     workflowVersionId: version.id,
     inputs: { a: { storage: 'inline' as const, type: NumberType, value: 10 } },
   };
-  return { runner, runs, execute, input, version, compile, graphs, getVersion };
+  const submission = new DefaultWorkflowRunSubmissionService(versions, runs);
+  const start = async (request: typeof input) =>
+    runner.executeStart((await submission.start(request)).id);
+  return {
+    start,
+    submission,
+    runner,
+    runs,
+    execute,
+    input,
+    version,
+    compile,
+    graphs,
+    getVersion,
+  };
 }
 
 async function resumeFixture(onResume: () => Promise<void> = async () => {}) {
@@ -256,7 +271,7 @@ async function resumeFixture(onResume: () => Promise<void> = async () => {}) {
 describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
   it('启动 Action 图后保存独立线程、最终输出和 NodeRun 历史，checkpoint 保留内部端口', async () => {
     const f = await fixture();
-    const result = await f.runner.start(f.input);
+    const result = await f.start(f.input);
     expect(result.status).toBe('completed');
     const run = await db.workflowRun.findUniqueOrThrow({
       where: { id: result.workflowRunId },
@@ -294,7 +309,7 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
     const f = await fixture();
     const cause = new Error('provider-secret-marker');
     f.execute.mockRejectedValue(cause);
-    await expect(f.runner.start(f.input)).rejects.toMatchObject({
+    await expect(f.start(f.input)).rejects.toMatchObject({
       stage: 'execute',
       cause,
     });
@@ -328,7 +343,7 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
       .addEdge('native_wait', END)
       .compile({ checkpointer: checkpointer.saver });
     f.compile.mockResolvedValue(graph);
-    const result = await f.runner.start(f.input);
+    const result = await f.start(f.input);
     const run = await db.workflowRun.findUniqueOrThrow({
       where: { id: result.workflowRunId },
     });
@@ -352,7 +367,7 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
     const f = await fixture((definition) => {
       definition.outputs[0]!.source.outputKey = 'missing';
     });
-    await expect(f.runner.start(f.input)).rejects.toMatchObject({
+    await expect(f.start(f.input)).rejects.toMatchObject({
       code: 'WORKFLOW_OUTPUT_MISSING',
     });
     const run = await db.workflowRun.findFirstOrThrow({
@@ -371,7 +386,7 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
     const f = await fixture((definition) => {
       definition.nodes[0]!.typeVersion = 999;
     });
-    await expect(f.runner.start(f.input)).rejects.toMatchObject({
+    await expect(f.start(f.input)).rejects.toMatchObject({
       code: 'unavailable_type',
     });
     const run = await db.workflowRun.findFirstOrThrow({
@@ -391,7 +406,7 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
     const cause = new Error('完成记录服务不可用');
     vi.spyOn(f.runs, 'markCompleted').mockRejectedValue(cause);
     const markFailed = vi.spyOn(f.runs, 'markFailed');
-    await expect(f.runner.start(f.input)).rejects.toBe(cause);
+    await expect(f.start(f.input)).rejects.toBe(cause);
     const run = await db.workflowRun.findFirstOrThrow({
       where: { workflowVersionId: f.version.id },
       include: { nodeRuns: true },
@@ -412,18 +427,18 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 恢复', () => {
   it('waiting → running → waiting → running → completed，原 thread / 版本 / State 不变', async () => {
     const f = await resumeFixture();
     const create = vi.spyOn(f.runs, 'create');
-    const first = await f.runner.start(f.input);
+    const first = await f.start(f.input);
     const waiting = await f.runs.getById(first.workflowRunId);
     const firstValue = { approved: true, note: '继续' };
     expect(
-      await f.runner.resume({
+      await f.runner.executeResume({
         workflowRunId: first.workflowRunId,
         value: firstValue,
       }),
     ).toEqual(first);
     const waitingAgain = await f.runs.getById(first.workflowRunId);
     expect(waitingAgain).toEqual(waiting);
-    const result = await f.runner.resume({
+    const result = await f.runner.executeResume({
       workflowRunId: first.workflowRunId,
       value: false,
     });
@@ -442,7 +457,8 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 恢复', () => {
       status: 'completed',
     });
     expect(saved?.completedAt).toEqual(expect.any(String));
-    expect(f.getVersion.mock.calls).toHaveLength(3);
+    // 提交校验一次；首次执行与两次恢复各自从存储读取原版本。
+    expect(f.getVersion.mock.calls).toHaveLength(4);
     expect(f.values).toEqual([firstValue, false]);
     expect(f.prepared).toHaveBeenCalledTimes(1);
     expect(f.finish).toHaveBeenCalledTimes(1);
@@ -468,7 +484,7 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 恢复', () => {
       release = resolve;
     });
     const f = await resumeFixture(() => gate);
-    const started = await f.runner.start(f.input);
+    const started = await f.start(f.input);
     const other = await new WorkflowRunRepositories(database).forProject(
       ownerId,
       f.input.projectId,
@@ -499,8 +515,14 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 恢复', () => {
     }
     const errors: unknown[] = [];
     const requests = [
-      f.runner.resume({ workflowRunId: started.workflowRunId, value: 'A' }),
-      secondRunner.resume({ workflowRunId: started.workflowRunId, value: 'B' }),
+      f.runner.executeResume({
+        workflowRunId: started.workflowRunId,
+        value: 'A',
+      }),
+      secondRunner.executeResume({
+        workflowRunId: started.workflowRunId,
+        value: 'B',
+      }),
     ];
     const outcomes = Promise.allSettled(
       requests.map((request) =>
@@ -550,14 +572,20 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 恢复', () => {
 
   it('恢复后执行异常只结束同一 WorkflowRun，不创建新运行或 NodeRun 关联', async () => {
     const f = await resumeFixture();
-    const first = await f.runner.start(f.input);
-    await f.runner.resume({ workflowRunId: first.workflowRunId, value: true });
+    const first = await f.start(f.input);
+    await f.runner.executeResume({
+      workflowRunId: first.workflowRunId,
+      value: true,
+    });
     const cause = new Error('provider-secret-marker');
     f.finish.mockImplementation(() => {
       throw cause;
     });
     await expect(
-      f.runner.resume({ workflowRunId: first.workflowRunId, value: true }),
+      f.runner.executeResume({
+        workflowRunId: first.workflowRunId,
+        value: true,
+      }),
     ).rejects.toBe(cause);
     const run = await f.runs.getById(first.workflowRunId);
     expect(run).toMatchObject({

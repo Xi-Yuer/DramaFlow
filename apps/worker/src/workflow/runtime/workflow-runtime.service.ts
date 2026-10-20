@@ -1,25 +1,22 @@
-import { WorkflowRuntimeFactory } from '@dramaflow/server';
-import type {
-  ResumeWorkflowRunInput,
-  StartWorkflowRunInput,
-} from '@dramaflow/workflow';
+import type { WorkflowExecutionJob } from '@dramaflow/contracts';
+import { WorkflowExecutionService } from '@dramaflow/server';
+import type { ResumeWorkflowRunInput } from '@dramaflow/workflow';
 import { Injectable } from '@nestjs/common';
 
+// 后续 Consumer 只交付 Job；Worker 执行已有 Run，不创建第二条运行记录。
 @Injectable()
 export class WorkflowRuntimeService {
-  constructor(private readonly runtimes: WorkflowRuntimeFactory) {}
+  constructor(private readonly execution: WorkflowExecutionService) {}
 
-  async start(ownerId: string, input: StartWorkflowRunInput) {
-    const runner = await this.runtimes.forProject(ownerId, input.projectId);
-    return runner.start(input);
+  execute(job: WorkflowExecutionJob) {
+    return this.execution.execute(job);
   }
 
-  async resume(
-    ownerId: string,
-    projectId: string,
-    input: ResumeWorkflowRunInput,
-  ) {
-    const runner = await this.runtimes.forProject(ownerId, projectId);
-    return runner.resume(input);
+  executeStart(workflowRunId: string) {
+    return this.execution.executeStart(workflowRunId);
+  }
+
+  executeResume(input: ResumeWorkflowRunInput) {
+    return this.execution.executeResume(input);
   }
 }

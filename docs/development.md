@@ -26,17 +26,17 @@ WorkflowRun contract 测试检查六状态、独立 thread、ISO 时间、输入
 
 WorkflowRunner 单元测试用真实 StateGraph / MemorySaver、Registry、BindingResolver、Codec、Executor 和普通 Action Compiler，检查首次启动的完整顺序、thread 来自已保存 Run、输入初始值、快照隔离、项目 / 工作流 / 版本错配及 draft 拒绝。原生 interrupt、静态断点和只返回 State 的 invoke 适配均验证 waiting；缺失或错误 checkpoint、节点错误、最终输出缺失、编译错误及记录服务故障验证相应失败边界。WorkflowOutputResolver 另检查按名称收集引用、不泄漏内部节点结果、缺失来源 / 继承属性 / 类型错误。
 
-workflow-resume.test.ts 用同一 MemorySaver 重新编译原图，验证 waiting → running → waiting → running → completed、只传 Command 和原 thread、已完成节点不重跑、State 输出与首次时间保留，且不查询或关联 NodeRun。覆盖 false / 0 / 空字符串 / null / 特殊对象键的值原样进入中断节点、非 waiting / 缺失记录拒绝、调用方版本 / thread 覆盖拒绝、claim 失败不 invoke、原 checkpoint 缺失 / END / 身份错配、准备 / 执行 / 记录故障边界。Runner 的 start / resume 共用结束分类与最终输出解析。
+workflow-resume.test.ts 用同一 MemorySaver 重新编译原图，验证 waiting → running → waiting → running → completed、只传 Command 和原 thread、已完成节点不重跑、State 输出与首次时间保留，且不查询或关联 NodeRun。覆盖 false / 0 / 空字符串 / null / 特殊对象键的值原样进入中断节点、非 waiting / 缺失记录拒绝、调用方版本 / thread 覆盖拒绝、claim 失败不 invoke、原 checkpoint 缺失 / END / 身份错配、准备 / 执行 / 记录故障边界。Runner 的 executeStart / executeResume 共用结束分类与最终输出解析。
 
 test/workflow-versions.e2e-spec.ts 在真实 PostgreSQL 经 WorkflowService 保存 / 发布，验证 V1 = A、修改草稿后 V2 = B 且 draft = B，新 Repository 和独立数据库连接仍能读取 V1。约束异常测试保留显式建数，覆盖版本全部字段不可更新、单项目单 Workflow、版本唯一及正数约束、权限、无效 Definition 拒绝和删除级联。
 
 test/workflows.e2e-spec.ts 使用真实服务和两个独立数据库连接，检查 12 次同修订并发编辑只成功一次、过期发布不生成版本、12 次同修订并发发布只生成一个版本并返回明确重复发布冲突，以及新修订继续获得下一版本号。用 PostgreSQL 阻塞信息验证发布实际等待未提交编辑行锁，编辑提交后以新 revision 拒绝过期请求，不依赖固定 sleep 猜测顺序。另覆盖发布重新校验存储草稿、失败不消耗版本号、输入必填 / 严格字段、所有者与过期权限、来源修订唯一 / 正数约束。此文件不测试 HTTP、运行或持久 checkpoint。
 
-test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的版本、WorkflowRun、NodeRun Repository、普通 Action Compiler 和生产 provider 的官方 PostgresSaver，验证首次成功、节点失败、原生暂停、NodeRun completed 但最终输出解析失败、编译失败、完成记录不可用时不反向 failed。版本快照在测试中显式建数，Runner 经生产读取实现获取。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目、级联记录及 thread checkpoint，不清空开发库。可定向执行 workflows、workflow-versions、workflow-runner、workflow-runs、node-runs、persistent-checkpoint、workflow-runtime 七个 e2e-spec；这些测试不证明 Artifact 或运行 HTTP 入口已接入。workflow 包另验证版本读取返回 null 时 start 不创建运行，resume 只由 claim 成功者记录 load_version 失败。
+test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的版本、WorkflowRun、NodeRun Repository、普通 Action Compiler 和生产 provider 的官方 PostgresSaver，验证首次成功、节点失败、原生暂停、NodeRun completed 但最终输出解析失败、编译失败、完成记录不可用时不反向 failed。版本快照在测试中显式建数，Runner 经生产读取实现获取。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目、级联记录及 thread checkpoint，不清空开发库。可定向执行 workflows、workflow-versions、workflow-runner、workflow-runs、node-runs、persistent-checkpoint、workflow-runtime 七个 e2e-spec；这些测试不证明 Artifact 或运行 HTTP 入口已接入。workflow 包另验证提交时版本读取返回 null 不创建运行；执行时版本读取失败由 claim 成功者记录 load_version 失败。
 
 test/persistent-checkpoint.e2e-spec.ts 是真实 PostgreSQL 跨进程测试，不用 MemorySaver：启动进程 A 的 Nest / Repository / Saver / Compiler / Runner，interrupt 后等待 A 完全退出；再启动 B，从原 workflowVersionId / threadId 恢复并完成。期间通过真实 WorkflowService 更新 / 发布新版本，检查原输入、已完成节点和原版本仍有效。两个全新进程另用 IPC 屏障先同时读到 waiting，释放后只有一个 claim 成功且进入 graph.invoke；第三项验证不可用 checkpoint 数据库使 Nest 初始化失败。子进程导入生产持久化模块与 Repository，原生 interrupt 图是测试专用 Compiler，不能视作 HumanReview 产品或 NodeRun waiting 实现。测试清理只调用官方 deleteThread 删除自建 thread，并关闭连接。health.e2e-spec 验证真正 API 启动和 checkpoint 读取健康项。
 
-test/workflow-runtime.e2e-spec.ts 在先完成应用 build 后，动态加载 API / Worker 的正式 AppModule 编译产物，保留 Nest 构造器 metadata，不覆盖 provider 或注册测试节点。检查生产 DI、权限作用域 Runner、空 WorkflowVersion 通过应用 Service 完成并写入真实 checkpoint、未知节点拒绝、配置错误 cause、跨用户隔离，以及 waiting 缺少 checkpoint 时失败且不创建新线程。两个应用各验证相同边界；空图完成只证明装配可运行，不代表业务节点已交付；Controller 由独立 HTTP 用例验证。普通 typecheck 不依赖 API / Worker 的 dist 产物。
+test/workflow-runtime.e2e-spec.ts 在先完成应用 build 后，动态加载 API / Worker 的正式 AppModule 编译产物，保留 Nest 构造器 metadata，不覆盖 provider 或注册测试节点。检查生产 DI、权限作用域 Runner、提交服务产生 pending，执行服务完成同一 Run 并写入真实 checkpoint、未知节点拒绝、配置错误 cause、跨用户隔离，以及 waiting 缺少 checkpoint 时失败且不创建新线程。另验证 API 应用提交、独立 Worker 应用按同一 ID 完成，重复 start Job 不再次执行；空图完成只证明装配可运行，不代表业务节点已交付；Controller 由独立 HTTP 用例验证。普通 typecheck 不依赖 API / Worker 的 dist 产物。
 
 test/workflow-run-api.e2e-spec.ts 使用两个真实 Nest HTTP 实例、真实密码会话与签名 Cookie，保留正式 Guard、Controller、Service、Repository 和 PostgresSaver。检查空版本经默认生产 factory 完成、严格请求和安全 DTO、未登录与 Origin、跨用户资源统一 404 且不进入 Runner、HTTP waiting / 跨实例恢复 / GET outputs、0 值恢复及两个 HTTP resume 的单胜者 / 409。中断与错误仅在专用测试项目装配原生图 / 故障注入，不提供生产交互节点；普通生产 Registry 仍为空。错误单测检查安全码、配置 cause 提取、修订冲突及循环 cause；contracts/test/workflow-run-api.test.ts 检查请求字段和响应不公开内部身份。定向运行前构建 API；隔离数据库、清理范围与既有测试相同。
 
@@ -88,3 +88,5 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 ## 定向验证范围
 
 按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / State 通道与并行增量 / 输入解析 / Codec / 存储策略 / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；WorkflowRun / NodeRun 生命周期另执行隔离 PostgreSQL 集成测试；生产 Checkpointer 的恢复能力用跨进程数据库测试验证，不能用 MemorySaver 单元测试替代。State 增量适配和执行主干不代表已有真实 Artifact 写入或完整图运行接口。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
+
+WorkflowExecutionJob 契约单测检查仅携带业务 Run ID、严格拒绝 State / Definition / thread / version 副本及保留 falsy resume 值。workflow-run-submission.test.ts 使用内存 Repository / MemorySaver 验证提交无 Graph I/O、新 Runner 只按 ID 读取已保存输入、不重复创建 Run、并发 start 单次执行、resume 提交保留 waiting、竞争执行单胜者与执行时版本读取失败。workflow-runs.e2e-spec.ts 用两个生产 Repository 验证 12 个 pending claim 仅一成功及非 pending 无写入；这些与 waiting claim、跨进程 persistent checkpoint 和真实 HTTP 用例分别证明不同边界，不把返回意图当成已持久入队。

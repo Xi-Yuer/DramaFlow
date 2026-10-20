@@ -2,6 +2,7 @@ import {
   NodeExecutionError,
   ReferenceResolutionError,
   WorkflowRunNotWaitingError,
+  WorkflowRunNotPendingError,
   WorkflowRunRecordingError,
 } from '@dramaflow/workflow';
 import { describe, expect, it } from 'vitest';
@@ -44,6 +45,19 @@ describe('Runtime HTTP 错误边界', () => {
     expect(mapped.getStatus()).toBe(409);
     expect(mapped.getResponse()).toMatchObject({
       code: 'WORKFLOW_RUN_NOT_WAITING',
+    });
+    expect(JSON.stringify(mapped.getResponse())).not.toContain('private-run');
+  });
+
+  it('重复首次执行映射为 pending 冲突，不泄漏内部运行身份', () => {
+    const mapped = workflowRuntimeHttpError(
+      new WorkflowRunNotPendingError('private-run'),
+      'WORKFLOW_RUN_NOT_FOUND',
+    );
+    expect(mapped.getStatus()).toBe(409);
+    expect(mapped.getResponse()).toMatchObject({
+      code: 'WORKFLOW_RUN_NOT_PENDING',
+      message: '工作流运行当前不在 pending 状态',
     });
     expect(JSON.stringify(mapped.getResponse())).not.toContain('private-run');
   });

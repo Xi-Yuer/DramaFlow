@@ -75,27 +75,26 @@ NodeRunError 的领域字段 stage 为字符串、code 可省略；Runtime 自�
 
 WorkflowRun 保存某个明确 WorkflowVersion 的一次完整运行，独立于 NodeRun 历史和 LangGraph Checkpoint。完整协议在 contracts/workflow/workflow-run.ts，Repository 抽象在 workflow/run/workflow-run-repository.ts，Prisma 实现在 packages/server/workflow；不在 contracts 或 workflow Repository 中引入数据库依赖。create 必须接收 projectId / workflowId / workflowVersionId 和 RuntimeValue 输入，不解析最新版、不随草稿更新。id 与 threadId 是独立字段；配置适配只消费运行元数据，不传递输入输出到 RunnableConfig。
 
-Repository 创建 pending，使用明确的 markRunning / markWaiting / markCompleted / markFailed / markCancelled。合法转换、时间规则见 [Workflow 模型](workflow-model.md#workflowrun一次实际运行)；Repository 对当前状态原子检查，数据库保护不可变身份、版本、输入和合法转换。getById 读取限定权限的完整记录，claimWaitingForResume 原子完成 waiting → running 并返回已抢占记录；无权访问、记录不存在或已不在 waiting 时返回 null。WorkflowRun waiting 只表示整图正在等待，NodeRun 仍只有普通 Action 的三种状态；记录操作不调用 LangGraph，start / resume 由 Runner 协调，人工审核尚未实现。
+Repository 创建 pending，使用明确的 markRunning / markWaiting / markCompleted / markFailed / markCancelled。合法转换、时间规则见 [Workflow 模型](workflow-model.md#workflowrun一次实际运行)；Repository 对当前状态原子检查，数据库保护不可变身份、版本、输入和合法转换。getById 读取限定权限的完整记录，claimPendingForStart 原子完成 pending → running 并写首次时间，claimWaitingForResume 原子完成 waiting → running 并返回已抢占记录；无权访问、记录不存在或已不在 waiting 时返回 null。WorkflowRun waiting 只表示整图正在等待，NodeRun 仍只有普通 Action 的三种状态；记录操作不调用 LangGraph，提交与执行分离，executeStart / executeResume 由 Runner 协调，人工审核尚未实现。
 
 inputs / outputs 是 RuntimeValue map。outputs 只接收最终对外工作流结果，不复制按 nodeId 组织的 State.outputs；结果收集由 WorkflowOutputResolver 承担，完整业务值校验继续由节点三组 Schema 负责。NodeRun 通过同项目复合外键引用真实 WorkflowRun，Checkpoint 继续独立。WorkflowVersionRepository 是纯读取接口，返回完整版本 / 项目 / 工作流身份或 null。共享服务的有权限作用域 Prisma 实现读取独立、不可更新的 workflow_version.definition，经正式 Schema 校验，不读取 draft 或 latest。Draft 更新和绑定修订的发布由独立 WorkflowService 负责，不进入 Runner 或只读 Repository。
 
 ### WorkflowRunner 首次启动
 
-run/workflow-runner.ts 是一次完整图运行的生命周期协调边界，提供 start / resume。StartWorkflowRunInput 只含项目、工作流、版本 ID 和 RuntimeValue 输入，拒绝调用方传入 Definition / draft。WorkflowVersionRepository.getVersion 返回完整版本记录及归属，Runner 校验请求的三重身份、复制并递归冻结 Definition；首次启动的版本读取或归属失败发生在创建运行前，不启动 Graph。此接口比只返回 Definition 多携带身份信息，以便实际完成项目 / 工作流 / 版本校验。
+run/workflow-run-submission.ts 的 DefaultWorkflowRunSubmissionService 只提交：start 接收项目 / 工作流 / 明确版本 ID 和 RuntimeValue 输入，拒绝 Definition / draft；核对固定版本归属后创建 pending，返回 WorkflowRun。resume 读取 waiting 并返回 { kind: "resume", workflowRunId, value }，不 claim、不调用 Graph。提交不承诺已持久入队，调用方必须显式交付执行意图。
 
-正常顺序为加载版本 → 校验归属 → create pending → compile → markRunning → invoke → 检查原生 snapshot → completed / waiting。初始 State 使用已创建运行的身份与输入快照，outputs / variables / execution 为空。thread_id 唯一取自 run.threadId，经既有 createWorkflowRunConfig 映射；Runner 和 Compiler 都不生成替代线程。Compiler 使用限定本次运行的 Executor 工厂与显式注入的 Checkpointer，复用 Action 策略和 DependencyCompiler，补充根节点 START、叶节点 END；只支持现有普通确定性 Action DAG，不自建调度，不管理运行状态，也不实现交互 / 控制结构。
-
+run/workflow-runner.ts 是执行已有 Run 的生命周期边界，只提供 executeStart / executeResume。首次执行顺序为读取 pending → claimPendingForStart 原子抢占 running → 重新加载原版本并核对归属 / 冻结 Definition → compile → invoke → 检查原生 snapshot → completed / waiting。竞争失败报 WORKFLOW_RUN_NOT_PENDING，不编译或调用图；执行者不再创建运行。初始 State 使用持久化 Run 的身份与输入快照，outputs / variables / execution 为空。thread_id 唯一取自 run.threadId；Job 不携带 Definition / State / threadId。Compiler 使用限定本次运行的 Executor 工厂与显式 Checkpointer，复用 Action 策略和 DependencyCompiler，连接根节点 START / 叶节点 END；只支持普通确定性 Action DAG。
 invoke 返回后仍调用原生 getState(config)。Runner 检查 result 的 isInterrupted 标记，以及 StateSnapshot.next / tasks；有待执行任务或中断则 markWaiting，不收集最终输出。每次读取快照都解析 State 并核对项目 / 版本 / 运行 / thread 身份；只有没有 pending tasks 的终态才通过 WorkflowOutputResolver 按 definition.outputs 数组的 name 与 source.nodeId / outputKey 收集 RuntimeValue；不保存整个 State.outputs。缺失来源、类型不匹配或异常 checkpoint 明确失败，不返回占位结果。检查依据当前安装的 LangGraph API 与 [StateSnapshot](https://reference.langchain.com/javascript/langchain-langgraph/index/StateSnapshot)，不在 State 增加 isInterrupted 字段。[原生 Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts) 规定暂停和 thread 的关系。
 
-业务 / 图执行错误由 Runner 记录整图 failed 后原样上抛；阶段区分 load_version（恢复准备）、compile、invoke、inspect_state、resolve_output，持久化稳定摘要，原始原因保留在异常中。NodeRun 仍由 NodeExecutor 单独维护，节点 completed 不等于整图 completed。编译失败发生在 pending，按既定 pending → running → failed 路径记录，不 invoke，也不新增 pending → failed 转换。markRunning / markWaiting / markCompleted 自身失败原样作为基础设施异常上抛，不反向 markFailed；markFailed 再失败时 WorkflowRunRecordingError 同时保留原异常与记录异常。正常 interrupt 由 LangGraph 返回暂停快照并投影 waiting；若原生 GraphBubbleUp 异常仍逃出 Graph，则原样交还上层，不猜测其等待状态或记为业务失败。
+业务 / 图执行错误由 Runner 记录整图 failed 后原样上抛；阶段区分 load_version（首次或恢复执行准备）、compile、invoke、inspect_state、resolve_output，持久化稳定摘要，原始原因保留在异常中。NodeRun 仍由 NodeExecutor 单独维护，节点 completed 不等于整图 completed。版本读取 / 编译失败发生在 claim 后，按既定 running → failed 路径记录，不 invoke，也不新增 pending → failed 转换。claim / markWaiting / markCompleted 自身失败原样作为基础设施异常上抛，不反向 markFailed；markFailed 再失败时 WorkflowRunRecordingError 同时保留原异常与记录异常。正常 interrupt 由 LangGraph 返回暂停快照并投影 waiting；若原生 GraphBubbleUp 异常仍逃出 Graph，则原样交还上层，不猜测其等待状态或记为业务失败。
 
 Runner 不实现 cancel / retry、HumanReviewRecord、SubWorkflow 或 Batch。生产版本读取已有 Prisma 实现和模块，共享服务已有官方 PostgreSQL Checkpointer；API / Worker 已装配生产 Runtime Service，Run HTTP 已接入，队列消费者仍未接入，没有内存或 draft 生产兜底。API 集成以真实版本 / 运行 Repository 和官方 saver 验证 Action 编译；独立进程测试另以原生中断测试图验证进程退出后恢复，单元测试仍可显式使用 MemorySaver 和版本替身。
 
 ### WorkflowRunner 恢复
 
-ResumeWorkflowRunInput 只接受 workflowRunId 与 unknown value，拒绝调用方覆盖版本、thread 或初始 State。Runner 经 getById 读取原运行并要求 waiting，随后只按 run.workflowVersionId 加载和核对原项目 / 工作流归属，重新编译相同定义。调用 claimWaitingForResume 原子抢占 running；读取时非 waiting 或 claim 返回 null 均抛 WORKFLOW_RUN_NOT_WAITING，竞争失败方不 invoke，也不记录胜者 failed。Prisma 实现在同一事务内以项目 / 所有者 / waiting 为更新条件，更新后读回完整记录，保留首次 startedAt、版本、thread 和输入快照，不使用普通 get → markRunning 代替 claim。
+ResumeWorkflowRunInput 只接受 workflowRunId 与 unknown value，拒绝调用方覆盖版本、thread 或初始 State。Runner 经 getById 读取原运行并要求 waiting，由实际执行者调用 claimWaitingForResume 原子抢占 running，随后只按 run.workflowVersionId 加载和核对原项目 / 工作流归属、重新编译相同定义；读取时非 waiting 或 claim 返回 null 均抛 WORKFLOW_RUN_NOT_WAITING，竞争失败方不 invoke，也不记录胜者 failed。Prisma 实现在同一事务内以项目 / 所有者 / waiting 为更新条件，更新后读回完整记录，保留首次 startedAt、版本、thread 和输入快照，不使用普通 get → markRunning 代替 claim。
 
-claim 成功后先核对原 checkpoint 的 State、项目 / 版本 / 运行 / thread 身份及 pending tasks，再用 Command({ resume }) 调用 Graph；绝不再次传 initialState，不创建 WorkflowRun 或线程。start 与 resume 共用 handleExecutionResult：再次中断记 waiting，END 时解析声明的最终输出并记 completed，普通异常记 failed。恢复准备阶段读取版本或编译失败，也须先成功 claim 才能按 running → failed 记录；竞争失败不能越权写入失败。claim 及最终状态记录自身的基础设施异常继续向上抛，不反向 markFailed。
+claim 成功后先核对原 checkpoint 的 State、项目 / 版本 / 运行 / thread 身份及 pending tasks，再用 Command({ resume }) 调用 Graph；绝不再次传 initialState，不创建 WorkflowRun 或线程。executeStart 与 executeResume 共用 handleExecutionResult：再次中断记 waiting，END 时解析声明的最终输出并记 completed，普通异常记 failed。恢复准备阶段读取版本或编译失败，也须先成功 claim 才能按 running → failed 记录；竞争失败不能越权写入失败。claim 及最终状态记录自身的基础设施异常继续向上抛，不反向 markFailed。
 
 当前 LangGraph 1.5.0 的 mapCommand 对直接 resume 值使用 truthy 检查，会将 false / 0 / 空字符串 / null 视为空 Command。仅有一个 pending interrupt 且带原生 ID 时，Runner 使用官方支持的 interruptId → value 原生映射传输，既保留原业务值，也避免其对象键被误认为 resume map；不定义或校验审批数据格式。多个中断继续透传 LangGraph 的原生 resume 协议，不在本步增加 Batch 路由。依据见 [原生中断映射](https://docs.langchain.com/oss/javascript/langgraph/interrupts#handling-multiple-interrupts)，没有修改 LangGraph 或在 State 中模拟恢复。
 
@@ -103,31 +102,32 @@ Runner 不查询或关联 interaction NodeRun；Human Review 后续单独定义�
 
 ### 生产应用装配
 
-API / Worker 的 WorkflowRuntimeModule 导出各自 WorkflowRuntimeService，只提供应用方法。start(ownerId, input) 与 resume(ownerId, projectId, input) 通过共享服务的 WorkflowRuntimeFactory.forProject 获取权限作用域 Runner，调用方必须显式提供执行身份，不能使用全局无权限 Runner。三个 Prisma Repository 工厂位于 packages/server/workflow，保持每次操作重新检查权限，Worker 不导入 API 实现。
+API / Worker 的 WorkflowRuntimeModule 导出各自应用 Service。共享 WorkflowRunSubmissionFactory.forProject(ownerId, projectId) 只用版本与运行 Repository 构造提交服务，不创建 Compiler / Checkpointer。共享 WorkflowExecutionService 接收受信任的 WorkflowExecutionJob，按 workflowRunId 读取项目及当前所有者，再用 WorkflowRuntimeFactory.forProject 构造权限作用域 Runner。三个 Prisma Repository 的每次操作继续检查权限；Worker 不导入 API 实现。
 
+API Service 的 submitStart / submitResume 是可独立调用的提交边界；Worker Service 只提供 execute(job)、executeStart(id)、executeResume(input)，从不创建新运行。内部执行服务不能代替 HTTP 权限检查：HTTP 先验证当前用户与 Version / Run 项目关系，再交付 Job。当前没有 Queue、Consumer、意图持久化或投递重试；重复 start Job 和竞争 resume 由各自状态 claim 拒绝，不自动重跑业务副作用。
 共享 WorkflowRuntimeInfrastructureModule 提供真实 Codec / 存储策略 / 最终输出解析，factory 连接精确版本 NodeRegistry、既有 Action Compiler、应用级 PostgresSaver 和按运行创建的 NodeExecutor。编译器仍只支持现有 Action 策略，没有新增 CompilationStrategyRegistry。NodeRegistry 在同一应用的目录与 Runtime 中共享，默认空目录不构成业务执行能力。
 
 内容服务尚未接入时，显式拒绝适配器抛 REFERENCE_RUNTIME_NOT_CONFIGURED / ARTIFACT_WRITER_NOT_CONFIGURED；Codec 的既有引用错误将前者保留在 REFERENCE_RESOLUTION_FAILED.cause.code，Executor 继续增加执行阶段与 cause。inline 使用真实 Codec，reference 不返回占位产物或降级 inline。Nest 生产装配与真实 PostgreSQL 空图已验证，Run HTTP Controller 已接入，尚无队列消费者。
 
 ### Run HTTP 边界
 
-WorkflowRunsController 只从 Actor 取得当前用户，并调用 API WorkflowRuntimeService.startVersion / getRun / resumeRun。start 请求为 { workflowVersionId, inputs }，严格拒绝 projectId / workflowId / threadId / status 等额外字段；服务端按当前用户反查版本归属，内部 start 继续使用已派生身份。get / resume 先按 Run 的项目所有者检查访问权限，权限拒绝不调用 Runner；底层 Repository 仍重新检查。resume 只接受显式 value，null / 0 / false 等不是缺少参数，具体交互数据契约留给未来节点。
+WorkflowRunsController 只从 Actor 取得当前用户，并调用 API WorkflowRuntimeService.startVersion / getRun / resumeRun。start 请求为 { workflowVersionId, inputs }，严格拒绝 projectId / workflowId / threadId / status 等额外字段；服务端按当前用户反查版本归属，submitStart 使用已派生身份创建 pending。get / resume 先按 Run 的项目所有者检查访问权限，权限拒绝不调用 Runner；底层 Repository 仍重新检查。resume 只接受显式 value，null / 0 / false 等不是缺少参数，具体交互数据契约留给未来节点。
 
 所有成功响应使用 WorkflowRunResponse，只公开业务 Run ID、固定版本、状态、RuntimeValue 输入 / 最终输出、稳定错误摘要和 ISO 时间。threadId 仅保留在领域运行、配置适配和 checkpoint 中。资源缺失 / 无权统一 404，非 waiting / claim 竞争失败为 409，引用 / Writer 配置缺失为 503；执行故障只返回白名单阶段码与安全说明，cause、stack、供应商及数据库文本留在服务端。现有统一 ApiExceptionFilter 负责请求标识和错误 envelope。
 
-当前 start / resume 同步 await Runner，实际执行发生在 API 进程。同步细节只在应用 Service 中，Controller 和请求 / 响应协议不依赖队列或 HTTP 连接作为执行身份；客户端始终操作 Run ID。Worker / Queue 迁移单独实施，不在本轮添加后台 fire-and-forget、盲目重试或基于请求断开的取消逻辑。
+当前 HTTP 明确先调用提交服务，再同步交付 Job 给 ExecutionService，实际执行仍发生在 API 进程。此临时桥接只在应用 Service 中，Controller 和请求 / 响应协议不依赖队列或 HTTP 连接作为执行身份；客户端始终操作 Run ID。Worker / Queue 迁移单独实施，不在本轮添加后台 fire-and-forget、盲目重试或基于请求断开的取消逻辑。
 
 ## State 与持久化
 
 WorkflowStateAnnotation 与既有 State 接口共处 runtime/state.ts。outputs 使用 mergeNodeOutputs 合并局部 RuntimeValue map，缺省为空；重复 nodeId 写入明确失败。其余分区不由普通 Action wrapper 写入，定义、业务历史、内容存储与执行快照分离，完整规则见 [State 边界](workflow-state.md#并行与历史)。不以对象覆盖或业务状态轮询代替通道。[官方 Graph API](https://docs.langchain.com/oss/javascript/langgraph/graph-api) 说明图和状态机制。
 
-运行配置使用必填 Run.threadId；恢复必须加载原不可变 WorkflowVersion，以兼容实现重建图，接回原 thread 与持久 checkpointer，而不是当前草稿。知道 thread_id 不等于拥有资源权限。已有 start / resume 协调器与普通 Action 整图编译，已有 Run HTTP，尚无队列入口。[官方 Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence) 说明原生持久化机制。
+运行配置使用必填 Run.threadId；恢复必须加载原不可变 WorkflowVersion，以兼容实现重建图，接回原 thread 与持久 checkpointer，而不是当前草稿。知道 thread_id 不等于拥有资源权限。已有独立提交服务、executeStart / executeResume 执行协调器与普通 Action 整图编译，已有 Run HTTP，尚无队列入口。[官方 Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence) 说明原生持久化机制。
 
 ### PostgreSQL Checkpointer
 
 packages/server 的 WorkflowCheckpointerModule 提供应用级 WorkflowCheckpointerService，API / Worker 经 InfrastructureModule 引入。官方 `@langchain/langgraph-checkpoint-postgres@1.1.0` 的 PostgresSaver 使用独立 pg.Pool，读取同一 DATABASE_URL，在固定 langgraph schema 保存 checkpoint、blobs 和 pending writes；Prisma 仍只管理业务表。平台不实现 BaseCheckpointSaver、序列化或 checkpoint 表迁移。具体 API 以安装包类型 / 实现和[官方 PostgreSQL 使用说明](https://docs.langchain.com/oss/javascript/langgraph/add-memory#postgres)为准。
 
-Nest 初始化期间先获取数据库级 advisory transaction lock，串行调用官方 setup() 并经 getTuple() 验证读取，完成后才开放 service.saver。setup 的 DDL 仍由官方实现执行；锁只防止 API / Worker 多实例同时初始化官方迁移。失败抛 WORKFLOW_CHECKPOINT_UNAVAILABLE 并关闭池，应用不得就绪；健康检查通过官方读取路径探测，应用关闭调用官方 end()。Compiler 仅接收 BaseCheckpointSaver 并传给 graph.compile，Runner.start / resume 不创建 saver 或执行 setup，也不降级到内存。
+Nest 初始化期间先获取数据库级 advisory transaction lock，串行调用官方 setup() 并经 getTuple() 验证读取，完成后才开放 service.saver。setup 的 DDL 仍由官方实现执行；锁只防止 API / Worker 多实例同时初始化官方迁移。失败抛 WORKFLOW_CHECKPOINT_UNAVAILABLE 并关闭池，应用不得就绪；健康检查通过官方读取路径探测，应用关闭调用官方 end()。Compiler 仅接收 BaseCheckpointSaver 并传给 graph.compile，Runner.executeStart / executeResume 不创建 saver 或执行 setup，也不降级到内存。
 
 多个进程的 Saver 对象与连接池相互独立，恢复依赖相同数据库 / schema、原 threadId 和原 WorkflowVersion。进程退出后数据仍在 PostgreSQL；两个新进程竞争同一 waiting Run 时，业务 Repository 的原子 claim 只允许一个进入 invoke。Checkpoint 与 WorkflowRun / NodeRun 分属不同持久化路径，不承诺跨两者原子提交；故障后的对账及业务删除后的 checkpoint 保留策略仍需单独设计。初始化权限、备份和验证见 [部署说明](deployment.md#langgraph-postgresql-checkpointer)与[开发指南](development.md)。
 

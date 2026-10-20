@@ -15,34 +15,24 @@ import type {
   WorkflowCompiler,
   WorkflowResumeCommand,
 } from '../compiler/workflow-compiler.js';
-import { createWorkflowDefinitionSnapshot } from '../definition/version.js';
 import { workflowStateSchema, type WorkflowState } from '../runtime/state.js';
 import { createWorkflowRunConfig } from './config.js';
 import type { WorkflowOutputResolver } from './workflow-output-resolver.js';
 import type { WorkflowRunRepository } from './workflow-run-repository.js';
+import { WorkflowRunNotPendingError, WorkflowRunNotWaitingError } from './workflow-run-error.js';
+import type { ResumeWorkflowRunInput } from './workflow-run-submission.js';
 import {
-  workflowVersionRecordSchema,
+  loadWorkflowVersion,
   type WorkflowVersionRecord,
   type WorkflowVersionRepository,
 } from './workflow-version-repository.js';
 
-const startInputSchema = z
+const resumeInputSchema = z
   .object({
-    projectId: workflowIdentifierSchema,
-    workflowId: workflowIdentifierSchema,
-    workflowVersionId: workflowIdentifierSchema,
-    inputs: runtimeValueMapSchema,
+    workflowRunId: workflowIdentifierSchema,
+    value: z.unknown().refine((value) => value !== undefined, '必须提供恢复值'),
   })
   .strict();
-export type StartWorkflowRunInput = z.infer<typeof startInputSchema>;
-
-const resumeInputSchema = z
-  .object({ workflowRunId: workflowIdentifierSchema, value: z.unknown() })
-  .strict();
-export interface ResumeWorkflowRunInput {
-  readonly workflowRunId: string;
-  readonly value: unknown;
-}
 
 export type StartWorkflowRunResult = {
   readonly workflowRunId: string;
@@ -54,8 +44,8 @@ export type StartWorkflowRunResult = {
 export type ResumeWorkflowRunResult = StartWorkflowRunResult;
 
 export interface WorkflowRunner {
-  start(input: StartWorkflowRunInput): Promise<StartWorkflowRunResult>;
-  resume(input: ResumeWorkflowRunInput): Promise<ResumeWorkflowRunResult>;
+  executeStart(workflowRunId: string): Promise<StartWorkflowRunResult>;
+  executeResume(input: ResumeWorkflowRunInput): Promise<ResumeWorkflowRunResult>;
 }
 
 const failureCodes = {
@@ -66,14 +56,6 @@ const failureCodes = {
   resolve_output: 'WORKFLOW_OUTPUT_RESOLUTION_FAILED',
 } as const;
 type WorkflowRunStage = keyof typeof failureCodes;
-
-export class WorkflowRunNotWaitingError extends Error {
-  readonly code = 'WORKFLOW_RUN_NOT_WAITING';
-  constructor(public readonly workflowRunId: string) {
-    super('工作流运行不存在、无权访问或已不在 waiting 状态');
-    this.name = 'WorkflowRunNotWaitingError';
-  }
-}
 
 // 记录稳定摘要，不把 Node cause、供应商错误或访问 URL 复制进整图记录。
 function toWorkflowRunError(stage: WorkflowRunStage): WorkflowRunError {
@@ -99,34 +81,15 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
     private readonly outputResolver: WorkflowOutputResolver,
   ) {}
 
-  async start(input: StartWorkflowRunInput): Promise<StartWorkflowRunResult> {
-    const request = startInputSchema.parse(input);
-    const version = await this.loadVersion(request);
-
-    // create 返回的 RuntimeValue 输入快照及 thread 是本次执行身份的唯一来源。
-    const run = Object.freeze(workflowRunSchema.parse(await this.runs.create(request)));
-    if (
-      run.projectId !== request.projectId ||
-      run.workflowId !== version.workflowId ||
-      run.workflowVersionId !== version.id ||
-      run.status !== 'pending'
-    )
-      throw new Error('新建运行与已加载版本不匹配或不是 pending');
-    let graph: CompiledWorkflow;
-    try {
-      graph = await this.compiler.compile(version.definition, run);
-    } catch (error) {
-      if (error !== null && isGraphBubbleUp(error)) throw error;
-      // 编译发生在 pending；失败也按既定 pending → running → failed 路径记录，不增加非法转换。
-      try {
-        await this.runs.markRunning(run.id);
-      } catch (recordingError) {
-        throw new WorkflowRunRecordingError(run.id, error, recordingError);
-      }
-      return this.fail(run, 'compile', error);
-    }
-
-    await this.runs.markRunning(run.id);
+  async executeStart(workflowRunId: string): Promise<StartWorkflowRunResult> {
+    const id = workflowIdentifierSchema.parse(workflowRunId);
+    const expected = await this.runs.getById(id);
+    if (!expected || expected.status !== 'pending') throw new WorkflowRunNotPendingError(id);
+    const claimed = await this.runs.claimPendingForStart(id);
+    if (!claimed) throw new WorkflowRunNotPendingError(id);
+    const run = Object.freeze(workflowRunSchema.parse(claimed));
+    this.assertClaim(run, expected, id);
+    const { version, graph } = await this.prepare(run);
     const initialState: WorkflowState = {
       run: {
         projectId: run.projectId,
@@ -142,33 +105,16 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
     return this.invoke(run, version, graph, initialState);
   }
 
-  async resume(input: ResumeWorkflowRunInput): Promise<ResumeWorkflowRunResult> {
+  async executeResume(input: ResumeWorkflowRunInput): Promise<ResumeWorkflowRunResult> {
     const request = resumeInputSchema.parse(input);
-    const stored = await this.runs.getById(request.workflowRunId);
-    if (!stored || stored.status !== 'waiting')
+    const expected = await this.runs.getById(request.workflowRunId);
+    if (!expected || expected.status !== 'waiting')
       throw new WorkflowRunNotWaitingError(request.workflowRunId);
-    const waitingRun = Object.freeze(workflowRunSchema.parse(stored));
-    if (waitingRun.id !== request.workflowRunId) throw new Error('读取到的运行与恢复请求不匹配');
-    let stage: WorkflowRunStage = 'load_version';
-    let version: WorkflowVersionRecord;
-    let graph: CompiledWorkflow;
-    try {
-      version = await this.loadVersion(waitingRun);
-      stage = 'compile';
-      graph = await this.compiler.compile(version.definition, waitingRun);
-    } catch (error) {
-      if (error !== null && isGraphBubbleUp(error)) throw error;
-      // 准备阶段失败也必须先拥有 waiting → running 转换，不能越过 claim 写失败记录。
-      let claimed: WorkflowRun;
-      try {
-        claimed = await this.claim(waitingRun);
-      } catch (recordingError) {
-        if (recordingError instanceof WorkflowRunNotWaitingError) throw recordingError;
-        throw new WorkflowRunRecordingError(waitingRun.id, error, recordingError);
-      }
-      return this.fail(claimed, stage, error);
-    }
-    const run = await this.claim(waitingRun);
+    const claimed = await this.runs.claimWaitingForResume(request.workflowRunId);
+    if (!claimed) throw new WorkflowRunNotWaitingError(request.workflowRunId);
+    const run = Object.freeze(workflowRunSchema.parse(claimed));
+    this.assertClaim(run, expected, request.workflowRunId);
+    const { version, graph } = await this.prepare(run);
     return this.invoke(
       run,
       version,
@@ -177,38 +123,31 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
     );
   }
 
-  private async loadVersion(
-    identity: Pick<WorkflowRun, 'projectId' | 'workflowId' | 'workflowVersionId'>,
-  ): Promise<WorkflowVersionRecord> {
-    const stored = await this.versions.getVersion(identity.workflowVersionId);
-    if (stored === null) throw new Error('工作流版本不存在或无权访问');
-    const loaded = workflowVersionRecordSchema.parse(stored);
-    if (
-      loaded.id !== identity.workflowVersionId ||
-      loaded.workflowId !== identity.workflowId ||
-      loaded.projectId !== identity.projectId
-    )
-      throw new Error('工作流版本与请求的项目 / 工作流不匹配');
-    return Object.freeze({
-      ...loaded,
-      definition: createWorkflowDefinitionSnapshot(loaded.definition),
-    });
-  }
-
-  private async claim(expected: WorkflowRun): Promise<WorkflowRun> {
-    const claimed = await this.runs.claimWaitingForResume(expected.id);
-    if (!claimed) throw new WorkflowRunNotWaitingError(expected.id);
-    const run = Object.freeze(workflowRunSchema.parse(claimed));
+  private assertClaim(run: WorkflowRun, expected: WorkflowRun, id: string): void {
     if (
       run.status !== 'running' ||
+      run.id !== id ||
       run.id !== expected.id ||
       run.projectId !== expected.projectId ||
       run.workflowId !== expected.workflowId ||
       run.workflowVersionId !== expected.workflowVersionId ||
       run.threadId !== expected.threadId
     )
-      throw new Error('抢占运行与原恢复身份不匹配');
-    return run;
+      throw new Error('抢占运行与原执行身份不匹配');
+  }
+
+  private async prepare(
+    run: WorkflowRun,
+  ): Promise<{ version: WorkflowVersionRecord; graph: CompiledWorkflow }> {
+    let stage: WorkflowRunStage = 'load_version';
+    try {
+      const version = await loadWorkflowVersion(this.versions, run);
+      stage = 'compile';
+      const graph = await this.compiler.compile(version.definition, run);
+      return { version, graph };
+    } catch (error) {
+      return this.fail(run, stage, error);
+    }
   }
 
   private checkpointState(run: WorkflowRun, snapshot: StateSnapshot): WorkflowState {

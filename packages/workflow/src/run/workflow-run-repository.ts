@@ -12,6 +12,8 @@ export interface CreateWorkflowRunInput {
 export interface WorkflowRunRepository {
   create(input: CreateWorkflowRunInput): Promise<WorkflowRun>;
   getById(workflowRunId: string): Promise<WorkflowRun | null>;
+  // 首次执行只允许一个执行者将 pending 抢占为 running，写入 startedAt 并返回持久身份。
+  claimPendingForStart(workflowRunId: string): Promise<WorkflowRun | null>;
   // 同一事务原子检查 waiting 并返回已转为 running 的记录；并发失败或无权访问返回 null。
   claimWaitingForResume(workflowRunId: string): Promise<WorkflowRun | null>;
   markRunning(workflowRunId: string): Promise<void>;

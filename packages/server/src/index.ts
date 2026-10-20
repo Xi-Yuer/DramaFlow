@@ -11,3 +11,5 @@ export { WorkflowVersionRepositories } from './workflow/workflow-version-reposit
 export { WorkflowNodeRegistryModule } from './workflow/workflow-node-registry.module.js';
 export { WorkflowRuntimeFactory } from './workflow/workflow-runtime.factory.js';
 export { WorkflowRuntimeInfrastructureModule } from './workflow/workflow-runtime-infrastructure.module.js';
+export { WorkflowRunSubmissionFactory } from './workflow/workflow-run-submission.factory.js';
+export { WorkflowExecutionService } from './workflow/workflow-execution.service.js';

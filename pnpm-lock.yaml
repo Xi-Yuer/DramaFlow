@@ -181,6 +181,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@dramaflow/contracts':
+        specifier: workspace:^
+        version: link:../../packages/contracts
       '@dramaflow/server':
         specifier: workspace:*
         version: link:../../packages/server

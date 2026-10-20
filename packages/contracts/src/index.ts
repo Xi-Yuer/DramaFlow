@@ -16,3 +16,4 @@ export * from './workflow/workflow-run.js';
 export * from './workflow/workflow-run-api.js';
 export * from './node/definition.js';
 export * from './node/manifest.js';
+export * from './workflow/workflow-execution-job.js';

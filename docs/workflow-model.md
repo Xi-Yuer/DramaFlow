@@ -160,7 +160,7 @@ inputs / outputs 保存 RuntimeValue map，不复制解码媒体或整个 State.
 
 合法转换固定为 pending → running；running → waiting / completed / failed / cancelled；waiting → running / cancelled。waiting 恢复后如遇失败，必须经过 running 再进入 failed；终态不再更新。首次进入 running 写 startedAt，waiting → running 保留首次开始时间，终态写 completedAt。Repository 只提供明确领域操作，不开放任意 updateStatus，也不靠状态记录调度 Graph。
 
-Runner.resume 通过 Repository.claimWaitingForResume 原子抢占 waiting → running，不能凭普通读取再调用 markRunning。getById 和 claim 都限定项目 / 所有者；非 waiting 或 claim 竞争失败向调用方返回 WORKFLOW_RUN_NOT_WAITING，不执行 Graph。恢复只允许提供 Run ID 和不透明 value，版本与 thread 一律取原运行，不新建记录或初始 State，具体执行边界见 [Runtime](runtime-architecture.md#workflowrunner-恢复)。
+提交服务只创建 pending 或返回恢复意图，不 claim；Runner.executeStart 通过 claimPendingForStart 原子抢占首次执行，Runner.executeResume 通过 Repository.claimWaitingForResume 原子抢占 waiting → running，不能凭普通读取再调用 markRunning。getById 和 claim 都限定项目 / 所有者；非 waiting 或 claim 竞争失败向调用方返回 WORKFLOW_RUN_NOT_WAITING，不执行 Graph。恢复只允许提供 Run ID 和不透明 value，版本与 thread 一律取原运行，不新建记录或初始 State，具体执行边界见 [Runtime](runtime-architecture.md#workflowrunner-恢复)。
 
 `waiting` 是等待人工审核、外部 API、子流程或批量结果等执行事实的业务投影，不能凭状态字符串驱动另一套暂停 / 恢复流程。人工介入使用 LangGraph interrupt / Command.resume；WorkflowRun.threadId 映射 thread_id，等待原因及业务审计与 checkpoint 分离，见 [WorkflowState 边界](workflow-state.md) 与 [技术职责](runtime-architecture.md)。
 
@@ -215,6 +215,6 @@ React Flow Edge 通过 edge.data.kind 区分两类边，并保留边 ID 和两�
 
 联合 DAG 只验证图结构无环。执行依赖收集独立读取两类边的节点 ID，按目标聚合、按来源去重，不增加 parallelNodes / sequentialNodes 等列表；多上游映射为一条 LangGraph 数组 Join Edge。原始 Data Edge 的两端 portKey 保留给 BindingResolver 读取上游输出，依赖编译不读取端口或构造输入。条件候选分支不能直接放入 ALL 等待集合。图调度、Checkpoint 和暂停恢复由 LangGraph 提供。
 
-WorkflowState.outputs 使用携带 DataType 的 RuntimeValue。BindingResolver 定位或包装输入，Codec 解码输入并按统一存储策略编码输出，引用访问及写入委托独立服务；Action NodeExecutor 校验输入 / 配置 / 输出并返回 `{ output: Record<string, RuntimeValue> }`，不修改 State。Action 编译包装返回当前节点的 outputs 增量，LangGraph reducer 按节点键合并并拒绝重复写入，规则见 [State 边界](workflow-state.md#并行与历史) 与 [数据模型](data-model.md)。普通 Action 整图 Compiler 和 Runner 已有实现，生产运行入口仍未接入，能力与引用服务限制见 [架构](architecture.md#数据与-node-基础库)。
+WorkflowState.outputs 使用携带 DataType 的 RuntimeValue。BindingResolver 定位或包装输入，Codec 解码输入并按统一存储策略编码输出，引用访问及写入委托独立服务；Action NodeExecutor 校验输入 / 配置 / 输出并返回 `{ output: Record<string, RuntimeValue> }`，不修改 State。Action 编译包装返回当前节点的 outputs 增量，LangGraph reducer 按节点键合并并拒绝重复写入，规则见 [State 边界](workflow-state.md#并行与历史) 与 [数据模型](data-model.md)。普通 Action 整图 Compiler 和 Runner 已有实现，Run HTTP 通过独立提交 / 执行服务接入，仍在 API 同步桥接，能力与引用服务限制见 [架构](architecture.md#数据与-node-基础库)。
 
 项目保存协议仍未接入 WorkflowDefinition，阶段与下一步统一见 [实施方案](implementation-plan.md)。

@@ -11,6 +11,7 @@ import {
 import {
   DefaultWorkflowOutputResolver,
   DefaultWorkflowRunner,
+  DefaultWorkflowRunSubmissionService,
   workflowStateSchema,
 } from '@dramaflow/workflow';
 import {
@@ -108,9 +109,12 @@ try {
       compiler,
       new DefaultWorkflowOutputResolver(),
     );
+    const submission = new DefaultWorkflowRunSubmissionService(versions, runs);
+    const start = async (input: Parameters<typeof submission.start>[0]) =>
+      runner.executeStart((await submission.start(input)).id);
     const result =
       command.action === 'start'
-        ? await runner.start({
+        ? await start({
             projectId: command.projectId,
             workflowId: command.workflowId,
             workflowVersionId: command.workflowVersionId,
@@ -122,7 +126,7 @@ try {
               },
             },
           })
-        : await runner.resume({
+        : await runner.executeResume({
             workflowRunId: command.workflowRunId,
             value: command.value,
           });

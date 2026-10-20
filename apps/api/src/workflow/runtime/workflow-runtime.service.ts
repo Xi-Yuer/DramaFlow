@@ -5,7 +5,11 @@ import {
   workflowRunResponseSchema,
   type WorkflowRunResponse,
 } from '@dramaflow/contracts';
-import { DatabaseService, WorkflowRuntimeFactory } from '@dramaflow/server';
+import {
+  DatabaseService,
+  WorkflowRunSubmissionFactory,
+  WorkflowExecutionService,
+} from '@dramaflow/server';
 import type {
   ResumeWorkflowRunInput,
   StartWorkflowRunInput,
@@ -20,7 +24,8 @@ import {
 @Injectable()
 export class WorkflowRuntimeService {
   constructor(
-    private readonly runtimes: WorkflowRuntimeFactory,
+    private readonly submissions: WorkflowRunSubmissionFactory,
+    private readonly execution: WorkflowExecutionService,
     private readonly database: DatabaseService,
   ) {}
 
@@ -37,15 +42,24 @@ export class WorkflowRuntimeService {
       select: { workflow: { select: { id: true, projectId: true } } },
     });
     if (!version) throw workflowResourceNotFound('WORKFLOW_VERSION_NOT_FOUND');
-    const result = await this.httpOperation('WORKFLOW_VERSION_NOT_FOUND', () =>
-      this.start(ownerId, {
-        projectId: version.workflow.projectId,
-        workflowId: version.workflow.id,
-        workflowVersionId: request.workflowVersionId,
-        inputs: request.inputs,
-      }),
+    const run = await this.httpOperation(
+      'WORKFLOW_VERSION_NOT_FOUND',
+      async () => {
+        const pending = await this.submitStart(ownerId, {
+          projectId: version.workflow.projectId,
+          workflowId: version.workflow.id,
+          workflowVersionId: request.workflowVersionId,
+          inputs: request.inputs,
+        });
+        // 临时同步桥接；后续 Queue 仅替换此执行调用，不改变提交服务或 HTTP 契约。
+        await this.execution.execute({
+          kind: 'start',
+          workflowRunId: pending.id,
+        });
+        return pending;
+      },
     );
-    return this.getRun(ownerId, result.workflowRunId);
+    return this.getRun(ownerId, run.id);
   }
 
   async getRun(ownerId: string, rawId: string): Promise<WorkflowRunResponse> {
@@ -80,12 +94,13 @@ export class WorkflowRuntimeService {
     const request = resumeWorkflowRunRequestSchema.parse(body);
     // 在调用 Runner 前完成 HTTP 资源权限检查；Runner 的 Repository 仍独立重新检查。
     const run = await this.authorizedRun(ownerId, runId);
-    await this.httpOperation('WORKFLOW_RUN_NOT_FOUND', () =>
-      this.resume(ownerId, run.projectId, {
+    await this.httpOperation('WORKFLOW_RUN_NOT_FOUND', async () => {
+      const job = await this.submitResume(ownerId, run.projectId, {
         workflowRunId: runId,
         value: request.value,
-      }),
-    );
+      });
+      await this.execution.execute(job);
+    });
     return this.getRun(ownerId, runId);
   }
 
@@ -121,17 +136,20 @@ export class WorkflowRuntimeService {
     }
   }
 
-  async start(ownerId: string, input: StartWorkflowRunInput) {
-    const runner = await this.runtimes.forProject(ownerId, input.projectId);
-    return runner.start(input);
+  async submitStart(ownerId: string, input: StartWorkflowRunInput) {
+    const submission = await this.submissions.forProject(
+      ownerId,
+      input.projectId,
+    );
+    return submission.start(input);
   }
 
-  async resume(
+  async submitResume(
     ownerId: string,
     projectId: string,
     input: ResumeWorkflowRunInput,
   ) {
-    const runner = await this.runtimes.forProject(ownerId, projectId);
-    return runner.resume(input);
+    const submission = await this.submissions.forProject(ownerId, projectId);
+    return submission.resume(input);
   }
 }

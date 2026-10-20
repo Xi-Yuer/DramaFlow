@@ -95,6 +95,18 @@ class PrismaWorkflowRunRepository implements WorkflowRunRepository {
     return row ? toWorkflowRun(row) : null;
   }
 
+  async claimPendingForStart(workflowRunId: string): Promise<WorkflowRun | null> {
+    return this.db.client.$transaction(async (tx) => {
+      const where = this.scoped(workflowRunId);
+      const changed = await tx.workflowRun.updateMany({
+        where: { ...where, status: 'pending' },
+        data: { status: 'running', startedAt: new Date() },
+      });
+      if (changed.count === 0) return null;
+      return toWorkflowRun(await tx.workflowRun.findFirstOrThrow({ where }));
+    });
+  }
+
   async claimWaitingForResume(workflowRunId: string): Promise<WorkflowRun | null> {
     return this.db.client.$transaction(async (tx) => {
       const where = this.scoped(workflowRunId);
@@ -166,7 +178,7 @@ class PrismaWorkflowRunRepository implements WorkflowRunRepository {
   }
 }
 
-// 无运行 HTTP 入口；内部调用方先明确所有者与项目，所有写入继续检查权限。
+// 内部调用方先明确所有者与项目；HTTP 的资源检查不能替代此处逐次操作的权限检查。
 @Injectable()
 export class WorkflowRunRepositories {
   constructor(private readonly db: DatabaseService) {}

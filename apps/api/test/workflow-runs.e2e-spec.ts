@@ -348,6 +348,37 @@ describe('WorkflowRun 读取与原子恢复 claim', () => {
     expect(await repository.getById('missing-run')).toBeNull();
   });
 
+  it('两个生产 Repository 的 12 个首次执行 claim 只有一个成功，startedAt 在抢占时写入', async () => {
+    const run = await create();
+    const second = await repositories.forProject(ownerId, projectId);
+    const claims = await Promise.all(
+      Array.from({ length: 12 }, (_, index) =>
+        (index % 2 ? repository : second).claimPendingForStart(run.id),
+      ),
+    );
+    const claimed = claims.filter((value) => value !== null);
+    expect(claimed).toHaveLength(1);
+    expect(claimed[0]).toMatchObject({
+      ...run,
+      status: 'running',
+      startedAt: expect.any(String),
+    });
+    expect(await repository.getById(run.id)).toEqual(claimed[0]);
+    expect(await repository.claimPendingForStart(run.id)).toBeNull();
+    expect(await repository.claimPendingForStart('missing-run')).toBeNull();
+    expect(await db.workflowRun.count({ where: { id: run.id } })).toBe(1);
+  });
+
+  it.each(['running', 'waiting', 'completed', 'failed', 'cancelled'] as const)(
+    '%s 不能通过首次 claim 修改原记录',
+    async (status) => {
+      const run = await prepare(status);
+      const before = await repository.getById(run.id);
+      expect(await repository.claimPendingForStart(run.id)).toBeNull();
+      expect(await repository.getById(run.id)).toEqual(before);
+    },
+  );
+
   it('12 个并发 claim 只有一个成功，返回 running 并保留原身份、输入与首次开始时间', async () => {
     const run = await prepare('waiting');
     const before = await repository.getById(run.id);
@@ -375,22 +406,30 @@ describe('WorkflowRun 读取与原子恢复 claim', () => {
     },
   );
 
-  it('读取和 claim 继续检查所有者 / 项目，不泄漏其他项目记录或使用过期权限', async () => {
-    const run = await prepare('waiting');
-    const before = await repository.getById(run.id);
-    const other = await repositories.forProject(otherId, otherProjectId);
-    expect(await other.getById(run.id)).toBeNull();
-    expect(await other.claimWaitingForResume(run.id)).toBeNull();
-    await db.project.update({
-      where: { id: projectId },
-      data: { ownerId: otherId },
-    });
-    try {
-      expect(await repository.getById(run.id)).toBeNull();
-      expect(await repository.claimWaitingForResume(run.id)).toBeNull();
-    } finally {
-      await db.project.update({ where: { id: projectId }, data: { ownerId } });
-    }
-    expect(await repository.getById(run.id)).toEqual(before);
-  });
+  it.each(['pending', 'waiting'] as const)(
+    '%s 的读取和 claim 继续检查所有者 / 项目，不使用过期权限',
+    async (status) => {
+      const run = await prepare(status);
+      const claim =
+        status === 'pending' ? 'claimPendingForStart' : 'claimWaitingForResume';
+      const before = await repository.getById(run.id);
+      const other = await repositories.forProject(otherId, otherProjectId);
+      expect(await other.getById(run.id)).toBeNull();
+      expect(await other[claim](run.id)).toBeNull();
+      await db.project.update({
+        where: { id: projectId },
+        data: { ownerId: otherId },
+      });
+      try {
+        expect(await repository.getById(run.id)).toBeNull();
+        expect(await repository[claim](run.id)).toBeNull();
+      } finally {
+        await db.project.update({
+          where: { id: projectId },
+          data: { ownerId },
+        });
+      }
+      expect(await repository.getById(run.id)).toEqual(before);
+    },
+  );
 });

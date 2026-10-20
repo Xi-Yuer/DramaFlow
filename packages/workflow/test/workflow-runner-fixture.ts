@@ -15,6 +15,7 @@ import {
   DefaultWorkflowCompiler,
   DefaultWorkflowOutputResolver,
   DefaultWorkflowRunner,
+  DefaultWorkflowRunSubmissionService,
   NodeRegistry,
   type CompiledWorkflow,
   type WorkflowCompiler,
@@ -79,6 +80,15 @@ export function workflowRunnerFixture() {
       order.push('get_run');
       return stored?.id === id ? structuredClone(stored) : null;
     }),
+    claimPendingForStart: vi
+      .fn<WorkflowRunRepository['claimPendingForStart']>()
+      .mockImplementation(async (id) => {
+        order.push('claim_start');
+        if (!stored || stored.id !== id || stored.status !== 'pending') return null;
+        stored.status = 'running';
+        stored.startedAt = '2026-10-20T00:00:01.000Z';
+        return structuredClone(stored);
+      }),
     claimWaitingForResume: vi
       .fn<WorkflowRunRepository['claimWaitingForResume']>()
       .mockImplementation(async (id) => {
@@ -178,7 +188,14 @@ export function workflowRunnerFixture() {
     return resolveOutputs(definition, state);
   });
   const runner = new DefaultWorkflowRunner({ getVersion }, runs, { compile }, resolver);
+  const submission = new DefaultWorkflowRunSubmissionService({ getVersion }, runs);
+  const start = async (request: typeof input) => {
+    const pending = await submission.start(request);
+    return runner.executeStart(pending.id);
+  };
   return {
+    start,
+    submission,
     runner,
     input,
     version,

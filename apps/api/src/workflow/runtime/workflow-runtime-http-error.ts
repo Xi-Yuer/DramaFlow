@@ -2,6 +2,7 @@ import {
   NodeExecutionError,
   NodeRegistrationError,
   WorkflowRunNotWaitingError,
+  WorkflowRunNotPendingError,
   WorkflowRunRecordingError,
 } from '@dramaflow/workflow';
 import {
@@ -45,9 +46,18 @@ export function workflowRuntimeHttpError(
   error: unknown,
   notFoundCode: WorkflowResourceNotFoundCode,
 ): HttpException {
-  if (error instanceof WorkflowRunNotWaitingError)
+  if (
+    error instanceof WorkflowRunNotWaitingError ||
+    error instanceof WorkflowRunNotPendingError
+  )
     return new ConflictException(
-      { code: error.code, message: '工作流运行当前不在 waiting 状态' },
+      {
+        code: error.code,
+        message:
+          error instanceof WorkflowRunNotWaitingError
+            ? '工作流运行当前不在 waiting 状态'
+            : '工作流运行当前不在 pending 状态',
+      },
       { cause: error },
     );
   if (error instanceof HttpException && error.getStatus() === 404)

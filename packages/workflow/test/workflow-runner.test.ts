@@ -36,7 +36,7 @@ describe('WorkflowRunner 首次启动', () => {
   it('真实 Action 执行顺序、固定版本 / thread、初始 State 和最终输出均正确', async () => {
     const f = workflowRunnerFixture();
     const before = structuredClone(f.input);
-    const result = await f.runner.start(f.input);
+    const result = await f.start(f.input);
     expect(result).toEqual({
       workflowRunId: 'run-1',
       threadId: 'thread-7',
@@ -48,14 +48,16 @@ describe('WorkflowRunner 首次启动', () => {
     expect(f.order).toEqual([
       'load_version',
       'create',
+      'get_run',
+      'claim_start',
+      'load_version',
       'compile',
-      'running',
       'invoke',
       'execute',
       'resolve_output',
       'completed',
     ]);
-    expect(f.getVersion).toHaveBeenCalledExactlyOnceWith('version-3');
+    expect(f.getVersion).toHaveBeenNthCalledWith(2, 'version-3');
     expect(f.graphs[0]!.invoke).toHaveBeenCalledExactlyOnceWith(
       {
         run: {
@@ -89,12 +91,12 @@ describe('WorkflowRunner 首次启动', () => {
 
   it('加载后与调用方的版本对象隔离，Compiler 和业务上下文中的定义均冻结', async () => {
     const f = workflowRunnerFixture();
-    const create = f.runs.create.getMockImplementation()!;
-    f.runs.create.mockImplementation(async (input) => {
+    const compile = f.compile.getMockImplementation()!;
+    f.compile.mockImplementation(async (definition, run) => {
       f.node.inputs.b = { type: 'constant', value: 999 };
-      return create(input);
+      return compile(definition, run);
     });
-    const result = await f.runner.start(f.input);
+    const result = await f.start(f.input);
     const definition = f.compile.mock.calls[0]![0];
     expect(Object.isFrozen(definition.nodes[0]!.inputs)).toBe(true);
     expect(Reflect.set(definition.nodes[0]!.inputs, 'b', { type: 'constant', value: 888 })).toBe(
@@ -109,7 +111,7 @@ describe('WorkflowRunner 首次启动', () => {
     async (field) => {
       const f = workflowRunnerFixture();
       f.getVersion.mockResolvedValue({ ...f.version, [field]: 'other' });
-      await expect(f.runner.start(f.input)).rejects.toThrow('不匹配');
+      await expect(f.start(f.input)).rejects.toThrow('不匹配');
       expect(f.runs.create).not.toHaveBeenCalled();
       expect(f.compile).not.toHaveBeenCalled();
     },
@@ -119,9 +121,9 @@ describe('WorkflowRunner 首次启动', () => {
     const f = workflowRunnerFixture();
     const failure = new Error('版本未发布或无权访问');
     f.getVersion.mockRejectedValue(failure);
-    await expect(f.runner.start(f.input)).rejects.toBe(failure);
+    await expect(f.start(f.input)).rejects.toBe(failure);
     const withDraft = { ...f.input, definition: f.version.definition };
-    await expect(f.runner.start(withDraft)).rejects.toThrow();
+    await expect(f.start(withDraft)).rejects.toThrow();
     expect(f.getVersion).toHaveBeenCalledTimes(1);
     expect(f.runs.create).not.toHaveBeenCalled();
   });
@@ -129,7 +131,7 @@ describe('WorkflowRunner 首次启动', () => {
   it('版本 Repository 返回 null 时明确拒绝，不创建运行或编译图', async () => {
     const f = workflowRunnerFixture();
     f.getVersion.mockResolvedValue(null);
-    await expect(f.runner.start(f.input)).rejects.toThrow('工作流版本不存在或无权访问');
+    await expect(f.start(f.input)).rejects.toThrow('工作流版本不存在或无权访问');
     expect(f.runs.create).not.toHaveBeenCalled();
     expect(f.compile).not.toHaveBeenCalled();
   });
@@ -138,7 +140,7 @@ describe('WorkflowRunner 首次启动', () => {
     const f = workflowRunnerFixture();
     const cause = new Error('provider-secret-marker');
     f.execute.mockRejectedValue(cause);
-    const invocation = f.runner.start(f.input);
+    const invocation = f.start(f.input);
     await expect(invocation).rejects.toMatchObject({ stage: 'execute', cause });
     expect(f.nodeRuns.markFailed).toHaveBeenCalledWith(
       'node-run-1',
@@ -163,7 +165,7 @@ describe('WorkflowRunner 首次启动', () => {
       const graph = pausedGraph(staticBreakpoint);
       const invoke = vi.spyOn(graph, 'invoke');
       f.compile.mockResolvedValue(graph);
-      const result = await f.runner.start(f.input);
+      const result = await f.start(f.input);
       expect(result).toEqual({ workflowRunId: 'run-1', threadId: 'thread-7', status: 'waiting' });
       const snapshot = await graph.getState({ configurable: { thread_id: 'thread-7' } });
       expect(snapshot.next).toEqual(['native_wait']);
@@ -190,7 +192,7 @@ describe('WorkflowRunner 首次启动', () => {
       getState: graph.getState.bind(graph),
     };
     f.compile.mockResolvedValue(compiled);
-    expect(await f.runner.start(f.input)).toMatchObject({ status: 'waiting' });
+    expect(await f.start(f.input)).toMatchObject({ status: 'waiting' });
     expect(f.runs.markFailed).not.toHaveBeenCalled();
     expect(f.runs.markCompleted).not.toHaveBeenCalled();
   });
@@ -199,8 +201,15 @@ describe('WorkflowRunner 首次启动', () => {
     const f = workflowRunnerFixture();
     const cause = new Error('不支持的节点');
     f.compile.mockRejectedValue(cause);
-    await expect(f.runner.start(f.input)).rejects.toBe(cause);
-    expect(f.order).toEqual(['load_version', 'create', 'running', 'failed']);
+    await expect(f.start(f.input)).rejects.toBe(cause);
+    expect(f.order).toEqual([
+      'load_version',
+      'create',
+      'get_run',
+      'claim_start',
+      'load_version',
+      'failed',
+    ]);
     expect(f.runs.markFailed).toHaveBeenCalledWith(
       'run-1',
       expect.objectContaining({ stage: 'compile' }),
@@ -211,7 +220,7 @@ describe('WorkflowRunner 首次启动', () => {
   it('缺少声明的最终输出时，NodeRun 可已完成，WorkflowRun 必须失败', async () => {
     const f = workflowRunnerFixture();
     f.version.definition.outputs[0]!.source.outputKey = 'missing';
-    await expect(f.runner.start(f.input)).rejects.toMatchObject({
+    await expect(f.start(f.input)).rejects.toMatchObject({
       code: 'WORKFLOW_OUTPUT_MISSING',
     });
     expect(f.nodeRuns.markCompleted).toHaveBeenCalledTimes(1);
@@ -222,16 +231,17 @@ describe('WorkflowRunner 首次启动', () => {
     expect(f.runs.markCompleted).not.toHaveBeenCalled();
   });
 
-  it.each(['create', 'markRunning', 'markCompleted', 'markWaiting'] as const)(
+  it.each(['create', 'claimPendingForStart', 'markCompleted', 'markWaiting'] as const)(
     '%s 持久化故障原样上抛，不反向 markFailed',
     async (method) => {
       const f = workflowRunnerFixture();
       if (method === 'markWaiting') f.compile.mockResolvedValue(pausedGraph());
       const failure = new Error('记录服务不可用');
       f.runs[method].mockRejectedValue(failure);
-      await expect(f.runner.start(f.input)).rejects.toBe(failure);
+      await expect(f.start(f.input)).rejects.toBe(failure);
       expect(f.runs.markFailed).not.toHaveBeenCalled();
-      if (method === 'markRunning' || method === 'create') expect(f.execute).not.toHaveBeenCalled();
+      if (method === 'claimPendingForStart' || method === 'create')
+        expect(f.execute).not.toHaveBeenCalled();
     },
   );
 
@@ -241,7 +251,7 @@ describe('WorkflowRunner 首次启动', () => {
     const recordingError = new Error('数据库故障');
     f.execute.mockRejectedValue(cause);
     f.runs.markFailed.mockRejectedValue(recordingError);
-    const invocation = f.runner.start(f.input);
+    const invocation = f.start(f.input);
     await expect(invocation).rejects.toBeInstanceOf(WorkflowRunRecordingError);
     await expect(invocation).rejects.toMatchObject({
       workflowRunId: 'run-1',
@@ -259,7 +269,7 @@ describe('WorkflowRunner 首次启动', () => {
       const native = pausedGraph();
       vi.spyOn(native, 'invoke').mockRejectedValue(cause);
       f.compile.mockResolvedValue(native);
-      await expect(f.runner.start(f.input)).rejects.toBe(cause);
+      await expect(f.start(f.input)).rejects.toBe(cause);
       expect(f.runs.markFailed).not.toHaveBeenCalled();
       expect(f.runs.markWaiting).not.toHaveBeenCalled();
     },
@@ -297,7 +307,7 @@ describe('WorkflowRunner 首次启动', () => {
         });
         return graph;
       });
-      await expect(f.runner.start(f.input)).rejects.toThrow();
+      await expect(f.start(f.input)).rejects.toThrow();
       expect(f.runs.markFailed).toHaveBeenCalledWith(
         'run-1',
         expect.objectContaining({ stage: 'inspect_state' }),

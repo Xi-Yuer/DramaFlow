@@ -4,7 +4,7 @@ DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，�
 
 当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录、注册通用 renderer，并接入 Data / Control Edge 连线、重连与删除事件；生产目录为空，画布仍无添加节点、Workflow 保存 / 发布或运行交互，尚无模型调用。
 
-基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。PostgreSQL 已有 Workflow 草稿、完整不可变 WorkflowVersion 快照及 WorkflowRun / NodeRun；API 应用服务支持 Draft 乐观锁与绑定修订的并发安全发布，同一修订仅生成一个版本，版本读取 Repository 保持只读。WorkflowRunner 按明确版本首次启动 Action 图，并以原 thread 的 Command 恢复 waiting 运行；原子 claim 防止并发恢复，结束时只记录声明的最终输出。API / Worker 共用官方 PostgreSQL Checkpointer 基础设施，启动时初始化、关闭时释放连接，已验证跨进程恢复。API / Worker 已通过应用 Service 和共享 factory 装配生产 Runner，按所有者 / 项目创建权限作用域。已有受鉴权保护的 Run start / get / resume HTTP，服务端派生身份且响应不公开 thread；当前在 API 进程同步执行。生产节点目录仍为空，尚无发布 HTTP 或队列消费者；reference decode / encode 明确报未配置错误；实现范围见 [当前架构](docs/architecture.md)。
+基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。PostgreSQL 已有 Workflow 草稿、完整不可变 WorkflowVersion 快照及 WorkflowRun / NodeRun；API 应用服务支持 Draft 乐观锁与绑定修订的并发安全发布，同一修订仅生成一个版本，版本读取 Repository 保持只读。提交服务只创建 pending Run，WorkflowRunner 通过 executeStart 按已有 Run 的明确版本启动 Action 图，并以原 thread 的 Command 恢复 waiting 运行；pending / waiting 原子 claim 防止重复首次执行或并发恢复，结束时只记录声明的最终输出。API / Worker 共用官方 PostgreSQL Checkpointer 基础设施，启动时初始化、关闭时释放连接，已验证跨进程恢复。API / Worker 已通过应用 Service 和共享 factory 装配生产 Runner，按所有者 / 项目创建权限作用域。已有受鉴权保护的 Run start / get / resume HTTP，服务端派生身份且响应不公开 thread；当前 API 显式桥接提交服务与 ExecutionService，仍同步执行；Worker 已可按仅含 Run ID 的 Job 执行现有运行，尚无 Queue / Consumer。生产节点目录仍为空，尚无发布 HTTP 或队列消费者；reference decode / encode 明确报未配置错误；实现范围见 [当前架构](docs/architecture.md)。
 
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 
@@ -53,7 +53,7 @@ pnpm test:integration
 pnpm stack:up
 ```
 
-`test` 运行现有单元测试，包括 Workflow / Node 契约、manifest、React Flow 转换与真实 LangGraph 编译适配；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、项目、基础设施、完整版本快照、Run 生命周期、PostgreSQL checkpoint 跨进程恢复及多实例 claim，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。持久化恢复测试使用原生中断测试图，不代表 Human Review、运行接口或真实模型调用已接入。
+`test` 运行现有单元测试，包括 Workflow / Node 契约、manifest、React Flow 转换与真实 LangGraph 编译适配；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、项目、基础设施、完整版本快照、Run 生命周期、PostgreSQL checkpoint 跨进程恢复及多实例 claim，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。持久化恢复测试使用原生中断测试图，不代表 Human Review 或真实模型调用已接入，运行 HTTP 由独立用例验证。
 
 `stack:up` 构建镜像，启动基础设施、初始化存储桶、迁移和初始管理员，再启动 API、worker 和前端。已有数据卷不会因更新代码而自动删除。
 

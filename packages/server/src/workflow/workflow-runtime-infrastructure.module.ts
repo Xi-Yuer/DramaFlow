@@ -13,6 +13,8 @@ import {
 } from './unconfigured-reference-runtime.js';
 import { WorkflowNodeRegistryModule } from './workflow-node-registry.module.js';
 import { WorkflowRunRepositories } from './workflow-run-repository.js';
+import { WorkflowExecutionService } from './workflow-execution.service.js';
+import { WorkflowRunSubmissionFactory } from './workflow-run-submission.factory.js';
 import { WorkflowRuntimeFactory } from './workflow-runtime.factory.js';
 import { WorkflowVersionRepositories } from './workflow-version-repository.js';
 
@@ -40,7 +42,9 @@ import { WorkflowVersionRepositories } from './workflow-version-repository.js';
       ],
     },
     WorkflowRuntimeFactory,
+    WorkflowRunSubmissionFactory,
+    WorkflowExecutionService,
   ],
-  exports: [WorkflowRuntimeFactory],
+  exports: [WorkflowRuntimeFactory, WorkflowRunSubmissionFactory, WorkflowExecutionService],
 })
 export class WorkflowRuntimeInfrastructureModule {}

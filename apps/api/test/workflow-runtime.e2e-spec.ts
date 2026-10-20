@@ -12,6 +12,8 @@ import {
   WorkflowNodeRegistryModule,
   WorkflowRunRepositories,
   WorkflowRuntimeFactory,
+  WorkflowExecutionService,
+  WorkflowRunSubmissionFactory,
   WorkflowVersionRepositories,
 } from '@dramaflow/server';
 import {
@@ -21,6 +23,8 @@ import {
   DefaultWorkflowRunner,
   NodeRegistry,
   type WorkflowRunner,
+  type StartWorkflowRunInput,
+  type ResumeWorkflowRunInput,
 } from '@dramaflow/workflow';
 import {
   type INestApplicationContext,
@@ -49,7 +53,7 @@ const outsiderId = randomUUID();
 const applications: {
   name: string;
   app: INestApplicationContext;
-  service: Pick<WorkflowRuntimeService, 'start' | 'resume'>;
+  runtimeToken: Type<unknown>;
 }[] = [];
 
 beforeAll(async () => {
@@ -85,9 +89,7 @@ beforeAll(async () => {
     applications.push({
       name,
       app,
-      service: app.get<Pick<WorkflowRuntimeService, 'start' | 'resume'>>(
-        WorkflowRuntimeService,
-      ),
+      runtimeToken: WorkflowRuntimeService,
     });
   }
 });
@@ -138,6 +140,74 @@ async function fixture(
   };
 }
 
+// 测试显式组合两个生产边界；生产 Worker 不接受创建参数。
+async function start(
+  app: INestApplicationContext,
+  owner: string,
+  input: StartWorkflowRunInput,
+) {
+  const submission = await app
+    .get(WorkflowRunSubmissionFactory)
+    .forProject(owner, input.projectId);
+  const pending = await submission.start(input);
+  expect(pending.status).toBe('pending');
+  expect(
+    await app
+      .get(WorkflowCheckpointerService)
+      .saver.getTuple({ configurable: { thread_id: pending.threadId } }),
+  ).toBeUndefined();
+  return app.get(WorkflowExecutionService).executeStart(pending.id);
+}
+
+async function resume(
+  app: INestApplicationContext,
+  owner: string,
+  projectId: string,
+  input: ResumeWorkflowRunInput,
+) {
+  const submission = await app
+    .get(WorkflowRunSubmissionFactory)
+    .forProject(owner, projectId);
+  const job = await submission.resume(input);
+  return app.get(WorkflowExecutionService).execute(job);
+}
+
+it('API 提交后由独立 Worker 应用执行同一个 pending Run；重复 start Job 不再次执行', async () => {
+  const api = applications.find((entry) => entry.name === 'api');
+  const worker = applications.find((entry) => entry.name === 'worker');
+  if (!api || !worker) throw new Error('应用未启动');
+  const submission = api.app.get<WorkflowRuntimeService>(api.runtimeToken);
+  const execution = worker.app.get<Pick<WorkflowExecutionService, 'execute'>>(
+    worker.runtimeToken,
+  );
+  const input = await fixture();
+  const run = await submission.submitStart(ownerId, input);
+  expect(run.status).toBe('pending');
+  expect(
+    await db.workflowRun.count({ where: { projectId: input.projectId } }),
+  ).toBe(1);
+  expect(
+    await api.app
+      .get(WorkflowCheckpointerService)
+      .saver.getTuple({ configurable: { thread_id: run.threadId } }),
+  ).toBeUndefined();
+  const result = await execution.execute({
+    kind: 'start',
+    workflowRunId: run.id,
+  });
+  expect(result).toMatchObject({
+    workflowRunId: run.id,
+    threadId: run.threadId,
+    status: 'completed',
+  });
+  await expect(
+    execution.execute({ kind: 'start', workflowRunId: run.id }),
+  ).rejects.toMatchObject({ code: 'WORKFLOW_RUN_NOT_PENDING' });
+  expect(
+    await db.workflowRun.count({ where: { projectId: input.projectId } }),
+  ).toBe(1);
+});
+
 describe.each(['api', 'worker'])('%s 正式 Nest Runtime 装配', (name) => {
   function context() {
     const application = applications.find((entry) => entry.name === name);
@@ -146,7 +216,7 @@ describe.each(['api', 'worker'])('%s 正式 Nest Runtime 装配', (name) => {
   }
 
   it('完整 DI 构造生产 Repository / Codec / Registry / Runner，空图经真实服务与 PostgreSQL 完成', async () => {
-    const { app, service } = context();
+    const { app } = context();
     await app.get(DatabaseService).client.$queryRaw`SELECT 1`;
     await app.get(WorkflowCheckpointerService).ping();
     expect(app.get(WorkflowVersionRepositories)).toBeInstanceOf(
@@ -178,7 +248,7 @@ describe.each(['api', 'worker'])('%s 正式 Nest Runtime 装配', (name) => {
       .get(WorkflowRuntimeFactory)
       .forProject(ownerId, input.projectId);
     expect(runner).toBeInstanceOf(DefaultWorkflowRunner);
-    const result = await service.start(ownerId, input);
+    const result = await start(app, ownerId, input);
     expect(result).toMatchObject({ status: 'completed', outputs: {} });
     const run = await db.workflowRun.findUniqueOrThrow({
       where: { id: result.workflowRunId },
@@ -200,7 +270,7 @@ describe.each(['api', 'worker'])('%s 正式 Nest Runtime 装配', (name) => {
       0,
     );
     await expect(
-      service.resume(ownerId, input.projectId, {
+      resume(app, ownerId, input.projectId, {
         workflowRunId: run.id,
         value: 1,
       }),
@@ -225,9 +295,9 @@ describe.each(['api', 'worker'])('%s 正式 Nest Runtime 装配', (name) => {
       edges: [],
       outputs: [],
     });
-    await expect(context().service.start(ownerId, input)).rejects.toMatchObject(
-      { code: 'unavailable_type' },
-    );
+    await expect(start(context().app, ownerId, input)).rejects.toMatchObject({
+      code: 'unavailable_type',
+    });
     const run = await db.workflowRun.findFirstOrThrow({
       where: { projectId: input.projectId },
     });
@@ -285,19 +355,19 @@ describe.each(['api', 'worker'])('%s 正式 Nest Runtime 装配', (name) => {
 
   it('显式所有者 / 项目限定 start 和 resume，不允许跨用户取得 Runner 或修改运行', async () => {
     const input = await fixture();
-    const { app, service } = context();
+    const { app } = context();
     await expect(
       app.get(WorkflowRuntimeFactory).forProject(outsiderId, input.projectId),
     ).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.start(outsiderId, input)).rejects.toBeInstanceOf(
+    await expect(start(app, outsiderId, input)).rejects.toBeInstanceOf(
       NotFoundException,
     );
     expect(
       await db.workflowRun.count({ where: { projectId: input.projectId } }),
     ).toBe(0);
-    const result = await service.start(ownerId, input);
+    const result = await start(app, ownerId, input);
     await expect(
-      service.resume(outsiderId, input.projectId, {
+      resume(app, outsiderId, input.projectId, {
         workflowRunId: result.workflowRunId,
         value: 1,
       }),
@@ -311,7 +381,7 @@ describe.each(['api', 'worker'])('%s 正式 Nest Runtime 装配', (name) => {
 
   it('resume 经生产服务读取原运行；waiting 但缺少 checkpoint 时失败，不重新初始化图', async () => {
     const input = await fixture();
-    const { app, service } = context();
+    const { app } = context();
     const repository = await app
       .get(WorkflowRunRepositories)
       .forProject(ownerId, input.projectId);
@@ -319,7 +389,7 @@ describe.each(['api', 'worker'])('%s 正式 Nest Runtime 装配', (name) => {
     await repository.markRunning(run.id);
     await repository.markWaiting(run.id);
     await expect(
-      service.resume(ownerId, input.projectId, {
+      resume(app, ownerId, input.projectId, {
         workflowRunId: run.id,
         value: 1,
       }),

@@ -103,15 +103,23 @@ async function application() {
       const compiler: WorkflowCompiler = {
         async compile(definition, run) {
           const graph = await native.compile(definition, run);
-          if (run.status === 'waiting') await plan.gate?.();
           const fail = plan.fail;
           if (!fail) return graph;
           return { ...graph, invoke: () => fail(run, app) };
         },
       };
+      const runs = await app
+        .get(WorkflowRunRepositories)
+        .forProject(owner, projectId);
+      const read = runs.getById.bind(runs);
+      runs.getById = async (id) => {
+        const run = await read(id);
+        if (run?.status === 'waiting') await plan.gate?.();
+        return run;
+      };
       return new DefaultWorkflowRunner(
         await app.get(WorkflowVersionRepositories).forProject(owner, projectId),
-        await app.get(WorkflowRunRepositories).forProject(owner, projectId),
+        runs,
         compiler,
         new DefaultWorkflowOutputResolver(),
       );
