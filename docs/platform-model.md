@@ -76,7 +76,7 @@ Tool 让一个操作可被 Node / Agent 调用；Plugin 对外部供应商做适
 
 ### 执行、中间件与人工操作
 
-React Flow 是可视化编辑器，平台保存自己的 WorkflowDefinition，经 Workflow Compiler、NodeRegistry / NodeCompilationStrategy 与 Edge Compiler 转换为 LangGraph StateGraph。LangGraph 是核心 Graph Runtime，负责图调度、State 更新、Checkpoint、Interrupt / Resume、Send 和条件路由；平台负责领域契约、Binding 适配、权限与业务记录。普通 NodeType 只 execute 自身业务，统一 NodeExecutor 负责输入输出管线与 State 更新，编译策略负责结构包装。
+React Flow 是可视化编辑器，平台保存自己的 WorkflowDefinition，经 Workflow Compiler、NodeRegistry / NodeCompilationStrategy 与 Edge Compiler 转换为 LangGraph StateGraph。LangGraph 是核心 Graph Runtime，负责图调度、State 更新、Checkpoint、Interrupt / Resume、Send 和条件路由；平台负责领域契约、Binding 适配、权限与业务记录。普通 NodeType 只 execute 自身业务，统一 Action NodeExecutor 负责输入解析、业务校验和调用并返回业务输出，输出编码与 State 增量适配独立处理，编译策略负责结构包装。
 
 LangChain 提供模型、Tool、Agent、Message、Runnable 等抽象，外部能力仍经受信任 Plugin 适配。队列与 worker 承担长异步作业、跨运行和供应商配额控制及唤醒；Middleware 在相应边界应用策略。技术职责、恢复及并发边界统一见 [Runtime 架构](runtime-architecture.md)，不另建调度器。
 

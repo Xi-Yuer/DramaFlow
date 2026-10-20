@@ -4,11 +4,11 @@
 
 ## 当前阶段
 
-2026-10-20：RuntimeValueCodec 的 decode 与引用委托边界阶段已完成；实际能力与引用服务限制见 [当前架构](architecture.md#数据与-node-基础库)，职责边界见 [Runtime](runtime-architecture.md#runtimevalue-decode-边界)。
+2026-10-20：普通 Action NodeExecutor 主执行管线与六阶段错误边界已完成；能力与输出适配限制见 [当前架构](architecture.md#数据与-node-基础库)，职责边界见 [Runtime](runtime-architecture.md#action-执行错误阶段)。
 
 数据语义与承载见 [数据模型](data-model.md)。两类边的静态联合无环检查、执行依赖收集和运行输入绑定职责分离。生产执行管线、大小预算、权限解析、业务持久化及 LangGraph 通道 / reducer 仍待后续阶段接入；本步不扩大项目保存与节点目录的应用边界，不预设条件路由。
 
-**下一步只解决普通 Action Node 的 NodeExecutor 完整执行管线，串联绑定、decode、Zod 校验、NodeType.execute 与输出处理。** 不提前扩展命名控制端口交互、Branch、完整运行服务或生成流程。
+**下一步只解决校验后的 Node 业务输出如何 encode 成 RuntimeValue，以及什么时候生成 Artifact。** 不提前扩展 NodeRun 持久化、Retry、Human Review、Control Node、完整图运行或生成流程。
 
 本文件是当前阶段、下一步与待决策项的唯一维护入口；推进时原地修订，不堆叠旧计划或逐轮交付流水。文档维护方式见 [开发指南](development.md#文档维护)。
 
@@ -19,8 +19,8 @@
 | ①    | 平台是什么                                | 平台定位、一级概念、领域层与执行底座             | 已记录顶层决策                           |
 | ②    | Workflow 工作流模型                       | 静态定义、版本、输入输出及 WorkflowRun           | 已确定边界并实施基础库                   |
 | ③    | Node 节点模型                             | Manifest、服务端实现、实例、端口、版本与编译边界 | 已实施基础设施与目录接入                 |
-| ④    | State / 数据流模型                        | 单次状态、绑定求值、结果传递与并行隔离           | 输入组装与 Decode 边界已明确，待执行管线 |
-| ⑤    | Runtime 执行模型                          | LangGraph 编译与服务接入、持久化、恢复及事件投影 | 待逐步设计                               |
+| ④    | State / 数据流模型                        | 单次状态、绑定求值、结果传递与并行隔离           | 输入主干已明确，待输出 RuntimeValue 编码 |
+| ⑤    | Runtime 执行模型                          | LangGraph 编译与服务接入、持久化、恢复及事件投影 | Action 主干已确定，图运行与持久化待设计  |
 | ⑥    | Tool 工具体系                             | 可调用操作、调用契约、权限及 Node / Agent 关系   | 待逐步设计                               |
 | ⑦    | Plugin 外部能力体系                       | 能力声明、模型、凭证、版本与供应商适配           | 待逐步设计                               |
 | ⑧    | Middleware 中间件体系                     | 日志、权限、成本、重试的介入边界                 | 待逐步设计                               |
@@ -35,15 +35,15 @@
 
 Workflow 的可组合性与固定被调用版本原则已在 [Workflow 模型](workflow-model.md#workflow-组合与-subworkflow-边界) 确定。第 ⑪ 步继续细化父子运行与批量生命周期，不授权任意循环、递归调用或项目下多个独立画布 / 工作流。
 
-## 下一步：普通 Action NodeExecutor 执行管线
+## 下一步：Node 输出编码与 Artifact 边界
 
-BindingResolver 定位或包装 RuntimeValue，RuntimeValueCodec 解码后交出业务输入，规则见 [数据模型](data-model.md#codecbinding-与执行服务接口)。下一步只回答：
+NodeExecutor 经输出 Schema 校验后返回业务 `{ output }`，不将其冒充 State 增量，规则见 [数据模型](data-model.md#codecbinding-与执行服务接口)。下一步只回答：
 
-1. NodeExecutor 怎样按精确节点版本取得 Manifest 与实现，依次绑定、decode、校验完整输入 / 配置并调用业务？
-2. 输出校验、RuntimeValueEncoder、Artifact 与 NodeRun 服务应怎样注入，怎样返回仅本节点的 State.outputs 增量？
-3. 引用失败、输入 / 输出校验失败及业务失败怎样保持各自错误边界，并避免吞掉 LangGraph 原生中断？
+1. 怎样依据输出端口 DataType 与承载策略，把业务输出转成 inline / reference RuntimeValue？
+2. 哪些输出须生成 Artifact，怎样区分新产物与已有固定版本引用？
+3. 编码或持久化失败怎样保持错误边界，避免把部分结果当作完整输出？
 
-结论明确后再串联执行管线，保持 Codec 解码、NodeExecutor Zod 校验与 NodeType 业务调用分层。不用测试引用服务代替生产授权与内容访问，不将临时 URL 反向写入 RuntimeValue 快照。Control Edge 只提供执行先后，Dependency Compiler 不取值。普通多上游固定 ALL，条件候选分支不能套用此规则；继续使用 LangGraph 调度、Checkpoint、Send 和 Interrupt，不自建 ready 轮询或第二套状态机，不授权任意循环或项目下多个独立画布。
+结论明确后再实现输出侧适配，保持业务校验、编码、内容持久化与 State 写回的职责边界；NodeRun 与生产运行服务独立推进。不用测试服务代替真实存储或权限，不将临时 URL 写入 RuntimeValue 快照。Control Edge 只提供执行先后，Dependency Compiler 不取值。普通多上游固定 ALL，条件候选分支不适用；继续使用 LangGraph，不自建调度或恢复状态机，不授权任意循环或项目下多个独立画布。
 
 ## 从设计进入代码
 

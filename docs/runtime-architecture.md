@@ -11,18 +11,25 @@ NestJS 承担认证、权限与业务入口；PostgreSQL 保存业务记录并�
 ## 编译与执行分离
 
 ```text
-WorkflowDefinition / Version
-  → WorkflowCompiler
-  → NodeCompilationStrategy
-  → LangGraph Node Function
-  → NodeExecutor
-  → BindingResolver + RuntimeValueCodec + NodeRun / 内容服务
+NodeDefinition + NodeExecutionContext
+  → NodeRegistry.getAction(type, version)
+  → BindingResolver.resolveInputs
+  → RuntimeValueCodec.decodeRecord
+  → inputSchema.parse / configSchema.parse
   → NodeType.execute(input, config, context)
+  → outputSchema.parse
+  → NodeExecutionResult { output }
 ```
 
-普通 NodeType 不再 compile，也不取得 Graph builder。ActionNodeCompilationStrategy 仅注册调用统一 Executor 的函数，不为每个 LLM、TTS 或视频业务复制编译策略。control / composite / interaction 具有不同图语义，后续由相应结构策略处理，不强行套普通 action。
+普通 NodeType 不再 compile，也不取得 Graph builder。ActionNodeCompilationStrategy 只包装统一 Executor，注入调用时的当前 State 并返回 NodeExecutionResult；输出 encode 与图 State 增量适配独立处理，不把业务结果冒充 State 更新。control / composite / interaction 使用独立结构策略，不强行套普通 action。
 
-NodeExecutor 负责依次调用 BindingResolver 定位 RuntimeValue、RuntimeValueCodec.decodeRecord 得到业务输入，再执行完整输入 / 配置 Zod 校验、业务调用、输出校验与输出编码、Artifact 持久化、NodeRun 和自身 State 更新。普通节点不解析资产、写其他节点结果或自行判断 ready。Executor、输出编码与内容 Store 仍是服务接口，BindingResolver 与 decode 适配的实际范围见 [架构](architecture.md#数据与-node-基础库)，完整生产执行链未接入。
+普通 Action NodeExecutor 主干固定为精确版本查找、绑定、decode、输入 / 配置 Zod 校验、业务调用和输出 Zod 校验，返回业务 output。NodeExecutionContext 包含领域 workflow / state、项目运行定位及可选信号 / 能力 / 配置，不传 React Flow 对象；Codec 只接收单独构造的最小项目运行上下文。不按 node.type 分支，不处理输出编码、Artifact、State 增量、NodeRun、Retry 或 Human Review，实际范围见 [架构](architecture.md#数据与-node-基础库)。
+
+### Action 执行错误阶段
+
+NodeExecutionError 保留 nodeId、nodeType、stage、code 和原始 cause。六个 stage 为 resolve_input、decode_input、validate_input、validate_config、execute、validate_output；Registry 缺少版本或非 action 拒绝归入 resolve_input。普通失败停止后续步骤，不自动重试。输入校验使用 NODE_INPUT_VALIDATION_FAILED，引用错误保留在 decode_input 的 cause 中，不把所有问题当成原始 ZodError。
+
+LangGraph GraphBubbleUp（含 interrupt / 父图 Command 控制异常）原样传播，不包装为业务失败，不自建恢复状态机。[官方 Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts) 说明中断必须交还图 Runtime；这里只守住异常边界，不引入审核实现。
 
 原有 invokeNodeOperation 是独立值校验工具，不是第二套 Runtime。测试中直接使用原生 StateGraph / MemorySaver 只验证适配与线程机制，不能作为生产持久化或真实生成能力。
 
@@ -48,7 +55,7 @@ BindingResolver.resolveInputs 的上下文包含 node、nodeType、edges、state
 
 RuntimeValueCodec.decode 只接收 RuntimeValue 与 projectId / workflowRunId，返回 unknown。inline 原样返回实际值；reference 只调用 DataReferenceResolver，具体授权与内容访问由该引用服务实现承担。媒体可以返回含临时访问 URL 的 MediaResource，其他领域返回相应业务对象，不统一转换成 Buffer 或 URL。decodeRecord 使用 Promise.all 并行解码，再保留输入键组装结果；任何引用失败都使批量调用失败，不提供部分结果或重试。
 
-Codec 不读取 Registry、不依赖数据库或对象存储实现、不生成 URL，也不执行 Zod。引用服务失败用 REFERENCE_RESOLUTION_FAILED 保留边界与 cause；未来 NodeExecutor 在解码完成后执行完整 inputSchema.parse，按 NODE_INPUT_VALIDATION_FAILED 区分业务输入校验问题。NodeType.execute 只接收校验后的业务输入，不接触 RuntimeValue。输出 encode 单独保留 RuntimeValueEncoder 端口，不扩展本轮 decode 范围。详细协议见 [数据模型](data-model.md#codecbinding-与执行服务接口)。
+Codec 不读取 Registry、不依赖数据库或对象存储实现、不生成 URL，也不执行 Zod。引用失败用 REFERENCE_RESOLUTION_FAILED 保留边界与 cause；NodeExecutor 解码后执行 inputSchema.parse，按 NODE_INPUT_VALIDATION_FAILED 区分业务校验。NodeType.execute 只接收校验后的业务输入。输出 encode 仍保留独立 RuntimeValueEncoder 端口，详见 [数据模型](data-model.md#codecbinding-与执行服务接口)。
 
 ## State 与持久化
 

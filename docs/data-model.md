@@ -68,7 +68,7 @@ RuntimeValueCodec.decode(value, context) 只把 RuntimeValue 转成业务值 unk
 
 DataReferenceResolver 的具体实现负责项目授权、固定资产版本和内容访问，可以通过 Artifact / Asset Repository 与对象存储协作；Codec 不依赖这些基础设施实现。解析结果随领域而异，例如 Character 对象、MediaResource 或文档资源，不统一强制成 Buffer 或 URL。MediaResource 提供 id、mediaType、可选 mimeType / size 和必填 access.url；access.url 可为临时 signed URL，不能回写持久 RuntimeValue 或输入快照。插件只消费业务资源，不解释平台存储 key / bucket 或资产引用。ArtifactStore / AssetStore 的访问仍须检查项目归属及明确版本，不能只凭知道 ID 获得权限。
 
-Codec 不执行 inputSchema.parse，不做业务类型、必填或配置校验。引用解析失败以 ReferenceResolutionError / REFERENCE_RESOLUTION_FAILED 标识，保留原始 cause；已有此类错误直接传播。它与后续 NodeExecutor 的 NODE_INPUT_VALIDATION_FAILED 分属不同边界，不能都当成 ZodError。并行批量解码任一引用失败则整体失败，不返回缺失字段或占位结果。
+Codec 不执行 inputSchema.parse，不做业务类型、必填或配置校验。引用失败以 ReferenceResolutionError / REFERENCE_RESOLUTION_FAILED 标识并保留 cause，已有此类错误直接传播。NodeExecutor 在 decode_input 保留该错误作为 cause，与 validate_input 的 NODE_INPUT_VALIDATION_FAILED 区分。批量解码任一引用失败则整体失败，不返回部分结果或占位值。
 
 输出编码单独保留 RuntimeValueEncoder.encode(value, type, context) 端口，RuntimeValueContext 包含项目、运行和可选 nodeRunId；实际值验证、StoragePolicy 与产物持久化后返回 RuntimeValue 属于该输出侧职责，不由输入 decode 承担。编码及引用服务的实际接入范围见 [当前架构](architecture.md#数据与-node-基础库)。
 
@@ -78,6 +78,8 @@ BindingResolver.resolveInputs 接收 NodeDefinition、上层提供的 NodeTypeMa
 
 Resolver 只定位、包装并合并 RuntimeValue，保留上游值和引用，不 decode reference，不做数据库、对象存储或网络 I/O。后续由 RuntimeValueCodec decode，再由 NodeExecutor 完整 Zod 校验并调用 NodeType；输入快照仍保存 RuntimeValue，不把临时媒体 URL 重新 encode 进历史。静态绑定与 Data Edge 指向同一目标输入、或多条 Data Edge 指向同一输入时，直接报 INPUT_SOURCE_CONFLICT；找不到上游节点输出或端口时直接报 SOURCE_NODE_OUTPUT_MISSING；工作流输入不存在时直接报 WORKFLOW_INPUT_MISSING，静态绑定或当前数据边的目标输入端口未声明时报 INPUT_PORT_NOT_FOUND。必填检查、类型兼容与业务值校验留给后续执行层，不延迟来源问题成为误导性的必填参数错误。Workflow 静态校验提前拒绝来源冲突，运行时继续防御检查。实际能力与执行层限制见 [当前架构](architecture.md#数据与-node-基础库)。
 
-NodeExecutor 的统一管线契约是：解析绑定、decode、输入/配置 Zod 校验、NodeType.execute、输出校验、encode、持久化 Artifact、记录 NodeRun，最后返回本节点的 outputs 增量。NodeRunRecorder 的 begin / complete / fail 与 Checkpoint 分离，输入输出快照使用 RuntimeValue，不能把凭证或临时访问 URL 写入快照。attempt 不等于节点函数重入次数。
+普通 Action NodeExecutor 负责精确版本查找、绑定、decode、输入 / 配置 Zod 校验、NodeType.execute 和输出 Zod 校验，只返回 `NodeExecutionResult { output: unknown }`。上下文提供领域 workflow / state 与项目运行定位，NodeType 收到校验后的业务输入 / 配置及执行上下文，不是 RuntimeValue map。错误按六阶段包装，原生 LangGraph 控制异常直接传播，见 [Runtime](runtime-architecture.md#action-执行错误阶段)。
 
-普通 NodeType 只实现 input + config + context → output。它不获得 Graph builder、BindingResolver、内容 Store 或 Checkpoint。控制、复合与交互结构由独立 CompilationStrategy 处理，不在 Executor 中按业务 type 写 switch。完整执行管线仍需运行服务接入，不能把接口或测试替身写成已完成的 Runtime。
+输出编码、Artifact 持久化、WorkflowState.outputs 增量与 NodeRun 记录是后续独立接入点。NodeRunRecorder 的 begin / complete / fail 与 Checkpoint 分离，未来快照须使用 RuntimeValue，不写入凭证或临时 URL；attempt 不等于函数重入次数。
+
+普通 NodeType 只实现 input + config + context → output，不获得 Graph builder、BindingResolver、内容 Store 或 Checkpoint，不负责调度、绑定解析或输出持久化。控制、复合和交互结构使用独立策略，不在 Executor 中按业务 type 写 switch。输出编码及生产图运行仍须独立接入，不能把业务主干或测试替身标为完整 Runtime。

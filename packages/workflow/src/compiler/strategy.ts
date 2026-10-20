@@ -5,18 +5,23 @@ import {
   type NodeTypeManifest,
 } from '@dramaflow/contracts';
 import type { LangGraphRunnableConfig } from '@langchain/langgraph';
-import type { NodeExecutor, NodeExecutionContext } from '../runtime/node-executor.js';
-import type { WorkflowState, WorkflowStateUpdate } from '../runtime/state.js';
+import type {
+  NodeExecutor,
+  NodeExecutionContext,
+  NodeExecutionResult,
+} from '../runtime/node-executor.js';
+import type { WorkflowState } from '../runtime/state.js';
 
+// 本阶段返回业务执行结果；输出 encode 与 WorkflowState 增量适配尚未接入。
 export type LangGraphNode = (
   state: WorkflowState,
   config: LangGraphRunnableConfig,
-) => Promise<WorkflowStateUpdate>;
+) => Promise<NodeExecutionResult>;
 export interface NodeCompilationContext {
   node: NodeDefinition;
   manifest: NodeTypeManifest;
   executor: NodeExecutor;
-  executionContext(config: LangGraphRunnableConfig): NodeExecutionContext;
+  executionContext(config: LangGraphRunnableConfig): Omit<NodeExecutionContext, 'state'>;
   addNode(id: string, node: LangGraphNode): void;
 }
 export interface NodeCompilationStrategy {
@@ -35,10 +40,9 @@ export class ActionNodeCompilationStrategy implements NodeCompilationStrategy {
       throw new Error('编译节点类型版本不匹配');
     const { executor } = context;
     context.addNode(node.id, (state, config) =>
-      executor.execute({
-        node: nodeDefinitionSchema.parse(node),
+      executor.execute(nodeDefinitionSchema.parse(node), {
+        ...context.executionContext(config),
         state,
-        context: context.executionContext(config),
       }),
     );
   }

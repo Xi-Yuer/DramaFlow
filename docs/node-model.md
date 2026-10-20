@@ -26,9 +26,9 @@ NodeType 持 manifest、inputSchema、configSchema、outputSchema 和 execute(in
 
 assertNodeSchemas 核对公开输入、输出、配置字段集合和默认值，不声称已经证明 Manifest 与任意 Zod Schema 完全等价。真实运行须经过数据类型 Registry 与节点完整 Zod 校验。
 
-ActionNodeCompilationStrategy 只生成调用统一 NodeExecutor 的 LangGraph 包装，不执行业务、不解析 Binding、不自行 addEdge。它拒绝不匹配的版本及非 action 类型。WorkflowCompiler / 其他结构策略待 Graph Model 明确后实施，不为每个 LLM、TTS 或图生视频类型创建独立编译策略。
+ActionNodeCompilationStrategy 只包装统一 NodeExecutor，传入当前 State 并返回 NodeExecutionResult，不把业务结果当成 State 增量。编译不执行业务、不解析 Binding、不自行 addEdge，拒绝不匹配版本或非 action。输出编码 / 图 State 适配、整图 Compiler 与结构策略独立接入，不为每个业务类型复制编译策略。
 
-NodeExecutor 的职责与 Codec、BindingResolver、内容服务和 NodeRunRecorder 端口见 [数据模型](data-model.md)。BindingResolver 根据上层传入的 Manifest 只组装 RuntimeValue，RuntimeValueCodec 解码为业务输入并委托引用服务。NodeExecutor、输出编码及内容 / 审计服务仍为接口，实际范围见 [架构](architecture.md#数据与-node-基础库)；普通节点只知道业务输入、配置和调用上下文，不知道上下游、存储实现或 Checkpoint。
+普通 Action NodeExecutor 串联精确 Registry、绑定、decode、输入 / 配置校验、业务调用与输出校验，只返回业务 output，不按 node.type 分支。NodeExecutionContext 包含领域 workflow / state 与项目运行定位，不含 React Flow 对象；普通节点接收已校验的业务输入和配置，不自行调度或解析绑定。输出编码与内容 / 审计仍为服务端口，能力见 [架构](architecture.md#数据与-node-基础库)，错误规则见 [Runtime](runtime-architecture.md#action-执行错误阶段)。
 
 ## Preset 与 NodeRun
 

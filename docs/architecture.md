@@ -38,7 +38,7 @@ NodeTypeManifest 增加必填 executionKind：action / control / composite / int
 
 createOperationNodeType 只组合 Manifest、三组 Zod 与 operation。parseNodeDefinition、applyNodePreset、invokeNodeOperation 保留独立值契约校验，Preset 不改变运行身份，转换与默认值不回写定义。assertNodeSchemas 检查字段集合和默认值，不证明任意 Schema 与语义类型完全等价。
 
-ActionNodeCompilationStrategy 校验节点类型版本，复制定义并仅生成调用统一 NodeExecutor 的 LangGraph 包装。编译时不执行业务，不编译控制边，不管理调度或暂停恢复。完整 WorkflowCompiler 和结构策略尚未实现。
+ActionNodeCompilationStrategy 校验精确类型版本、复制定义并只生成调用 NodeExecutor 的函数包装。上下文工厂提供不含 State 的上下文，包装注入调用时的当前 WorkflowState，返回 NodeExecutionResult，不是 WorkflowStateUpdate。输出编码 / State 增量适配、完整 WorkflowCompiler 与结构策略尚未接入；编译不执行业务，不编译控制边，也不管理调度或暂停恢复。
 
 runtime/binding-resolver.ts 已实现 resolveDataEdgeInputs 和无参数 createBindingResolver。BindingResolver.resolveInputs 接收 node / nodeType / edges / state，按传入 Manifest 的 inputs 索引校验已绑定目标端口，只读取当前目标的数据边，将上游指定输出原样映射为目标输入 RuntimeValue。三类静态 Binding 使用实际实现：constant 按端口 dataType 包装为 inline；workflow_input 按既有 key 直接复用 State.inputs 的 RuntimeValue；asset 按端口类型生成包含 assetId / versionId 的 reference，不查内容或最新版。未重新引入 ConnectionBinding，也不 decode、调用 NodeType、Zod 或持久化 Artifact，Resolver 没有数据库、对象存储或网络依赖。
 
@@ -46,7 +46,11 @@ BindingResolutionError 包含 INPUT_SOURCE_CONFLICT、SOURCE_NODE_OUTPUT_MISSING
 
 runtime/runtime-value-codec.ts 提供 RuntimeValueCodec、最小 RuntimeValueDecodeContext 和 DefaultRuntimeValueCodec。decode 对 inline 原样返回值，reference 委托显式注入的 DataReferenceResolver；decodeRecord 并行解码并保留自有输入键，任一引用失败时整体失败。引用失败包装为 ReferenceResolutionError，code 为 REFERENCE_RESOLUTION_FAILED，保留 reference 与原始 cause；已有结构化引用错误原样传播。Codec 没有数据库、对象存储或 Zod 依赖，不查内容或拼 URL。data-reference-resolver.ts 同时提供 MediaResource 业务资源描述，媒体 access.url 必填；value-codec.ts 保留独立 RuntimeValueEncoder 接口与通用 RuntimeValueContext，没有输出编码实现。
 
-DataReferenceResolver 只有接口，真实资产 / 产物读取、项目授权、版本检查和 signed URL 生成尚未接入；测试显式引用替身只验证委托、媒体 / 领域对象返回、并行与错误边界，不作为生产内容服务。上层提供精确版本 Manifest、完整业务输入 / 输出校验与调用的 NodeExecutor 仍仅有接口，NODE_INPUT_VALIDATION_FAILED 属于其后续校验边界。内容 Store 和 NodeRunRecorder 同样为接口；State.outputs 使用 NodeOutputMap（RuntimeValue），execution 暂不启用控制字段，没有生产通道、reducer、内容持久化或完整执行服务，不提供内存 / 本地存储降级。
+runtime/node-executor.ts 提供 DefaultNodeExecutor，显式注入 NodeRegistry、BindingResolver 和 RuntimeValueCodec。execute(node, context) 通过 getAction 复用精确版本 get 并拒绝非 action，然后顺序绑定、decodeRecord、inputSchema.parse、configSchema.parse、NodeType.execute、outputSchema.parse，返回 `{ output }`。NodeExecutionContext 必填 workflow / state / projectId / workflowRunId，保留可选信号、能力及运行配置；给 Codec 单独构造最小上下文。不按业务 type 分支，不编码输出、更新 State、持久化 Artifact / NodeRun、重试或实现审核。
+
+node-execution-error.ts 提供 NodeExecutionError，包含 nodeId、nodeType、stage、code 和原始 cause。六个 stage 为 resolve_input / decode_input / validate_input / validate_config / execute / validate_output；Registry 查找及种类拒绝归入 resolve_input，普通失败停止后续步骤。校验错误保留 ZodError，decode 错误保留 ReferenceResolutionError，GraphBubbleUp 原样传播。测试 math.add 用真实 Registry / BindingResolver / Codec 验证 10 + 20 得到 `{ output: { result: 30 } }`、步骤顺序、Schema 默认 / 转换、各阶段失败、精确版本、非 action 拒绝与不修改 State。独立 TestState / MemorySaver 仅验证原生中断与 Command 恢复，不代表审核或生产 State 写回。
+
+DataReferenceResolver 仍只有接口，真实内容读取、项目授权、版本检查及 signed URL 未接入，测试引用替身不作为生产内容服务。math.add 仅在测试注册，生产目录仍为空。RuntimeValueEncoder、内容 Store 和 NodeRunRecorder 同样为接口；State.outputs 使用 NodeOutputMap，execution 保留为空，没有生产通道、reducer、输出编码或内容持久化，也未接入完整图运行服务，不提供内存 / 本地存储降级。
 
 createWorkflowRunConfig 使用显式 Run.threadId，不从 Run.id 推断或允许其他配置覆盖，不创建运行或 checkpointer。NodeRun 保留 attempt、可选 JSON 快照、状态、结构化错误和 ISO 时间契约；业务记录、权限与持久化仍待接入。
 

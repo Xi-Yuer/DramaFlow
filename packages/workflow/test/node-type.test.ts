@@ -16,7 +16,18 @@ const schemas = {
   outputSchema: z.object({ text: z.string() }),
   configSchema: z.object({}),
 };
-const context = { projectId: 'p', workflowRunId: 'r' };
+const context = {
+  projectId: 'p',
+  workflowRunId: 'r',
+  workflow: { inputs: [], nodes: [], edges: [], outputs: [] },
+  state: {
+    run: { workflowId: 'w', workflowVersionId: 'v', workflowRunId: 'r', projectId: 'p' },
+    inputs: {},
+    outputs: {},
+    variables: {},
+    execution: {},
+  },
+};
 
 describe('NodeType 只负责业务 execute', () => {
   it('版本精确查找、重复与缺失失败，不用 Preset 注册运行身份', async () => {

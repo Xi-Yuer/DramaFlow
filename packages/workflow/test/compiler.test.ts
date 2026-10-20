@@ -42,13 +42,12 @@ const state: WorkflowState = {
   variables: {},
   execution: {},
 };
+const workflow = { inputs: [], nodes: [node], edges: [], outputs: [] };
 
 describe('普通操作编译策略', () => {
   it('仅包装统一 Executor，编译不执行业务，节点不获得 Graph builder', async () => {
-    const update = {
-      outputs: { a: { text: { storage: 'inline' as const, type: StringType, value: '结果' } } },
-    };
-    const execute = vi.fn<NodeExecutor['execute']>().mockResolvedValue(update);
+    const result = { output: { text: '结果' } };
+    const execute = vi.fn<NodeExecutor['execute']>().mockResolvedValue(result);
     const addNode = vi.fn<(id: string, node: LangGraphNode) => void>();
     new ActionNodeCompilationStrategy().compile({
       node,
@@ -57,6 +56,7 @@ describe('普通操作编译策略', () => {
       executionContext: (config) => ({
         projectId: 'p',
         workflowRunId: 'r',
+        workflow,
         runnableConfig: config,
       }),
       addNode,
@@ -64,11 +64,13 @@ describe('普通操作编译策略', () => {
     expect(execute).not.toHaveBeenCalled();
     const wrapped = addNode.mock.calls[0]![1];
     const config = { configurable: { thread_id: 't' }, maxConcurrency: 2 };
-    expect(await wrapped(state, config)).toEqual(update);
-    expect(execute).toHaveBeenCalledWith({
-      node,
+    expect(await wrapped(state, config)).toEqual(result);
+    expect(execute).toHaveBeenCalledWith(node, {
+      projectId: 'p',
+      workflowRunId: 'r',
+      runnableConfig: config,
+      workflow,
       state,
-      context: { projectId: 'p', workflowRunId: 'r', runnableConfig: config },
     });
   });
   it('拒绝错误版本和非 action，不为控制结构编造执行语义', () => {
@@ -77,7 +79,7 @@ describe('普通操作编译策略', () => {
       node,
       manifest,
       executor: { execute: vi.fn<NodeExecutor['execute']>() },
-      executionContext: () => ({ projectId: 'p', workflowRunId: 'r' }),
+      executionContext: () => ({ projectId: 'p', workflowRunId: 'r', workflow }),
       addNode: vi.fn(),
     };
     for (const executionKind of ['control', 'composite', 'interaction'] as const)
