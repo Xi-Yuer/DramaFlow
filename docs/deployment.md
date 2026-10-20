@@ -12,7 +12,9 @@ NodeRun 的[初始化迁移](../packages/database/prisma/migrations/202610200000
 
 [WorkflowRun 迁移](../packages/database/prisma/migrations/20261020020000_workflow_runs/migration.sql)建立 workflow_run，关联项目并保存显式逻辑 workflowId / workflowVersionId。threadId 唯一，状态和时间 / 结果字段一致性由数据库约束；更新触发器保护身份 / 版本 / 输入及合法转换。node_run 通过 workflowRunId / projectId 复合外键关联同项目父运行，父运行删除时级联清理节点记录。为建立真实外键，该迁移会删除没有匹配父运行的旧开发 NodeRun，不补造版本或运行记录；项目、账号、Redis 与对象存储不受影响。新增迁移不重写旧迁移，也无需 reset 或删除卷。
 
-[Workflow / WorkflowVersion 迁移](../packages/database/prisma/migrations/20261020030000_workflow_versions/migration.sql)只新增表、索引、外键与版本不可更新触发器，不删除或回填现有业务数据。workflow.projectId 唯一并关联项目；workflow_version 关联 Workflow，以 workflowId / version 唯一，每条保存完整 definition JSON，父级删除时级联。revision / version 要求正数，draft / definition 要求 JSON 对象；完整 DSL 在 Repository 读取边界校验。数据库禁止更新已创建版本，不提供差量拼接。Run 的两个逻辑 ID 本轮不改成版本外键。此迁移不提供发布服务、并发版本分配或草稿乐观锁，应用方式仍为 db:migrate，无需 reset。
+[Workflow / WorkflowVersion 迁移](../packages/database/prisma/migrations/20261020030000_workflow_versions/migration.sql)新增表、索引、外键与版本不可更新触发器，不删除或回填现有业务数据。workflow.projectId 唯一并关联项目；workflow_version 关联 Workflow，以 workflowId / version 唯一，每条保存完整 definition JSON，父级删除时级联。revision / version 要求正数，draft / definition 要求 JSON 对象；完整 DSL 在发布和 Repository 读取边界校验。数据库禁止更新已创建版本，不提供差量拼接。Run 的两个逻辑 ID 保持不变。
+
+[发布来源修订迁移](../packages/database/prisma/migrations/20261020040000_workflow_publish_revision/migration.sql)增加必填、正数 sourceRevision 及 workflowId / sourceRevision 唯一约束；既有不可更新触发器同时保护来源修订。迁移不猜测历史版本来源、不用版本号或当前草稿修订回填；存在缺少真实来源信息的旧开发版本时，应先核对范围并按开发数据授权清理，不能伪造来源。本机空版本表可直接执行 db:migrate，无需 reset。WorkflowService 用原子条件更新实现草稿乐观锁，以事务行锁串行化发布序列；数据库唯一约束是最终防线，不承担正常版本分配。
 
 [项目基础迁移](../packages/database/prisma/migrations/20261019000000_project_foundation/migration.sql) 删除 canvas_project 的 definition、nodeCount 列及 plugin_installation 表。尚未应用该迁移的环境执行时会清除旧节点、连线、数据绑定及插件安装记录，包括其中的配置与加密凭证；保留项目基础信息与身份数据，不操作 Redis、RustFS 或其他数据卷。当前协议不兼容这些旧业务字段。
 

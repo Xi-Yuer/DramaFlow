@@ -28,9 +28,11 @@ WorkflowRunner 单元测试用真实 StateGraph / MemorySaver、Registry、Bindi
 
 workflow-resume.test.ts 用同一 MemorySaver 重新编译原图，验证 waiting → running → waiting → running → completed、只传 Command 和原 thread、已完成节点不重跑、State 输出与首次时间保留，且不查询或关联 NodeRun。覆盖 false / 0 / 空字符串 / null / 特殊对象键的值原样进入中断节点、非 waiting / 缺失记录拒绝、调用方版本 / thread 覆盖拒绝、claim 失败不 invoke、原 checkpoint 缺失 / END / 身份错配、准备 / 执行 / 记录故障边界。Runner 的 start / resume 共用结束分类与最终输出解析。
 
-test/workflow-versions.e2e-spec.ts 在真实 PostgreSQL 显式写入草稿与完整版本快照，验证 V1 = A、修改草稿后 V2 = B 且 draft = B，新 Repository 和独立数据库连接仍能读取 V1。覆盖版本更新拒绝、单项目单 Workflow、版本唯一及正数约束、项目 / 过期权限、无效 Definition 拒绝和删除级联；测试指定版本号，不冒充发布并发分配或草稿乐观锁。
+test/workflow-versions.e2e-spec.ts 在真实 PostgreSQL 经 WorkflowService 保存 / 发布，验证 V1 = A、修改草稿后 V2 = B 且 draft = B，新 Repository 和独立数据库连接仍能读取 V1。约束异常测试保留显式建数，覆盖版本全部字段不可更新、单项目单 Workflow、版本唯一及正数约束、权限、无效 Definition 拒绝和删除级联。
 
-test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的版本、WorkflowRun、NodeRun Repository 和原生 LangGraph，验证首次成功、节点失败、原生暂停、NodeRun completed 但最终输出解析失败、编译失败、完成记录不可用时不反向 failed。版本快照在测试中显式建数，Runner 经生产读取实现获取；MemorySaver 不是生产持久化兜底。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目及级联记录，不清空开发库。可定向执行 workflow-versions、workflow-runner、workflow-runs、node-runs 四个 e2e-spec；这些测试不证明发布服务、Artifact、运行 HTTP 入口或生产 Checkpointer 已接入。workflow 包另验证版本读取返回 null 时 start 不创建运行，resume 只由 claim 成功者记录 load_version 失败。
+test/workflows.e2e-spec.ts 使用真实服务和两个独立数据库连接，检查 12 次同修订并发编辑只成功一次、过期发布不生成版本、12 次同修订并发发布只生成一个版本并返回明确重复发布冲突，以及新修订继续获得下一版本号。用 PostgreSQL 阻塞信息验证发布实际等待未提交编辑行锁，编辑提交后以新 revision 拒绝过期请求，不依赖固定 sleep 猜测顺序。另覆盖发布重新校验存储草稿、失败不消耗版本号、输入必填 / 严格字段、所有者与过期权限、来源修订唯一 / 正数约束。此文件不测试 HTTP、运行或持久 checkpoint。
+
+test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的版本、WorkflowRun、NodeRun Repository 和原生 LangGraph，验证首次成功、节点失败、原生暂停、NodeRun completed 但最终输出解析失败、编译失败、完成记录不可用时不反向 failed。版本快照在测试中显式建数，Runner 经生产读取实现获取；MemorySaver 不是生产持久化兜底。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目及级联记录，不清空开发库。可定向执行 workflows、workflow-versions、workflow-runner、workflow-runs、node-runs 五个 e2e-spec；这些测试不证明 Artifact、运行 HTTP 入口或生产 Checkpointer 已接入。workflow 包另验证版本读取返回 null 时 start 不创建运行，resume 只由 claim 成功者记录 load_version 失败。
 
 恢复的数据库用例另外验证同一运行经过两次 resume 完成、同一 State 输出保留、运行记录与 thread 数不增加、恢复失败结束同一记录。两个不同 Repository / Runner 实例通过屏障先都读到 waiting，图执行期间只有一个 claim 成功并 invoke，另一个收到 WORKFLOW_RUN_NOT_WAITING。Repository 用例另测试 12 个并发 claim 的单胜者、完整六状态读取、所有者 / 项目 / 过期权限与非 waiting 不更新；不以纯内存替身证明并发持久化正确。
 

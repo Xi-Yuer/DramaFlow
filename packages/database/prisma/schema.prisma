@@ -135,14 +135,16 @@ model Workflow {
 
 // 每个版本独立保存完整定义；迁移中的触发器禁止更新已创建版本。
 model WorkflowVersion {
-  id         String   @id @default(uuid())
-  workflowId String
-  version    Int
-  definition Json
-  createdAt  DateTime @default(now())
-  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  id             String   @id @default(uuid())
+  workflowId     String
+  version        Int
+  sourceRevision Int
+  definition     Json
+  createdAt      DateTime @default(now())
+  workflow       Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
 
   @@unique([workflowId, version])
+  @@unique([workflowId, sourceRevision])
   @@index([workflowId])
   @@map("workflow_version")
 }

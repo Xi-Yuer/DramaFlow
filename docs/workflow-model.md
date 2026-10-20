@@ -2,7 +2,7 @@
 
 本文维护 Workflow 层的当前设计结论，承接 [平台核心模型](platform-model.md)。这里只确定流程的身份、静态定义、输入输出契约、不可变版本及运行边界，不设计 Node 内部执行、数据库表或 Runtime 调度实现。实现现状见 [当前架构](architecture.md)，设计进度见 [分步设计与实施方案](implementation-plan.md)。
 
-已有代码范围见 [Workflow 基础库](architecture.md#workflow-基础库)：静态定义、校验、快照、运行基础库，以及 Workflow / WorkflowVersion 数据库模型和生产版本读取已经实现；应用保存 / 发布、并发版本分配、草稿乐观锁和生产运行入口尚未接入。节点目录 API 不等于工作流执行接口。
+已有代码范围见 [Workflow 基础库](architecture.md#workflow-基础库)：静态定义、校验、快照、运行基础库、版本持久化与读取，以及应用服务层的 Draft 乐观锁和并发发布已经实现；编辑 / 发布 HTTP 和生产运行入口尚未接入。节点目录 API 不等于工作流执行接口。
 
 ## 核心关系
 
@@ -116,7 +116,7 @@ interface WorkflowVersion {
 
 发布表示校验草稿并创建不可变快照，不触发生成或执行。快照包含完整输入输出契约、节点及连线；后续草稿修改只影响之后发布的版本，不能回写已发布版本或已有运行。
 
-现有项目 `revision` 是并发保存检查值，与 WorkflowVersion 的身份和版本编号分离。发布时应校验操作者权限及其所依据的草稿修订，避免并发修改后发布了另一份定义；具体修订字段与接口在实施时确定。
+Project.revision 管理名称 / 视口保存，Workflow.revision 管理草稿编辑，两者独立，也都不等于发布版本号。updateDraft 必须携带 expectedRevision，以原子条件更新递增修订，过期请求返回 WORKFLOW_REVISION_CONFLICT。publish 同样绑定 expectedRevision，在事务内锁定工作流、重新校验完整定义并分配版本号，不修改草稿修订。数据库 sourceRevision 记录快照来源，同一 workflowId / sourceRevision 只能发布一次，重复请求返回 WORKFLOW_REVISION_ALREADY_PUBLISHED；版本读取保持只读，服务与测试范围见 [架构](architecture.md#workflow-基础库)。
 
 发布与启动需要保证定义的结构、引用、输入输出和依赖有效；节点细节、类型兼容及图校验规则分别由后续模型补齐。安全密钥不进入定义或版本。此处的不可变性要求持久化与服务边界共同保证，不因某个 TypeScript 类型标记就视为实现完成。
 

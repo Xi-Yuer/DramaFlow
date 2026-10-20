@@ -77,7 +77,7 @@ WorkflowRun 保存某个明确 WorkflowVersion 的一次完整运行，独立于
 
 Repository 创建 pending，使用明确的 markRunning / markWaiting / markCompleted / markFailed / markCancelled。合法转换、时间规则见 [Workflow 模型](workflow-model.md#workflowrun一次实际运行)；Repository 对当前状态原子检查，数据库保护不可变身份、版本、输入和合法转换。getById 读取限定权限的完整记录，claimWaitingForResume 原子完成 waiting → running 并返回已抢占记录；无权访问、记录不存在或已不在 waiting 时返回 null。WorkflowRun waiting 只表示整图正在等待，NodeRun 仍只有普通 Action 的三种状态；记录操作不调用 LangGraph，start / resume 由 Runner 协调，人工审核尚未实现。
 
-inputs / outputs 是 RuntimeValue map。outputs 只接收最终对外工作流结果，不复制按 nodeId 组织的 State.outputs；结果收集由 WorkflowOutputResolver 承担，完整业务值校验继续由节点三组 Schema 负责。NodeRun 通过同项目复合外键引用真实 WorkflowRun，Checkpoint 继续独立。WorkflowVersionRepository 是纯读取接口，返回完整版本 / 项目 / 工作流身份或 null。API 的有权限作用域 Prisma 实现读取独立、不可更新的 workflow_version.definition，经正式 Schema 校验，不读取 draft 或 latest；发布服务尚未实现。
+inputs / outputs 是 RuntimeValue map。outputs 只接收最终对外工作流结果，不复制按 nodeId 组织的 State.outputs；结果收集由 WorkflowOutputResolver 承担，完整业务值校验继续由节点三组 Schema 负责。NodeRun 通过同项目复合外键引用真实 WorkflowRun，Checkpoint 继续独立。WorkflowVersionRepository 是纯读取接口，返回完整版本 / 项目 / 工作流身份或 null。API 的有权限作用域 Prisma 实现读取独立、不可更新的 workflow_version.definition，经正式 Schema 校验，不读取 draft 或 latest。Draft 更新和绑定修订的发布由独立 WorkflowService 负责，不进入 Runner 或只读 Repository。
 
 ### WorkflowRunner 首次启动
 

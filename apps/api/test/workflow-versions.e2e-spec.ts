@@ -5,6 +5,7 @@ import { createWorkflowDefinitionSnapshot } from '@dramaflow/workflow';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { WorkflowVersionRepositories } from '../src/workflow/workflow-versions/workflow-version-repository.js';
+import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
@@ -20,6 +21,7 @@ const db = database.client;
 const ownerId = randomUUID();
 const otherId = randomUUID();
 const repositories = new WorkflowVersionRepositories(database);
+const workflows = new WorkflowService(database);
 
 beforeAll(async () => {
   for (const id of [ownerId, otherId])
@@ -96,7 +98,12 @@ async function storeVersion(workflowId: string, version: number) {
     where: { id: workflowId },
   });
   return db.workflowVersion.create({
-    data: { workflowId, version, definition: snapshot(workflow.draft) },
+    data: {
+      workflowId,
+      version,
+      sourceRevision: workflow.revision,
+      definition: snapshot(workflow.draft),
+    },
   });
 }
 
@@ -106,19 +113,26 @@ describe('真实 PostgreSQL Workflow / WorkflowVersion', () => {
     const b = definition('B');
     const f = await fixture(a);
     expect(f.workflow.revision).toBe(1);
-    const v1 = await storeVersion(f.workflow.id, 1);
-    await db.workflow.update({
-      where: { id: f.workflow.id },
-      data: { draft: snapshot(b), revision: { increment: 1 } },
+    const v1 = await workflows.publish(ownerId, {
+      workflowId: f.workflow.id,
+      expectedRevision: 1,
     });
-    const v2 = await storeVersion(f.workflow.id, 2);
+    await workflows.updateDraft(ownerId, {
+      workflowId: f.workflow.id,
+      expectedRevision: 1,
+      definition: b,
+    });
+    const v2 = await workflows.publish(ownerId, {
+      workflowId: f.workflow.id,
+      expectedRevision: 2,
+    });
     const first = await f.repository.getVersion(v1.id);
     expect(first).toEqual({
       id: v1.id,
       projectId: f.project.id,
       workflowId: f.workflow.id,
       version: 1,
-      publishedAt: v1.createdAt.toISOString(),
+      publishedAt: v1.publishedAt,
       definition: a,
     });
     expect(await f.repository.getVersion(v2.id)).toMatchObject({
@@ -165,6 +179,7 @@ describe('真实 PostgreSQL Workflow / WorkflowVersion', () => {
       { id: randomUUID() },
       { workflowId: randomUUID() },
       { version: 2 },
+      { sourceRevision: 2 },
       { createdAt: new Date(0) },
     ])
       await expect(
@@ -199,7 +214,12 @@ describe('真实 PostgreSQL Workflow / WorkflowVersion', () => {
     ).rejects.toThrow();
     await expect(
       db.workflowVersion.create({
-        data: { workflowId: f.workflow.id, version: 2, definition: [] },
+        data: {
+          workflowId: f.workflow.id,
+          version: 2,
+          sourceRevision: 2,
+          definition: [],
+        },
       }),
     ).rejects.toThrow();
   });
@@ -237,6 +257,7 @@ describe('真实 PostgreSQL Workflow / WorkflowVersion', () => {
       data: {
         workflowId: f.workflow.id,
         version: 1,
+        sourceRevision: 1,
         definition: { patch: [] },
       },
     });

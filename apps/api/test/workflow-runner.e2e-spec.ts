@@ -141,6 +141,7 @@ async function fixture(
       id: version.id,
       workflowId: version.workflowId,
       version: version.version,
+      sourceRevision: 1,
       definition: snapshot,
       createdAt: new Date(version.publishedAt),
     },
