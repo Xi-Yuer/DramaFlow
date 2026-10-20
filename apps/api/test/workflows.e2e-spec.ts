@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { StringType, type WorkflowDefinition } from '@dramaflow/contracts';
-import { DatabaseService } from '@dramaflow/server';
+import {
+  DatabaseService,
+  WorkflowVersionRepositories,
+} from '@dramaflow/server';
 import { NotFoundException } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
-import { WorkflowVersionRepositories } from '../src/workflow/workflow-versions/workflow-version-repository.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||

@@ -9,11 +9,8 @@ import {
   type WorkflowRunError,
 } from '@dramaflow/contracts';
 import type { Prisma } from '@dramaflow/database';
-import { DatabaseService } from '@dramaflow/server';
-import type {
-  CreateWorkflowRunInput,
-  WorkflowRunRepository,
-} from '@dramaflow/workflow';
+import { DatabaseService } from '../database/database.service.js';
+import type { CreateWorkflowRunInput, WorkflowRunRepository } from '@dramaflow/workflow';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 
@@ -26,12 +23,8 @@ const createInputSchema = z
   })
   .strict();
 
-function snapshot(
-  values: Record<string, RuntimeValue>,
-): Prisma.InputJsonObject {
-  return z
-    .record(z.string(), z.json())
-    .parse(runtimeValueMapSchema.parse(values));
+function snapshot(values: Record<string, RuntimeValue>): Prisma.InputJsonObject {
+  return z.record(z.string(), z.json()).parse(runtimeValueMapSchema.parse(values));
 }
 
 interface RepositoryScope {
@@ -39,9 +32,7 @@ interface RepositoryScope {
   readonly projectId: string;
 }
 
-function toWorkflowRun(
-  row: Prisma.WorkflowRunGetPayload<Record<string, never>>,
-): WorkflowRun {
+function toWorkflowRun(row: Prisma.WorkflowRunGetPayload<Record<string, never>>): WorkflowRun {
   return workflowRunSchema.parse({
     id: row.id,
     projectId: row.projectId,
@@ -53,12 +44,8 @@ function toWorkflowRun(
     createdAt: row.createdAt.toISOString(),
     ...(row.outputs !== null ? { outputs: row.outputs } : {}),
     ...(row.error !== null ? { error: row.error } : {}),
-    ...(row.startedAt !== null
-      ? { startedAt: row.startedAt.toISOString() }
-      : {}),
-    ...(row.completedAt !== null
-      ? { completedAt: row.completedAt.toISOString() }
-      : {}),
+    ...(row.startedAt !== null ? { startedAt: row.startedAt.toISOString() } : {}),
+    ...(row.completedAt !== null ? { completedAt: row.completedAt.toISOString() } : {}),
   });
 }
 
@@ -70,8 +57,7 @@ class PrismaWorkflowRunRepository implements WorkflowRunRepository {
 
   async create(input: CreateWorkflowRunInput): Promise<WorkflowRun> {
     const parsed = createInputSchema.parse(input);
-    if (parsed.projectId !== this.scope.projectId)
-      throw new Error('运行与已授权项目不匹配');
+    if (parsed.projectId !== this.scope.projectId) throw new Error('运行与已授权项目不匹配');
     return this.db.client.$transaction(async (tx) => {
       const project = await tx.project.findFirst({
         where: { id: parsed.projectId, ownerId: this.scope.ownerId },
@@ -109,9 +95,7 @@ class PrismaWorkflowRunRepository implements WorkflowRunRepository {
     return row ? toWorkflowRun(row) : null;
   }
 
-  async claimWaitingForResume(
-    workflowRunId: string,
-  ): Promise<WorkflowRun | null> {
+  async claimWaitingForResume(workflowRunId: string): Promise<WorkflowRun | null> {
     return this.db.client.$transaction(async (tx) => {
       const where = this.scoped(workflowRunId);
       const changed = await tx.workflowRun.updateMany({
@@ -158,10 +142,7 @@ class PrismaWorkflowRunRepository implements WorkflowRunRepository {
     return this.transition(workflowRunId, ['running'], { status: 'waiting' });
   }
 
-  markCompleted(
-    workflowRunId: string,
-    outputs: Record<string, RuntimeValue>,
-  ): Promise<void> {
+  markCompleted(workflowRunId: string, outputs: Record<string, RuntimeValue>): Promise<void> {
     return this.transition(workflowRunId, ['running'], {
       status: 'completed',
       outputs: snapshot(outputs),
@@ -190,10 +171,7 @@ class PrismaWorkflowRunRepository implements WorkflowRunRepository {
 export class WorkflowRunRepositories {
   constructor(private readonly db: DatabaseService) {}
 
-  async forProject(
-    ownerId: string,
-    rawProjectId: string,
-  ): Promise<WorkflowRunRepository> {
+  async forProject(ownerId: string, rawProjectId: string): Promise<WorkflowRunRepository> {
     const projectId = z.uuid().parse(rawProjectId);
     const project = await this.db.client.project.findFirst({
       where: { id: projectId, ownerId },

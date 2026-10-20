@@ -4,7 +4,7 @@ DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，�
 
 当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录、注册通用 renderer，并接入 Data / Control Edge 连线、重连与删除事件；生产目录为空，没有添加节点、Workflow 保存 / 发布入口、工作流运行或模型调用。
 
-基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。PostgreSQL 已有 Workflow 草稿、完整不可变 WorkflowVersion 快照及 WorkflowRun / NodeRun；API 应用服务支持 Draft 乐观锁与绑定修订的并发安全发布，同一修订仅生成一个版本，版本读取 Repository 保持只读。WorkflowRunner 按明确版本首次启动 Action 图，并以原 thread 的 Command 恢复 waiting 运行；原子 claim 防止并发恢复，结束时只记录声明的最终输出。API / Worker 共用官方 PostgreSQL Checkpointer 基础设施，启动时初始化、关闭时释放连接，已验证跨进程恢复。尚无生产 Runner 装配、发布 / 运行 HTTP 或 Worker 执行入口，引用解析与 Artifact 写入仍是接口；实现范围见 [当前架构](docs/architecture.md)。
+基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。PostgreSQL 已有 Workflow 草稿、完整不可变 WorkflowVersion 快照及 WorkflowRun / NodeRun；API 应用服务支持 Draft 乐观锁与绑定修订的并发安全发布，同一修订仅生成一个版本，版本读取 Repository 保持只读。WorkflowRunner 按明确版本首次启动 Action 图，并以原 thread 的 Command 恢复 waiting 运行；原子 claim 防止并发恢复，结束时只记录声明的最终输出。API / Worker 共用官方 PostgreSQL Checkpointer 基础设施，启动时初始化、关闭时释放连接，已验证跨进程恢复。API / Worker 已通过应用 Service 和共享 factory 装配生产 Runner，按所有者 / 项目创建权限作用域。生产节点目录仍为空，尚无发布 / 运行 HTTP 或队列消费者；reference decode / encode 明确报未配置错误；实现范围见 [当前架构](docs/architecture.md)。
 
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 
@@ -33,8 +33,8 @@ pnpm dev
 | 目录               | 当前内容                                                                 |
 | ------------------ | ------------------------------------------------------------------------ |
 | apps/web           | 身份与项目画布、目录查询、通用节点 renderer 和协议适配                   |
-| apps/api           | NestJS、Better Auth、资料、项目与受保护节点目录 API                      |
-| apps/worker        | 独立 NestJS 应用上下文，尚未注册业务任务                                 |
+| apps/api           | NestJS、身份 / 项目 / 节点目录 API 与 Runtime Service                    |
+| apps/worker        | 独立 NestJS 应用上下文与 Runtime Service，尚未注册业务任务               |
 | packages/database  | Prisma、身份/资料/凭证/会话及基础项目模型、pgvector                      |
 | packages/server    | API 与 worker 共用的数据库、持久 Checkpointer、Redis、对象存储和凭证加密 |
 | packages/contracts | 身份、项目、Workflow / Node、DataType 及静态类型声明                     |
@@ -42,7 +42,7 @@ pnpm dev
 | packages/plugins   | 插件包空入口，保留模型 SDK 依赖                                          |
 | packages/context   | 上下文包空入口，待逐步定义                                               |
 
-上述目录是当前工程结构，不为每个一级概念预建独立包。contracts 按 identity / project 协议与 workflow / node 分组，workflow 按 definition / data / node / runtime / compiler / run 分组；server 只承载服务端基础设施。具体职责见 [架构与目录职责](docs/architecture.md)。
+上述目录是当前工程结构，不为每个一级概念预建独立包。contracts 按 identity / project 协议与 workflow / node 分组，workflow 按 definition / data / node / runtime / compiler / run 分组；server 承载服务端基础设施与共享装配适配。具体职责见 [架构与目录职责](docs/architecture.md)。
 
 ## 检查与部署
 

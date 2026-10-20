@@ -8,7 +8,11 @@ import {
   type NodeTypeManifest,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
-import { DatabaseService } from '@dramaflow/server';
+import {
+  DatabaseService,
+  NodeRunRepositories,
+  WorkflowRunRepositories,
+} from '@dramaflow/server';
 import {
   ActionNodeCompilationStrategy,
   createBindingResolver,
@@ -24,8 +28,6 @@ import {
 } from '@dramaflow/workflow';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { NodeRunRepositories } from '../src/workflow/node-runs/node-run-repository.js';
-import { WorkflowRunRepositories } from '../src/workflow/workflow-runs/workflow-run-repository.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||

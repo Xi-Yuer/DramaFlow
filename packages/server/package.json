@@ -20,7 +20,9 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1030.0",
+    "@dramaflow/contracts": "workspace:^",
     "@dramaflow/database": "workspace:*",
+    "@dramaflow/workflow": "workspace:^",
     "@langchain/core": "1.2.18",
     "@langchain/langgraph-checkpoint": "1.2.0",
     "@langchain/langgraph-checkpoint-postgres": "1.1.0",

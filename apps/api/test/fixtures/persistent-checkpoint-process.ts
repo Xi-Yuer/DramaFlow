@@ -5,6 +5,8 @@ import {
   DatabaseService,
   WorkflowCheckpointerModule,
   WorkflowCheckpointerService,
+  WorkflowRunRepositories,
+  WorkflowVersionRepositories,
 } from '@dramaflow/server';
 import {
   DefaultWorkflowOutputResolver,
@@ -18,8 +20,7 @@ import {
 } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { z } from 'zod';
-import { WorkflowRunRepositories } from '../../src/workflow/workflow-runs/workflow-run-repository.js';
-import { WorkflowVersionRepositories } from '../../src/workflow/workflow-versions/workflow-version-repository.js';
+
 import { persistentTestCompiler } from './persistent-workflow-compiler.js';
 
 const identity = { ownerId: z.string(), projectId: z.uuid() };

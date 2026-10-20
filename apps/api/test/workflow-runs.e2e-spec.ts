@@ -5,11 +5,13 @@ import {
   type RuntimeValue,
   type WorkflowRunStatus,
 } from '@dramaflow/contracts';
-import { DatabaseService } from '@dramaflow/server';
+import {
+  DatabaseService,
+  NodeRunRepositories,
+  WorkflowRunRepositories,
+} from '@dramaflow/server';
 import type { WorkflowRunRepository } from '@dramaflow/workflow';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { WorkflowRunRepositories } from '../src/workflow/workflow-runs/workflow-run-repository.js';
-import { NodeRunRepositories } from '../src/workflow/node-runs/node-run-repository.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||

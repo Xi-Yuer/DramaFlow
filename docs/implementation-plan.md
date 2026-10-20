@@ -4,11 +4,11 @@
 
 ## 当前阶段
 
-2026-10-20：以实际代码为基线，推进 PostgreSQL Persistent Checkpointer，应用级初始化与关闭、多进程共享 checkpoint store 和进程退出后恢复的实现及验证见 [当前架构](architecture.md#postgresql-checkpointer)。
+2026-10-20：以实际代码为基线，完成 API / Worker 的生产 Runtime 装配。本轮范围止于 Nest → WorkflowRuntimeService → 有权限作用域的生产 WorkflowRunner，实现与验证见 [当前架构](architecture.md#生产-runtime-装配)。
 
 数据语义与承载见 [数据模型](data-model.md)。两类边的静态联合无环检查、执行依赖收集和运行输入绑定职责分离。完整生产执行管线、大小预算、权限解析、业务持久化及控制结构通道语义仍待后续阶段接入；本步不扩大项目保存与节点目录的应用边界，不预设条件路由。
 
-**下一步范围待确认：生产 Runner 装配与受理边界。** 不继续扩展 Workflow CRUD；本轮不增加编辑 / 发布 HTTP、运行入口、Worker queue、Human Review、Artifact 或 Plugin，不提前加入 Registry / port / type / resource 发布级语义校验。
+**下一步：Run API（start / get / resume），另行实施。** 不继续扩展 Workflow CRUD；本轮不增加编辑 / 发布 HTTP、运行入口、Worker queue、Human Review、Artifact 或 Plugin，不提前加入 Registry / port / type / resource 发布级语义校验。
 
 本文件是当前阶段、下一步与待决策项的唯一维护入口；推进时原地修订，不堆叠旧计划或逐轮交付流水。文档维护方式见 [开发指南](development.md#文档维护)。
 
@@ -20,7 +20,7 @@
 | ②    | Workflow 工作流模型                       | 静态定义、版本、输入输出及 WorkflowRun           | 已确定边界并实施基础库                    |
 | ③    | Node 节点模型                             | Manifest、服务端实现、实例、端口、版本与编译边界 | 已实施基础设施与目录接入                  |
 | ④    | State / 数据流模型                        | 单次状态、绑定求值、结果传递与并行隔离           | 普通 Action 增量与 outputs reducer 已明确 |
-| ⑤    | Runtime 执行模型                          | LangGraph 编译与服务接入、持久化、恢复及事件投影 | start / resume 已实施，生产接入待设计     |
+| ⑤    | Runtime 执行模型                          | LangGraph 编译与服务接入、持久化、恢复及事件投影 | 生产装配已接入，HTTP 受理待设计           |
 | ⑥    | Tool 工具体系                             | 可调用操作、调用契约、权限及 Node / Agent 关系   | 待逐步设计                                |
 | ⑦    | Plugin 外部能力体系                       | 能力声明、模型、凭证、版本与供应商适配           | 待逐步设计                                |
 | ⑧    | Middleware 中间件体系                     | 日志、权限、成本、重试的介入边界                 | 待逐步设计                                |
@@ -39,7 +39,7 @@ Workflow 的可组合性与固定被调用版本原则已在 [Workflow 模型](w
 
 WorkflowRun 记录整次运行，NodeRun 记录节点历史，Checkpoint 负责原生图恢复。以下议题留待单独明确，不构成本轮实施范围：
 
-1. API / worker 如何装配生产 Runner、受理 / 查询运行，并处理记录状态与 Checkpoint 不一致的基础设施故障？
+1. Run API 如何鉴权并受理 / 查询运行，后续 Worker 如何消费任务，以及如何处理记录状态与 Checkpoint 不一致的基础设施故障？
 2. 运行删除与 checkpoint 的保留 / 清理策略如何定义？
 3. interaction 节点如何定义 waiting 并在 resume 时复用同一 NodeRun、不增加 attempt？
 

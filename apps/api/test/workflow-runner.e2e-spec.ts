@@ -6,7 +6,10 @@ import {
 } from '@dramaflow/contracts';
 import {
   DatabaseService,
+  NodeRunRepositories,
   WorkflowCheckpointerService,
+  WorkflowRunRepositories,
+  WorkflowVersionRepositories,
 } from '@dramaflow/server';
 import { END, interrupt, START, StateGraph } from '@langchain/langgraph';
 import {
@@ -24,9 +27,6 @@ import {
 } from '@dramaflow/workflow';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { NodeRunRepositories } from '../src/workflow/node-runs/node-run-repository.js';
-import { WorkflowRunRepositories } from '../src/workflow/workflow-runs/workflow-run-repository.js';
-import { WorkflowVersionRepositories } from '../src/workflow/workflow-versions/workflow-version-repository.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||

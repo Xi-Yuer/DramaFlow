@@ -5,9 +5,7 @@ import { Module } from '@nestjs/common';
 import { InfrastructureModule } from '@dramaflow/server';
 import { HealthController } from './health/health.controller.js';
 import { NodeTypesModule } from './workflow/node-types/node-types.module.js';
-import { NodeRunsModule } from './workflow/node-runs/node-runs.module.js';
-import { WorkflowRunsModule } from './workflow/workflow-runs/workflow-runs.module.js';
-import { WorkflowVersionsModule } from './workflow/workflow-versions/workflow-versions.module.js';
+import { WorkflowRuntimeModule } from './workflow/runtime/workflow-runtime.module.js';
 import { WorkflowsModule } from './workflow/workflows/workflows.module.js';
 
 @Module({
@@ -17,9 +15,7 @@ import { WorkflowsModule } from './workflow/workflows/workflows.module.js';
     UsersModule,
     ProjectsModule,
     NodeTypesModule,
-    NodeRunsModule,
-    WorkflowRunsModule,
-    WorkflowVersionsModule,
+    WorkflowRuntimeModule,
     WorkflowsModule,
   ],
   controllers: [HealthController],

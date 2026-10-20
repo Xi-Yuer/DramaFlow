@@ -1,5 +1,5 @@
 import { workflowIdentifierSchema } from '@dramaflow/contracts';
-import { DatabaseService } from '@dramaflow/server';
+import { DatabaseService } from '../database/database.service.js';
 import {
   workflowVersionRecordSchema,
   type WorkflowVersionRecord,
@@ -19,9 +19,7 @@ class PrismaWorkflowVersionRepository implements WorkflowVersionRepository {
     private readonly scope: RepositoryScope,
   ) {}
 
-  async getVersion(
-    workflowVersionId: string,
-  ): Promise<WorkflowVersionRecord | null> {
+  async getVersion(workflowVersionId: string): Promise<WorkflowVersionRecord | null> {
     // 每次查询重新检查归属，旧 Repository 不能保留项目转移前的访问权限。
     const row = await this.db.client.workflowVersion.findFirst({
       where: {
@@ -58,10 +56,7 @@ class PrismaWorkflowVersionRepository implements WorkflowVersionRepository {
 export class WorkflowVersionRepositories {
   constructor(private readonly db: DatabaseService) {}
 
-  async forProject(
-    ownerId: string,
-    rawProjectId: string,
-  ): Promise<WorkflowVersionRepository> {
+  async forProject(ownerId: string, rawProjectId: string): Promise<WorkflowVersionRepository> {
     const projectId = z.uuid().parse(rawProjectId);
     const project = await this.db.client.project.findFirst({
       where: { id: projectId, ownerId },

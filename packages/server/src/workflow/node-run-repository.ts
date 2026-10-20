@@ -8,11 +8,8 @@ import {
   type RuntimeValue,
 } from '@dramaflow/contracts';
 import { Prisma } from '@dramaflow/database';
-import { DatabaseService } from '@dramaflow/server';
-import type {
-  CreateNodeRunInput,
-  NodeRunRepository,
-} from '@dramaflow/workflow';
+import { DatabaseService } from '../database/database.service.js';
+import type { CreateNodeRunInput, NodeRunRepository } from '@dramaflow/workflow';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 
@@ -22,12 +19,8 @@ interface RepositoryScope {
   readonly workflowRunId: string;
 }
 
-function snapshot(
-  values: Record<string, RuntimeValue>,
-): Prisma.InputJsonObject {
-  return z
-    .record(z.string(), z.json())
-    .parse(runtimeValueMapSchema.parse(values));
+function snapshot(values: Record<string, RuntimeValue>): Prisma.InputJsonObject {
+  return z.record(z.string(), z.json()).parse(runtimeValueMapSchema.parse(values));
 }
 
 // 不提供未限定项目 / 运行的公开 Repository 实例，也不增加 HTTP 运行入口。
@@ -39,8 +32,7 @@ class PrismaNodeRunRepository implements NodeRunRepository {
 
   async createRunning(input: CreateNodeRunInput): Promise<NodeRun> {
     const { projectId, workflowRunId, ownerId } = this.scope;
-    if (input.workflowRunId !== workflowRunId)
-      throw new Error('节点执行记录与已授权运行不匹配');
+    if (input.workflowRunId !== workflowRunId) throw new Error('节点执行记录与已授权运行不匹配');
     const nodeId = workflowIdentifierSchema.parse(input.nodeId);
     return this.db.client.$transaction(
       async (tx) => {
@@ -88,14 +80,10 @@ class PrismaNodeRunRepository implements NodeRunRepository {
   }
 
   private assertChanged(count: number): void {
-    if (count !== 1)
-      throw new Error('节点执行记录不存在、无权访问或状态不允许此更新');
+    if (count !== 1) throw new Error('节点执行记录不存在、无权访问或状态不允许此更新');
   }
 
-  async updateInputs(
-    nodeRunId: string,
-    inputs: Record<string, RuntimeValue>,
-  ): Promise<void> {
+  async updateInputs(nodeRunId: string, inputs: Record<string, RuntimeValue>): Promise<void> {
     const changed = await this.db.client.nodeRun.updateMany({
       where: { ...this.running(nodeRunId), inputs: { equals: Prisma.DbNull } },
       data: { inputs: snapshot(inputs) },
@@ -103,10 +91,7 @@ class PrismaNodeRunRepository implements NodeRunRepository {
     this.assertChanged(changed.count);
   }
 
-  async markCompleted(
-    nodeRunId: string,
-    outputs: Record<string, RuntimeValue>,
-  ): Promise<void> {
+  async markCompleted(nodeRunId: string, outputs: Record<string, RuntimeValue>): Promise<void> {
     const changed = await this.db.client.nodeRun.updateMany({
       where: { ...this.running(nodeRunId), inputs: { not: Prisma.DbNull } },
       data: {

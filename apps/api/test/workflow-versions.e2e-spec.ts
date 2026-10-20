@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { StringType, type WorkflowDefinition } from '@dramaflow/contracts';
-import { DatabaseService } from '@dramaflow/server';
+import {
+  DatabaseService,
+  WorkflowVersionRepositories,
+} from '@dramaflow/server';
 import { createWorkflowDefinitionSnapshot } from '@dramaflow/workflow';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { WorkflowVersionRepositories } from '../src/workflow/workflow-versions/workflow-version-repository.js';
+
 import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
 
 if (
