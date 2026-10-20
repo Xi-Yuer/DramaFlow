@@ -1,7 +1,6 @@
 import {
   createBindingResolver,
   DefaultNodeExecutor,
-  DefaultRuntimeValueCodec,
   DefaultWorkflowCompiler,
   DefaultWorkflowOutputResolver,
   DefaultWorkflowRunner,
@@ -13,6 +12,7 @@ import { WorkflowCheckpointerService } from '../checkpoint/workflow-checkpointer
 import { NodeRunRepositories } from './node-run-repository.js';
 import { WorkflowRunRepositories } from './workflow-run-repository.js';
 import { WorkflowVersionRepositories } from './workflow-version-repository.js';
+import { ArtifactRuntimeFactory } from '../artifacts/artifact-runtime.factory.js';
 
 // API / Worker 复用构造逻辑，作用域仍由调用方显式提供，不缓存跨用户 Runner。
 @Injectable()
@@ -24,7 +24,7 @@ export class WorkflowRuntimeFactory {
     private readonly runs: WorkflowRunRepositories,
     private readonly nodeRuns: NodeRunRepositories,
     private readonly registry: NodeRegistry,
-    private readonly codec: DefaultRuntimeValueCodec,
+    private readonly artifacts: ArtifactRuntimeFactory,
     private readonly outputs: DefaultWorkflowOutputResolver,
     private readonly checkpointer: WorkflowCheckpointerService,
   ) {}
@@ -42,7 +42,7 @@ export class WorkflowRuntimeFactory {
         new DefaultNodeExecutor(
           this.registry,
           this.bindings,
-          this.codec,
+          await this.artifacts.forRun(ownerId, projectId, run.id),
           await this.nodeRuns.forRun(ownerId, projectId, run.id),
         ),
       this.checkpointer.saver,

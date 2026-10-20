@@ -29,7 +29,7 @@ NodeDefinition + NodeExecutionContext
 
 普通 NodeType 不再 compile，也不取得 Graph builder。ActionNodeCompilationStrategy 只包装统一 Executor，注入调用时的当前 State 与 state.run 中的项目 / 运行 ID，再将结果映射为当前 nodeId 的 WorkflowStateUpdate。wrapper 不展开旧 outputs，不解析 Binding、校验业务 Schema 或操作 Artifact；这些仍由 Executor 与注入服务承担。control / composite / interaction 使用独立结构策略，不强行套普通 action。
 
-普通 Action NodeExecutor 先创建 running 记录，再执行精确版本查找、绑定、记录输入、decode、输入 / 配置 Zod 校验、业务调用、输出 Zod 校验和逐端口 encode；完成记录成功后才返回 RuntimeValue map。NodeExecutionContext 包含领域 workflow / state、项目运行定位及可选信号 / 能力 / 配置，不传 React Flow 对象；Codec 接收单独构造的项目运行定位；encode 额外携带 nodeId / outputKey，Writer 另收到 DataType。不按 node.type 分支，不直接访问 Artifact 存储，通过独立 Repository 记录 NodeRun，不处理 State 增量、Retry 或 Human Review，实际范围见 [架构](architecture.md#数据与-node-基础库)。
+普通 Action NodeExecutor 先创建 running 记录，再执行精确版本查找、绑定、记录输入、decode、输入 / 配置 Zod 校验、业务调用、输出 Zod 校验和逐端口 encode；完成记录成功后才返回 RuntimeValue map。NodeExecutionContext 包含领域 workflow / state、项目运行定位及可选信号 / 能力 / 配置，不传 React Flow 对象；Codec 接收单独构造的项目运行定位；encode 额外携带 nodeId / outputKey / nodeRunId，Writer 另收到 DataType。不按 node.type 分支，不直接访问 Artifact 存储，通过独立 Repository 记录 NodeRun，不处理 State 增量、Retry 或 Human Review，实际范围见 [架构](architecture.md#数据与-node-基础库)。
 
 ### Action 执行错误阶段
 
@@ -107,7 +107,7 @@ API / Worker 的 WorkflowRuntimeModule 导出各自应用 Service。共享 Workf
 API Service 的 submitStart / submitResume 是可独立调用的提交边界；Worker Service 只提供 execute(job)、executeStart(id)、executeResume(input)，从不创建新运行。内部执行服务不能代替 HTTP 权限检查：HTTP 先验证当前用户与 Version / Run 项目关系，再交付 Job。API 只装配 SubmissionModule / QueueModule，Worker 装配 RuntimeInfrastructureModule、Consumer 与 Outbox Pump。Job 确定性身份和持久 Outbox 防止重复交付，运行 claim 由实际执行者完成，不自动重跑业务副作用。完整故障边界见 [执行队列](architecture.md#workflow-execution-queue)。
 共享 WorkflowRuntimeInfrastructureModule 提供真实 Codec / 存储策略 / 最终输出解析，factory 连接精确版本 NodeRegistry、既有 Action Compiler、应用级 PostgresSaver 和按运行创建的 NodeExecutor。编译器仍只支持现有 Action 策略，没有新增 CompilationStrategyRegistry。NodeRegistry 在同一应用的目录与 Runtime 中共享，默认空目录不构成业务执行能力。
 
-内容服务尚未接入时，显式拒绝适配器抛 REFERENCE_RUNTIME_NOT_CONFIGURED / ARTIFACT_WRITER_NOT_CONFIGURED；Codec 的既有引用错误将前者保留在 REFERENCE_RESOLUTION_FAILED.cause.code，Executor 继续增加执行阶段与 cause。inline 使用真实 Codec，reference 不返回占位产物或降级 inline。Nest 生产装配与真实 PostgreSQL 空图已验证，Run HTTP Controller 与 Worker Consumer 已接入。
+ArtifactModule 提供生产内容读写；ArtifactRuntimeFactory 按已授权 owner / project / Run 创建 Codec，注入 ArtifactWriterService、ArtifactDataReferenceResolver 和统一策略。写入 RuntimeValueEncodeContext 由 Executor 增加真实 nodeRunId，Writer 校验来源后登记写入、上传 RustFS 并确认 ready；只有完成确认才返回引用。JSON decode 返回原业务值，blob decode 返回临时 MediaResource，State / NodeRun 仍只记录引用。Asset 尚未实现，明确报 REFERENCE_RESOLUTION_FAILED.cause.code = ASSET_REFERENCE_NOT_CONFIGURED。失败补偿与提交不明语义见 [Artifact 生产数据通道](architecture.md#artifact-生产数据通道)，不返回占位内容或降级 inline。Run HTTP Controller 与 Worker Consumer 已接入，生产 Registry 仍为空。
 
 ### Run HTTP 边界
 

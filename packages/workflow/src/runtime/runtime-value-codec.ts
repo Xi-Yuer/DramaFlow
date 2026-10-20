@@ -15,6 +15,7 @@ export interface RuntimeValueDecodeContext {
 }
 
 export interface RuntimeValueEncodeContext extends RuntimeValueDecodeContext {
+  readonly nodeRunId?: string;
   readonly nodeId: string;
   readonly outputKey: string;
 }

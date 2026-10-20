@@ -91,6 +91,7 @@ export class DefaultNodeExecutor implements NodeExecutor {
           context: {
             projectId: context.projectId,
             workflowRunId: context.workflowRunId,
+            nodeRunId: nodeRun.id,
             nodeId: node.id,
             outputKey: port.key,
           },

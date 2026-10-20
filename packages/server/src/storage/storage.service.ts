@@ -1,9 +1,12 @@
 import {
   GetObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable, type OnModuleDestroy } from '@nestjs/common';
 import { z } from 'zod';
 
@@ -12,6 +15,7 @@ import { z } from 'zod';
 export class StorageService implements OnModuleDestroy {
   private readonly bucket: string;
   private readonly client: S3Client;
+  private readonly accessClient: S3Client;
 
   constructor() {
     const config = z
@@ -21,6 +25,7 @@ export class StorageService implements OnModuleDestroy {
         S3_ACCESS_KEY_ID: z.string().min(1),
         S3_SECRET_ACCESS_KEY: z.string().min(1),
         S3_REGION: z.string().min(1).default('us-east-1'),
+        S3_ACCESS_ENDPOINT: z.url().optional(),
       })
       .safeParse(process.env);
     if (!config.success) {
@@ -38,6 +43,17 @@ export class StorageService implements OnModuleDestroy {
         secretAccessKey: config.data.S3_SECRET_ACCESS_KEY,
       },
     });
+    this.accessClient = config.data.S3_ACCESS_ENDPOINT
+      ? new S3Client({
+          region: config.data.S3_REGION,
+          endpoint: config.data.S3_ACCESS_ENDPOINT,
+          forcePathStyle: true,
+          credentials: {
+            accessKeyId: config.data.S3_ACCESS_KEY_ID,
+            secretAccessKey: config.data.S3_SECRET_ACCESS_KEY,
+          },
+        })
+      : this.client;
   }
 
   async ping(): Promise<void> {
@@ -61,7 +77,28 @@ export class StorageService implements OnModuleDestroy {
     return result.Body.transformToByteArray();
   }
 
+  async head(key: string): Promise<{ size: number; mimeType?: string }> {
+    const result = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+    if (result.ContentLength === undefined) throw new Error('对象大小缺失');
+    return { size: result.ContentLength, mimeType: result.ContentType };
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
+
+  signedGetUrl(key: string): Promise<string> {
+    return getSignedUrl(
+      this.accessClient,
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      {
+        expiresIn: 900,
+      },
+    );
+  }
+
   onModuleDestroy() {
     this.client.destroy();
+    if (this.accessClient !== this.client) this.accessClient.destroy();
   }
 }

@@ -7,6 +7,7 @@ import {
 } from '@dramaflow/contracts';
 import {
   DatabaseService,
+  ArtifactRuntimeFactory,
   NodeRunRepositories,
   WorkflowCheckpointerService,
   WorkflowExecutionQueue,
@@ -17,7 +18,7 @@ import {
   WorkflowRuntimeFactory,
   WorkflowVersionRepositories,
 } from '@dramaflow/server';
-import { DefaultRuntimeValueCodec, NodeRegistry } from '@dramaflow/workflow';
+import { NodeRegistry } from '@dramaflow/workflow';
 import {
   type INestApplicationContext,
   NotFoundException,
@@ -250,9 +251,13 @@ describe('正式 Nest 应用的提交 / 队列 / 执行装配', () => {
       await api.get(WorkflowExecutionQueue).queue.pause();
     }
   });
-  it('引用实现未配置仍明确拒绝，inline 使用真实 Codec，不注入媒体兜底', async () => {
-    const codec = worker.get(DefaultRuntimeValueCodec);
-    const context = { projectId: 'project', workflowRunId: 'run' };
+  it('Artifact Codec 按已授权运行构造，Asset 仍明确拒绝，inline 不产生内容 I/O', async () => {
+    const input = await fixture();
+    const run = await apiRuntime.submitStart(ownerId, input);
+    const codec = await worker
+      .get(ArtifactRuntimeFactory)
+      .forRun(ownerId, input.projectId, run.id);
+    const context = { projectId: input.projectId, workflowRunId: run.id };
     expect(
       await codec.decode(
         { storage: 'inline', type: NumberType, value: 10 },
@@ -270,7 +275,7 @@ describe('正式 Nest 应用的提交 / 队列 / 执行装配', () => {
       ),
     ).rejects.toMatchObject({
       code: 'REFERENCE_RESOLUTION_FAILED',
-      cause: { code: 'REFERENCE_RUNTIME_NOT_CONFIGURED' },
+      cause: { code: 'ASSET_REFERENCE_NOT_CONFIGURED' },
     });
     await expect(
       codec.encode(
@@ -281,7 +286,13 @@ describe('正式 Nest 应用的提交 / 队列 / 执行装配', () => {
           context: { ...context, nodeId: 'node', outputKey: 'image' },
         },
       ),
-    ).rejects.toMatchObject({ code: 'ARTIFACT_WRITER_NOT_CONFIGURED' });
+    ).rejects.toMatchObject({
+      code: 'ARTIFACT_WRITE_FAILED',
+      stage: 'prepare',
+    });
+    expect(await db.artifact.count({ where: { workflowRunId: run.id } })).toBe(
+      0,
+    );
   });
   it('waiting 缺少 checkpoint 时恢复同一记录失败，不初始化新线程', async () => {
     const input = await fixture();

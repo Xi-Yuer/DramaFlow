@@ -176,7 +176,13 @@ describe('普通 Action Node 执行主链', () => {
     expect(f.encode).toHaveBeenCalledExactlyOnceWith(30, {
       type: NumberType,
       storagePolicy: 'auto',
-      context: { projectId: 'p', workflowRunId: 'r', nodeId: 'sum', outputKey: 'result' },
+      context: {
+        projectId: 'p',
+        workflowRunId: 'r',
+        nodeRunId: 'node-run-1',
+        nodeId: 'sum',
+        outputKey: 'result',
+      },
     });
     expect(f.write).not.toHaveBeenCalled();
     expect(f.nodeRuns.createRunning).toHaveBeenCalledExactlyOnceWith({
@@ -601,6 +607,7 @@ describe('NodeExecutor 按输出端口编码', () => {
     expect(f.write).toHaveBeenCalledExactlyOnceWith(f.video, {
       projectId: 'p',
       workflowRunId: 'r',
+      nodeRunId: 'node-run-1',
       nodeId: 'render',
       outputKey: 'video',
       type: VideoType,
@@ -611,7 +618,13 @@ describe('NodeExecutor 按输出端口编码', () => {
         {
           type: VideoType,
           storagePolicy: 'auto',
-          context: { projectId: 'p', workflowRunId: 'r', nodeId: 'render', outputKey: 'video' },
+          context: {
+            projectId: 'p',
+            workflowRunId: 'r',
+            nodeRunId: 'node-run-1',
+            nodeId: 'render',
+            outputKey: 'video',
+          },
         },
       ],
       [
@@ -619,7 +632,13 @@ describe('NodeExecutor 按输出端口编码', () => {
         {
           type: NumberType,
           storagePolicy: 'inline',
-          context: { projectId: 'p', workflowRunId: 'r', nodeId: 'render', outputKey: 'duration' },
+          context: {
+            projectId: 'p',
+            workflowRunId: 'r',
+            nodeRunId: 'node-run-1',
+            nodeId: 'render',
+            outputKey: 'duration',
+          },
         },
       ],
     ]);

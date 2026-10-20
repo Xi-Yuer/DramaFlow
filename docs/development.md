@@ -32,11 +32,13 @@ test/workflow-versions.e2e-spec.ts 在真实 PostgreSQL 经 WorkflowService 保�
 
 test/workflows.e2e-spec.ts 使用真实服务和两个独立数据库连接，检查 12 次同修订并发编辑只成功一次、过期发布不生成版本、12 次同修订并发发布只生成一个版本并返回明确重复发布冲突，以及新修订继续获得下一版本号。用 PostgreSQL 阻塞信息验证发布实际等待未提交编辑行锁，编辑提交后以新 revision 拒绝过期请求，不依赖固定 sleep 猜测顺序。另覆盖发布重新校验存储草稿、失败不消耗版本号、输入必填 / 严格字段、所有者与过期权限、来源修订唯一 / 正数约束。此文件不测试 HTTP、运行或持久 checkpoint。
 
-test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的版本、WorkflowRun、NodeRun Repository、普通 Action Compiler 和生产 provider 的官方 PostgresSaver，验证首次成功、节点失败、原生暂停、NodeRun completed 但最终输出解析失败、编译失败、完成记录不可用时不反向 failed。版本快照在测试中显式建数，Runner 经生产读取实现获取。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目、级联记录及 thread checkpoint，不清空开发库。可定向执行 workflows、workflow-versions、workflow-runner、workflow-runs、node-runs、persistent-checkpoint、workflow-runtime 七个 e2e-spec；这些测试不证明 Artifact 或运行 HTTP 入口已接入。workflow 包另验证提交时版本读取返回 null 不创建运行；执行时版本读取失败由 claim 成功者记录 load_version 失败。
+test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的版本、WorkflowRun、NodeRun Repository、普通 Action Compiler 和生产 provider 的官方 PostgresSaver，验证首次成功、节点失败、原生暂停、NodeRun completed 但最终输出解析失败、编译失败、完成记录不可用时不反向 failed。版本快照在测试中显式建数，Runner 经生产读取实现获取。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目、级联记录及 thread checkpoint，不清空开发库。可定向执行该用例；内容持久化由 artifacts.e2e-spec、运行 HTTP 由 workflow-run-api.e2e-spec 另行验证。workflow 包另验证提交时版本读取返回 null 不创建运行；执行时版本读取失败由 claim 成功者记录 load_version 失败。
 
 test/persistent-checkpoint.e2e-spec.ts 是真实 PostgreSQL 跨进程测试，不用 MemorySaver：启动进程 A 的 Nest / Repository / Saver / Compiler / Runner，interrupt 后等待 A 完全退出；再启动 B，从原 workflowVersionId / threadId 恢复并完成。期间通过真实 WorkflowService 更新 / 发布新版本，检查原输入、已完成节点和原版本仍有效。两个全新进程另用 IPC 屏障先同时读到 waiting，释放后只有一个 claim 成功且进入 graph.invoke；第三项验证不可用 checkpoint 数据库使 Nest 初始化失败。子进程导入生产持久化模块与 Repository，原生 interrupt 图是测试专用 Compiler，不能视作 HumanReview 产品或 NodeRun waiting 实现。测试清理只调用官方 deleteThread 删除自建 thread，并关闭连接。health.e2e-spec 验证真正 API 启动和 checkpoint 读取健康项。
 
-test/workflow-runtime.e2e-spec.ts 动态加载正式 API / Worker AppModule 编译产物，不覆盖生产 provider。验证 API 没有 Runner factory / ExecutionService、Worker 完整 DI、API 事务提交 pending / Outbox 后由实际队列 Consumer 完成同一 Run，以及权限、未知节点、引用未配置和缺失 checkpoint 的边界。生产 Registry 仍为空，不把空图当作已交付业务节点。
+test/workflow-runtime.e2e-spec.ts 动态加载正式 API / Worker AppModule 编译产物，不覆盖生产 provider。验证 API 没有 Runner factory / ExecutionService、Worker 完整 DI、API 事务提交 pending / Outbox 后由实际队列 Consumer 完成同一 Run，以及权限、未知节点、Asset 未配置、无效媒体输出和缺失 checkpoint 的边界。生产 Registry 仍为空，不把空图当作已交付业务节点。
+
+test/artifacts.e2e-spec.ts 在真实 PostgreSQL / RustFS 运行生产 Artifact 适配器：普通 Compiler / Executor 验证 A 输出大 JSON 与 BinaryContent，B 经 Binding / Codec 取得原 JSON 和可访问的临时媒体资源；检查数据库 metadata、实际对象、NodeRun 引用和全部 checkpoint / pending writes 不含大内容及 signed URL。另用两个真实退出的子进程加载正式 Worker AppModule，从测试原生中断门恢复原 thread，验证重建客户端后 B 仍读取同一 Artifact，A 不重复执行。此处直接驱动 Runner，运行记录不创建 Outbox，Queue 交付故障由 workflow-queue.e2e-spec 单独验证。覆盖授权 / 项目与 context 拼接拒绝、对象缺失 / 删除 / JSON 损坏、登记故障、PUT 已写后报错、清理失败、失败记录故障、确认失败及提交成功响应丢失。注入故障验证失败边界，正常路径的数据库和对象存储均为真实服务；只清理自建对象和数据。server 的 artifact-content.spec 为纯内容单元测试，storage.storage-test 为独立真实 RustFS 测试，不能用前者替代持久化验证。
 
 test/workflow-run-api.e2e-spec.ts 使用两个真实 HTTP API、密码会话 / 签名 Cookie，并启动独立 Worker 子进程。验证没有 Worker 时也能返回 202 / pending、GET 完成输出、API 进程不执行 Runner、两轮恢复 / 0 值、同等待周期并发提交单意图 / 409、跨用户不可见、字段严格校验及 Redis 入队未确认返回安全 503。原生等待图只存在于测试子进程，不注册生产交互节点。
 
@@ -89,6 +91,6 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 
 ## 定向验证范围
 
-按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / State 通道与并行增量 / 输入解析 / Codec / 存储策略 / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；WorkflowRun / NodeRun 生命周期另执行隔离 PostgreSQL 集成测试；生产 Checkpointer 的恢复能力用跨进程数据库测试验证，不能用 MemorySaver 单元测试替代。State 增量适配和执行主干不代表已有真实 Artifact 写入或完整图运行接口。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
+按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / State 通道与并行增量 / 输入解析 / Codec / 存储策略 / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；WorkflowRun / NodeRun 生命周期另执行隔离 PostgreSQL 集成测试；生产 Checkpointer 的恢复能力用跨进程数据库测试验证，不能用 MemorySaver 单元测试替代。Artifact 生产内容链由 artifacts.e2e-spec 另行验证，Asset 尚未实现。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
 
 WorkflowExecutionJob 契约单测检查仅携带业务 Run ID、resume executionId / value，严格拒绝 State / Definition / thread / version 副本并保留 falsy 值。workflow-run-submission.test.ts 的内存 Repository / MemorySaver 只验证提交与执行分离，不作为生产事务 / Queue 证明；实际事务回滚和崩溃重投由上述 PostgreSQL / Redis 集成覆盖。

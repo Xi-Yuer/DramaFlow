@@ -6,7 +6,7 @@
 
 端口使用默认 5432、6379、9000、9001，应用前端 3000。宿主仅监听 127.0.0.1，对外访问需要 HTTPS 反向代理。Docker 内部通过 postgres、redis、rustfs 服务名访问，不使用宿主 localhost。
 
-Prisma 迁移保留 vector 扩展及用户身份、资料、凭证、会话、限流、基础项目、Workflow / WorkflowVersion 与运行记录表，不包含工作空间。当前 canvas_project 保存项目所有者、名称、视口、revision 及时间字段。
+Prisma 迁移保留 vector 扩展及用户身份、资料、凭证、会话、限流、基础项目、Workflow / WorkflowVersion、运行记录与 Artifact metadata 表，不包含工作空间。当前 canvas_project 保存项目所有者、名称、视口、revision 及时间字段。
 
 NodeRun 的[初始化迁移](../packages/database/prisma/migrations/20261020000000_node_runs/migration.sql)和[字段 / 索引迁移](../packages/database/prisma/migrations/20261020010000_node_run_boundary/migration.sql)建立 node_run，关联现有项目。status 使用 String，并保留数据库三状态校验；字段调整把已有状态转为 text，保留记录与唯一约束，补充 workflowRunId、workflowRunId / nodeId 索引。数据库约束 workflowRunId + nodeId + attempt 唯一、attempt 为正数、输入输出为 JSON 对象及终态字段一致性。Repository 在事务锁内原子分配 attempt；事务级锁随提交或回滚释放，见 [PostgreSQL 官方说明](https://www.postgresql.org/docs/17/explicit-locking.html#ADVISORY-LOCKS)。
 
@@ -15,6 +15,8 @@ NodeRun 的[初始化迁移](../packages/database/prisma/migrations/202610200000
 [Workflow / WorkflowVersion 迁移](../packages/database/prisma/migrations/20261020030000_workflow_versions/migration.sql)新增表、索引、外键与版本不可更新触发器，不删除或回填现有业务数据。workflow.projectId 唯一并关联项目；workflow_version 关联 Workflow，以 workflowId / version 唯一，每条保存完整 definition JSON，父级删除时级联。revision / version 要求正数，draft / definition 要求 JSON 对象；完整 DSL 在发布和 Repository 读取边界校验。数据库禁止更新已创建版本，不提供差量拼接。Run 的两个逻辑 ID 保持不变。
 
 [发布来源修订迁移](../packages/database/prisma/migrations/20261020040000_workflow_publish_revision/migration.sql)增加必填、正数 sourceRevision 及 workflowId / sourceRevision 唯一约束；既有不可更新触发器同时保护来源修订。迁移不猜测历史版本来源、不用版本号或当前草稿修订回填；存在缺少真实来源信息的旧开发版本时，应先核对范围并按开发数据授权清理，不能伪造来源。本机空版本表可直接执行 db:migrate，无需 reset。WorkflowService 用原子条件更新实现草稿乐观锁，以事务行锁串行化发布序列；数据库唯一约束是最终防线，不承担正常版本分配。
+
+[Artifact 迁移](../packages/database/prisma/migrations/20261020060000_artifacts/migration.sql)新增 artifact 表与索引，使用项目 / WorkflowRun / 可选 NodeRun 复合外键保证来源一致，并增加 NodeRun 复合唯一索引。不删除或重写现有数据。writing / ready / failed 及终态字段受约束，触发器禁止改写内容身份和覆盖终态；对象本体不进入数据库。写入记录与 RustFS 不能跨库原子提交，失败补偿、未确认记录和对象保留规则见 [对象存储](object-storage.md)。备份须同时覆盖业务库、langgraph schema 与私有对象桶；Prisma 级联删除 metadata 不等于对象清理。
 
 [项目基础迁移](../packages/database/prisma/migrations/20261019000000_project_foundation/migration.sql) 删除 canvas_project 的 definition、nodeCount 列及 plugin_installation 表。尚未应用该迁移的环境执行时会清除旧节点、连线、数据绑定及插件安装记录，包括其中的配置与加密凭证；保留项目基础信息与身份数据，不操作 Redis、RustFS 或其他数据卷。当前协议不兼容这些旧业务字段。
 

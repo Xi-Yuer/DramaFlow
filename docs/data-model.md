@@ -54,13 +54,13 @@ OutputPortDefinition.storagePolicy 可为 inline、reference、auto，省略时�
 
 ## Artifact、Asset 与领域对象
 
-Artifact 契约保存项目、运行、可选 NodeRun 来源、DataType、对象存储位置、可选 JSON 元数据和 ISO 时间。存储位置含 provider/key 以及可选 MIME、大小、checksum，不以 URL 作为核心存储字段。
+Artifact 契约保存项目、运行、可选 NodeRun 来源、DataType、必填 contentKind（json / blob）、对象存储位置、可选 JSON 元数据和 ISO 时间。存储位置含 provider/key 以及可选 MIME、大小、checksum，不以 URL 作为核心存储字段。数据库另保存写入状态及节点 / 输出键，只有 ready 记录映射为可读取的 Artifact；内容编码和身份不可更新。
 
 Asset 契约保存项目、名字、DataType、明确 versionId、来源和内容。来源包括 upload、artifact、external；内容可为内联 JSON 或独立对象存储位置。文件不是唯一资产形态，Character 等领域对象同样可以成为受管理的资产。
 
 需要引用承载的节点输出先成为 Artifact，inline 输出不创建 Artifact。进入可复用资产库需显式 Promote 或已明确的规则；不自动把全部候选图、中间文件和重试产物堆入资产库。Domain Object 描述数据形状，不自动赋予持久化身份。Shot 可以包含产物引用，而不内嵌生成视频的二进制。
 
-共享内容协议及 ArtifactStore / AssetStore 服务端口不代表数据库表、上传、Promote 或资产库业务，实际能力见 [当前架构](architecture.md)。实际存储继续统一使用 RustFS / S3，不引入本地存储或内存生产兜底。
+ArtifactWriter / DataReferenceResolver 的 Artifact 分支已有 PostgreSQL / RustFS 生产适配，见 [当前架构](architecture.md#artifact-生产数据通道)。ArtifactStore / AssetStore 仍是服务端口，Asset 数据库、版本内容读取、Promote 和资产库业务尚未接入。实际存储统一使用 RustFS / S3，不引入本地存储或内存生产兜底。
 
 ## Codec、Binding 与执行服务接口
 
@@ -70,7 +70,9 @@ DataReferenceResolver 的具体实现负责项目授权、固定资产版本和�
 
 Codec 不执行 inputSchema.parse，不做业务类型、必填或配置校验。引用失败以 ReferenceResolutionError / REFERENCE_RESOLUTION_FAILED 标识并保留 cause，已有此类错误直接传播。NodeExecutor 在 decode_input 保留该错误作为 cause，与 validate_input 的 NODE_INPUT_VALIDATION_FAILED 区分。批量解码任一引用失败则整体失败，不返回部分结果或占位值。
 
-RuntimeValueCodec.encode(value, { type, storagePolicy, context }) 处理校验后的单个业务输出。RuntimeValueEncodeContext 只包含 projectId、workflowRunId、nodeId、outputKey；不传整个 State。inline 检查 RuntimeValue 的 JSON 可持久化边界后包装，不创建 Artifact，不重复业务 Schema 校验；非 JSON 值直接失败，不隐式序列化或降级。reference 仅调用 ArtifactWriter.write(value, context)，上下文额外携带声明 DataType；Writer 成功后返回 ArtifactReference，Codec 验证引用结构并包装为 ReferenceRuntimeValue，不把业务内容或临时 URL 放入 State。Writer 负责实际授权、不可变 Artifact 和内容存储，Codec 不访问数据库或 S3。
+RuntimeValueCodec.encode(value, { type, storagePolicy, context }) 处理校验后的单个业务输出。RuntimeValueEncodeContext 包含 projectId、workflowRunId、nodeId、outputKey 和可选 nodeRunId；Executor 提供本次真实 NodeRun ID，不传整个 State。inline 检查 RuntimeValue 的 JSON 可持久化边界后包装，不创建 Artifact，不重复业务 Schema 校验；非 JSON 值直接失败，不隐式序列化或降级。reference 仅调用 ArtifactWriter.write(value, context)，上下文额外携带声明 DataType；Writer 成功后返回 ArtifactReference，Codec 验证引用结构并包装为 ReferenceRuntimeValue，不把业务内容或临时 URL 放入 State。Writer 负责实际授权、不可变 Artifact 和内容存储，Codec 不访问数据库或 S3。
+
+生产 Writer 接受 JSON 值（含字符串与结构化对象），或业务 BinaryContent `{ bytes: Uint8Array, mimeType: string }`。media.file / image / video / audio / document 要求 BinaryContent，不把 URL 描述误当作已保存媒体，也不自动下载。JSON 按 UTF-8 存储，decode 还原原业务值；blob decode 返回 MediaResource，包含临时 access.url，其他类型二进制的 mediaType 为 file。Writer 保留可追查写入记录，只有对象上传且数据库确认成功后才返回引用。Asset 引用仍报 REFERENCE_RESOLUTION_FAILED，cause.code 为 ASSET_REFERENCE_NOT_CONFIGURED。
 
 DataStoragePolicyResolver.resolve(type, value) 统一处理 auto。默认规则为 primitive、system.json、story.character、story.scene → inline；media.file / image / video / audio / document → reference。命名规则可集中注入并由 Resolver 复制持有；未注册 named 以及 any / array / object / union 的 auto 报 DATA_STORAGE_POLICY_NOT_FOUND，须显式声明承载或注入相应规则，不猜测嵌套媒体。显式 inline / reference 不调用 Resolver。实际接入范围见 [当前架构](architecture.md#数据与-node-基础库)。
 

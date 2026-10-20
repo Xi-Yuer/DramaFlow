@@ -59,10 +59,25 @@ describe('真实 RustFS 存储', () => {
     const object = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
     expect(object.ContentType).toBe('application/octet-stream');
     expect(Buffer.from(await object.Body!.transformToByteArray())).toEqual(bytes);
+    expect(await storage.head(key)).toEqual({
+      size: bytes.byteLength,
+      mimeType: 'application/octet-stream',
+    });
+    const url = await storage.signedGetUrl(key);
+    expect(new URL(url).searchParams.get('X-Amz-Expires')).toBe('900');
+    const response = await fetch(url);
+    expect(response.ok).toBe(true);
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
   });
 
   it('不存在的对象明确报错', async () => {
     await expect(storage.get(randomUUID())).rejects.toThrow();
+    await expect(storage.head(randomUUID())).rejects.toThrow();
+    const key = randomUUID();
+    keys.push(key);
+    await storage.put(key, new Uint8Array([1]), 'application/octet-stream');
+    await storage.delete(key);
+    await expect(storage.head(key)).rejects.toThrow();
   });
 
   it('未授权读取私有对象被拒绝', async () => {

@@ -1,6 +1,12 @@
 import type { ArtifactReference, DataType } from '@dramaflow/contracts';
 import type { RuntimeValueEncodeContext } from './runtime-value-codec.js';
 
+/** 节点返回的业务二进制内容；不含存储位置或平台引用。 */
+export interface BinaryContent {
+  readonly bytes: Uint8Array;
+  readonly mimeType: string;
+}
+
 export interface ArtifactWriteContext extends RuntimeValueEncodeContext {
   readonly type: DataType;
 }

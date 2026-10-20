@@ -44,9 +44,9 @@ executeResume 只接受 workflowRunId 与 unknown value，getById 校验 waiting
 ## 生产 Runtime 装配
 
 API 与 Worker 各有 workflow/runtime/WorkflowRuntimeModule 和 WorkflowRuntimeService，AppModule 显式引入。API 仅引入 WorkflowSubmissionModule / WorkflowQueueModule，不提供 Runner factory 或 ExecutionService；执行基础设施、Consumer 和 Outbox Pump 仅在 Worker 装配。共享 WorkflowRunSubmissionFactory.forProject(ownerId, projectId) 创建限定权限的提交服务，独立于 Compiler / Checkpointer。WorkflowExecutionService 接收受信任的 Job，核对持久 Outbox 的身份、payload 和 waiting 周期，再按 Run ID 从数据库读取项目及所有者，再经 WorkflowRuntimeFactory.forProject 装配权限与 executionId 作用域的 Runner；版本 / thread 仍由 Runner 从持久记录读取，不缓存跨用户 Runner。执行服务是内部执行端边界，HTTP 必须在交付 Job 前校验当前用户权限。Worker Service 暴露 execute(job)、executeStart(id)、executeResume(input)，不再创建 Run。
-packages/server/workflow 复用原有 Prisma 版本 / Run / NodeRun Repository 实现，权限过滤、原子 attempt 与 claim 语义不变，移除 API 私有实现和重复模块，Worker 不依赖 API 包。WorkflowRuntimeInfrastructureModule 提供 Repository 工厂、Codec、统一存储策略、最终输出解析与装配 factory。factory 使用既有 DefaultWorkflowCompiler / Action 策略，注入应用级 PostgresSaver；按真实 Run 创建限定权限的 DefaultNodeExecutor，复用 BindingResolver 与 Codec。未新增策略注册框架或修改 Runner 图执行语义。
+packages/server/workflow 复用原有 Prisma 版本 / Run / NodeRun Repository 实现，权限过滤、原子 attempt 与 claim 语义不变，Worker 不依赖 API 包。WorkflowRuntimeInfrastructureModule 提供 Repository 工厂、ArtifactModule、最终输出解析与装配 factory。factory 使用既有 DefaultWorkflowCompiler / Action 策略，注入应用级 PostgresSaver；按真实 Run 创建限定权限的 DefaultNodeExecutor 和 Artifact Codec，复用纯 BindingResolver 与统一存储策略。未新增策略注册框架或修改 Runner 图执行语义。
 
-WorkflowNodeRegistryModule 为每个应用提供同一个生产 Registry；API 目录与 Runtime 共用，仍未注册业务节点。UnconfiguredDataReferenceResolver / UnconfiguredArtifactWriter 是明确拒绝适配，不提供内容实现：reference decode 的 REFERENCE_RESOLUTION_FAILED.cause.code 为 REFERENCE_RUNTIME_NOT_CONFIGURED，reference / media auto encode 报 ARTIFACT_WRITER_NOT_CONFIGURED；Executor 继续保留阶段包装和 cause，不回退 inline。
+WorkflowNodeRegistryModule 为每个应用提供同一个生产 Registry；API 目录与 Runtime 共用，仍未注册业务节点。ArtifactRuntimeFactory.forRun(ownerId, projectId, workflowRunId) 构造有授权作用域的真实 Writer / Resolver / Codec；Asset 引用仍以 REFERENCE_RESOLUTION_FAILED.cause.code = ASSET_REFERENCE_NOT_CONFIGURED 明确拒绝，不回退 inline。
 
 workflow-runtime.e2e-spec 启动正式 API / Worker AppModule，检查 API 不装配执行依赖、Worker 构造生产依赖、空版本从提交到消费、权限、未知节点与缺失 checkpoint 的失败边界、引用服务明确未配置。测试目录仍为空，测试用故障节点和原生等待图不会进入生产源码。
 
@@ -84,7 +84,7 @@ API 的 workflow-runner.e2e-spec 已使用生产 provider 和官方 saver 验证
 
 contracts/data 提供正式 DataType、builtin 类型常量、共享 isTypeAssignable、DataTypeManifest、RuntimeValue 与 DataReference。primitive / named / array / object / union / any 描述语义类型；inline / reference 描述运行值承载。数组元素用 itemType；兼容规则包含递归数组、Union 全来源覆盖和对象结构子集，any 仅放宽目标。
 
-contracts/content 提供 Artifact 与版本化 Asset 的共享协议；Artifact 引用不可变产物 ID，AssetReference / AssetBinding 固定 versionId。没有对应数据库表、上传、Promote 或引用读取服务。详细类型与生命周期见 [数据模型](data-model.md)。
+contracts/content 提供 Artifact 与版本化 Asset 的共享协议；Artifact 引用不可变产物 ID，AssetReference / AssetBinding 固定 versionId。Artifact 已接入下述生产数据通道；Asset 仍无数据库、版本内容读取、Promote 或资产库服务。详细类型与生命周期见 [数据模型](data-model.md)。
 
 服务端 DataTypeRegistry 按名称注册 Manifest + Zod，拒绝重复及未知名称；schemaFor / parse 递归检查实际 JSON 值。目录只返回独立 Manifest 副本，未注册虚构媒体实现，也未接入类型目录 API。
 
@@ -102,23 +102,35 @@ BindingResolutionError 包含 INPUT_SOURCE_CONFLICT、SOURCE_NODE_OUTPUT_MISSING
 
 runtime/runtime-value-codec.ts 提供统一 RuntimeValueCodec 和 DefaultRuntimeValueCodec，显式注入 DataReferenceResolver、ArtifactWriter 与 DataStoragePolicyResolver。decode 对 inline 原样返回，reference 委托引用服务；decodeRecord 并行解码自有键，引用失败以 ReferenceResolutionError / REFERENCE_RESOLUTION_FAILED 保留 reference 和 cause。encode 接收 DataType、存储策略及项目 / 运行 / 节点 / 输出键定位；inline 校验 JSON 承载后包装，reference 经 ArtifactWriter 写入并验证返回的 ArtifactReference。Codec 不依赖数据库或对象存储实现，不拼接 URL，不执行业务 Schema。data-reference-resolver.ts 保留 MediaResource，value-codec.ts 仅保留通用 RuntimeValueContext，不再另设输出 Encoder。
 
-OutputPortDefinition 增加可选 storagePolicy，复用既有 DataStoragePolicy；省略时 Executor 使用 auto。data-storage-policy-resolver.ts 提供统一接口及默认类型规则：primitive / system.json / story.character / story.scene 内联，media.file / image / video / audio / document 引用；规则表可显式扩展。未注册 named 及结构类型的 auto 明确失败，不用 JSON 大小猜测。artifact-writer.ts 仅定义写入接口，携带声明类型及输出来源，未接入实际 Artifact 创建或对象存储写入。
+OutputPortDefinition 增加可选 storagePolicy，复用既有 DataStoragePolicy；省略时 Executor 使用 auto。data-storage-policy-resolver.ts 提供统一接口及默认类型规则：primitive / system.json / story.character / story.scene 内联，media.file / image / video / audio / document 引用；规则表可显式扩展。未注册 named 及结构类型的 auto 明确失败，不用 JSON 大小猜测。workflow 的 artifact-writer.ts 保持接口与业务 BinaryContent 类型，携带声明类型及输出来源；实际 Artifact 持久化由 server 适配，不让内核依赖 Prisma / S3。
 
 runtime/node-executor.ts 提供 DefaultNodeExecutor，显式注入 Registry、BindingResolver、Codec 与 NodeRunRepository。先 createRunning，再 getAction、绑定、updateInputs、decodeRecord、输入 / 配置校验、业务调用、输出校验和逐端口 encode；markCompleted 确认成功后才返回 `{ output: Record<string, RuntimeValue> }`，不修改 WorkflowState。不按业务 type 分支，不直接操作数据库或对象存储，NodeRun 持久化只经注入 Repository，不重试或实现审核。编码失败停止后续输出，不返回部分结果；前序已写入的 Artifact 不由 Executor 自动回滚。
 
 node-execution-error.ts 提供 NodeExecutionError，保留 nodeId、nodeType、stage、code 和 cause。Executor 记录的业务阶段为 resolve_input / decode_input / validate_input / validate_config / execute / validate_output / encode_output；输出编码及 Writer 失败使用 NODE_OUTPUT_ENCODING_FAILED，与输出业务校验区分。业务管线异常按准确阶段先 markFailed 再抛出；创建、输入记录与完成记录方法均在该 catch 外，Repository 故障保留原始异常上抛，不反向 markFailed。失败记录写入也失败时沿用 NodeRunRecordingError，同时保留原 cause 与 recordingError。GraphBubbleUp 原样传播、记录保持 running，不记 failed；普通 Action 不得主动 interrupt，恢复关联未实现。测试用真实 Registry / BindingResolver / Codec 验证 math.add、Schema 转换后编码、三类真实 Binding 错误的 resolve_input 阶段、业务失败记录、三个 Repository 方法故障原样上抛、等待完成记录确认及 State 不变；测试视频输出得到 Artifact 引用和内联 duration，检查 Writer 上下文与失败停止。独立 TestState / MemorySaver 仅验证原生中断与 Command 恢复，不代表生产 Checkpoint 或审核服务。
 
-DataReferenceResolver、ArtifactWriter 与内容 Store 仍只有服务接口，真实内容读写、项目授权、版本检查及 signed URL 未接入。math.add 与视频节点仅在测试注册，生产目录为空。State.outputs 使用 NodeOutputMap，execution 保留为空；已提供 outputs 通道、Action 增量适配和持久 Checkpointer，没有内容持久化、业务节点或队列消费者，不提供内存 / 本地存储降级。
+DataReferenceResolver / ArtifactWriter 的 Artifact 分支已接入 server 生产实现；旧 ArtifactStore / AssetStore 端口不作为第二套内容链使用，Asset 内容服务未实现。math.add、媒体及产物测试节点仅在测试注册，生产目录为空。State.outputs 使用 NodeOutputMap，execution 保留为空；Action 增量、持久 Checkpointer、内容通道与 Worker Consumer 已接入，不提供内存 / 本地存储降级。
 
 createWorkflowRunConfig 使用显式 Run.threadId，不从 Run.id 推断或允许其他配置覆盖，不创建运行或 checkpointer。contracts/workflow/node-run.ts 独立定义 NodeRun 的三状态、必填 ISO 开始时间、RuntimeValue inputs / outputs 和结构化错误，并从包入口导出。NodeRunError.stage 为非空字符串，code 可省略，不绑定 Runtime 的阶段枚举；NodeExecutionStage 仅在 workflow/runtime/node-execution-error.ts 内维护。run/node-run-repository.ts 定义 Repository 抽象，createRunning 只接收 workflowRunId / nodeId，不接收 attempt 或数据库字段；Executor 只依赖该抽象。
 
 packages/server 的 workflow/node-run-repository.ts 提供 NodeRunRepositories.forRun(ownerId, projectId, workflowRunId)，验证同项目真实父运行和所有者，返回限定项目 / 运行的 PostgreSQL Repository。projectId 来自该工厂作用域，不属于 CreateNodeRunInput。写入继续过滤所有者、项目、运行和 running 状态；输入只写一次，终态不可改写。createRunning 在 ReadCommitted 事务中按运行 / 节点获取 PostgreSQL advisory transaction lock 后分配 attempt，并受唯一约束保护。Prisma NodeRun 使用 String status，数据库继续约束三状态及终态字段一致性，包含 workflowRunId 和 workflowRunId / nodeId 索引。node_run 关联 canvas_project，并以 workflowRunId / projectId 复合外键关联 workflow_run，防止跨项目归属；删除父运行级联删除节点历史。
 
-contracts/workflow/workflow-run.ts 在既有元数据上补全 WorkflowRun，保存项目、明确版本、独立 threadId、六种状态、RuntimeValue inputs / 最终 outputs、结构化错误和 ISO 时间。run/workflow-run-repository.ts 定义 create、getById、claimPendingForStart、claimWaitingForResume 与五种明确状态操作，不暴露 updateStatus 或数据库实现。共享服务的 WorkflowRunRepositories.forProject(ownerId, projectId) 返回有权限作用域的 Prisma Repository；创建固定 pending、输入与版本，分别生成 id / threadId，所有写入继续检查所有者与项目。markRunning 首次写 startedAt，waiting 恢复保留它；其余操作以当前合法状态作为原子更新条件，终态不改写。数据库约束字段一致性、threadId 唯一、不可变身份 / 版本 / 输入及合法转换，规则见 [WorkflowRun](workflow-model.md#workflowrun一次实际运行)。Run 的 workflowId / workflowVersionId 暂保留逻辑引用，本轮版本建模不调整运行外键；Runner 经真实版本 Repository 核对项目 / 工作流 / 版本归属。start / resume 已有受鉴权保护的 HTTP，尚无 worker 消费者或 Human Review 接入。
+contracts/workflow/workflow-run.ts 在既有元数据上补全 WorkflowRun，保存项目、明确版本、独立 threadId、六种状态、RuntimeValue inputs / 最终 outputs、结构化错误和 ISO 时间。run/workflow-run-repository.ts 定义 create、getById、claimPendingForStart、claimWaitingForResume 与五种明确状态操作，不暴露 updateStatus 或数据库实现。共享服务的 WorkflowRunRepositories.forProject(ownerId, projectId) 返回有权限作用域的 Prisma Repository；创建固定 pending、输入与版本，分别生成 id / threadId，所有写入继续检查所有者与项目。markRunning 首次写 startedAt，waiting 恢复保留它；其余操作以当前合法状态作为原子更新条件，终态不改写。数据库约束字段一致性、threadId 唯一、不可变身份 / 版本 / 输入及合法转换，规则见 [WorkflowRun](workflow-model.md#workflowrun一次实际运行)。Run 的 workflowId / workflowVersionId 暂保留逻辑引用，本轮版本建模不调整运行外键；Runner 经真实版本 Repository 核对项目 / 工作流 / 版本归属。start / resume 已有受鉴权保护的 HTTP 与 Worker 消费者，Human Review 尚未接入。
 
 WorkflowRun 测试检查协议 JSON 往返、输入输出 RuntimeValue map、独立 thread 与 ISO 时间；真实隔离 PostgreSQL 覆盖创建、等待再运行、首次时间保留、30 组状态操作、终态并发竞争、版本不可改、thread 唯一、权限隔离、同项目 NodeRun 外键与级联删除。记录中的最终输出只含调用方提交的对外 RuntimeValue map，Repository 不执行最终结果收集或业务 Schema 校验。
 
 真实隔离 PostgreSQL 测试覆盖仅用两个创建字段连续得到 attempt 1/2、可省略错误码及可扩展阶段，并覆盖视频节点首次失败、第二次成功的两条历史与有效 State 输出、Binding 失败无输入快照、12 次并发 attempt、数据库唯一约束、终态不可覆盖及项目 / 运行权限隔离。完成记录不可用的故障注入用例验证业务已成功时不会调用 markFailed，已创建的 running 记录和输入保留，且不写 State。内容 Resolver / Writer 仍显式使用测试替身；这些用例不证明真实视频或 Artifact 持久化。
+
+## Artifact 生产数据通道
+
+packages/server/artifacts 提供 ArtifactRepository、ArtifactWriterService、ArtifactDataReferenceResolver 与 ArtifactRuntimeFactory。WorkflowRuntimeFactory 按已授权 Run 构造 Codec；读取时重新检查当前运行和项目所有者，并限制 Artifact 属于同一项目，允许同项目其他运行引用，拒绝跨项目或与已授权作用域不符的 context。写入还要求父 Run 正在运行，可选 NodeRun 必须属于同一项目 / Run / nodeId 且为 running；Executor 总会传入真实 NodeRun ID。数据库使用复合外键阻止来源拼接。
+
+Artifact 契约复用 contracts/content/artifact.ts，增加 json / blob 内容编码。PostgreSQL artifact 保存来源、DataType、storageKey、MIME、字节数和 SHA-256；不保存业务内容或 signed URL。写入先登记 writing，JSON 值编码为 UTF-8 JSON，BinaryContent `{ bytes: Uint8Array, mimeType }` 原样存储二进制，上传 RustFS 后确认 ready，再返回 ArtifactReference。所有内置 media 类型要求二进制内容，不自动下载外部 URL；大文本或领域 JSON 可显式使用 reference 策略。当前使用内存字节与单次 PUT，尚无流式 / multipart 大文件路径。
+
+只解析 ready 记录：JSON 从 RustFS 读取并检查大小、摘要后还原业务值；blob 先 HEAD 验证对象存在及元数据，再生成 900 秒 signed URL 的 MediaResource。Codec、Executor、State / Checkpoint 与 NodeRun 都保留 RuntimeValue 引用，不保存解码后的媒体 URL。缺失、跨项目、非 ready、对象删除或 JSON 内容损坏统一抛 REFERENCE_RESOLUTION_FAILED，仍由 Executor 标记 decode_input。
+
+写入失败使用 ARTIFACT_WRITE_FAILED，细分 prepare / register / upload / finalize；Executor 标记 encode_output。登记失败不上传；PUT 失败尝试删除同一专属 key，再记录 failed / cleanupRequired，补偿与记录错误保留在 AggregateError。确认数据库状态失败可能已提交，保留 writing 或真实 ready 记录及对象，不返回引用，不删除可能已确认的对象。数据库触发器保护内容身份、编码和来源不变，终态不可覆盖。这里不承诺数据库 / S3 / NodeRun / Checkpoint 原子提交；中途退出的 writing、清理失败及未被最终 State 使用的产物仍需核对，自动对账与垃圾回收未实现。
+
+artifacts.e2e-spec 使用真实 PostgreSQL / RustFS、生产 Compiler / Executor 验证 A→B 的 JSON / 图片二进制管线、NodeRun 输入输出引用和所有 checkpoint / pending writes 无实际大内容。另启动两个独立进程加载正式 Worker AppModule，A 在测试原生等待门前写完产物并真实退出，B 重建 Prisma / Storage / Saver 后恢复原 thread，读取相同 Artifact ID；A / B 各只有一次 NodeRun。测试还覆盖跨项目与上下文伪造、对象不存在 / 删除 / JSON 损坏、上传确认丢失、补偿失败、登记失败、数据库确认前失败及提交后响应丢失。中断门是测试 Compiler，不提供 HumanReview 产品能力；测试节点不加入生产 Registry，没有调用真实生成模型。
 
 ## React Flow 数据适配
 

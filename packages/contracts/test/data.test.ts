@@ -112,6 +112,7 @@ describe('运行值、引用与持久内容协议', () => {
       projectId: 'p',
       workflowRunId: 'run',
       type: ImageType,
+      contentKind: 'blob',
       storage: { provider: 'rustfs', key: 'art-1.png' },
       createdAt: time,
     };

@@ -17,6 +17,7 @@ export const artifactSchema = z
     workflowRunId: contentIdentifierSchema,
     nodeRunId: contentIdentifierSchema.optional(),
     type: dataTypeSchema,
+    contentKind: z.enum(['json', 'blob']),
     storage: artifactStorageSchema,
     metadata: z.record(z.string(), z.json()).optional(),
     createdAt: z.iso.datetime(),
