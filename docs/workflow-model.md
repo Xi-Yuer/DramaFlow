@@ -160,6 +160,8 @@ inputs / outputs 保存 RuntimeValue map，不复制解码媒体或整个 State.
 
 合法转换固定为 pending → running；running → waiting / completed / failed / cancelled；waiting → running / cancelled。waiting 恢复后如遇失败，必须经过 running 再进入 failed；终态不再更新。首次进入 running 写 startedAt，waiting → running 保留首次开始时间，终态写 completedAt。Repository 只提供明确领域操作，不开放任意 updateStatus，也不靠状态记录调度 Graph。
 
+Runner.resume 通过 Repository.claimWaitingForResume 原子抢占 waiting → running，不能凭普通读取再调用 markRunning。getById 和 claim 都限定项目 / 所有者；非 waiting 或 claim 竞争失败向调用方返回 WORKFLOW_RUN_NOT_WAITING，不执行 Graph。恢复只允许提供 Run ID 和不透明 value，版本与 thread 一律取原运行，不新建记录或初始 State，具体执行边界见 [Runtime](runtime-architecture.md#workflowrunner-恢复)。
+
 `waiting` 是等待人工审核、外部 API、子流程或批量结果等执行事实的业务投影，不能凭状态字符串驱动另一套暂停 / 恢复流程。人工介入使用 LangGraph interrupt / Command.resume；WorkflowRun.threadId 映射 thread_id，等待原因及业务审计与 checkpoint 分离，见 [WorkflowState 边界](workflow-state.md) 与 [技术职责](runtime-architecture.md)。
 
 恢复继续使用原 Run、thread_id 及其不可变版本，不重新选择最新版。Checkpoint 保存执行 State，不保存平台 DSL；应用必须按 Run 绑定的版本重新编译图，不能恢复最新草稿。人工确认、生成和继续下游仍须遵守明确操作边界；恢复与用户主动重生成分离，供应商受理不明时不能借恢复盲目重试。

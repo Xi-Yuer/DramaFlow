@@ -26,6 +26,7 @@ import { nodeRunRepositoryFixture } from './node-run-fixture.js';
 
 export function workflowRunnerFixture() {
   const order: string[] = [];
+  let stored: WorkflowRun | null = null;
   const node: NodeDefinition = {
     id: 'sum',
     type: 'math.add',
@@ -65,26 +66,58 @@ export function workflowRunnerFixture() {
   const runs = {
     create: vi.fn<WorkflowRunRepository['create']>().mockImplementation(async (request) => {
       order.push('create');
-      return {
+      stored = {
         ...structuredClone(request),
         id: 'run-1',
         threadId: 'thread-7',
         status: 'pending',
         createdAt: '2026-10-20T00:00:00.000Z',
       };
+      return structuredClone(stored);
     }),
+    getById: vi.fn<WorkflowRunRepository['getById']>().mockImplementation(async (id) => {
+      order.push('get_run');
+      return stored?.id === id ? structuredClone(stored) : null;
+    }),
+    claimWaitingForResume: vi
+      .fn<WorkflowRunRepository['claimWaitingForResume']>()
+      .mockImplementation(async (id) => {
+        order.push('claim');
+        if (!stored || stored.id !== id || stored.status !== 'waiting') return null;
+        stored.status = 'running';
+        return structuredClone(stored);
+      }),
     markRunning: vi.fn<WorkflowRunRepository['markRunning']>().mockImplementation(async () => {
       order.push('running');
+      if (stored) {
+        stored.status = 'running';
+        stored.startedAt ??= '2026-10-20T00:00:01.000Z';
+      }
     }),
     markWaiting: vi.fn<WorkflowRunRepository['markWaiting']>().mockImplementation(async () => {
       order.push('waiting');
+      if (stored) stored.status = 'waiting';
     }),
-    markCompleted: vi.fn<WorkflowRunRepository['markCompleted']>().mockImplementation(async () => {
-      order.push('completed');
-    }),
-    markFailed: vi.fn<WorkflowRunRepository['markFailed']>().mockImplementation(async () => {
-      order.push('failed');
-    }),
+    markCompleted: vi
+      .fn<WorkflowRunRepository['markCompleted']>()
+      .mockImplementation(async (_id, outputs) => {
+        order.push('completed');
+        if (stored) {
+          stored.status = 'completed';
+          stored.outputs = structuredClone(outputs);
+          stored.completedAt = '2026-10-20T00:00:02.000Z';
+        }
+      }),
+    markFailed: vi
+      .fn<WorkflowRunRepository['markFailed']>()
+      .mockImplementation(async (_id, error) => {
+        order.push('failed');
+        if (stored) {
+          stored.status = 'failed';
+          stored.error = error;
+          stored.completedAt = '2026-10-20T00:00:02.000Z';
+        }
+      }),
     markCancelled: vi.fn<WorkflowRunRepository['markCancelled']>(),
   } satisfies WorkflowRunRepository;
   const nodeRuns = nodeRunRepositoryFixture();

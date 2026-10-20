@@ -11,6 +11,9 @@ export interface CreateWorkflowRunInput {
 // waiting 只是业务记录，不在 Repository 中执行、暂停或恢复 Graph。
 export interface WorkflowRunRepository {
   create(input: CreateWorkflowRunInput): Promise<WorkflowRun>;
+  getById(workflowRunId: string): Promise<WorkflowRun | null>;
+  // 同一事务原子检查 waiting 并返回已转为 running 的记录；并发失败或无权访问返回 null。
+  claimWaitingForResume(workflowRunId: string): Promise<WorkflowRun | null>;
   markRunning(workflowRunId: string): Promise<void>;
   markWaiting(workflowRunId: string): Promise<void>;
   markCompleted(workflowRunId: string, outputs: Record<string, RuntimeValue>): Promise<void>;

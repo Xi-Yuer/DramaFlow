@@ -34,6 +34,8 @@ WorkflowRun.threadId 独立必填，createWorkflowRunConfig 将它映射到 conf
 
 首次启动由 WorkflowRunner 创建完整初始 State；状态反映以原生 StateSnapshot.next / tasks 与 interrupt 标记为依据，不在 State 增加 isInterrupted。State.outputs 继续保存节点数据，WorkflowRun.outputs 由独立 Resolver 按声明收集，完整边界见 [Runner](runtime-architecture.md#workflowrunner-首次启动)。
 
+resume 只读取原 Run 的版本与 thread；原子 claim waiting → running 后，以 Command({ resume }) 继续原 checkpoint，不重建 initialState。原快照缺失或身份不符时失败，不重新运行已完成节点；恢复再次中断可回到 waiting。Runner 不查询 interaction NodeRun，具体关联由节点自身生命周期后续落实，见 [恢复边界](runtime-architecture.md#workflowrunner-恢复)。
+
 审核继续用 LangGraph interrupt / Command.resume，waiting 是业务投影。节点恢复从开头重入，副作用需幂等，审核决策记录独立于 Checkpoint；WorkflowRun Repository 保存业务状态，不提供审核 API 或 Graph 恢复服务。[官方 Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts) 解释原生恢复机制。
 
 Send 使用 branch-local 输入，不能争写全局 currentEpisode。SubWorkflow 通过明确输入输出映射组合，不复制整个父 State。当前 Data / Control Edge 均产生确定性执行依赖，相同节点对去重；Control Edge 不写 State 输入值，Data Edge 的端口取值独立于依赖编译。普通多上游的 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join) 由 LangGraph waiting edge 承担，不在 State 增加平台 ready 计数。条件分支、Send / Batch 与父子运行的执行映射单独设计，不把候选路径当作静态 ALL 等待集合，不自建轮询或恢复状态机。

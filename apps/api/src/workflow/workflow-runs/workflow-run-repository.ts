@@ -39,6 +39,29 @@ interface RepositoryScope {
   readonly projectId: string;
 }
 
+function toWorkflowRun(
+  row: Prisma.WorkflowRunGetPayload<Record<string, never>>,
+): WorkflowRun {
+  return workflowRunSchema.parse({
+    id: row.id,
+    projectId: row.projectId,
+    workflowId: row.workflowId,
+    workflowVersionId: row.workflowVersionId,
+    threadId: row.threadId,
+    status: row.status,
+    inputs: row.inputs,
+    createdAt: row.createdAt.toISOString(),
+    ...(row.outputs !== null ? { outputs: row.outputs } : {}),
+    ...(row.error !== null ? { error: row.error } : {}),
+    ...(row.startedAt !== null
+      ? { startedAt: row.startedAt.toISOString() }
+      : {}),
+    ...(row.completedAt !== null
+      ? { completedAt: row.completedAt.toISOString() }
+      : {}),
+  });
+}
+
 class PrismaWorkflowRunRepository implements WorkflowRunRepository {
   constructor(
     private readonly db: DatabaseService,
@@ -63,16 +86,7 @@ class PrismaWorkflowRunRepository implements WorkflowRunRepository {
           inputs: snapshot(parsed.inputs),
         },
       });
-      return workflowRunSchema.parse({
-        id: row.id,
-        projectId: row.projectId,
-        workflowId: row.workflowId,
-        workflowVersionId: row.workflowVersionId,
-        threadId: row.threadId,
-        status: row.status,
-        inputs: row.inputs,
-        createdAt: row.createdAt.toISOString(),
-      });
+      return toWorkflowRun(row);
     });
   }
 
@@ -86,6 +100,29 @@ class PrismaWorkflowRunRepository implements WorkflowRunRepository {
 
   private assertChanged(count: number): void {
     if (count !== 1) throw new Error('运行不存在、无权访问或状态不允许此更新');
+  }
+
+  async getById(workflowRunId: string): Promise<WorkflowRun | null> {
+    const row = await this.db.client.workflowRun.findFirst({
+      where: this.scoped(workflowRunId),
+    });
+    return row ? toWorkflowRun(row) : null;
+  }
+
+  async claimWaitingForResume(
+    workflowRunId: string,
+  ): Promise<WorkflowRun | null> {
+    return this.db.client.$transaction(async (tx) => {
+      const where = this.scoped(workflowRunId);
+      const changed = await tx.workflowRun.updateMany({
+        where: { ...where, status: 'waiting' },
+        data: { status: 'running' },
+      });
+      if (changed.count === 0) return null;
+      // 更新锁一直保留到读取 / 校验后的提交，不在应用层先读再决定是否抢占。
+      const row = await tx.workflowRun.findFirstOrThrow({ where });
+      return toWorkflowRun(row);
+    });
   }
 
   async markRunning(workflowRunId: string): Promise<void> {

@@ -315,3 +315,80 @@ describe('真实 PostgreSQL WorkflowRun', () => {
     ).not.toBeNull();
   });
 });
+
+describe('WorkflowRun 读取与原子恢复 claim', () => {
+  it.each([
+    'pending',
+    'running',
+    'waiting',
+    'completed',
+    'failed',
+    'cancelled',
+  ] as const)('读取完整 %s 记录，JSON / ISO 字段转换正确', async (status) => {
+    const run = await prepare(status);
+    const read = await repository.getById(run.id);
+    expect(read).toMatchObject({
+      id: run.id,
+      projectId,
+      workflowId: run.workflowId,
+      workflowVersionId: run.workflowVersionId,
+      threadId: run.threadId,
+      status,
+      inputs: {},
+      createdAt: run.createdAt,
+    });
+    if (status !== 'pending')
+      expect(read?.startedAt).toEqual(expect.any(String));
+    if (status === 'completed') expect(read?.outputs).toEqual(outputs);
+    if (status === 'failed') expect(read?.error).toEqual(failure);
+    if (['completed', 'failed', 'cancelled'].includes(status))
+      expect(read?.completedAt).toEqual(expect.any(String));
+    expect(await repository.getById('missing-run')).toBeNull();
+  });
+
+  it('12 个并发 claim 只有一个成功，返回 running 并保留原身份、输入与首次开始时间', async () => {
+    const run = await prepare('waiting');
+    const before = await repository.getById(run.id);
+    const second = await repositories.forProject(ownerId, projectId);
+    const claims = await Promise.all(
+      Array.from({ length: 12 }, (_, index) =>
+        (index % 2 ? repository : second).claimWaitingForResume(run.id),
+      ),
+    );
+    const claimed = claims.filter((value) => value !== null);
+    expect(claimed).toHaveLength(1);
+    expect(claimed[0]).toEqual({ ...before, status: 'running' });
+    expect(await repository.getById(run.id)).toEqual(claimed[0]);
+    expect(await repository.claimWaitingForResume(run.id)).toBeNull();
+    expect(await repository.claimWaitingForResume('missing-run')).toBeNull();
+  });
+
+  it.each(['pending', 'running', 'completed', 'failed', 'cancelled'] as const)(
+    '%s 的 claim 不写入任何字段',
+    async (status) => {
+      const run = await prepare(status);
+      const before = await repository.getById(run.id);
+      expect(await repository.claimWaitingForResume(run.id)).toBeNull();
+      expect(await repository.getById(run.id)).toEqual(before);
+    },
+  );
+
+  it('读取和 claim 继续检查所有者 / 项目，不泄漏其他项目记录或使用过期权限', async () => {
+    const run = await prepare('waiting');
+    const before = await repository.getById(run.id);
+    const other = await repositories.forProject(otherId, otherProjectId);
+    expect(await other.getById(run.id)).toBeNull();
+    expect(await other.claimWaitingForResume(run.id)).toBeNull();
+    await db.project.update({
+      where: { id: projectId },
+      data: { ownerId: otherId },
+    });
+    try {
+      expect(await repository.getById(run.id)).toBeNull();
+      expect(await repository.claimWaitingForResume(run.id)).toBeNull();
+    } finally {
+      await db.project.update({ where: { id: projectId }, data: { ownerId } });
+    }
+    expect(await repository.getById(run.id)).toEqual(before);
+  });
+});

@@ -2,6 +2,7 @@ import type { WorkflowDefinition, WorkflowRun } from '@dramaflow/contracts';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import {
   END,
+  type Command,
   START,
   StateGraph,
   type BaseCheckpointSaver,
@@ -14,8 +15,10 @@ import { WorkflowStateAnnotation, type WorkflowState } from '../runtime/state.js
 import { DependencyCompiler } from './dependency.compiler.js';
 import { ActionNodeCompilationStrategy } from './strategy.js';
 
+// Runner 仅发送 resume，不开放 Command.update / goto 的状态写入或路由能力。
+export type WorkflowResumeCommand = Command<unknown, never, never>;
 export interface CompiledWorkflow {
-  invoke(state: WorkflowState, config: RunnableConfig): Promise<unknown>;
+  invoke(input: WorkflowState | WorkflowResumeCommand, config: RunnableConfig): Promise<unknown>;
   getState(config: RunnableConfig): Promise<StateSnapshot>;
 }
 

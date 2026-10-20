@@ -164,7 +164,54 @@ async function fixture() {
     workflowVersionId: version.id,
     inputs: { a: { storage: 'inline' as const, type: NumberType, value: 10 } },
   };
-  return { runner, runs, execute, input, version, compile, graphs };
+  return { runner, runs, execute, input, version, compile, graphs, getVersion };
+}
+
+async function resumeFixture(onResume: () => Promise<void> = async () => {}) {
+  const f = await fixture();
+  const saver = new MemorySaver();
+  const values: unknown[] = [];
+  const prepared = vi.fn(() => ({
+    outputs: {
+      prepared: {
+        value: { storage: 'inline' as const, type: NumberType, value: 7 },
+      },
+    },
+  }));
+  const finish = vi.fn(() => ({
+    outputs: {
+      sum: {
+        result: { storage: 'inline' as const, type: NumberType, value: 30 },
+      },
+    },
+  }));
+  const graphs: CompiledWorkflow[] = [];
+  f.compile.mockImplementation(async () => {
+    // 仅测试原生暂停 / 恢复，不实现生产 interaction 节点或 NodeRun 恢复关联。
+    const graph: CompiledWorkflow = new StateGraph(WorkflowStateAnnotation)
+      .addNode('prepare', prepared)
+      .addNode('first_wait', async () => {
+        const value = interrupt<unknown, unknown>('第一次输入');
+        await onResume();
+        values.push(value);
+        return {};
+      })
+      .addNode('second_wait', () => {
+        values.push(interrupt<unknown, unknown>('第二次输入'));
+        return {};
+      })
+      .addNode('sum', finish)
+      .addEdge(START, 'prepare')
+      .addEdge('prepare', 'first_wait')
+      .addEdge('first_wait', 'second_wait')
+      .addEdge('second_wait', 'sum')
+      .addEdge('sum', END)
+      .compile({ checkpointer: saver });
+    vi.spyOn(graph, 'invoke');
+    graphs.push(graph);
+    return graph;
+  });
+  return { ...f, graphs, values, prepared, finish };
 }
 
 describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
@@ -317,5 +364,172 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
     expect(run.nodeRuns[0]!.status).toBe('completed');
     expect(markFailed).not.toHaveBeenCalled();
     expect(f.execute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('真实 PostgreSQL + LangGraph WorkflowRunner 恢复', () => {
+  it('waiting → running → waiting → running → completed，原 thread / 版本 / State 不变', async () => {
+    const f = await resumeFixture();
+    const create = vi.spyOn(f.runs, 'create');
+    const first = await f.runner.start(f.input);
+    const waiting = await f.runs.getById(first.workflowRunId);
+    const firstValue = { approved: true, note: '继续' };
+    expect(
+      await f.runner.resume({
+        workflowRunId: first.workflowRunId,
+        value: firstValue,
+      }),
+    ).toEqual(first);
+    const waitingAgain = await f.runs.getById(first.workflowRunId);
+    expect(waitingAgain).toEqual(waiting);
+    const result = await f.runner.resume({
+      workflowRunId: first.workflowRunId,
+      value: false,
+    });
+    expect(result).toMatchObject({
+      workflowRunId: first.workflowRunId,
+      threadId: first.threadId,
+      status: 'completed',
+      outputs: { answer: { value: 30 } },
+    });
+    const saved = await f.runs.getById(first.workflowRunId);
+    expect(saved).toMatchObject({
+      workflowVersionId: f.input.workflowVersionId,
+      threadId: first.threadId,
+      startedAt: waiting?.startedAt,
+      inputs: f.input.inputs,
+      status: 'completed',
+    });
+    expect(saved?.completedAt).toEqual(expect.any(String));
+    expect(f.getVersion.mock.calls).toHaveLength(3);
+    expect(f.values).toEqual([firstValue, false]);
+    expect(f.prepared).toHaveBeenCalledTimes(1);
+    expect(f.finish).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(1);
+    const snapshot = await f.graphs[2]!.getState({
+      configurable: { thread_id: first.threadId },
+    });
+    expect(snapshot.values.outputs.prepared.value.value).toBe(7);
+    expect(snapshot.next).toEqual([]);
+    expect(
+      await db.nodeRun.count({ where: { workflowRunId: first.workflowRunId } }),
+    ).toBe(0);
+    expect(
+      await db.workflowRun.count({
+        where: { workflowVersionId: f.version.id },
+      }),
+    ).toBe(1);
+  });
+
+  it('两个请求都先读到 waiting，只有一个原子 claim 成功并 invoke 原线程', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const f = await resumeFixture(() => gate);
+    const started = await f.runner.start(f.input);
+    const other = await new WorkflowRunRepositories(database).forProject(
+      ownerId,
+      projectId,
+    );
+    const secondRunner = new DefaultWorkflowRunner(
+      { getVersion: f.getVersion },
+      other,
+      { compile: f.compile },
+      new DefaultWorkflowOutputResolver(),
+    );
+    let readCount = 0;
+    let releaseReads!: () => void;
+    const bothRead = new Promise<void>((resolve) => {
+      releaseReads = resolve;
+    });
+    for (const repository of [f.runs, other]) {
+      const read = repository.getById.bind(repository);
+      vi.spyOn(repository, 'getById').mockImplementation(async (id) => {
+        const run = await read(id);
+        expect(run?.status).toBe('waiting');
+        if (++readCount === 2) releaseReads();
+        await bothRead;
+        return run;
+      });
+    }
+    const errors: unknown[] = [];
+    const requests = [
+      f.runner.resume({ workflowRunId: started.workflowRunId, value: 'A' }),
+      secondRunner.resume({ workflowRunId: started.workflowRunId, value: 'B' }),
+    ];
+    const outcomes = Promise.allSettled(
+      requests.map((request) =>
+        request.catch((error: unknown) => {
+          errors.push(error);
+          throw error;
+        }),
+      ),
+    );
+    try {
+      await vi.waitFor(() => expect(errors).toHaveLength(1));
+      expect(errors[0]).toMatchObject({ code: 'WORKFLOW_RUN_NOT_WAITING' });
+      expect(
+        f.graphs
+          .slice(1)
+          .filter((graph) => vi.mocked(graph.invoke).mock.calls.length > 0),
+      ).toHaveLength(1);
+      expect(
+        (
+          await db.workflowRun.findUniqueOrThrow({
+            where: { id: started.workflowRunId },
+          })
+        ).status,
+      ).toBe('running');
+    } finally {
+      release();
+      releaseReads();
+      await outcomes;
+    }
+    const results = await outcomes;
+    expect(
+      results.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === 'rejected'),
+    ).toHaveLength(1);
+    expect(f.values).toHaveLength(1);
+    expect(f.prepared).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        await db.workflowRun.findUniqueOrThrow({
+          where: { id: started.workflowRunId },
+        })
+      ).status,
+    ).toBe('waiting');
+  });
+
+  it('恢复后执行异常只结束同一 WorkflowRun，不创建新运行或 NodeRun 关联', async () => {
+    const f = await resumeFixture();
+    const first = await f.runner.start(f.input);
+    await f.runner.resume({ workflowRunId: first.workflowRunId, value: true });
+    const cause = new Error('provider-secret-marker');
+    f.finish.mockImplementation(() => {
+      throw cause;
+    });
+    await expect(
+      f.runner.resume({ workflowRunId: first.workflowRunId, value: true }),
+    ).rejects.toBe(cause);
+    const run = await f.runs.getById(first.workflowRunId);
+    expect(run).toMatchObject({
+      status: 'failed',
+      threadId: first.threadId,
+      workflowVersionId: f.input.workflowVersionId,
+      error: { stage: 'invoke' },
+    });
+    expect(JSON.stringify(run)).not.toContain('provider-secret-marker');
+    expect(
+      await db.workflowRun.count({
+        where: { workflowVersionId: f.version.id },
+      }),
+    ).toBe(1);
+    expect(
+      await db.nodeRun.count({ where: { workflowRunId: first.workflowRunId } }),
+    ).toBe(0);
   });
 });
