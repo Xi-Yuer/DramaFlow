@@ -175,6 +175,8 @@ WorkflowRun 测试检查协议 JSON 往返、输入输出 RuntimeValue map、独
 
 2026-10-21 已显式执行 `ai-text-live.e2e-spec.ts`：使用操作者选择的 DeepSeek `deepseek-flash`，通过正式发布、HTTP 202、Outbox、BullMQ、独立 Worker、生产文本 Node 和参考插件完成真实外部模型请求，NodeRun attempt 为 1，WorkflowRun completed，并取得非空文本最终输出。用例检查 Version / Draft、Run / NodeRun、Outbox、所有 checkpoint 与 Worker 日志不含该凭证明文，结束后清理自建测试记录与 thread。此项使用真实服务，没有覆盖或替换 Registry / Compiler / SDK；本机协议服务负责失败边界，真实调用只验证本次选择的服务与模型。可用 `pnpm test:ai:live` 显式复验，参数和边界见 [开发指南](development.md)。
 
+仓库的 [LiteLLM 隔离实验](../experiments/litellm-l1/README.md)提供固定 `1.104.5` Gateway、双协议本机服务与自动验证驱动；其结果只验证 Gateway 边界，生产 PluginRegistry / Worker 尚未装配 LiteLLM。运行中观察到 SDK client cache 会保留凭证引用，普通响应头及错误路径会返回 endpoint，细节与复现见实验说明；拟议领域所有权见[集成评估](litellm-integration.md)。
+
 ## Plugin / Provider / 模型配置管理 HTTP
 
 `apps/api/src/models` 提供模型管理 Controller，复用共享 ModelProviderService、SecretsService 与生产 PluginRegistry。业务 API 默认认证，写入遵循既有 Origin 校验，所有管理响应为 no-store。资源不存在或不属于当前用户 / 路径项目时统一 404；无效请求与插件 Schema 校验失败为安全 400，已停用 Provider 不接受新模型绑定并返回 409，加密或服务故障为安全 503。

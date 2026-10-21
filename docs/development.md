@@ -99,6 +99,8 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 
 ## 定向验证范围
 
+LiteLLM Gateway 的独立验证使用 `node experiments/litellm-l1/run.mjs`，先按[实验说明](../experiments/litellm-l1/README.md#固定版本与复现)拉取锁定 digest。脚本不加载项目 `.env`、不连接业务数据库、不调用收费模型；使用独立 Compose project、真实 Gateway 与本地双协议服务，运行后清理。它不属于正式 Worker 集成测试，也不替代后续故障与 Secret 专项验证。
+
 按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / State 通道与并行增量 / 输入解析 / Codec / 存储策略 / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；WorkflowRun / NodeRun 生命周期另执行隔离 PostgreSQL 集成测试；生产 Checkpointer 的恢复能力用跨进程数据库测试验证，不能用 MemorySaver 单元测试替代。Artifact 生产内容链由 artifacts.e2e-spec 另行验证，Asset 尚未实现。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
 
 WorkflowExecutionJob 契约单测检查仅携带业务 Run ID、resume executionId / value，严格拒绝 State / Definition / thread / version 副本并保留 falsy 值。workflow-run-submission.test.ts 的内存 Repository / MemorySaver 只验证提交与执行分离，不作为生产事务 / Queue 证明；实际事务回滚和崩溃重投由上述 PostgreSQL / Redis 集成覆盖。

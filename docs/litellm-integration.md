@@ -1,6 +1,6 @@
 # LiteLLM 集成架构评估
 
-本文记录拟议的集成边界，不表示功能已交付。代码核对基线为 `19ba4f4`；资料核对日期为 2026-10-21，读取了用户提供的[中文文档](https://docs.litellm.com.cn/docs/)、[上游文档](https://docs.litellm.ai/docs/)与 BerriAI 官方源码。在线文档和 `main` 不能替代固定发行版验收。当前阶段、下一步和任务依赖统一维护在[实施方案](implementation-plan.md#litellm-集成任务拆解)；已实现能力仍以[当前架构](architecture.md#文本-ai-与-provider-plugin)为准。
+本文记录拟议的集成边界，不表示 Runtime 集成已交付。代码评估基线为 `19ba4f4`；资料核对日期为 2026-10-21，读取了用户提供的[中文文档](https://docs.litellm.com.cn/docs/)、[上游文档](https://docs.litellm.ai/docs/)与 BerriAI 官方源码。固定 `1.104.5` 镜像的请求级凭证、双协议及无 DB 实测见[隔离验证](../experiments/litellm-l1/README.md)。在线文档和 `main` 不能替代固定发行版验收。当前阶段、下一步和任务依赖统一维护在[实施方案](implementation-plan.md#litellm-集成任务拆解)；已实现能力仍以[当前架构](architecture.md#文本-ai-与-provider-plugin)为准。
 
 ## 推荐结论
 
@@ -79,7 +79,7 @@ Gateway 不读取 DramaFlow 数据库，不消费 BullMQ，不执行 LangGraph�
 
 官方 [Clientside LLM Credentials](https://docs.litellm.ai/docs/proxy/clientside_auth)提供这条路径；`api_base` / `base_url` 的请求覆盖受配置授权控制。优先按 provider 路由限定覆盖字段和 endpoint 范围，不因支持 BYOK 就允许任意请求字典。`user_config` 也能携带完整 Router 配置，但会扩大可控路由、重试和配置处理范围，本方案不把它作为常规请求格式。
 
-Gateway 是新增的明文 Secret 信任边界，不能声称凭证永远不离开 Worker，也不能承诺 Python / Node 堆内字符串在请求结束后立即擦除。目标是无应用级持久副本、无跨用户复用、无日志 / trace / 请求镜像泄漏；SDK 连接缓存、异常和后台 callback 仍需用固定镜像做验证。
+Gateway 是新增的明文 Secret 信任边界，不能声称凭证永远不离开 Worker，也不能承诺 Python / Node 堆内字符串在请求结束后立即擦除。固定 `1.104.5` 的隔离探针已观察到 SDK client cache 持有 A/B 各自的 API Key 引用，默认 TTL 为 600 秒；并发测试未发现串用。关闭响应缓存不等于关闭 client cache。目标仍是无应用级持久副本、无跨用户复用、无日志 / trace / 请求镜像泄漏；后续须继续核对保留时间、异常及后台 callback 边界。
 
 具体约束如下：
 
