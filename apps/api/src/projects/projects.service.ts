@@ -14,6 +14,7 @@ import {
   projectSummarySchema,
 } from '@dramaflow/contracts';
 import { DatabaseService } from '@dramaflow/server';
+import { createInitialWorkflowData } from '../workflow/workflows/initial-workflow.js';
 
 @Injectable()
 export class ProjectsService {
@@ -67,6 +68,8 @@ export class ProjectsService {
         ownerId,
         name,
         viewport: { x: 0, y: 0, zoom: 1 },
+        // 嵌套创建与 Project 原子提交；不会留下没有默认 Workflow 的新项目。
+        workflow: { create: createInitialWorkflowData() },
       },
     });
     return this.dto(project);

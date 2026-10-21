@@ -14,6 +14,8 @@ NodeRun 的[初始化迁移](../packages/database/prisma/migrations/202610200000
 
 [Workflow / WorkflowVersion 迁移](../packages/database/prisma/migrations/20261020030000_workflow_versions/migration.sql)新增表、索引、外键与版本不可更新触发器，不删除或回填现有业务数据。workflow.projectId 唯一并关联项目；workflow_version 关联 Workflow，以 workflowId / version 唯一，每条保存完整 definition JSON，父级删除时级联。revision / version 要求正数，draft / definition 要求 JSON 对象；完整 DSL 在发布和 Repository 读取边界校验。数据库禁止更新已创建版本，不提供差量拼接。Run 的两个逻辑 ID 保持不变。
 
+默认 Workflow 初始化沿用上述模型与唯一约束，无新增迁移或批量回填。新项目原子创建空草稿 Workflow；已有项目通过[显式初始化入口](architecture.md#workflow-编辑-http-api)按需补齐，重复初始化保留已有定义和修订，不重置开发数据。
+
 [发布来源修订迁移](../packages/database/prisma/migrations/20261020040000_workflow_publish_revision/migration.sql)增加必填、正数 sourceRevision 及 workflowId / sourceRevision 唯一约束；既有不可更新触发器同时保护来源修订。迁移不猜测历史版本来源、不用版本号或当前草稿修订回填；存在缺少真实来源信息的旧开发版本时，应先核对范围并按开发数据授权清理，不能伪造来源。本机空版本表可直接执行 db:migrate，无需 reset。WorkflowService 用原子条件更新实现草稿乐观锁，以事务行锁串行化发布序列；数据库唯一约束是最终防线，不承担正常版本分配。
 
 [Artifact 迁移](../packages/database/prisma/migrations/20261020060000_artifacts/migration.sql)新增 artifact 表与索引，使用项目 / WorkflowRun / 可选 NodeRun 复合外键保证来源一致，并增加 NodeRun 复合唯一索引。不删除或重写现有数据。writing / ready / failed 及终态字段受约束，触发器禁止改写内容身份和覆盖终态；对象本体不进入数据库。写入记录与 RustFS 不能跨库原子提交，失败补偿、未确认记录和对象保留规则见 [对象存储](object-storage.md)。备份须同时覆盖业务库、langgraph schema 与私有对象桶；Prisma 级联删除 metadata 不等于对象清理。

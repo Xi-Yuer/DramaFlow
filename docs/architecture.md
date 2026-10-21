@@ -8,7 +8,7 @@ DramaFlow 是面向团队自部署的 AI 视频生产工作流平台，漫剧优
 
 Next.js 使用 App Router、Ant Design 深色主题和 TanStack Query。认证通过同源代理接入 NestJS Better Auth 白名单入口，业务 API 默认受真实全局 AuthGuard 保护。PostgreSQL / Prisma 保存身份、资料、凭证、会话、认证限流、基础项目、Workflow / WorkflowVersion 及 WorkflowRun / NodeRun 业务记录；Redis 与 RustFS 提供基础服务。会话与角色边界见 [认证实施](authentication.md)。
 
-每项目恰好一张画布。项目保存所有者、名称、视口、revision 和时间，不保存节点、绑定或 WorkflowDefinition；读取与写入按所有者隔离。列表按更新时间与 id 倒序，游标保存毫秒精度更新时间和 id，并校验长度、编码与字段；相同更新时间用 id 确定边界。分页读取当前列表，不建立跨请求数据库快照。原子更新检查 revision，冲突返回 409。revision 是项目保存的修订号，不是工作流发布版本。目录与渲染器接入没有改变项目保存协议或数据库。
+每项目恰好一张画布。项目保存所有者、名称、视口、revision 和时间，不保存节点、绑定或 WorkflowDefinition；读取与写入按所有者隔离。列表按更新时间与 id 倒序，游标保存毫秒精度更新时间和 id，并校验长度、编码与字段；相同更新时间用 id 确定边界。分页读取当前列表，不建立跨请求数据库快照。原子更新检查 revision，冲突返回 409。Project revision、Workflow 草稿 revision 和发布 version 各自独立。新建项目通过 Prisma 嵌套写入原子创建默认 Workflow，任一创建失败都回滚；Project 请求和响应不嵌入 Workflow，保存项目仍只修改名称与视口。
 
 项目 API 为 GET / POST /api/v1/projects、GET / PUT /api/v1/projects/:id。GET /api/v1/workflow/node-types 默认认证，响应 Cache-Control: no-store。NodeTypesModule 复用共享 WorkflowNodeRegistryModule，与本应用 Runtime 共用服务端 Registry；当前注册正式 `ai.text_generate@1`，只返回 JSON Manifest，不公开实现、配置实例或密钥。
 
@@ -26,7 +26,7 @@ workflow 包已有 parseWorkflowInputs、collectWorkflowOutputs、createWorkflow
 
 数据库 workflow 保存 draft JSON、revision、名称及时间，以 projectId 唯一约束落实每项目一个逻辑 Workflow。workflow_version 每条保存完整 WorkflowDefinition JSON，不引用 draft 或保存差量；workflowId / version 与 workflowId / sourceRevision 分别唯一，同一草稿修订只能产生一个版本。sourceRevision 必填且为正数，数据库触发器禁止更新版本的所有字段，父级删除按外键级联。共享服务的 WorkflowVersionRepositories.forProject 返回限定项目 / 所有者的只读 PrismaWorkflowVersionRepository，每次查询重新检查权限，经 workflowVersionRecordSchema 校验并把 createdAt 映射为 publishedAt；不存在或无权访问返回 null，不回退 draft / latest。
 
-API 的 workflows/WorkflowService 提供 updateDraft 与 publish，WorkflowsModule 注册并导出服务。两者都显式接收操作者和 expectedRevision，并检查 Workflow 所属项目的所有者。updateDraft 以身份 / 权限 / revision 为条件原子更新 draft、递增 revision，冲突返回 WORKFLOW_REVISION_CONFLICT，不存在或无权访问返回 404。publish 在 ReadCommitted 事务内 SELECT FOR UPDATE 锁定 Workflow，检查修订、拒绝重复发布，经正式 Schema 校验与完整快照后，按已锁定工作流的 max(version) + 1 创建版本。发布结果包含 sourceRevision，发布不修改 draft 或 revision；同修订再次发布返回 WORKFLOW_REVISION_ALREADY_PUBLISHED，不以唯一冲突作为正常分配机制。服务额外使用共享 Registry：已注册 Action 的 Draft config 拒绝声明之外的字段，允许暂缺必填选择；publish 必须通过该 NodeType 严格 configSchema，阻止 endpoint / credentials 混入版本。未知类型仍按既有行为留到 compile 拒绝。尚无编辑 / 发布 HTTP，也没有端口、类型兼容或资源访问的完整发布级语义校验。
+API 的 workflows/WorkflowService 提供 updateDraft 与 publish，WorkflowsModule 注册并导出服务。两者都显式接收操作者和 expectedRevision，并检查 Workflow 所属项目的所有者。updateDraft 以身份 / 权限 / revision 为条件原子更新 draft、递增 revision，冲突返回 WORKFLOW_REVISION_CONFLICT，不存在或无权访问返回 404。publish 在 ReadCommitted 事务内 SELECT FOR UPDATE 锁定 Workflow，检查修订、拒绝重复发布，经正式 Schema 校验与完整快照后，按已锁定工作流的 max(version) + 1 创建版本。发布结果包含 sourceRevision，发布不修改 draft 或 revision；同修订再次发布返回 WORKFLOW_REVISION_ALREADY_PUBLISHED，不以唯一冲突作为正常分配机制。服务额外使用共享 Registry：已注册 Action 的 Draft config 拒绝声明之外的字段，允许暂缺必填选择；publish 必须通过该 NodeType 严格 configSchema，阻止 endpoint / credentials 混入版本。未知类型仍按既有行为留到 compile 拒绝。草稿编辑 HTTP 已接入；没有发布 HTTP，也没有端口、类型兼容或资源访问的完整发布级语义校验。
 
 `packages/workflow/src/compiler/dependency.compiler.ts` 导出 collectNodeDependencies：接收当前 WorkflowEdge 列表，Data / Control Edge 均按两端 nodeId 收集执行依赖，按 target 聚合、按 source 去重并保留首次出现顺序，输出 NodeDependency。同一节点对的不同端口数据边及重复 Data / Control 关系只形成一个上游。DependencyCompiler.compile 直接接收 edges 并调用收集函数，单上游生成字符串 addEdge，多上游只生成一条数组 addEdge（ALL Join），不会拆成多个独立触发边。它保留原始边，不读取或修改 portKey、不获取输出或构造输入；这些仍属 BindingResolver / NodeExecutor。真实 LangGraph 测试覆盖混合边去重后的两种完成顺序、不同路径长度、仅执行一次和上游失败；测试另验证端口不被读取及冻结边保持完整。不新增 NodeDefinition.joinMode 或平台 Join Runtime。If / Switch / Conditional Edge / Send / Batch 候选分支不适用；普通 Action 整图组装复用此 Compiler，运行 HTTP 与执行队列已接入。
 
@@ -40,6 +40,22 @@ Runner 在 invoke 返回后检查原生 StateSnapshot 的 next / tasks 与 isInt
 executeResume 只接受 workflowRunId 与 unknown value，getById 校验 waiting 后通过 claimWaitingForResume 原子转为 running，再加载原版本和编译；非 waiting 或 claim 竞争失败报 WORKFLOW_RUN_NOT_WAITING 且不 invoke。Prisma 的读取和 claim 继续按项目 / 所有者过滤；claim 在事务中有条件更新后读回完整记录，保留 startedAt 与身份。恢复前先检查原 checkpoint，再传 Command，不传 initialState、不新建 Run 或线程；与 start 共用结果分类、最终输出解析及状态落库逻辑。再次暂停可回 waiting，错误由已 claim 的调用方写 failed。Runner 不查询 interaction NodeRun；其 waiting / resume 关联仍独立设计。当前 LangGraph 对 falsy resume 的行为以单个原生 interrupt ID 映射适配，interaction node 接收的业务值不变，细节见 [恢复边界](runtime-architecture.md#workflowrunner-恢复)。
 
 版本读取已有生产 Prisma 实现，并用于真实 PostgreSQL / LangGraph 的 Runner 集成；生产 Runner 已通过 Worker Runtime Service 装配，队列消费者、正式文本节点与 Run HTTP 已接入。MemorySaver 和测试节点仅用于测试，不构成生产兜底。版本测试经真实 WorkflowService 更新 / 发布，验证 A → Version 1、草稿改 B → Version 2 后旧版本不变，以及新 Repository / 独立数据库连接读取。发布测试使用两个独立连接验证 12 次并发编辑单胜者、过期发布无版本、12 次同修订发布单版本、新修订递增版本号；另以 PostgreSQL 阻塞信息确认发布等待未提交编辑行锁，并在编辑提交后拒绝过期修订。覆盖发布时无效定义拒绝、所有者隔离、输入校验及 sourceRevision 数据库约束。Runner 与 Run Repository 的既有失败、恢复、并发 claim 和权限边界保持独立。
+
+## Workflow 编辑 HTTP API
+
+| 接口                                      | 行为                                                                       |
+| ----------------------------------------- | -------------------------------------------------------------------------- |
+| POST /api/v1/projects/:projectId/workflow | 显式初始化并返回当前默认 Workflow；空请求或 `{}`，创建和已存在均返回 200   |
+| GET /api/v1/projects/:projectId/workflow  | 只读当前 Workflow；未初始化、不存在或无权访问返回 404，不隐式写库          |
+| PUT /api/v1/workflows/:workflowId/draft   | 接受 `{ expectedRevision, definition }`，成功返回本次保存的 `{ revision }` |
+
+三个入口均由全局 AuthGuard 保护，响应为 no-store，写入遵循既有 Origin 策略。Workflow 读取响应包含 id、projectId、name、revision、完整 draft 和创建 / 更新时间，经共享 Schema 校验，不携带 ownerId、版本数组、运行或凭证。默认名称为“默认工作流”，初始 revision 为 1，草稿的 inputs / nodes / edges / outputs 均为空数组；后续项目改名不会同步覆盖 Workflow 名称。
+
+initializeForProject 在 ReadCommitted 事务中按 projectId / ownerId 锁定项目行，等待锁后查询现有 Workflow，仅缺失时创建；既有 workflow.projectId 唯一约束作为数据库防线。重复或跨实例并发初始化返回同一身份，不更新已有名称、草稿、revision 或 updatedAt，也不修改 Project。此选择逻辑只属于当前应用的项目默认工作流入口；Workflow、Version、Run 和 Runtime 仍以独立 Workflow ID 工作，没有新增永久单工作流的内核约束或数据库迁移。
+
+读取按项目所有者过滤，初始化在项目行锁内校验所有者；保存复用 updateDraft 的权限和乐观锁，不信任客户端传入的归属。客户端先取得真实 Workflow ID 和 revision，再保存完整 definition；并发保存只有一个请求成功，过期请求返回 409，不覆盖最新草稿。保存不发布版本、不创建 Run / Outbox、不调用模型；允许未选择模型的编辑草稿，仍执行既有结构与已注册节点配置字段校验，不承诺已可执行。Web 尚未调用这些入口。
+
+workflow-editor-api.e2e-spec 使用两个真实 API 实例、密码会话和隔离 PostgreSQL，覆盖新项目原子创建与失败回滚、旧项目只读不初始化、12 次并发初始化、12 次同修订保存、权限及 Origin、所有者变化、独立修订、严格字段和已有版本不变。测试不启动 Worker，也不进行真实模型调用。
 
 ## 生产 Runtime 装配
 
@@ -132,7 +148,7 @@ WorkflowRun 测试检查协议 JSON 往返、输入输出 RuntimeValue map、独
 
 模型调用有界超时，默认 60 秒，可明确配置为 100 毫秒至 180 秒；LangChain 与 SDK 重试关闭，不流式返回。适配器隔离父级与自动 tracing、关闭 SDK 日志；全局 LANGCHAIN_VERBOSE=true 时拒绝调用。连接中断、超时或 5xx 的外部受理结果可能不明，不自动再次发送；Worker 仍沿既有 NodeRun / WorkflowRun 失败及 Outbox 终态记录，不承诺外部调用 exactly-once。原始供应商响应、message、cause 不进入持久错误摘要。
 
-`ai-text.e2e-spec.ts` 已通过 6 项真实基础设施测试，路径为鉴权 HTTP、正式发布、PostgreSQL Outbox、BullMQ、独立正式 Worker、文本节点与本机 OpenAI-compatible 协议服务。覆盖配置 / 凭证不可用、503 不重试、项目 / 所有者隔离、配置不可改写、凭证轮换、服务端 CLI 真实写库，以及持久记录和 Worker 日志无凭证；本机协议服务不冒充外部模型。全仓库 check 与隔离数据库集成 143 项均通过，默认集成跳过真实收费调用。
+`ai-text.e2e-spec.ts` 已通过 6 项真实基础设施测试，路径为鉴权 HTTP、正式发布、PostgreSQL Outbox、BullMQ、独立正式 Worker、文本节点与本机 OpenAI-compatible 协议服务。覆盖配置 / 凭证不可用、503 不重试、项目 / 所有者隔离、配置不可改写、凭证轮换、服务端 CLI 真实写库，以及持久记录和 Worker 日志无凭证；本机协议服务不冒充外部模型。全仓库 check 与隔离数据库集成均通过，默认集成跳过真实收费调用。
 
 2026-10-21 已显式执行 `ai-text-live.e2e-spec.ts`：使用操作者选择的 DeepSeek `deepseek-flash`，通过正式发布、HTTP 202、Outbox、BullMQ、独立 Worker、生产文本 Node 和参考插件完成真实外部模型请求，NodeRun attempt 为 1，WorkflowRun completed，并取得非空文本最终输出。用例检查 Version / Draft、Run / NodeRun、Outbox、所有 checkpoint 与 Worker 日志不含该凭证明文，结束后清理自建测试记录与 thread。此项使用真实服务，没有覆盖或替换 Registry / Compiler / SDK；本机协议服务负责失败边界，真实调用只验证本次选择的服务与模型。可用 `pnpm test:ai:live` 显式复验，参数和边界见 [开发指南](development.md)。
 
@@ -163,8 +179,8 @@ GenericWorkflowNode 根据精确类型版本 Manifest 自动生成数据 Handle�
 | 目录               | 当前职责                                                                        | 后续边界                               |
 | ------------------ | ------------------------------------------------------------------------------- | -------------------------------------- |
 | apps/web           | 身份、账户、项目画布、目录查询、通用 renderer 与适配                            | 创作交互，不加载服务端插件或密钥       |
-| apps/api           | 认证、资料、项目、节点目录与 Runtime Service                                    | 模块化业务入口、权限与应用服务         |
-| apps/worker        | 独立进程，基础设施与 Runtime Service 装配，无任务消费者                         | 独立执行进程，不自建图调度语义         |
+| apps/api           | 认证、资料、项目、默认 Workflow 编辑、节点目录与 Runtime Service                | 模块化业务入口、权限与应用服务         |
+| apps/worker        | 独立进程，基础设施、Runtime Service、Outbox Pump 与任务消费者                   | 独立执行进程，不自建图调度语义         |
 | packages/server    | 数据库、Checkpointer、运行 Repository 与装配 factory、Redis、对象存储和凭证加密 | 不包含 HTTP、认证或业务流程            |
 | packages/contracts | 身份、项目、Workflow 与 Node 的中立 JSON 协议                                   | 不依赖前端、数据库或 Runtime 框架      |
 | packages/database  | Prisma 与身份、基础项目和运行记录持久化                                         | 模型、迁移按实际业务增加               |

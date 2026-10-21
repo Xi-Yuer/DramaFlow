@@ -2,7 +2,7 @@
 
 本文维护 Workflow 层的当前设计结论，承接 [平台核心模型](platform-model.md)。这里只确定流程的身份、静态定义、输入输出契约、不可变版本及运行边界，不设计 Node 内部执行、数据库表或 Runtime 调度实现。实现现状见 [当前架构](architecture.md)，设计进度见 [分步设计与实施方案](implementation-plan.md)。
 
-已有代码范围见 [Workflow 基础库](architecture.md#workflow-基础库)：静态定义、校验、快照、运行基础库、版本持久化与读取，以及应用服务层的 Draft 乐观锁和并发发布已经实现；编辑 / 发布 HTTP 和生产运行入口尚未接入。节点目录 API 不等于工作流执行接口。
+已有代码范围统一见 [Workflow 基础库](architecture.md#workflow-基础库)、[Workflow 编辑 API](architecture.md#workflow-编辑-http-api)和 [Run API](architecture.md#workflow-run-http-api)；领域设计不代表所有产品操作已经交付。
 
 ## 核心关系
 
@@ -31,7 +31,7 @@ Workflow
 
 ## Workflow 与 WorkflowDefinition
 
-Workflow 回答“这是谁的哪一个流程、草稿是什么”；WorkflowDefinition 回答“有哪些节点、怎样连接、接受什么输入、暴露什么输出”。一个项目恰好一张 Canvas，对应一个逻辑 Workflow；Canvas 是编辑视图，不是 Runtime 的执行状态。
+Workflow 回答“这是谁的哪一个流程、草稿是什么”；WorkflowDefinition 回答“有哪些节点、怎样连接、接受什么输入、暴露什么输出”。当前产品阶段一个项目恰好一张 Canvas，编辑其默认逻辑 Workflow；默认选择和初始化属于应用边界，不将 Workflow 核心身份永久限定为项目身份。Canvas 是编辑视图，不是 Runtime 的执行状态。
 
 contracts 已导出正式 WorkflowDefinition / workflowDefinitionSchema；通用 createWorkflowSchemas 仍要求显式传入 DataType、Node、Edge Schema。正式定义使用 NodeDefinition 和 WorkflowEdge，保留四个顶层组成。edges 是节点间连接的唯一来源，分别以 Data Edge 表达值来源、Control Edge 表达显式执行先后；Node.inputs 只保存非连线输入。节点细节见 [Node 模型](node-model.md)。
 
@@ -41,6 +41,7 @@ interface Workflow {
   projectId: string;
   name: string;
   description?: string;
+  revision: number;
   draft: WorkflowDefinition;
   createdAt: string;
   updatedAt: string;
@@ -56,7 +57,7 @@ interface WorkflowDefinition {
 
 Inputs 与 Outputs 只在 WorkflowDefinition 内定义，随草稿和版本分别保存；不在 Workflow 顶层再维护一份可独立修改的契约。版本、运行的关联也不改变 WorkflowDefinition 的四个组成部分。
 
-视口与节点布局不决定执行语义；节点布局当前必填保存在 ui.position，React Flow 临时交互状态不进入定义。现有项目名称与拟议的 Workflow 元数据名称如何呈现及持久化，也不在本步增加同步字段或修改项目保存接口。
+视口与节点布局不决定执行语义；节点布局当前必填保存在 ui.position，React Flow 临时交互状态不进入定义。Project revision 管理项目名称与视口保存，Workflow revision 管理完整草稿保存，发布 version 标识不可变快照，三者不得混用。项目与 Workflow 名称各自独立，不因保存项目而改写工作流元数据。
 
 ## Inputs：工作流的显式输入契约
 

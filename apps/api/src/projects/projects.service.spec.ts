@@ -42,11 +42,21 @@ async function setup() {
 }
 
 describe('基础项目与所有者隔离', () => {
-  it('创建归属当前所有者的项目，并初始化视口', async () => {
+  it('创建归属当前所有者的项目，并原子初始化视口和默认工作流', async () => {
     const { service, project } = await setup();
     const result = await service.create(ownerId, { name: ' 第一集 ' });
     expect(project.create).toHaveBeenCalledWith({
-      data: { ownerId, name: '第一集', viewport: { x: 0, y: 0, zoom: 1 } },
+      data: {
+        ownerId,
+        name: '第一集',
+        viewport: { x: 0, y: 0, zoom: 1 },
+        workflow: {
+          create: {
+            name: '默认工作流',
+            draft: { inputs: [], nodes: [], edges: [], outputs: [] },
+          },
+        },
+      },
     });
     expect(result).not.toHaveProperty('ownerId');
     expect(result).not.toHaveProperty('definition');

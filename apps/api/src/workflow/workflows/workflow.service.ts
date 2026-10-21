@@ -1,6 +1,8 @@
 import {
-  workflowDefinitionSchema,
+  saveWorkflowDraftRequestSchema,
   workflowIdentifierSchema,
+  workflowResponseSchema,
+  type WorkflowResponse,
 } from '@dramaflow/contracts';
 import { Prisma } from '@dramaflow/database';
 import { DatabaseService } from '@dramaflow/server';
@@ -17,6 +19,7 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import { validateWorkflowNodeConfigurations } from './validate-node-configurations.js';
+import { createInitialWorkflowData } from './initial-workflow.js';
 
 const revisionSchema = z.number().int().positive();
 const publishInputSchema = z
@@ -25,8 +28,8 @@ const publishInputSchema = z
     expectedRevision: revisionSchema,
   })
   .strict();
-const updateDraftInputSchema = publishInputSchema.extend({
-  definition: workflowDefinitionSchema,
+const updateDraftInputSchema = saveWorkflowDraftRequestSchema.extend({
+  workflowId: workflowIdentifierSchema,
 });
 
 export type UpdateWorkflowDraftInput = z.infer<typeof updateDraftInputSchema>;
@@ -48,6 +51,59 @@ export class WorkflowService {
     private readonly db: DatabaseService,
     private readonly registry: NodeRegistry,
   ) {}
+
+  async initializeForProject(
+    ownerId: string,
+    rawProjectId: string,
+  ): Promise<WorkflowResponse> {
+    const projectId = z.uuid().parse(rawProjectId);
+    return this.db.client.$transaction(
+      async (tx) => {
+        // 锁定项目而非尚不存在的 Workflow，串行化跨进程首次初始化，并固定本次权限。
+        const projects = await tx.$queryRaw<{ id: string }[]>`
+          SELECT "id" FROM "canvas_project"
+          WHERE "id" = ${projectId}::uuid AND "ownerId" = ${ownerId}
+          FOR UPDATE
+        `;
+        if (!projects[0]) throw new NotFoundException('项目不存在或无权访问');
+        const existing = await tx.workflow.findUnique({ where: { projectId } });
+        const workflow =
+          existing ??
+          (await tx.workflow.create({
+            data: { projectId, ...createInitialWorkflowData() },
+          }));
+        // 已存在时不执行 UPDATE，不重置草稿、名称、revision 或 updatedAt。
+        return this.response(workflow);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+    );
+  }
+
+  async getForProject(
+    ownerId: string,
+    rawProjectId: string,
+  ): Promise<WorkflowResponse> {
+    const projectId = z.uuid().parse(rawProjectId);
+    const workflow = await this.db.client.workflow.findFirst({
+      where: { projectId, project: { ownerId } },
+    });
+    if (!workflow) throw new NotFoundException('工作流不存在或无权访问');
+    return this.response(workflow);
+  }
+
+  private response(
+    workflow: Prisma.WorkflowGetPayload<Record<string, never>>,
+  ): WorkflowResponse {
+    return workflowResponseSchema.parse({
+      id: workflow.id,
+      projectId: workflow.projectId,
+      name: workflow.name,
+      revision: workflow.revision,
+      draft: workflow.draft,
+      createdAt: workflow.createdAt.toISOString(),
+      updatedAt: workflow.updatedAt.toISOString(),
+    });
+  }
 
   async updateDraft(
     ownerId: string,

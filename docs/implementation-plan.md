@@ -4,11 +4,11 @@
 
 ## 当前阶段
 
-2026-10-21：可扩展 Provider / Plugin / Capability 边界与首个正式文本 AI 节点已完成本阶段验收，真实外部模型已通过正式 Workflow、队列与 Worker 执行。本阶段停在首条业务链闭环，等待重新横向评估后续方向；实现与验证边界见 [当前架构](architecture.md#文本-ai-与-provider-plugin)。
+2026-10-21：A1 已完成实施与验收，项目默认 Workflow 的初始化、读取与草稿保存入口已接通。实现和验证边界见 [当前架构](architecture.md#workflow-编辑-http-api)。本轮停在 A1，保留既有 Workflow / Version 领域模型及独立修订语义。
 
-本轮停止扩展 Runtime / Storage 基础设施；不做第二种 AI 节点、图片 / 视频 / 语音、Asset、Human Review、Agent、Batch / SubWorkflow、插件市场、远程代码加载或沙箱。既有 Artifact、Binding、Codec、NodeRun 和持久化执行链直接复用。
+本轮不接入 Web 持久化、不开放发布 HTTP、不增加发布级完整可执行性校验、Provider / Model 管理 API、Run 幂等或查询扩展；不扩展 Runtime / Storage、业务节点、Human Review、Asset、Agent 或 Batch / SubWorkflow。
 
-**下一步：在本轮验证完成后重新横向评估产品进度，再决定 Human Review、前端工作流配置体验、图片生成或 Batch / SubWorkflow 的优先级。** 不自动实施第二个 AI 节点，也不继续追加 Runtime / Storage 或调度功能。后续方向不构成本轮实施授权。
+**下一步候选是 A2：版本读取、发布入口及发布前可执行性校验，须另行明确任务范围。A1 验收后停止，不自动执行 A2～A10。** 阶段 A 的目标仍为可视化文本工作流闭环，后续人工审核、媒体场景与批量复用按实际需求另行安排。
 
 本文件是当前阶段、下一步与待决策项的唯一维护入口；推进时原地修订，不堆叠旧计划或逐轮交付流水。文档维护方式见 [开发指南](development.md#文档维护)。
 

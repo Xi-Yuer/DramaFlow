@@ -34,25 +34,30 @@
 
 ## 接口与代码入口
 
-| 接口                                        | 权限/行为                                                   |
-| ------------------------------------------- | ----------------------------------------------------------- |
-| GET /api/v1/health                          | 显式公开，检查 PostgreSQL、持久 Checkpointer、Redis、RustFS |
-| POST /api/auth/sign-in/email                | 同源登录；每 IP 每 60 秒最多 10 次                          |
-| POST /api/auth/sign-out                     | 同源退出当前会话                                            |
-| GET /api/auth/get-session                   | 认证库会话接口；停用账号不能绕过检查                        |
-| POST /api/auth/change-password              | 当前会话与旧密码；每 60 秒最多 5 次；强制撤销其他会话       |
-| GET /api/v1/users/me                        | 当前用户安全资料与当前会话标识                              |
-| PATCH /api/v1/users/me                      | 仅允许 name、bio、timeZone                                  |
-| GET /api/v1/users/me/sessions               | 当前用户最近 100 条未过期会话摘要                           |
-| POST /api/v1/users/me/revoke-other-sessions | 撤销当前用户其他会话，保留当前设备                          |
-| GET /api/v1/users                           | 仅平台管理员；最近 100 个账号的安全目录，当前没有管理 UI    |
-| POST /api/v1/workflow-runs                  | 登录后反查版本归属，仅接受版本 ID / inputs；确认入队后 202  |
-| GET /api/v1/workflow-runs/:runId            | 仅运行所属项目的所有者可见，响应不包含 threadId             |
-| POST /api/v1/workflow-runs/:runId/resume    | 检查项目所有者后提交恢复意图并确认入队；同等待周期重复 409  |
+| 接口                                        | 权限/行为                                                       |
+| ------------------------------------------- | --------------------------------------------------------------- |
+| GET /api/v1/health                          | 显式公开，检查 PostgreSQL、持久 Checkpointer、Redis、RustFS     |
+| POST /api/auth/sign-in/email                | 同源登录；每 IP 每 60 秒最多 10 次                              |
+| POST /api/auth/sign-out                     | 同源退出当前会话                                                |
+| GET /api/auth/get-session                   | 认证库会话接口；停用账号不能绕过检查                            |
+| POST /api/auth/change-password              | 当前会话与旧密码；每 60 秒最多 5 次；强制撤销其他会话           |
+| GET /api/v1/users/me                        | 当前用户安全资料与当前会话标识                                  |
+| PATCH /api/v1/users/me                      | 仅允许 name、bio、timeZone                                      |
+| GET /api/v1/users/me/sessions               | 当前用户最近 100 条未过期会话摘要                               |
+| POST /api/v1/users/me/revoke-other-sessions | 撤销当前用户其他会话，保留当前设备                              |
+| GET /api/v1/users                           | 仅平台管理员；最近 100 个账号的安全目录，当前没有管理 UI        |
+| POST /api/v1/projects/:projectId/workflow   | 仅项目所有者可显式初始化默认 Workflow；重复初始化不改写已有内容 |
+| GET /api/v1/projects/:projectId/workflow    | 仅项目所有者可读取 Workflow 与草稿；读取不隐式初始化            |
+| PUT /api/v1/workflows/:workflowId/draft     | 按当前所有者与 Workflow expectedRevision 保存草稿，过期 409     |
+| POST /api/v1/workflow-runs                  | 登录后反查版本归属，仅接受版本 ID / inputs；确认入队后 202      |
+| GET /api/v1/workflow-runs/:runId            | 仅运行所属项目的所有者可见，响应不包含 threadId                 |
+| POST /api/v1/workflow-runs/:runId/resume    | 检查项目所有者后提交恢复意图并确认入队；同等待周期重复 409      |
 
 NestJS 的鉴权与 Public/PlatformAdmin/Actor 装饰器在 apps/api/src/auth；用户资料服务在 users。认证 HTTP 入口通过白名单挂载；注册、管理插件、模拟登录、删除账号和未经授权的认证端点不公开。密码散列及 Cookie 处理复用认证库，不另建 JWT 系统。
 
 Run HTTP 的资源缺失 / 无权访问统一为 404，不向其他用户泄漏 Version / Run 是否存在；请求字段严格校验，执行身份从数据库派生。完整契约与测试边界见 [Run API](architecture.md#workflow-run-http-api)。
+
+Workflow 编辑 HTTP 同样将资源缺失与无权访问统一为 404；初始化不接受客户端指定身份，保存不接受 ownerId / projectId / 发布字段。Project 与 Workflow 的修订独立，保存草稿不发布或执行；细节见 [Workflow 编辑 API](architecture.md#workflow-编辑-http-api)。
 
 ## 业务权限与密钥边界
 

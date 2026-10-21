@@ -3,7 +3,7 @@
 共享 JSON 协议与边界校验，不依赖 React Flow、NestJS、Prisma 或 LangGraph。
 
 - identity / project：身份与基础项目协议，列表游标和保存 revision 不等于工作流发布版本。
-- workflow / node：显式定义、不可变版本、运行记录与最小 WorkflowExecutionJob 契约；edges 是节点间连接唯一来源，Data Edge 表达值来源，Control Edge 表达显式执行先后。实例 inputs 只保存 constant / workflow_input / asset 三类 StaticInputBinding。Manifest 含 executionKind，资产绑定固定 assetId / versionId。
+- workflow / node：显式定义、不可变版本、运行记录与最小 WorkflowExecutionJob 契约；workflow-api 提供默认 Workflow 初始化空请求、含独立 revision 的读取响应，以及 expectedRevision / definition 草稿保存请求。edges 是节点间连接唯一来源，Data Edge 表达值来源，Control Edge 表达显式执行先后。实例 inputs 只保存 constant / workflow_input / asset 三类 StaticInputBinding。Manifest 含 executionKind，资产绑定固定 assetId / versionId。
 - data：正式 DataType、共享 isTypeAssignable、builtin 常量、DataTypeManifest、RuntimeValue 和 DataReference。
 - content：Artifact、版本化 Asset、来源与内容位置协议；不实现数据库、上传、Promote 或授权读取。
 
