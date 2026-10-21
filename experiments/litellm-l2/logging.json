@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": { "safe": { "()": "safe_logging.AllowlistFormatter" } },
+  "handlers": {
+    "safe": { "class": "logging.StreamHandler", "stream": "ext://sys.stdout", "formatter": "safe" }
+  },
+  "root": { "level": "INFO", "handlers": ["safe"] },
+  "loggers": {
+    "LiteLLM": { "level": "INFO", "handlers": ["safe"], "propagate": false },
+    "LiteLLM Proxy": { "level": "INFO", "handlers": ["safe"], "propagate": false },
+    "LiteLLM Router": { "level": "INFO", "handlers": ["safe"], "propagate": false },
+    "uvicorn": { "level": "INFO", "handlers": ["safe"], "propagate": false },
+    "uvicorn.error": { "level": "INFO", "handlers": ["safe"], "propagate": false },
+    "uvicorn.access": { "level": "INFO", "handlers": ["safe"], "propagate": false }
+  }
+}

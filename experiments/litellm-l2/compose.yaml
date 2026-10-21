@@ -1,0 +1,59 @@
+services:
+  upstream:
+    image: ${L2_IMAGE:?固定镜像}
+    entrypoint: [python]
+    command: [/experiment/upstream.py]
+    volumes: [.:/experiment:ro]
+    networks: [experiment]
+    read_only: true
+    tmpfs: [/tmp]
+
+  gateway:
+    image: ${L2_IMAGE:?固定镜像}
+    command: [--config, /experiment/config.yaml, --port, '4000', --num_workers, '1']
+    environment:
+      LITELLM_MASTER_KEY: ${L2_GATEWAY_KEY:?合成网关认证}
+      LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+      LITELLM_TELEMETRY: 'False'
+      DISABLE_ADMIN_UI: 'True'
+    volumes: [.:/experiment:ro]
+    networks: [experiment]
+
+  safe-gateway:
+    extends: gateway
+    command:
+      [
+        --config,
+        /experiment/config.yaml,
+        --port,
+        '4000',
+        --num_workers,
+        '1',
+        --log_config,
+        /experiment/logging.json,
+      ]
+    environment:
+      PYTHONPATH: /experiment
+
+  probe-gateway:
+    extends: gateway
+    command: [--config, /probe/config.yaml, --port, '4000', --num_workers, '1']
+    environment:
+      PYTHONPATH: /experiment
+    volumes:
+      - ${L2_PROBE_CONFIG:?测试观察配置}:/probe/config.yaml:ro
+
+  relay:
+    image: ${L2_IMAGE:?固定镜像}
+    entrypoint: [python]
+    command: [/experiment/relay.py]
+    volumes: [.:/experiment:ro]
+    ports: [127.0.0.1::4100, 127.0.0.1::4101, 127.0.0.1::4102, 127.0.0.1::8080]
+    networks: [experiment, access]
+    read_only: true
+    tmpfs: [/tmp]
+
+networks:
+  experiment:
+    internal: true
+  access: {}

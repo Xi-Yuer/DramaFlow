@@ -1,0 +1,41 @@
+model_list:
+  - model_name: openai/*
+    litellm_params:
+      model: openai/*
+      max_retries: 0
+      timeout: 1.2
+      configurable_clientside_auth_params:
+        - api_base: ^http://upstream:(8080|8099)/openai/v1$
+  - model_name: anthropic/*
+    litellm_params:
+      model: anthropic/*
+      max_retries: 0
+      timeout: 1.2
+      configurable_clientside_auth_params:
+        - api_base: ^http://upstream:(8080|8099)/anthropic$
+
+router_settings:
+  num_retries: 0
+  disable_cooldowns: true
+  max_fallbacks: 0
+  fallbacks: []
+  default_fallbacks: []
+  context_window_fallbacks: []
+  content_policy_fallbacks: []
+  client_ttl: 1
+
+litellm_settings:
+  set_verbose: false
+  cache: false
+  drop_params: false
+  modify_params: false
+  turn_off_message_logging: true
+  callbacks: []
+  success_callback: []
+  failure_callback: []
+  service_callback: []
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  store_model_in_db: false
+  disable_spend_logs: true

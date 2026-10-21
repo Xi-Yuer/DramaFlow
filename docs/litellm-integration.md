@@ -4,6 +4,8 @@
 
 ## 推荐结论
 
+固定版本的后续故障实验发现了当前方案的准入阻塞：307 会让两个协议重复发送生成 POST，最终响应仍为 200。必须先验证 no-redirect 出站约束；已确认的所有权和产品模型继续保留，但当前配置不能进入正式部署。安全投影、outcome、缓存及 timeout 的约束统一见[模型调用协议](litellm-call-protocol.md)。
+
 采用独立、内网部署的 LiteLLM Gateway，作为受信任 `litellm@1` 插件的底层 AI 协议兼容服务。保留 DramaFlow 的 Provider Instance、Model Configuration、凭证加密、能力契约、发布校验和 Worker 解析。模型配置只由 DramaFlow 管理；不建立 LiteLLM 用户模型数据库或双向配置同步。
 
 这是跨插件契约、Secret 传输、部署和 A4 目录展示的改造，超过一次局部 Adapter 替换。应先验证固定版本的 Gateway 行为，再分步接入；不通过修改现有 `openai_compatible@1` 的 endpoint 就宣布完成。
@@ -79,7 +81,7 @@ Gateway 不读取 DramaFlow 数据库，不消费 BullMQ，不执行 LangGraph�
 
 官方 [Clientside LLM Credentials](https://docs.litellm.ai/docs/proxy/clientside_auth)提供这条路径；`api_base` / `base_url` 的请求覆盖受配置授权控制。优先按 provider 路由限定覆盖字段和 endpoint 范围，不因支持 BYOK 就允许任意请求字典。`user_config` 也能携带完整 Router 配置，但会扩大可控路由、重试和配置处理范围，本方案不把它作为常规请求格式。
 
-Gateway 是新增的明文 Secret 信任边界，不能声称凭证永远不离开 Worker，也不能承诺 Python / Node 堆内字符串在请求结束后立即擦除。固定 `1.104.5` 的隔离探针已观察到 SDK client cache 持有 A/B 各自的 API Key 引用，默认 TTL 为 600 秒；并发测试未发现串用。关闭响应缓存不等于关闭 client cache。目标仍是无应用级持久副本、无跨用户复用、无日志 / trace / 请求镜像泄漏；后续须继续核对保留时间、异常及后台 callback 边界。
+Gateway 是新增的明文 Secret 信任边界。固定 `1.104.5` 的 SDK client 实际插入 TTL 为 3600 秒，600 秒只是缓存容器默认值，Router 的 client_ttl 也不控制这条 SDK 路径。cache key 同时包含明文 key 和 hash，过期 / eviction 后仍可能有 bookkeeping 或 SDK 引用。选择在受信任 Gateway 进程内接受驻留并保留连接复用，不能承诺请求结束或 TTL 到期立即擦除；关闭响应缓存不等于关闭 client cache。实际证据及生产边界见[调用协议](litellm-call-protocol.md#secret-与-client-cache)。
 
 具体约束如下：
 
@@ -149,9 +151,9 @@ LiteLLM 提供 retry / fallback 能力，但其默认值和多层 SDK 行为不�
 | 已受理但连接丢失     | 不再次生成、不声称 exactly-once。进程存活且失败记录成功时，沿 NodeRun / WorkflowRun failed 和 Outbox failed；Worker 死亡或无法可靠确认执行结果时，沿现有 Outbox recovery_required 核查       |
 | streaming            | 首期继续关闭。未来由 Gateway 处理厂商流、Worker 聚合 / 校验，平台单独投影进度；完整终态输出才能完成 NodeRun。浏览器断连不取消后台 Run，流中断不重新发起生成                                  |
 
-当前 `CapabilityError` 仅提供 `rejected` / `outcome_unknown`，`externalCapabilityError` 把 4xx 归入 rejected；新增网关后不能仅靠 HTTP 状态判断原始受理阶段，尤其 408 或中间代理错误。新插件应在自身边界做保守映射，缺少证据一律 unknown；不要未经验证将新分类套到旧插件。
+当前 `CapabilityError` 仅提供 `rejected` / `outcome_unknown`，`externalCapabilityError` 把 4xx 归入 rejected；不能直接复用这一判断来处理 Gateway。实测生成后的坏 Schema 也可能变成 400，与 Provider 400 具有相同 type / code；400、422、408 等缺少阶段证据时须归 unknown。具体分类见[调用协议](litellm-call-protocol.md#outcome-与证据)，不修改旧插件的既有行为。
 
-当前 `toNodeRunError` 仅持久化执行阶段安全摘要，不保存 `CapabilityError.outcome`，所以现有记录不能直接告诉操作者“网关拒绝 / 上游结果不明”。若本次接入需要诊断区分，增加受控、无 Secret 的错误摘要字段应作为单独可测的小变更；不改变 Run 状态机、不新增自动恢复接口。也不能把所有 unknown 一律转成 recovery_required。
+当前 `toNodeRunError` 仅持久化执行阶段安全摘要，不保存 `CapabilityError.outcome`。后续应通过既有 error.code 投影确认未受理 / 结果未知的受控编码，单独测试投影，不要求新增字段、Run 状态或恢复接口。模型 unknown 仍可沿 NodeRun / WorkflowRun failed 记录，不能一律转成 recovery_required。
 
 插件接口虽有 `signal`，当前 `CapabilityInvoker` / 文本节点 / Worker factory 没有贯通该参数；因此不能宣称现有 Workflow 已具备端到端取消。首次接入必须至少维持插件独立总 deadline。需要传递运行取消时，应另行界定接口与行为，不将 HTTP 连接状态冒充运行取消。
 

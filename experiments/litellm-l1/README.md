@@ -75,7 +75,7 @@ Gateway 无认证返回 401；错误 master key 或把 Provider key 当 Gateway 
 
 ## Secret 与缓存的实际观察
 
-1. **存在凭证内存缓存。** 独立运行探针在 `LLMClientCache` 中观察到分别引用 A、B key 的 `AsyncOpenAI.api_key` 对象，默认 TTL 为 600 秒；共享 Router 配置与全局 Provider credential 未被写入这些 key。关闭响应缓存并不会关闭 SDK client cache。TTL 也不等于所有堆对象在 600 秒时立即擦除。
+1. **存在凭证内存缓存。** L1 探针在 `LLMClientCache` 中观察到 A/B 各自的 `AsyncOpenAI.api_key`，读取的 600 秒是缓存容器 default_ttl。后续[生命周期实验](../litellm-l2/README.md)确认 SDK 条目显式写入 3600 秒，过期后还可能有其他引用；不能把 600 秒解释为实际 SDK TTL 或 Secret 清除时限。共享 Router 配置与全局 Provider credential 没有被写入这些 key，关闭响应缓存也不会关闭 client cache。
 2. **存在 endpoint 返回。** 成功响应头 `x-litellm-model-api-base` 包含上游地址；错误正文和错误日志也可能包含上游路径 / 地址。后续 Plugin 必须只输出领域结果和安全错误，不能把 Gateway 响应头 / 原始错误直接交给浏览器、NodeRun 或 checkpoint。
 3. **debug 会记录请求内容。** 实际启动 `--detailed_debug` 后，日志包含 messages、模型、参数、endpoint 和带掩码的认证字段。本轮未发现完整 key，但不能据此允许生产 debug，或推导所有 Provider / callback 都安全。后续要求 debug / verbose 关闭，日志和 callback 按允许字段收集。
 4. **固定版本会遮盖测试 key。** stub 故意在两种协议的 400 错误正文中反射完整 key，本版本在 Gateway 响应及默认错误日志中将它替换为 `REDACTED`。这只证明本实验的 key 格式和路径，不替代 DramaFlow 自身脱敏边界。
