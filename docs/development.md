@@ -103,6 +103,8 @@ LiteLLM Gateway 的独立验证使用 `node experiments/litellm-l1/run.mjs`，�
 
 Secret / 故障协议验证使用 `node experiments/litellm-l2/run.mjs`，仍复用固定 digest 与独立环境；目前应以退出码 1 报告 307 重复 POST 导致的 NO-GO，不应通过删除场景或放宽计数断言使其变绿。故障矩阵、缓存与日志证据见[实验说明](../experiments/litellm-l2/README.md)，正式接入要求见[调用协议](litellm-call-protocol.md)。
 
+出站 No-Redirect 专项使用 `node experiments/litellm-l2-1/run.mjs`，需要 OpenSSL 生成临时测试证书。它复验 301/302/303/307/308、跨 origin / TLS、公开 OpenAI session 注入、HTTPX transport 与普通 forward / CONNECT；当前按预期退出码 1，双协议未准入。调用链、凭证行为与替代路线见[专项说明](../experiments/litellm-l2-1/README.md)。它不修改 L1 / L2 测试源代码，也不部署正式 egress 或更换 SDK。
+
 按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / State 通道与并行增量 / 输入解析 / Codec / 存储策略 / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；WorkflowRun / NodeRun 生命周期另执行隔离 PostgreSQL 集成测试；生产 Checkpointer 的恢复能力用跨进程数据库测试验证，不能用 MemorySaver 单元测试替代。Artifact 生产内容链由 artifacts.e2e-spec 另行验证，Asset 尚未实现。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
 
 WorkflowExecutionJob 契约单测检查仅携带业务 Run ID、resume executionId / value，严格拒绝 State / Definition / thread / version 副本并保留 falsy 值。workflow-run-submission.test.ts 的内存 Repository / MemorySaver 只验证提交与执行分离，不作为生产事务 / Queue 证明；实际事务回滚和崩溃重投由上述 PostgreSQL / Redis 集成覆盖。

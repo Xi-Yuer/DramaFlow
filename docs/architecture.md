@@ -175,7 +175,7 @@ WorkflowRun 测试检查协议 JSON 往返、输入输出 RuntimeValue map、独
 
 2026-10-21 已显式执行 `ai-text-live.e2e-spec.ts`：使用操作者选择的 DeepSeek `deepseek-flash`，通过正式发布、HTTP 202、Outbox、BullMQ、独立 Worker、生产文本 Node 和参考插件完成真实外部模型请求，NodeRun attempt 为 1，WorkflowRun completed，并取得非空文本最终输出。用例检查 Version / Draft、Run / NodeRun、Outbox、所有 checkpoint 与 Worker 日志不含该凭证明文，结束后清理自建测试记录与 thread。此项使用真实服务，没有覆盖或替换 Registry / Compiler / SDK；本机协议服务负责失败边界，真实调用只验证本次选择的服务与模型。可用 `pnpm test:ai:live` 显式复验，参数和边界见 [开发指南](development.md)。
 
-仓库提供固定 `1.104.5` Gateway 的[接入实验](../experiments/litellm-l1/README.md)与[故障实验](../experiments/litellm-l2/README.md)，只验证隔离 Gateway 边界，生产 PluginRegistry / Worker 尚未装配 LiteLLM。SDK client 实际缓存 3600 秒且可能继续持有 Secret 引用；默认错误日志包含内部信息，实验已验证 allowlist 投影和日志格式。307 自动跳转仍产生第二次 POST，是当前准入阻塞；规范见[调用协议](litellm-call-protocol.md)，领域所有权见[集成评估](litellm-integration.md)。
+仓库提供固定 `1.104.5` Gateway 的[接入实验](../experiments/litellm-l1/README.md)、[故障实验](../experiments/litellm-l2/README.md)与[No-Redirect 实验](../experiments/litellm-l2-1/README.md)，只验证隔离边界，生产 PluginRegistry / Worker 尚未装配 LiteLLM。SDK client 实际缓存 3600 秒且可能继续持有 Secret 引用；实验已验证 allowlist 投影和日志格式。真实调用链中的 HTTPX redirect loop 导致 307/308 重复 POST，Anthropic x-api-key 跨 origin / HTTPS downgrade 保留；OpenAI session 注入与普通代理均未解决双协议准入。规范见[调用协议](litellm-call-protocol.md)，领域所有权见[集成评估](litellm-integration.md)。
 
 ## Plugin / Provider / 模型配置管理 HTTP
 

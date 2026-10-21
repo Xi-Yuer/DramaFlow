@@ -4,7 +4,7 @@
 
 ## 推荐结论
 
-固定版本的后续故障实验发现了当前方案的准入阻塞：307 会让两个协议重复发送生成 POST，最终响应仍为 200。必须先验证 no-redirect 出站约束；已确认的所有权和产品模型继续保留，但当前配置不能进入正式部署。安全投影、outcome、缓存及 timeout 的约束统一见[模型调用协议](litellm-call-protocol.md)。
+固定版本的[No-Redirect 专项](../experiments/litellm-l2-1/README.md)确认当前直接出站方案不能准入：307/308 让两个协议重复生成 POST，Anthropic x-api-key 还被带往跨 origin 及 HTTPS downgrade 的目标。正式 OpenAI session 注入不能覆盖 Anthropic，普通 forward proxy / CONNECT 无效。保持 **NO-GO**；L7 过滤、其他 Gateway 和统一 SDK 是待选择的替代路线，未自动采用。已确认的所有权与产品模型继续保留，安全投影、outcome、缓存及 timeout 约束见[模型调用协议](litellm-call-protocol.md)。
 
 采用独立、内网部署的 LiteLLM Gateway，作为受信任 `litellm@1` 插件的底层 AI 协议兼容服务。保留 DramaFlow 的 Provider Instance、Model Configuration、凭证加密、能力契约、发布校验和 Worker 解析。模型配置只由 DramaFlow 管理；不建立 LiteLLM 用户模型数据库或双向配置同步。
 

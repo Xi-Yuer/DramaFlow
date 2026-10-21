@@ -2,7 +2,7 @@
 
 本文定义后续 `litellm@1` 必须遵守的调用、安全投影和失败语义，不表示生产 Plugin / Runtime 已实现。证据来自固定 LiteLLM `1.104.5` 镜像中的实际代码与[真实 Gateway 故障实验](../experiments/litellm-l2/README.md)，镜像 digest 复用[锁文件](../experiments/litellm-l1/image.lock.json)。当前阶段与后续授权只维护在[实施方案](implementation-plan.md)。
 
-**当前存在准入阻塞：零 retry / fallback 配置仍会跟随 Provider 307，再次发送生成 POST，两个已测协议均复现。本文的“最多发送一次”要求尚未被当前 Gateway 配置满足，不能据此进入正式部署。**
+**当前存在准入阻塞：零 retry / fallback 配置仍跟随 Provider 307/308，再次发送生成 POST；原生 Anthropic 还将 x-api-key 传给跨 hostname、端口及 HTTPS downgrade 的目标。正式 OpenAI session 注入只修复 OpenAI，普通 forward proxy / CONNECT 均无效。本文的“最多发送一次”要求尚未被当前 Gateway 配置满足，不能据此进入正式部署。证据见 [No-Redirect 专项](../experiments/litellm-l2-1/README.md)。**
 
 ## 调用与发送约束
 
@@ -15,6 +15,8 @@ Plugin 必须从已校验的领域参数重新构造请求对象；禁止展开�
 Worker / SDK / HTTP client / 中间代理不能自动重发生成 POST，不能因调用结果未知重新生成。Gateway → Provider 也必须禁止自动跟随重定向；Worker 端的 `redirect: error` 只控制 Worker → Gateway，无法约束 Gateway 的内部 HTTP client。
 
 实测 `1.104.5` 的 OpenAI HTTP client 设有 `follow_redirects=True`，原生 Anthropic 路径也会跟随 307。输入 `api_base` 的正则验证不能阻止随后的 redirect 目标，原允许范围之外的路径实际收到了第二个 POST。Gateway 最终返回 200，客户端看不到完整跳转历史，因此 Plugin 无法靠最终响应投影补救这一副作用。
+
+真实调用链确认第二跳由 HTTPX 的 redirect loop 执行；其下层 aiohttp transport 已设 `allow_redirects=False`。301/302/303 也必须拒绝，虽然实测改为 GET，仍越过 endpoint 边界并可能转发 x-api-key。HTTPS CONNECT 不能观察加密响应，普通代理把 Location 原样交回 client 也不能阻止第二跳；L7 过滤若另行采用，必须同时验收 TLS、动态 endpoint、防绕过与零重试，不从文档推导 GO。过滤后失败仍按 outcome_unknown 处理，不能声称第一跳未生成。
 
 当前不能宣称“零 retry 等于一次上游请求”。恢复准入前，须验证一种受支持且覆盖两个协议的 no-redirect 出站约束，或明确增加可阻止 3xx 跳转的出口策略。不能把未验证的 private monkey patch 或换厂商直连作为生产兜底，也不重新维护逐厂商 Adapter。
 
@@ -104,4 +106,4 @@ debug / verbose 关闭，callbacks / success / failure / service callbacks 为�
 
 运维诊断依靠平台自建 invocation ID、阶段、耗时、受控错误类别及聚合成功 / 失败计数。需要更多原生 Gateway 诊断时必须单独审批其字段与保留方式，不能临时开启全量日志或把 cache dump 接入日志平台。
 
-本轮没有发现不可关闭的普通 SDK / Router 故障重试，已测故障都为 0 / 1 次；但两个协议的 307 跳转均为两次 POST。**当前 NO-GO 的原因是内部自动跳转导致重复发送，且最终响应不足以识别它。** Secret 所有权、现有运行状态和独立 Gateway 总体职责仍可保留；需要先补充并验证 no-redirect 机制，再重新判断准入，不能直接进入 L3。
+普通 SDK / Router 故障重试在已测场景为 0 / 1 次；但两协议的 307/308 均重复 POST，Anthropic 还存在跨 origin 凭证转发。**当前固定 Gateway 的直接出站路线 NO-GO，最终响应不足以识别或补救。** Secret 所有权与现有运行状态继续保留；专项实验的替代路线比较不构成自动更换架构的授权，不能直接进入 L3。

@@ -75,4 +75,4 @@ node experiments/litellm-l2/run.mjs
 
 普通故障的 SDK / Router 自动重试已关闭，运行中的 OpenAI SDK `max_retries=0`、Router `num_retries=0` 均有探针证据；**HTTP redirect 是另一个独立机制**。源码的 follow_redirects=True 与两次 POST 互相印证。没有证据表明现有 YAML 中某个正式选项可以覆盖两条已测路径来关闭它；本轮没有安装自定义 transport、修改镜像、增加出口代理或更换版本来绕过问题。
 
-本次没有验证所有 Provider、复杂 IAM / OAuth、真实模型、生产负载或正式 WorkflowRun 集成。没有实施 L3～L9 或 A6。下一步应先明确并验证 no-redirect 的受支持机制或出口约束，再重新完成 L2 准入。
+本次没有验证所有 Provider、复杂 IAM / OAuth、真实模型、生产负载或正式 WorkflowRun 集成。没有实施 L3～L9 或 A6。后续 [No-Redirect 专项](../litellm-l2-1/README.md)已记录正式控制点覆盖差异、跨 origin 凭证风险和普通代理失效证据；原 L2 源代码与结果保持不变，准入决定与下一步只维护在实施方案。
