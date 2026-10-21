@@ -22,15 +22,18 @@ export function WorkflowCanvas({
   workflow,
   onEdit,
   reloading,
+  interactionLocked = false,
   defaultViewport,
   onMoveEnd,
 }: {
   workflow: WorkflowDefinition;
   onEdit: (apply: (current: WorkflowDefinition) => WorkflowDefinition) => void;
   reloading: boolean;
+  interactionLocked?: boolean;
   defaultViewport: Project['viewport'];
   onMoveEnd: OnMove;
 }) {
+  const locked = reloading || interactionLocked;
   const nodeTypes = useQuery({ queryKey: nodeTypeKeys.list, queryFn: nodeTypeApi.list });
   const [nodeView, setNodeView] = useState<
     ReadonlyMap<string, Pick<WorkflowNode, 'selected' | 'measured'>>
@@ -61,10 +64,10 @@ export function WorkflowCanvas({
           nodeTypes={workflowNodeTypes}
           nodes={nodes}
           edges={edges}
-          nodesDraggable={!reloading}
-          nodesConnectable={!reloading && !nodeTypes.isPending && !nodeTypes.isError}
-          edgesReconnectable={!reloading}
-          deleteKeyCode={reloading ? null : ['Backspace', 'Delete']}
+          nodesDraggable={!locked}
+          nodesConnectable={!locked && !nodeTypes.isPending && !nodeTypes.isError}
+          edgesReconnectable={!locked}
+          deleteKeyCode={locked ? null : ['Backspace', 'Delete']}
           onNodesChange={(changes) => {
             // 受控 React Flow 仍需接收测量结果；仅缓存在视图，不回写领域草稿。
             setNodeView((current) => {
@@ -81,7 +84,7 @@ export function WorkflowCanvas({
               }
               return next;
             });
-            if (changes.some((change) => change.type === 'position' && change.position))
+            if (!locked && changes.some((change) => change.type === 'position' && change.position))
               onEdit((current) => applyWorkflowNodePositions(current, changes));
           }}
           onConnect={(connection) =>

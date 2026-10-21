@@ -116,3 +116,9 @@ A5 的定向检查先运行 `pnpm --filter @dramaflow/web test`、Web lint / typ
 管理 API 的契约、Registry 公共目录与 Secret 边界使用 contracts / plugins / server 单元测试；`pnpm typecheck --filter=@dramaflow/api...` 同时检查相关测试类型，`pnpm lint --filter=@dramaflow/api...` 检查服务端及共享包。正式路径与安全语义见[管理 HTTP](architecture.md#plugin--provider--模型配置管理-http)。
 
 `pnpm test:integration` 在隔离库验证 `model-management.e2e-spec.ts` 的真实 HTTP、启停 / 轮换、字段与所有者隔离、分页及错误脱敏；现有发布测试验证模型状态与事务边界，文本集成从管理 HTTP 配置后进入既有 Worker Runtime。普通测试只调用本机协议服务，真实收费模型调用仍须独立明确授权。不新增迁移或要求清理开发数据。
+
+## Web 模型管理验证
+
+`pnpm --filter @dramaflow/web test` 覆盖模型 API 的响应脱敏 / 分页以及公开 JSON Schema 的表单适配；配合 Web lint、typecheck 和 build 检查。`pnpm test:web:models` 只运行模型管理浏览器用例，`pnpm test:web:workflow` 同时运行既有画布回归。两者共用上述本机 Chrome、隔离数据库、临时账号及 3200 / 3201 测试服务规则，不调用外部模型。
+
+`model-settings.spec.ts` 的正常链从真实项目进入设置，经正式 HTTP 创建供应商 / 模型，验证刷新恢复、多个模型、启停、轮换和项目隔离。负向拦截仅用于网络 / 服务失败、空目录和不可呈现 Schema；不作为产品数据或运行兜底。Secret 检查包括请求未返回时的输入、组件退出后、响应 / Query / Mutation 缓存和浏览器存储；测试凭证为随机合成值，不读取真实模型凭证。浏览器测试结束后使用常规 `pnpm build --filter=@dramaflow/web` 恢复正常代理构建。

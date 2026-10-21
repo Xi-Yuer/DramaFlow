@@ -1,0 +1,183 @@
+.model-settings-drawer .ant-drawer-body {
+  padding: 24px;
+  background: #101012;
+}
+.model-settings-content {
+  display: grid;
+  gap: 20px;
+}
+.model-settings-heading,
+.model-section-heading,
+.model-card-heading,
+.model-card-footer,
+.model-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.model-settings-heading {
+  align-items: flex-start;
+}
+.model-project-name {
+  font-size: 12px;
+  color: #9c9ca7;
+}
+.model-settings-heading h2 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  margin: 6px 0 10px;
+}
+.model-settings-heading p,
+.model-section-heading p,
+.model-form-copy {
+  color: #a2a2ad;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.model-settings-heading > .ant-btn,
+.model-section-heading > .ant-btn {
+  flex-shrink: 0;
+}
+.model-settings-content .ant-tabs-nav {
+  margin-bottom: 18px;
+}
+.model-tab-content {
+  display: grid;
+  gap: 18px;
+}
+.model-card-list {
+  display: grid;
+  gap: 12px;
+}
+.model-config-card {
+  border: 1px solid #ffffff12;
+  border-radius: 14px;
+  padding: 20px;
+  background: #19191d;
+  min-width: 0;
+}
+.model-card-heading {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.model-card-heading h3,
+.model-catalog h3 {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.model-card-heading p {
+  color: #a2a2ad;
+  font-size: 12px;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.model-config-summary {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0;
+  font-size: 12px;
+}
+.model-config-summary > div {
+  display: grid;
+  grid-template-columns: minmax(125px, 1fr) 3fr;
+  gap: 14px;
+}
+.model-config-summary dt,
+.model-status-note,
+.model-card-footer > span {
+  color: #93939e;
+}
+.model-config-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.model-card-footer {
+  border-top: 1px solid #ffffff0b;
+  padding-top: 14px;
+  margin-top: 14px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.model-card-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.model-status-note {
+  font-size: 12px;
+  line-height: 1.7;
+}
+.model-unavailable-copy {
+  color: #e2ba6c;
+  font-size: 12px;
+  line-height: 1.7;
+  margin-top: 14px;
+}
+.model-catalog-items {
+  display: grid;
+  gap: 18px;
+}
+.model-catalog h3 span {
+  color: #93939e;
+  font-size: 12px;
+  font-weight: 400;
+}
+.model-catalog p {
+  color: #a2a2ad;
+  line-height: 1.8;
+  margin: 10px 0;
+}
+.model-form-copy {
+  margin-bottom: 18px;
+}
+.model-secret-section {
+  border-top: 1px solid #ffffff12;
+  padding-top: 18px;
+  margin-top: 4px;
+}
+.model-secret-section h3 {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.model-form-error {
+  margin-top: 16px;
+}
+.model-number-input {
+  width: 100%;
+}
+.model-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 72px 12px;
+  color: #a2a2ad;
+}
+.model-read-error {
+  display: grid;
+  gap: 18px;
+}
+@media (max-width: 640px) {
+  .model-settings-drawer .ant-drawer-body {
+    padding: 16px;
+  }
+  .model-settings-heading,
+  .model-section-heading {
+    flex-wrap: wrap;
+  }
+  .model-settings-heading h2 {
+    font-size: 20px;
+  }
+  .model-config-card {
+    padding: 16px;
+  }
+  .model-config-summary > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+  .model-card-actions {
+    justify-content: flex-start;
+  }
+}

@@ -6,4 +6,4 @@ InfrastructureModule 在应用启动期间初始化官方 PostgreSQL Checkpointe
 
 启动与检查见 [根 README](../../README.md) 和 [开发指南](../../docs/development.md)，当前阶段与后续实施范围见 [分步设计与实施方案](../../docs/implementation-plan.md)。
 
-`models/` 提供受鉴权的插件安全目录与项目级 Provider / Model Configuration 管理，创建体的项目身份来自路径。支持安全列表 / 详情、创建、独立启停和凭证完整轮换；不提供删除或覆盖不可变绑定。协议、路径及错误 / Secret 边界见[管理 HTTP](../../docs/architecture.md#plugin--provider--模型配置管理-http)。没有模型配置 Web 或新节点配置 UI。
+`models/` 提供受鉴权的插件安全目录与项目级 Provider / Model Configuration 管理，创建体的项目身份来自路径。支持安全列表 / 详情、创建、独立启停和凭证完整轮换；不提供删除或覆盖不可变绑定。协议、路径及错误 / Secret 边界见[管理 HTTP](../../docs/architecture.md#plugin--provider--模型配置管理-http)。Web 模型设置已调用这些入口；没有新节点配置 UI。

@@ -72,7 +72,7 @@ Workflow 编辑 HTTP 同样将资源缺失与无权访问统一为 404；初始�
 
 Provider 与 ModelConfiguration 按项目隔离，创建、列表、读取、启停与显式凭证轮换重新校验项目所有者。模型配置引用同项目 Provider；Worker 的 CapabilityInvoker 还会核验当前 running Run、项目 / 所有者、配置 enabled 与能力匹配，再解密调用。跨项目、跨所有者、失效配置和坏密文明确失败，不能仅凭 modelConfigurationId 使用其他项目凭证。模型配置 DTO 不返回明文或密文；Workflow / Version 只引用模型配置 UUID，NodeRun、Outbox、checkpoint 与自动 tracing 不保存 Provider 凭证。
 
-模型配置已有按项目所有者隔离的[正式管理 HTTP](architecture.md#plugin--provider--模型配置管理-http)，CLI 继续可用；尚无凭证管理 UI 或工作空间成员权限。用户选择的供应商 API Key 只通过创建 / 轮换请求提交，永不通过读取接口回填；服务端加密主密钥仍只从服务器环境变量读取，不通过 API 或配置 JSON 提交。CLI 操作方式见 [部署说明](deployment.md#文本模型-provider-配置)。Plugin Registry 只加载随部署注册的受信任代码，现有实现没有远程安装或沙箱。允许明确配置的本地 HTTP 模型 endpoint；对外模型调用应使用 HTTPS，endpoint 不允许 userinfo、query 或 fragment。
+模型配置已有按项目所有者隔离的[正式管理 HTTP](architecture.md#plugin--provider--模型配置管理-http)，CLI 继续可用；Web 项目模型设置已支持凭证创建与独立轮换，尚无工作空间成员权限。用户选择的供应商 API Key 只通过创建 / 轮换请求提交，永不通过读取接口回填；服务端加密主密钥仍只从服务器环境变量读取，不通过 API 或配置 JSON 提交。Web 凭证不注册到 Form store，不进入 Query / Mutation 缓存、URL 或浏览器存储；请求发送后及关闭时清空，不恢复已保存值。CLI 操作方式见 [部署说明](deployment.md#文本模型-provider-配置)。Plugin Registry 只加载随部署注册的受信任代码，现有实现没有远程安装或沙箱。允许明确配置的本地 HTTP 模型 endpoint；对外模型调用应使用 HTTPS，endpoint 不允许 userinfo、query 或 fragment。
 
 模型管理请求拒绝原始校验 issues 回显，并对前置 JSON 解析错误脱敏；读取投影不含凭证密文，失败响应和日志不复制请求凭证。
 

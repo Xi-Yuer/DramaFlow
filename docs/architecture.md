@@ -4,7 +4,7 @@ DramaFlow 是面向团队自部署的 AI 视频生产工作流平台，漫剧优
 
 ## 已实现的基础工程
 
-应用已有登录、平台鉴权、账户中心、项目管理和 React Flow 画布。画布注册通用节点 renderer、查询真实节点目录，并接入 Data / Control Edge 连线、重连与删除事件。目录已有正式文本生成节点；画布已加载并保存真实 Workflow Draft，支持节点位置和连线编辑；没有添加节点、发布、模型选择或运行交互，没有业务对话。
+应用已有登录、平台鉴权、账户中心、项目管理和 React Flow 画布。画布注册通用节点 renderer、查询真实节点目录，并接入 Data / Control Edge 连线、重连与删除事件。目录已有正式文本生成节点；画布已加载并保存真实 Workflow Draft，支持节点位置和连线编辑；已有项目内模型管理抽屉；没有添加节点、节点模型选择、发布或运行交互，没有业务对话。
 
 Next.js 使用 App Router、Ant Design 深色主题和 TanStack Query。认证通过同源代理接入 NestJS Better Auth 白名单入口，业务 API 默认受真实全局 AuthGuard 保护。PostgreSQL / Prisma 保存身份、资料、凭证、会话、认证限流、基础项目、Workflow / WorkflowVersion 及 WorkflowRun / NodeRun 业务记录；Redis 与 RustFS 提供基础服务。会话与角色边界见 [认证实施](authentication.md)。
 
@@ -167,7 +167,7 @@ WorkflowRun 测试检查协议 JSON 往返、输入输出 RuntimeValue map、独
 
 `packages/server/src/models` 提供生产 ModelProviderService、Prisma 配置读取和按 Run 限定权限的 CapabilityInvoker。model_provider 保存所属项目、插件身份 / 版本、endpoint 等配置及加密凭证；model_configuration 单独保存 Provider 引用、capability、模型名与参数。数据库约束同项目引用，插件 / 模型配置身份不可改写；禁用状态可变，凭证可通过显式服务操作轮换。改用其他模型或 endpoint 需创建新配置，旧 WorkflowVersion 的 modelConfigurationId 不变；凭证轮换和配置禁用不会把新模型静默替换进旧运行。每次调用按当前项目所有者和真实 Run 重新核验权限，拒绝跨项目、跨所有者、禁用或缺失配置。
 
-凭证使用既有 SecretsService 的 AES-256-GCM，ownerId 作为 AAD；安全 DTO 不返回明文或密文。Workflow / Version 只保存配置 UUID，NodeRun 与 checkpoint 不保存 endpoint、凭证或能力服务对象。API 与 Worker 可注入 ModelProviderService；正式管理 HTTP 见下节，模型选择 UI 尚未接入。服务端配置工具继续可用，见 [部署说明](deployment.md#文本模型-provider-配置)。调用前才解密，配置缺失或坏密文在现有 execute 阶段失败，不新建另一套运行记录。
+凭证使用既有 SecretsService 的 AES-256-GCM，ownerId 作为 AAD；安全 DTO 不返回明文或密文。Workflow / Version 只保存配置 UUID，NodeRun 与 checkpoint 不保存 endpoint、凭证或能力服务对象。API 与 Worker 可注入 ModelProviderService；正式管理 HTTP 见下节，项目内模型管理 Web 已接入，Workflow 节点的模型选择 UI 尚未接入。服务端配置工具继续可用，见 [部署说明](deployment.md#文本模型-provider-配置)。调用前才解密，配置缺失或坏密文在现有 execute 阶段失败，不新建另一套运行记录。
 
 模型调用有界超时，默认 60 秒，可明确配置为 100 毫秒至 180 秒；LangChain 与 SDK 重试关闭，不流式返回。适配器隔离父级与自动 tracing、关闭 SDK 日志；全局 LANGCHAIN_VERBOSE=true 时拒绝调用。连接中断、超时或 5xx 的外部受理结果可能不明，不自动再次发送；Worker 仍沿既有 NodeRun / WorkflowRun 失败及 Outbox 终态记录，不承诺外部调用 exactly-once。原始供应商响应、message、cause 不进入持久错误摘要。
 
@@ -205,6 +205,20 @@ Plugin 的可选 management 元数据显式允许新配置，缺省插件仍可�
 Provider 创建与完整凭证轮换复用 AES-256-GCM 和 ownerId AAD。读取数据库投影不包含 encryptedCredentials，输出白名单也不包含 credentials；停用的 Provider 仍可轮换凭证。校验或加密失败保留旧密文。Controller 不透传原始 Zod issues、插件 / 数据库 / 加密异常；全局错误过滤器对模型管理路径的前置 JSON 解析错误和未知错误同样脱敏，不在响应或日志中复制秘密。
 
 `model-management.e2e-spec.ts` 经真实鉴权 HTTP / PostgreSQL 检查目录、创建 / 读取 / 启停 / 轮换、跨用户与跨项目隔离、分页、严格字段白名单、失败无写入、错误与日志脱敏、并发字段更新及旧版本不变。`ai-text.e2e-spec.ts` 的正常配置路径已改用管理 HTTP，再经过正式发布、Outbox / Queue 和独立 Worker，验证绑定可被现有 Runtime 使用；本机兼容协议服务只用于测试，不代表本轮调用了外部模型。
+
+## Web 项目模型设置
+
+画布顶部“模型设置”打开项目内抽屉，不离开或卸载 Workflow Editor。界面按“模型供应商 / 模型”组织：接入方式来自 A3 的安全 Plugin 目录，供应商对应 Provider Instance，模型对应 Model Configuration。同一个供应商下可以添加多个模型或同名模型的不同参数配置，不存在厂商硬编码列表、默认供应商或默认模型。
+
+用户添加供应商时明确选择接入方式，填写名称、服务地址等非秘密配置和新凭证；成功后继续添加模型，供应商为刚才明确创建的实例。模型表单从其能力目录选择 capability，用户填写准确 model 名称和 Schema 参数。列表可刷新恢复配置，按 A3 的 nextCursor 遍历所有分页；查询 key 包含项目身份。没有节点模型选择、发布 / Run 操作、连接探测或远程模型列表同步。
+
+`features/models/schema-fields.ts` 校验可表现的 JSON Schema 子集，以安装版本的 Zod fromJSONSchema 完成客户端验证。支持扁平对象中的字符串、数字、整数、布尔和标量枚举，必填、默认值、范围、长度、格式和模式约束来自公开 Schema；少量通用字段中文标签只负责展示，不决定字段或验证规则。未支持的嵌套、数组、组合或未知约束会明确提示并禁用提交，不保存部分配置；服务端 Zod 仍是最终校验边界，不在前端复制未公开的插件自定义规则。
+
+凭证只在独立组件状态中作为本次输入存在，不注册到 AntD Form store，不进入 TanStack Mutation、查询数据、URL 或浏览器存储。发送创建 / 轮换请求即清空；失败也不恢复，关闭后卸载，重新打开始终为空。普通读取只接收严格安全 DTO；模型 API 适配层对错误和不合契约的响应重新生成安全错误，不保留原始 message、details 或 cause。轮换是独立表单与 PUT 操作，只接受 204，不读取返回体；保存失败保留非 Secret 配置并要求核对列表后重试，不自动重发创建或轮换。
+
+供应商和模型分别启停，不改变绑定或批量改写另一方的 enabled。模型卡片使用服务端 availability 展示可选性与安全原因，更新期间显示正在更新；失败不假报成功，读取失败明确重试。供应商停用会使其模型不可选，重新启用模型不隐式启用供应商。目录为空或接入方式不在可配置目录时，说明原因并关闭相应新增 / 轮换操作。名称、endpoint、插件、模型和参数没有覆盖编辑入口，需要调整时添加新配置。
+
+抽屉打开期间锁住画布图操作和保存快捷键，管理模型不保存 Project / Workflow，也不推进它们的 revision；关闭后保留本地未保存内容。`model-settings.spec.ts` 使用真实项目、模型 HTTP / PostgreSQL 验证创建与刷新、同供应商多模型、轮换、启停、错误重试、项目隔离、窄屏及画布状态保留；同时检查响应、输入、浏览器存储和 Query / Mutation 缓存不包含测试凭证，包括保存请求尚未返回的阶段。Schema / API 单测覆盖默认值、零值 / false、未知结构拒绝、分页及异常脱敏。验证方式见[开发指南](development.md#web-模型管理验证)。
 
 ## Artifact 生产数据通道
 

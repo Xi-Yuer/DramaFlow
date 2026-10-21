@@ -4,10 +4,11 @@ import { useRouter } from 'next/navigation';
 import { ReactFlowProvider, useReactFlow, type OnMove } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Alert, App, Button } from 'antd';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Settings2 } from 'lucide-react';
 import { saveProjectSchema, type Project, type WorkflowResponse } from '@dramaflow/contracts';
 import { ApiError } from '@/lib/http';
 import { AccountMenuButton } from '@/features/auth/account-menu';
+import { ModelSettings } from '@/features/models/model-settings';
 import { WorkflowCanvas } from '@/features/workflow/workflow-canvas';
 import { useWorkflowDraft } from '@/features/workflow/use-workflow-draft';
 import { projectApi } from './project-api';
@@ -32,6 +33,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
   const { message, modal } = App.useApp();
   const { getViewport, setViewport: setCanvasViewport } = useReactFlow();
   const draft = useWorkflowDraft(workflow);
+  const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
   const [name, setName] = useState(project.name);
   const [viewport, setViewport] = useState(project.viewport);
   const [saving, setSaving] = useState(false);
@@ -110,12 +112,12 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
     function onKey(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
-        void saveDraft();
+        if (!modelSettingsOpen) void saveDraft();
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [saveDraft]);
+  }, [saveDraft, modelSettingsOpen]);
 
   function leave() {
     if (!leavingDirty) {
@@ -240,6 +242,13 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
           </Button>
         </div>
         <div className="canvas-actions">
+          <Button
+            size="small"
+            icon={<Settings2 size={15} />}
+            onClick={() => setModelSettingsOpen(true)}
+          >
+            模型设置
+          </Button>
           <AccountMenuButton />
         </div>
       </header>
@@ -289,11 +298,18 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
           }
         />
       ) : null}
+      <ModelSettings
+        open={modelSettingsOpen}
+        projectId={project.id}
+        projectName={name}
+        onClose={() => setModelSettingsOpen(false)}
+      />
       <WorkflowCanvas
         key={draft.workflowId}
         workflow={draft.definition}
         onEdit={draft.edit}
         reloading={draft.operation === 'reloading'}
+        interactionLocked={modelSettingsOpen}
         defaultViewport={project.viewport}
         onMoveEnd={onMoveEnd}
       />
