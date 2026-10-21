@@ -12,7 +12,7 @@ react-flow-adapter.ts 将 Workflow.edges 中的 Data / Control Edge 映射为 Re
 
 显式数据连线先对照精确版本 Manifest 检查端口、共享静态类型兼容及目标单连接，再创建 Data Edge，并移除被显式替换的目标静态 Binding；数组输入也不自动接收多条数据边。控制边不占用静态输入，不自动从数据边补齐。断连和重连核对边种类与完整旧快照；selected、dragging、measured 不持久化。GenericWorkflowNode 只生成 Manifest 数据 Handle 与普通控制出入口，命名控制端口的路由交互尚未设计。画布读取真实 Workflow Draft、查询正式节点目录，并接入节点位置与两类边事件。草稿和项目信息分别保存与显示状态，各自使用独立 revision。旧项目缺少 Workflow 时需显式初始化；冲突保留本地修改，确认后才重读对应资源，不联动丢弃另一类编辑。保存失败不显示已保存。后台会话检查的临时故障保留编辑器并提示重试，明确拒绝访问时仍隐藏内容。节点添加和配置表单尚未开放。相关边界见 [Node 模型](node-model.md)。
 
-项目模型设置在画布内用抽屉展示，表单复用 AntD Modal / Form / Input / Select。面向用户使用“模型供应商 / 模型”，接入方式和能力来自安全目录，不列固定厂商品牌。配置表单只支持能完整呈现的公开 Schema，未知结构应明确关闭提交。Secret 不回填、不用假密文作输入值，创建 / 轮换发送后即清空；轮换必须是独立操作。启停后读取服务端可选性，不在 Web 推测外部服务是否在线。交互与边界见[当前架构](architecture.md#web-项目模型设置)。
+项目模型设置在画布内用抽屉展示，表单复用 AntD Modal / Form / Input / Select。面向用户使用“模型供应商 / 模型”，接入方式和能力来自安全目录，不在前端硬编码厂商清单；真实 Provider 接入档案的拟议扩展见[LiteLLM 评估](litellm-integration.md#a4模型发现与-a6)。配置表单只支持能完整呈现的公开 Schema，未知结构应明确关闭提交。Secret 不回填、不用假密文作输入值，创建 / 轮换发送后即清空；轮换必须是独立操作。启停后读取服务端可选性，不在 Web 推测外部服务是否在线。交互与边界见[当前架构](architecture.md#web-项目模型设置)。
 
 ## 可直接用于后续实施的样式提示词
 

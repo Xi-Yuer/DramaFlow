@@ -117,7 +117,7 @@ Invoker 每次调用检查真实 running Run、当前项目所有者、模型配
 
 OpenAI-compatible 参考插件明确配置 baseURL / model / apiKey，不读取隐藏默认模型或厂商；适配器通过 LangChain ChatOpenAICompletions 调用外部模型。模型调用设置有限超时，关闭 LangChain / SDK 自动重试与流式返回，隔离 tracing 和 SDK 日志；全局 verbose 模式被明确拒绝。配置、凭证或外部调用失败仍进入 NodeExecutionError.stage = execute，NodeRun / Run 记录既有安全摘要，具体 Provider 原始异常不持久化。超时或 5xx 可能受理结果不明，不据此自动再次发送。
 
-配置实例、密钥加密与不可变边界见 [当前架构](architecture.md#文本-ai-与-provider-plugin)及[认证与安全](authentication.md#业务权限与密钥边界)。没有 HumanReview、图片 / 视频 / 语音或 Agent Capability，也没有模型配置 HTTP / UI。
+配置实例、密钥加密与不可变边界见 [当前架构](architecture.md#文本-ai-与-provider-plugin)及[认证与安全](authentication.md#业务权限与密钥边界)。模型配置已有正式管理 HTTP 与项目内 Web 设置，节点模型选择 UI 尚未接入；没有 HumanReview、图片 / 视频 / 语音或 Agent Capability。LiteLLM 的拟议执行边界见[集成评估](litellm-integration.md)，不表示当前 Runtime 已经接入网关。
 
 ### Run HTTP 边界
 
