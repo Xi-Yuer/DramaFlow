@@ -103,18 +103,20 @@ model RateLimit {
 
 // 项目保存基础画布信息；Workflow 定义与运行入口独立接入。
 model Project {
-  id           String        @id @default(uuid()) @db.Uuid
-  ownerId      String
-  name         String        @db.VarChar(80)
-  revision     Int           @default(1)
-  viewport     Json
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  workflow     Workflow?
-  nodeRuns     NodeRun[]
-  workflowRuns WorkflowRun[]
-  artifacts    Artifact[]
+  id                  String               @id @default(uuid()) @db.Uuid
+  ownerId             String
+  name                String               @db.VarChar(80)
+  revision            Int                  @default(1)
+  viewport            Json
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  owner               User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  workflow            Workflow?
+  nodeRuns            NodeRun[]
+  workflowRuns        WorkflowRun[]
+  artifacts           Artifact[]
+  modelProviders      ModelProvider[]
+  modelConfigurations ModelConfiguration[]
 
   @@index([ownerId, updatedAt, id])
   @@map("canvas_project")
@@ -230,6 +232,43 @@ model Artifact {
   @@index([nodeRunId])
   @@index([status])
   @@map("artifact")
+}
+
+// Provider 是受信任插件的项目配置实例，凭证只能以服务端密文保存。
+model ModelProvider {
+  id                   String               @id @default(uuid()) @db.Uuid
+  projectId            String               @db.Uuid
+  name                 String               @db.VarChar(80)
+  pluginId             String               @db.VarChar(100)
+  pluginVersion        Int
+  configuration        Json
+  encryptedCredentials String
+  enabled              Boolean              @default(true)
+  createdAt            DateTime             @default(now())
+  project              Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  models               ModelConfiguration[]
+
+  @@unique([id, projectId])
+  @@index([projectId])
+  @@map("model_provider")
+}
+
+// 不可变能力 / 模型绑定；Workflow 只保存此 ID，不保存 endpoint 或凭证。
+model ModelConfiguration {
+  id         String        @id @default(uuid()) @db.Uuid
+  projectId  String        @db.Uuid
+  providerId String        @db.Uuid
+  capability String        @db.VarChar(100)
+  model      String        @db.VarChar(200)
+  settings   Json
+  enabled    Boolean       @default(true)
+  createdAt  DateTime      @default(now())
+  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider   ModelProvider @relation(fields: [providerId, projectId], references: [id, projectId], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([providerId])
+  @@map("model_configuration")
 }
 
 // 执行命令的持久交付及去重记录，payload 只保存共享 Job，不保存图状态。

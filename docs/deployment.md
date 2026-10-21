@@ -6,7 +6,7 @@
 
 端口使用默认 5432、6379、9000、9001，应用前端 3000。宿主仅监听 127.0.0.1，对外访问需要 HTTPS 反向代理。Docker 内部通过 postgres、redis、rustfs 服务名访问，不使用宿主 localhost。
 
-Prisma 迁移保留 vector 扩展及用户身份、资料、凭证、会话、限流、基础项目、Workflow / WorkflowVersion、运行记录与 Artifact metadata 表，不包含工作空间。当前 canvas_project 保存项目所有者、名称、视口、revision 及时间字段。
+Prisma 迁移保留 vector 扩展及用户身份、资料、凭证、会话、限流、基础项目、Workflow / WorkflowVersion、运行记录、Artifact metadata 及模型 Provider / 配置表，不包含工作空间。当前 canvas_project 保存项目所有者、名称、视口、revision 及时间字段。
 
 NodeRun 的[初始化迁移](../packages/database/prisma/migrations/20261020000000_node_runs/migration.sql)和[字段 / 索引迁移](../packages/database/prisma/migrations/20261020010000_node_run_boundary/migration.sql)建立 node_run，关联现有项目。status 使用 String，并保留数据库三状态校验；字段调整把已有状态转为 text，保留记录与唯一约束，补充 workflowRunId、workflowRunId / nodeId 索引。数据库约束 workflowRunId + nodeId + attempt 唯一、attempt 为正数、输入输出为 JSON 对象及终态字段一致性。Repository 在事务锁内原子分配 attempt；事务级锁随提交或回滚释放，见 [PostgreSQL 官方说明](https://www.postgresql.org/docs/17/explicit-locking.html#ADVISORY-LOCKS)。
 
@@ -17,6 +17,8 @@ NodeRun 的[初始化迁移](../packages/database/prisma/migrations/202610200000
 [发布来源修订迁移](../packages/database/prisma/migrations/20261020040000_workflow_publish_revision/migration.sql)增加必填、正数 sourceRevision 及 workflowId / sourceRevision 唯一约束；既有不可更新触发器同时保护来源修订。迁移不猜测历史版本来源、不用版本号或当前草稿修订回填；存在缺少真实来源信息的旧开发版本时，应先核对范围并按开发数据授权清理，不能伪造来源。本机空版本表可直接执行 db:migrate，无需 reset。WorkflowService 用原子条件更新实现草稿乐观锁，以事务行锁串行化发布序列；数据库唯一约束是最终防线，不承担正常版本分配。
 
 [Artifact 迁移](../packages/database/prisma/migrations/20261020060000_artifacts/migration.sql)新增 artifact 表与索引，使用项目 / WorkflowRun / 可选 NodeRun 复合外键保证来源一致，并增加 NodeRun 复合唯一索引。不删除或重写现有数据。writing / ready / failed 及终态字段受约束，触发器禁止改写内容身份和覆盖终态；对象本体不进入数据库。写入记录与 RustFS 不能跨库原子提交，失败补偿、未确认记录和对象保留规则见 [对象存储](object-storage.md)。备份须同时覆盖业务库、langgraph schema 与私有对象桶；Prisma 级联删除 metadata 不等于对象清理。
+
+[模型 Provider 迁移](../packages/database/prisma/migrations/20261020070000_model_providers/migration.sql)新增 model_provider 与 model_configuration，不重写现有数据。Provider 所属项目、插件精确版本与 configuration，以及模型配置的 Provider / capability / model / settings，创建后受触发器保护。enabled 可调整，encryptedCredentials 可经明确授权的服务操作轮换；更换模型、参数或 endpoint 应创建新配置。复合外键保证模型配置与 Provider 同属项目。Provider 删除和项目删除按数据库 FK 级联清理配置，不能将其解释为已有配置删除产品入口。
 
 [项目基础迁移](../packages/database/prisma/migrations/20261019000000_project_foundation/migration.sql) 删除 canvas_project 的 definition、nodeCount 列及 plugin_installation 表。尚未应用该迁移的环境执行时会清除旧节点、连线、数据绑定及插件安装记录，包括其中的配置与加密凭证；保留项目基础信息与身份数据，不操作 Redis、RustFS 或其他数据卷。当前协议不兼容这些旧业务字段。
 
@@ -47,6 +49,45 @@ Worker 并发由 WORKFLOW_WORKER_CONCURRENCY 配置（默认 4，1—64）。WOR
 API 在 enqueue 确认前不返回成功受理，Redis 不可用返回 WORKFLOW_QUEUE_UNAVAILABLE / 503，Run / Outbox 仍已持久保存，后续可能继续执行。不要因 503 或连接中断盲目重提收费生成。Worker 在 claim 后死亡或基础设施结果不明时，将意图记为 recovery_required，原 Run 保持 running；若已有 completed / 下一 waiting 记录则只补记意图完成。不实现自动重跑或人工恢复入口。核查须同时查看 Run / NodeRun / Outbox / 官方 checkpoint，不能只删除 Job 或把 running 改回 pending。
 
 部署时保持 Worker 常驻运行，否则 API 可以受理入队但无法执行；只运行 API 不会隐式执行 Graph。备份覆盖 PostgreSQL 业务与 checkpoint、Redis AOF；Outbox 本身没有独立的清理任务，业务 Run 删除按 FK 清理其意图。检查入口见 [开发指南](development.md)。
+
+## 文本模型 Provider 配置
+
+新增 [Provider / 模型配置迁移](../packages/database/prisma/migrations/20261020070000_model_providers/migration.sql)，分别保存 Provider 实例和能力 / 模型绑定；同项目复合外键阻止身份拼接，触发器固定插件版本、endpoint、模型和参数。迁移只新增表、索引与约束，不重置既有数据；本机开发库与隔离测试库均已部署。凭证密文和 enabled 状态可按明确服务操作更新，不改变旧 WorkflowVersion 的模型选择。
+
+API 与 Worker 装配 ModelProviderModule，正式节点目录提供 `ai.text_generate@1`；Node config 只接受 modelConfigurationId。模型配置没有 HTTP / UI 管理入口，服务端可用以下 CLI 创建明确选择的 Provider 与模型配置：
+
+```sh
+pnpm build
+pnpm model:configure /受保护目录/model-provider.json
+```
+
+配置文件只保存非秘密配置与环境变量名称，示例中的身份、endpoint、模型名须替换为实际选择，不存在默认厂商或默认模型：
+
+```json
+{
+  "ownerId": "项目所有者 ID",
+  "projectId": "项目 UUID",
+  "name": "自选文本服务",
+  "pluginId": "openai_compatible",
+  "pluginVersion": 1,
+  "configuration": {
+    "baseURL": "https://models.example.com/v1",
+    "timeoutMs": 60000
+  },
+  "credentialsEnv": { "apiKey": "DRAMAFLOW_MODEL_API_KEY" },
+  "model": {
+    "capability": "text.generate",
+    "model": "明确选择的模型名",
+    "settings": { "temperature": 0.7, "maxOutputTokens": 2048 }
+  }
+}
+```
+
+先在受保护的服务器环境中提供对应 API Key 及 CREDENTIAL_ENCRYPTION_KEY；CLI 自动加载根 .env，但不得提交该文件或把密钥写入命令行、JSON 或日志。工具在写库前验证插件、模型参数与凭证结构，校验项目归属，只输出 providerId / modelConfigurationId，不调用模型；错误输出不打印原始异常。配置文件中的 credentialsEnv 只是环境变量名映射，WorkflowDefinition 则只保存返回的 modelConfigurationId。当前 CLI 每次创建新配置，不执行更新或自动去重；两次数据库创建不是跨表原子发布，模型配置写入失败时 Provider 可能已经存在，不能将工具报错视为完全未写入。
+
+OpenAI-compatible 只是一个受信任的参考插件，可配置符合该协议的不同服务；ProviderPlugin 可声明多个 capability。新增适配器需随服务端代码部署并注册精确版本，不能通过 URL 下载代码或动态安装 npm 包。endpoint 允许显式 HTTP(S)，拒绝 URL 内凭证、查询参数和 fragment；不自动跟随重定向。自部署本地 HTTP 模型可用，对外调用应使用 HTTPS。API / Worker 的加密主密钥必须一致，否则 Worker 无法解密 API 创建的凭证。
+
+调用超时默认 60 秒，可显式配置 100 毫秒至 180 秒；模型参数仅支持有界 temperature / maxOutputTokens。LangChain 与 SDK 重试关闭，SDK 日志与自动 tracing 隔离，LANGCHAIN_VERBOSE=true 时拒绝调用，避免泄漏供应商原始异常。不要用调试开关观测收费请求内容；超时、连接故障或 5xx 不代表未受理，不能据此盲目重提 Run。模型输出沿 NodeRun / WorkflowRun 原有安全错误与最终输出链记录。
 
 ## 开发数据变更与授权
 

@@ -39,6 +39,7 @@ export class DefaultNodeExecutor implements NodeExecutor {
     private readonly bindingResolver: BindingResolver,
     private readonly runtimeValueCodec: RuntimeValueCodec,
     private readonly nodeRunRepository: NodeRunRepository,
+    private readonly capabilities?: CapabilityInvoker,
   ) {}
 
   async execute(node: NodeDefinition, context: NodeExecutionContext): Promise<NodeExecutionResult> {
@@ -80,6 +81,7 @@ export class DefaultNodeExecutor implements NodeExecutor {
       const rawOutput = await nodeType.execute(input, config, {
         ...context,
         nodeRunId: nodeRun.id,
+        ...(this.capabilities ? { capabilities: this.capabilities } : {}),
       });
       stage = 'validate_output';
       const output = nodeType.outputSchema.parse(rawOutput);

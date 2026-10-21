@@ -58,7 +58,13 @@ Run HTTP 的资源缺失 / 无权访问统一为 404，不向其他用户泄漏 
 
 资料更新始终使用字段白名单，用户不能通过资料接口自助修改平台角色、停用状态或邮箱验证状态。所有业务读取和写入都要校验资源权限，前端隐藏按钮不能替代鉴权。当前项目按所有者隔离；将来引入工作空间后，还须检查相应成员权限，不能以平台角色替代。
 
-后续接入的外部服务密钥仅在服务端加密保存，不进入客户端、工作流导出、模型上下文或日志。工作空间成员与插件凭证管理当前尚未实现，本节保留后续实施约束，不表示已有这些业务能力。
+模型 Provider 凭证已通过服务端 ModelProviderService 管理：凭证经 SecretsService 使用 AES-256-GCM 加密，当前项目 ownerId 作为 AAD；数据库只保存 encryptedCredentials。CREDENTIAL_ENCRYPTION_KEY 是 32 字节密钥的 64 字符十六进制表示，仅配置在服务端并与数据库备份分开保管；丢失或更换该值后，既有密文不可解密，不自动切换凭证或 Provider。
+
+Provider 与 ModelConfiguration 按项目隔离，创建、读取与显式凭证轮换重新校验项目所有者。模型配置引用同项目 Provider；Worker 的 CapabilityInvoker 还会核验当前 running Run、项目 / 所有者、配置 enabled 与能力匹配，再解密调用。跨项目、跨所有者、失效配置和坏密文明确失败，不能仅凭 modelConfigurationId 使用其他项目凭证。模型配置 DTO 不返回明文或密文；Workflow / Version 只引用模型配置 UUID，NodeRun、Outbox、checkpoint 与自动 tracing 不保存 Provider 凭证。
+
+模型配置当前通过受保护的服务端工具调用应用服务，没有 Provider HTTP Controller、凭证管理 UI 或工作空间成员权限。密钥从服务器环境变量读取，不通过命令行参数、配置 JSON、浏览器或聊天提供，操作方式见 [部署说明](deployment.md#文本模型-provider-配置)。Plugin Registry 只加载随部署注册的受信任代码，现有实现没有远程安装或沙箱。允许明确配置的本地 HTTP 模型 endpoint；对外模型调用应使用 HTTPS，endpoint 不允许 userinfo、query 或 fragment。
+
+外部调用的 SDK 日志关闭，自动 tracing 与父级 callback 隔离；LANGCHAIN_VERBOSE=true 时适配器拒绝执行。持久错误只保存安全阶段摘要，不复制供应商错误正文、cause 或 stack。外部受理结果不明时禁止盲目重试；这不构成对第三方供应商的数据保留或日志行为保证。
 
 ## 初始化与开通账号
 

@@ -6,6 +6,7 @@ import { Prisma } from '@dramaflow/database';
 import { DatabaseService } from '@dramaflow/server';
 import {
   createWorkflowDefinitionSnapshot,
+  NodeRegistry,
   workflowVersionRecordSchema,
   type WorkflowVersionRecord,
 } from '@dramaflow/workflow';
@@ -15,6 +16,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { z } from 'zod';
+import { validateWorkflowNodeConfigurations } from './validate-node-configurations.js';
 
 const revisionSchema = z.number().int().positive();
 const publishInputSchema = z
@@ -42,13 +44,21 @@ function revisionConflict(): ConflictException {
 
 @Injectable()
 export class WorkflowService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly registry: NodeRegistry,
+  ) {}
 
   async updateDraft(
     ownerId: string,
     input: unknown,
   ): Promise<{ revision: number }> {
     const request = updateDraftInputSchema.parse(input);
+    validateWorkflowNodeConfigurations(
+      request.definition,
+      this.registry,
+      'draft',
+    );
     const draft = z.record(z.string(), z.json()).parse(request.definition);
     return this.db.client.$transaction(async (tx) => {
       // revision 与所有者共同约束原子 UPDATE，不先读草稿再无条件覆盖。
@@ -115,9 +125,9 @@ export class WorkflowService {
 
         // 此函数内部执行正式 workflowDefinitionSchema.parse 并冻结完整快照。
         // 数据库 draft 不因曾经保存成功而成为可信的运行定义。
-        const definition = z
-          .record(z.string(), z.json())
-          .parse(createWorkflowDefinitionSnapshot(workflow.draft));
+        const snapshot = createWorkflowDefinitionSnapshot(workflow.draft);
+        validateWorkflowNodeConfigurations(snapshot, this.registry, 'publish');
+        const definition = z.record(z.string(), z.json()).parse(snapshot);
         const previous = await tx.workflowVersion.aggregate({
           where: { workflowId: workflow.id },
           _max: { version: true },

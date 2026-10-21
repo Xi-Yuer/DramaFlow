@@ -60,13 +60,18 @@ describe('节点类型目录 API', () => {
     expect(list).not.toHaveBeenCalled();
   });
 
-  it('受保护目录当前返回空数组，禁止缓存', async () => {
+  it('受保护目录提供正式文本 AI 能力，禁止缓存', async () => {
     const context = await setup();
     const response = await request(context.app.getHttpServer())
       .get('/api/v1/workflow/node-types')
       .expect(200)
       .expect('Cache-Control', 'no-store');
-    expect(response.body).toEqual([]);
+    expect(response.body).toMatchObject([
+      { type: 'ai.text_generate', version: 1, executionKind: 'action' },
+    ]);
+    expect(JSON.stringify(response.body)).not.toMatch(
+      /apiKey|encryptedCredentials|configSchema|inputSchema|outputSchema/,
+    );
     expect(context.requireSession).toHaveBeenCalledOnce();
   });
 

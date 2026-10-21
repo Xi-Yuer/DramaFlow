@@ -10,7 +10,7 @@ import {
   DatabaseService,
   WorkflowCheckpointerService,
 } from '@dramaflow/server';
-import { workflowStateSchema } from '@dramaflow/workflow';
+import { NodeRegistry, workflowStateSchema } from '@dramaflow/workflow';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
@@ -158,7 +158,7 @@ async function fixture() {
       draft: z.record(z.string(), z.json()).parse(persistentTestDefinition()),
     },
   });
-  const service = new WorkflowService(database);
+  const service = new WorkflowService(database, new NodeRegistry());
   const version = await service.publish(ownerId, {
     workflowId: workflow.id,
     expectedRevision: 1,

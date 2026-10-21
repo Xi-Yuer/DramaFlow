@@ -103,7 +103,7 @@ try {
     await app.get(WorkflowOutboxDispatcher).dispatchNext();
     await send({ event: 'dispatched' });
   } else {
-    // 仅该测试子进程注册故障节点；正式源码 Registry 仍为空。
+    // 仅该测试子进程追加故障节点；正式 Registry 中的业务节点保持不变。
     app.get(NodeRegistry).register({
       manifest: {
         type: 'test.queue_failure',

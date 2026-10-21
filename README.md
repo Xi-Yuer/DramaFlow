@@ -2,9 +2,11 @@
 
 DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，以漫剧生产为核心场景，同时支持广告、产品宣传、口播等视频生产流程**，面向团队自部署。
 
-当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录、注册通用 renderer，并接入 Data / Control Edge 连线、重连与删除事件；生产目录为空，画布仍无添加节点、Workflow 保存 / 发布或运行交互，尚无模型调用。
+当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录、注册通用 renderer，并接入 Data / Control Edge 连线、重连与删除事件。生产目录提供正式文本生成节点 `ai.text_generate@1`；画布仍无添加节点、Workflow 保存 / 发布、模型配置或运行交互。
 
-基础库包含正式 DataType 与共享兼容规则、RuntimeValue、版本化引用、Artifact / Asset 协议、数据与节点 Registry，以及编译、输入解析、Codec 与普通 Action 执行及输出编码。PostgreSQL 已有 Workflow 草稿、完整不可变 WorkflowVersion 快照及 WorkflowRun / NodeRun；API 应用服务支持 Draft 乐观锁与绑定修订的并发安全发布，同一修订仅生成一个版本，版本读取 Repository 保持只读。提交服务在同一事务创建 pending Run 与执行 Outbox，WorkflowRunner 通过 executeStart 按已有 Run 的明确版本启动 Action 图，并以原 thread 的 Command 恢复 waiting 运行；pending / waiting 原子 claim 防止重复首次执行或并发恢复，结束时只记录声明的最终输出。API / Worker 共用官方 PostgreSQL Checkpointer 基础设施，启动时初始化、关闭时释放连接，已验证跨进程恢复。API 装配提交与队列，独立 Worker 通过共享 factory 构造权限 / 执行意图作用域的生产 Runner。已有受鉴权保护的 Run start / get / resume HTTP，服务端派生身份且响应不公开 thread；API 确认入队后返回 202，Worker 经 BullMQ 执行，Outbox 负责投递故障恢复。Resume 意图具有固定 executionId 与等待周期，结果不明的执行停在 recovery_required 而不重跑业务。生产节点目录仍为空，尚无发布 HTTP；Artifact 的 reference encode / decode 已接入 PostgreSQL metadata 与 RustFS 的 JSON / 二进制内容通道，按项目授权读取并生成临时媒体访问 URL；Asset 内容仍未配置；实现范围见 [当前架构](docs/architecture.md)。
+Workflow 草稿、完整不可变版本、WorkflowRun / NodeRun 均已持久化；保存采用 revision 乐观锁，发布绑定明确修订。受鉴权保护的 Run start / get / resume HTTP 经 PostgreSQL Outbox、BullMQ 和独立 Worker 执行，原 thread 通过官方 PostgreSQL Checkpointer 恢复；结果不明的执行停在 recovery_required，不自动重跑业务。Artifact metadata 保存 PostgreSQL，JSON / 二进制内容写入 RustFS，State 与历史只保存引用；Asset 内容仍未配置。
+
+正式文本节点通过受信任的 PluginRegistry / Capability 调用模型，Workflow 只引用项目内的模型配置 ID。Provider 实例明确指定插件版本、endpoint 与加密凭证，ModelConfiguration 固定 capability、模型名及参数；已有 OpenAI-compatible 文本参考插件，没有默认厂商或模型。模型配置暂由服务端工具管理，无配置 HTTP / UI；独立 Worker 复用既有 Binding、Codec、NodeRun 与最终输出管线。测试与真实外部调用的验证范围见 [当前架构](docs/architecture.md#文本-ai-与-provider-plugin)。
 
 [平台核心模型](docs/platform-model.md) 定义顶层职责：Workflow 与 Node 构成编排骨架，Tool、Plugin、Middleware、Asset 和 Agent 围绕它们服务，领域节点与模板承载漫剧等生产语义。当前阶段与下一步统一见 [分步设计与实施方案](docs/implementation-plan.md)；规划不代表功能已经交付。
 
@@ -34,12 +36,12 @@ pnpm dev
 | ------------------ | ------------------------------------------------------------------------ |
 | apps/web           | 身份与项目画布、目录查询、通用节点 renderer 和协议适配                   |
 | apps/api           | NestJS、身份 / 项目 / 节点目录 API 与 Runtime Service                    |
-| apps/worker        | 独立 NestJS 应用上下文与 Runtime Service，尚未注册业务任务               |
-| packages/database  | Prisma、身份/资料/凭证/会话及基础项目模型、pgvector                      |
+| apps/worker        | 独立 NestJS 应用、Outbox Pump、执行 Consumer 与正式文本 AI 执行          |
+| packages/database  | Prisma、身份、项目、Workflow / Run、Artifact 与模型配置、pgvector        |
 | packages/server    | API 与 worker 共用的数据库、持久 Checkpointer、Redis、对象存储和凭证加密 |
 | packages/contracts | 身份、项目、Workflow / Node、DataType 及静态类型声明                     |
 | packages/workflow  | 值契约、类型 / 节点 Registry、运行接口和 action 编译包装                 |
-| packages/plugins   | 插件包空入口，保留模型 SDK 依赖                                          |
+| packages/plugins   | 受信任 PluginRegistry、Capability 契约与 OpenAI-compatible 文本适配      |
 | packages/context   | 上下文包空入口，待逐步定义                                               |
 
 上述目录是当前工程结构，不为每个一级概念预建独立包。contracts 按 identity / project 协议与 workflow / node 分组，workflow 按 definition / data / node / runtime / compiler / run 分组；server 承载服务端基础设施与共享装配适配。具体职责见 [架构与目录职责](docs/architecture.md)。
@@ -53,7 +55,9 @@ pnpm test:integration
 pnpm stack:up
 ```
 
-`test` 运行现有单元测试，包括 Workflow / Node 契约、manifest、React Flow 转换与真实 LangGraph 编译适配；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证认证、项目、基础设施、完整版本快照、Run 生命周期、PostgreSQL checkpoint 跨进程恢复及多实例 claim，不清空业务库。检查的适用范围见 [开发指南](docs/development.md)。持久化恢复测试使用原生中断测试图，不代表 Human Review 或真实模型调用已接入，运行 HTTP 由独立用例验证。
+`test` 运行现有单元测试，包括 Workflow / Node 契约、manifest、React Flow 转换、真实 LangGraph 编译适配及文本插件协议；`test:storage` 使用真实 RustFS 随机测试桶；`test:integration` 使用独立 dramaflow_test 数据库验证业务持久化、跨进程恢复、执行队列、Artifact 与正式文本节点，不清空业务库。本机模型协议服务只验证适配和失败边界，不代表真实外部模型质量。持久化恢复测试的原生中断图不代表 Human Review 产品能力。实际验证结果与适用范围见 [当前架构](docs/architecture.md#文本-ai-与-provider-plugin)及[开发指南](docs/development.md)。
+
+`model:configure` 从服务器配置文件和显式凭证环境变量创建模型配置，不调用模型。`test:ai:live` 在明确指定 endpoint、模型名和凭证变量后执行真实模型链验收；默认单元与集成测试不会启用它。用法见 [Provider 配置](docs/deployment.md#文本模型-provider-配置)和[开发指南](docs/development.md)。
 
 `stack:up` 构建镜像，启动基础设施、初始化存储桶、迁移和初始管理员，再启动 API、worker 和前端。已有数据卷不会因更新代码而自动删除。
 

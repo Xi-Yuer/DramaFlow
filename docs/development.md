@@ -36,7 +36,11 @@ test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的版本、WorkflowRun
 
 test/persistent-checkpoint.e2e-spec.ts 是真实 PostgreSQL 跨进程测试，不用 MemorySaver：启动进程 A 的 Nest / Repository / Saver / Compiler / Runner，interrupt 后等待 A 完全退出；再启动 B，从原 workflowVersionId / threadId 恢复并完成。期间通过真实 WorkflowService 更新 / 发布新版本，检查原输入、已完成节点和原版本仍有效。两个全新进程另用 IPC 屏障先同时读到 waiting，释放后只有一个 claim 成功且进入 graph.invoke；第三项验证不可用 checkpoint 数据库使 Nest 初始化失败。子进程导入生产持久化模块与 Repository，原生 interrupt 图是测试专用 Compiler，不能视作 HumanReview 产品或 NodeRun waiting 实现。测试清理只调用官方 deleteThread 删除自建 thread，并关闭连接。health.e2e-spec 验证真正 API 启动和 checkpoint 读取健康项。
 
-test/workflow-runtime.e2e-spec.ts 动态加载正式 API / Worker AppModule 编译产物，不覆盖生产 provider。验证 API 没有 Runner factory / ExecutionService、Worker 完整 DI、API 事务提交 pending / Outbox 后由实际队列 Consumer 完成同一 Run，以及权限、未知节点、Asset 未配置、无效媒体输出和缺失 checkpoint 的边界。生产 Registry 仍为空，不把空图当作已交付业务节点。
+test/workflow-runtime.e2e-spec.ts 动态加载正式 API / Worker AppModule 编译产物，不覆盖生产 provider。验证 API 没有 Runner factory / ExecutionService、Worker 完整 DI、API 事务提交 pending / Outbox 后由实际队列 Consumer 完成同一 Run，以及权限、未知节点、Asset 未配置、无效媒体输出和缺失 checkpoint 的边界。生产 Registry 已注册正式文本节点，空图用例只验证运行装配；模型调用另由文本专项验证。
+
+test/ai-text.e2e-spec.ts 使用真实鉴权 API、正式 WorkflowService 发布、Prisma 配置、Outbox / BullMQ 和独立正式 Worker，通过本机 Chat Completions 协议服务验证生产文本链。覆盖 CLI 加密配置写库、模型 / endpoint 不可改写、同项目复合外键、凭证轮换、缺失 / 禁用配置、坏密文、模型 503 不重试及所有者 / 项目隔离。供应商响应错误与测试凭证不进入持久记录和 Worker 日志。本机协议测试和 plugins 单元测试不能替代真实模型调用。
+
+test/ai-text-live.e2e-spec.ts 默认跳过，不能因本机存在密钥就自动执行。先构建应用、启动基础设施，在受保护的服务器环境明确设置 DRAMAFLOW_LIVE_AI_BASE_URL、DRAMAFLOW_LIVE_AI_MODEL、DRAMAFLOW_LIVE_AI_CREDENTIAL_ENV，以及最后一个变量指定的凭证变量，再从仓库根目录运行 `pnpm test:ai:live`。命令读取根 .env，仅允许本项目本机数据库并使用 dramaflow_test 与随机测试队列，部署测试迁移后执行一次真实外部请求。它创建并发布正式 Workflow，经鉴权 HTTP / 队列 / 正式 Worker 验证 NodeRun 与最终输出，检查凭证不进入版本、运行、checkpoint 或日志，最后清理自建数据。未设置默认厂商或模型，不自动重试；再次显式执行会产生新的外部请求。API Key 不得出现在命令行或测试断言输出。真实验收结果仅维护在 [当前架构](architecture.md#文本-ai-与-provider-plugin)。CLI 输入和失败脱敏另用 `node --test scripts/configure-model-provider.test.mjs` 检查。
 
 test/artifacts.e2e-spec.ts 在真实 PostgreSQL / RustFS 运行生产 Artifact 适配器：普通 Compiler / Executor 验证 A 输出大 JSON 与 BinaryContent，B 经 Binding / Codec 取得原 JSON 和可访问的临时媒体资源；检查数据库 metadata、实际对象、NodeRun 引用和全部 checkpoint / pending writes 不含大内容及 signed URL。另用两个真实退出的子进程加载正式 Worker AppModule，从测试原生中断门恢复原 thread，验证重建客户端后 B 仍读取同一 Artifact，A 不重复执行。此处直接驱动 Runner，运行记录不创建 Outbox，Queue 交付故障由 workflow-queue.e2e-spec 单独验证。覆盖授权 / 项目与 context 拼接拒绝、对象缺失 / 删除 / JSON 损坏、登记故障、PUT 已写后报错、清理失败、失败记录故障、确认失败及提交成功响应丢失。注入故障验证失败边界，正常路径的数据库和对象存储均为真实服务；只清理自建对象和数据。server 的 artifact-content.spec 为纯内容单元测试，storage.storage-test 为独立真实 RustFS 测试，不能用前者替代持久化验证。
 
@@ -50,7 +54,7 @@ test/workflow-queue.e2e-spec.ts 使用真实 PostgreSQL / Redis、正式 Submiss
 
 正式 WorkflowDefinition 测试检查三类 StaticInputBinding、两类边引用与全局 ID 唯一、自连接及联合 DAG；Data Edge 另检查目标数据端口单连接与静态 Binding 冲突，Control Edge 不占用输入并允许多个控制上游。检查控制端口可省略或命名，拒绝旧 ConnectionBinding。通用 factory 继续用独立自定义 Schema 测试，不强加正式 Node 协议。静态成功不证明端口存在、真实值有效或资产可访问，也不替代独立依赖收集与运行输入绑定检查；assetId / versionId 只是明确版本的引用声明。
 
-React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Handle 命名空间、控制端口省略与命名映射、跨类连线拒绝，以及删除 / 重连按边种类与完整快照防止误改。数据连线还检查精确版本 Manifest、共享 isTypeAssignable、目标单连接与数组输入不聚合、移除被显式替换的静态 Binding；节点转换检查临时字段剔除，renderer 检查数据端口 key、普通控制 Handle 与不可用状态。目录 API 使用真实默认鉴权与 no-store，前端处理加载、错误与空态；生产 Registry 为空，不用假类型填充。画布已接入两类边事件，但没有节点添加与 Workflow 保存入口，项目保存继续只处理名称、视口和 revision。
+React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Handle 命名空间、控制端口省略与命名映射、跨类连线拒绝，以及删除 / 重连按边种类与完整快照防止误改。数据连线还检查精确版本 Manifest、共享 isTypeAssignable、目标单连接与数组输入不聚合、移除被显式替换的静态 Binding；节点转换检查临时字段剔除，renderer 检查数据端口 key、普通控制 Handle 与不可用状态。目录 API 使用真实默认鉴权与 no-store，前端处理加载、错误与空态；生产 Registry 提供正式文本节点，不用假类型填充。画布已接入两类边事件，但没有节点添加与 Workflow 保存入口，项目保存继续只处理名称、视口和 revision。
 
 数据库模型在 packages/database/prisma/schema.prisma 定义。执行迁移前核对 DATABASE_URL 仅指向本项目开发库，再运行 pnpm db:migrate。迁移影响范围与操作方式统一见 [部署与数据库](deployment.md)。
 

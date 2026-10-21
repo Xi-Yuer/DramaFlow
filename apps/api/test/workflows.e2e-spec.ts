@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { StringType, type WorkflowDefinition } from '@dramaflow/contracts';
 import {
+  createTextGenerationNodeType,
+  NodeRegistry,
+} from '@dramaflow/workflow';
+import {
   DatabaseService,
   WorkflowVersionRepositories,
 } from '@dramaflow/server';
@@ -21,8 +25,9 @@ if (
 const database = new DatabaseService();
 const secondConnection = new DatabaseService();
 const db = database.client;
-const service = new WorkflowService(database);
-const otherService = new WorkflowService(secondConnection);
+const registry = new NodeRegistry([createTextGenerationNodeType()]);
+const service = new WorkflowService(database, registry);
+const otherService = new WorkflowService(secondConnection, registry);
 const ownerId = randomUUID();
 const otherId = randomUUID();
 
@@ -91,6 +96,88 @@ function conflict(
 }
 
 describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
+  it('正式 AI Node 的秘密字段不能保存到 Draft，也不能从既有不可信 Draft 发布成 Version', async () => {
+    const f = await fixture();
+    const unsafe = definition('生成对白');
+    unsafe.nodes[0]!.type = 'ai.text_generate';
+    unsafe.nodes[0]!.config = {
+      modelConfigurationId: randomUUID(),
+      apiKey: 'test-only-secret-marker',
+    };
+    const failure = expect.objectContaining({
+      status: 400,
+      response: {
+        code: 'WORKFLOW_NODE_CONFIGURATION_INVALID',
+        message: '工作流节点配置无效',
+      },
+    });
+    await expect(
+      service.updateDraft(ownerId, {
+        workflowId: f.workflow.id,
+        expectedRevision: 10,
+        definition: unsafe,
+      }),
+    ).rejects.toEqual(failure);
+    expect(
+      await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } }),
+    ).toEqual(f.workflow);
+
+    // 模拟直接导入或历史数据库中的不可信草稿；发布必须重新守住正式 Node Schema 边界。
+    await db.workflow.update({
+      where: { id: f.workflow.id },
+      data: { draft: z.record(z.string(), z.json()).parse(unsafe) },
+    });
+    await expect(
+      service.publish(ownerId, {
+        workflowId: f.workflow.id,
+        expectedRevision: 10,
+      }),
+    ).rejects.toEqual(failure);
+    expect(
+      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
+    ).toBe(0);
+  });
+
+  it('正式 AI Node 可保存未选模型的 Draft，发布前必须补齐配置，发布不查询或改写模型身份', async () => {
+    const f = await fixture();
+    const draft = definition('生成对白');
+    draft.nodes[0]!.type = 'ai.text_generate';
+    draft.nodes[0]!.config = {};
+    expect(
+      await service.updateDraft(ownerId, {
+        workflowId: f.workflow.id,
+        expectedRevision: 10,
+        definition: draft,
+      }),
+    ).toEqual({ revision: 11 });
+    await expect(
+      service.publish(ownerId, {
+        workflowId: f.workflow.id,
+        expectedRevision: 11,
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: { code: 'WORKFLOW_NODE_CONFIGURATION_INVALID' },
+    });
+    expect(
+      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
+    ).toBe(0);
+    const selected = randomUUID();
+    draft.nodes[0]!.config = { modelConfigurationId: selected };
+    await service.updateDraft(ownerId, {
+      workflowId: f.workflow.id,
+      expectedRevision: 11,
+      definition: draft,
+    });
+    const version = await service.publish(ownerId, {
+      workflowId: f.workflow.id,
+      expectedRevision: 12,
+    });
+    expect(version.definition.nodes[0]!.config).toEqual({
+      modelConfigurationId: selected,
+    });
+  });
+
   it('两个独立连接并发以 revision 8 编辑，只有一个成功写入 revision 9', async () => {
     const f = await fixture(8);
     const requests = Array.from({ length: 12 }, (_, index) =>

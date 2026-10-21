@@ -16,7 +16,7 @@ import {
   WorkflowOutboxDispatcher,
   workflowExecutionJobId,
 } from '@dramaflow/server';
-import { DefaultWorkflowRunner } from '@dramaflow/workflow';
+import { DefaultWorkflowRunner, NodeRegistry } from '@dramaflow/workflow';
 import type { Type } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -248,7 +248,10 @@ async function version(native = false) {
       draft: z.record(z.string(), z.json()).parse(definition),
     },
   });
-  const published = await new WorkflowService(database).publish(ownerId, {
+  const published = await new WorkflowService(
+    database,
+    new NodeRegistry(),
+  ).publish(ownerId, {
     workflowId: workflow.id,
     expectedRevision: 1,
   });

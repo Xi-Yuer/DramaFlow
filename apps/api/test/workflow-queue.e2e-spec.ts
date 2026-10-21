@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { NumberType, type WorkflowDefinition } from '@dramaflow/contracts';
+import { NodeRegistry } from '@dramaflow/workflow';
 import {
   DatabaseService,
   WorkflowCheckpointerService,
@@ -142,7 +143,10 @@ async function fixture(native = false, businessFailure = false) {
       draft: z.record(z.string(), z.json()).parse(definition),
     },
   });
-  const version = await new WorkflowService(database).publish(ownerId, {
+  const version = await new WorkflowService(
+    database,
+    new NodeRegistry(),
+  ).publish(ownerId, {
     workflowId: workflow.id,
     expectedRevision: 1,
   });

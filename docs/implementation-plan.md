@@ -4,11 +4,11 @@
 
 ## 当前阶段
 
-2026-10-20：Artifact 生产数据通道接入现有 Runtime。产物 metadata 保存 PostgreSQL，JSON / 二进制内容写入 RustFS，引用按项目 / Run 授权解析，并验证跨进程 checkpoint 恢复后的读取。实现与验证边界见 [当前架构](architecture.md#artifact-生产数据通道)。
+2026-10-21：可扩展 Provider / Plugin / Capability 边界与首个正式文本 AI 节点已完成本阶段验收，真实外部模型已通过正式 Workflow、队列与 Worker 执行。本阶段停在首条业务链闭环，等待重新横向评估后续方向；实现与验证边界见 [当前架构](architecture.md#文本-ai-与-provider-plugin)。
 
-数据语义与承载见 [数据模型](data-model.md)。两类确定性边的依赖、绑定及 ALL Join 规则保持不变；本轮不扩展调度层，也不引入 Asset、Human Review、Plugin、SubWorkflow 或 Batch。
+本轮停止扩展 Runtime / Storage 基础设施；不做第二种 AI 节点、图片 / 视频 / 语音、Asset、Human Review、Agent、Batch / SubWorkflow、插件市场、远程代码加载或沙箱。既有 Artifact、Binding、Codec、NodeRun 和持久化执行链直接复用。
 
-**下一步：单独明确 Asset 的 Artifact → 可管理、可复用项目资产边界。** 后续设计不构成本轮实施授权；不自动恢复结果不明的 Graph、不把 Queue 重投扩展成业务 Retry，也不继续扩展 Workflow CRUD。
+**下一步：在本轮验证完成后重新横向评估产品进度，再决定 Human Review、前端工作流配置体验、图片生成或 Batch / SubWorkflow 的优先级。** 不自动实施第二个 AI 节点，也不继续追加 Runtime / Storage 或调度功能。后续方向不构成本轮实施授权。
 
 本文件是当前阶段、下一步与待决策项的唯一维护入口；推进时原地修订，不堆叠旧计划或逐轮交付流水。文档维护方式见 [开发指南](development.md#文档维护)。
 
@@ -22,7 +22,7 @@
 | ④    | State / 数据流模型                        | 单次状态、绑定求值、结果传递与并行隔离           | 普通 Action 增量与 outputs reducer 已明确 |
 | ⑤    | Runtime 执行模型                          | LangGraph 编译与服务接入、持久化、恢复及事件投影 | 执行基础设施及 Artifact 内容通道已接入    |
 | ⑥    | Tool 工具体系                             | 可调用操作、调用契约、权限及 Node / Agent 关系   | 待逐步设计                                |
-| ⑦    | Plugin 外部能力体系                       | 能力声明、模型、凭证、版本与供应商适配           | 待逐步设计                                |
+| ⑦    | Plugin 外部能力体系                       | 能力声明、模型、凭证、版本与供应商适配           | 文本能力与受信任静态插件边界已实施        |
 | ⑧    | Middleware 中间件体系                     | 日志、权限、成本、重试的介入边界                 | 待逐步设计                                |
 | ⑨    | Human Review / Interrupt 人工介入         | 暂停、确认、恢复与生成副作用边界                 | 待逐步设计                                |
 | ⑩    | Asset 资产体系                            | 生产资料、媒体引用、版本、归属与生命周期         | 待逐步设计                                |
@@ -43,7 +43,7 @@ WorkflowRun 记录整次运行，NodeRun 记录节点历史，Checkpoint 负责�
 2. 运行删除与 checkpoint 的保留 / 清理策略如何定义？
 3. interaction 节点如何定义 waiting 并在 resume 时复用同一 NodeRun、不增加 attempt？
 
-不提前实现 Retry、Human Review、Control Node、真实模型或完整生成流程。普通 Action 禁止主动 interrupt；原生控制异常保持穿透，已有 NodeRun 保持 running。Human Review 阶段再引入 NodeRun.waiting，明确 resume 复用同一 NodeRun、不增加 attempt；本步不恢复关联，不靠 reducer 静默覆盖已有有效输出。
+不提前实现 Retry、Human Review、Control Node 或完整生成流程。普通 Action 禁止主动 interrupt；原生控制异常保持穿透，已有 NodeRun 保持 running。Human Review 阶段再引入 NodeRun.waiting，明确 resume 复用同一 NodeRun、不增加 attempt；本轮不恢复关联，不靠 reducer 静默覆盖已有有效输出。
 
 ## 从设计进入代码
 

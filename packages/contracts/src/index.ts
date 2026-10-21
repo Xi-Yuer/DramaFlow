@@ -17,3 +17,5 @@ export * from './workflow/workflow-run-api.js';
 export * from './node/definition.js';
 export * from './node/manifest.js';
 export * from './workflow/workflow-execution-job.js';
+export * from './ai/text-generation.js';
+export * from './ai/model-provider.js';

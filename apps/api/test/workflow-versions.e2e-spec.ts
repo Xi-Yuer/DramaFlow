@@ -4,7 +4,10 @@ import {
   DatabaseService,
   WorkflowVersionRepositories,
 } from '@dramaflow/server';
-import { createWorkflowDefinitionSnapshot } from '@dramaflow/workflow';
+import {
+  createWorkflowDefinitionSnapshot,
+  NodeRegistry,
+} from '@dramaflow/workflow';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -24,7 +27,7 @@ const db = database.client;
 const ownerId = randomUUID();
 const otherId = randomUUID();
 const repositories = new WorkflowVersionRepositories(database);
-const workflows = new WorkflowService(database);
+const workflows = new WorkflowService(database, new NodeRegistry());
 
 beforeAll(async () => {
   for (const id of [ownerId, otherId])

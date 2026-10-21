@@ -105,9 +105,19 @@ Runner 不查询或关联 interaction NodeRun；Human Review 后续单独定义�
 API / Worker 的 WorkflowRuntimeModule 导出各自应用 Service。共享 WorkflowRunSubmissionFactory.forProject(ownerId, projectId) 只用版本与运行 Repository 构造提交服务，不创建 Compiler / Checkpointer。共享 WorkflowExecutionService 接收受信任的 WorkflowExecutionJob，核对持久 Outbox、payload 与 waiting 周期后按 workflowRunId 读取项目及当前所有者，再用 WorkflowRuntimeFactory.forProject 构造权限作用域 Runner。三个 Prisma Repository 的每次操作继续检查权限；Worker 不导入 API 实现。
 
 API Service 的 submitStart / submitResume 是可独立调用的提交边界；Worker Service 只提供 execute(job)、executeStart(id)、executeResume(input)，从不创建新运行。内部执行服务不能代替 HTTP 权限检查：HTTP 先验证当前用户与 Version / Run 项目关系，再交付 Job。API 只装配 SubmissionModule / QueueModule，Worker 装配 RuntimeInfrastructureModule、Consumer 与 Outbox Pump。Job 确定性身份和持久 Outbox 防止重复交付，运行 claim 由实际执行者完成，不自动重跑业务副作用。完整故障边界见 [执行队列](architecture.md#workflow-execution-queue)。
-共享 WorkflowRuntimeInfrastructureModule 提供真实 Codec / 存储策略 / 最终输出解析，factory 连接精确版本 NodeRegistry、既有 Action Compiler、应用级 PostgresSaver 和按运行创建的 NodeExecutor。编译器仍只支持现有 Action 策略，没有新增 CompilationStrategyRegistry。NodeRegistry 在同一应用的目录与 Runtime 中共享，默认空目录不构成业务执行能力。
+共享 WorkflowRuntimeInfrastructureModule 提供真实 Codec / 存储策略 / 最终输出解析，factory 连接精确版本 NodeRegistry、既有 Action Compiler、应用级 PostgresSaver 和按运行创建的 NodeExecutor。编译器仍只支持现有 Action 策略，没有新增 CompilationStrategyRegistry。NodeRegistry 在同一应用的目录与 Runtime 中共享，正式注册 `ai.text_generate@1`。
 
-ArtifactModule 提供生产内容读写；ArtifactRuntimeFactory 按已授权 owner / project / Run 创建 Codec，注入 ArtifactWriterService、ArtifactDataReferenceResolver 和统一策略。写入 RuntimeValueEncodeContext 由 Executor 增加真实 nodeRunId，Writer 校验来源后登记写入、上传 RustFS 并确认 ready；只有完成确认才返回引用。JSON decode 返回原业务值，blob decode 返回临时 MediaResource，State / NodeRun 仍只记录引用。Asset 尚未实现，明确报 REFERENCE_RESOLUTION_FAILED.cause.code = ASSET_REFERENCE_NOT_CONFIGURED。失败补偿与提交不明语义见 [Artifact 生产数据通道](architecture.md#artifact-生产数据通道)，不返回占位内容或降级 inline。Run HTTP Controller 与 Worker Consumer 已接入，生产 Registry 仍为空。
+ArtifactModule 提供生产内容读写；ArtifactRuntimeFactory 按已授权 owner / project / Run 创建 Codec，注入 ArtifactWriterService、ArtifactDataReferenceResolver 和统一策略。写入 RuntimeValueEncodeContext 由 Executor 增加真实 nodeRunId，Writer 校验来源后登记写入、上传 RustFS 并确认 ready；只有完成确认才返回引用。JSON decode 返回原业务值，blob decode 返回临时 MediaResource，State / NodeRun 仍只记录引用。Asset 尚未实现，明确报 REFERENCE_RESOLUTION_FAILED.cause.code = ASSET_REFERENCE_NOT_CONFIGURED。失败补偿与提交不明语义见 [Artifact 生产数据通道](architecture.md#artifact-生产数据通道)，不返回占位内容或降级 inline。Run HTTP Controller 与 Worker Consumer 已接入。
+
+### 文本 Capability 调用边界
+
+Worker 的 WorkflowRuntimeFactory 在构造 Executor 时，注入 WorkflowCapabilitiesFactory.forRun(ownerId, projectId, workflowRunId) 返回的 CapabilityInvoker。能力依赖只存在业务执行上下文，不写入 WorkflowState / RunnableConfig 或 checkpoint。正式文本 Node 的 config 只有 modelConfigurationId，输入 prompt / system 继续由 BindingResolver 与 Codec 解析；NodeType.execute 调用 text.generate，返回普通 `{ text }`，随后仍由 outputSchema、Codec 与 NodeRun Repository 处理。
+
+Invoker 每次调用检查真实 running Run、当前项目所有者、模型配置所属项目与 enabled、Provider 所属项目与 enabled，以及 capability 是否匹配。然后才用既有 SecretsService 解密 Provider 凭证，并按固定 pluginId / pluginVersion 交付 PluginRegistry。Registry 与插件负责外部协议、输入输出和模型参数，不接管 Graph、State 或节点生命周期。新增受信任 Provider 插件通过注册扩展，无需修改 Compiler、NodeExecutor 或 Queue。
+
+OpenAI-compatible 参考插件明确配置 baseURL / model / apiKey，不读取隐藏默认模型或厂商；适配器通过 LangChain ChatOpenAICompletions 调用外部模型。模型调用设置有限超时，关闭 LangChain / SDK 自动重试与流式返回，隔离 tracing 和 SDK 日志；全局 verbose 模式被明确拒绝。配置、凭证或外部调用失败仍进入 NodeExecutionError.stage = execute，NodeRun / Run 记录既有安全摘要，具体 Provider 原始异常不持久化。超时或 5xx 可能受理结果不明，不据此自动再次发送。
+
+配置实例、密钥加密与不可变边界见 [当前架构](architecture.md#文本-ai-与-provider-plugin)及[认证与安全](authentication.md#业务权限与密钥边界)。没有 HumanReview、图片 / 视频 / 语音或 Agent Capability，也没有模型配置 HTTP / UI。
 
 ### Run HTTP 边界
 
@@ -137,4 +147,4 @@ Nest 初始化期间先获取数据库级 advisory transaction lock，串行调�
 
 Data Edge 保存值来源，Control Edge 保存显式执行先后；定义层的联合 DAG 只检查无环，执行依赖由独立收集函数生成。普通确定性 fan-in 遵循上述 ALL Join，条件分支、Send、Batch 与子图的精确映射留待各自结构策略。单次图调用 maxConcurrency 位于顶层配置；跨运行与供应商配额由后续 Queue / Worker 处理，不把 Send 当作全部容量控制。[官方 Graph API 示例](https://docs.langchain.com/oss/javascript/langgraph/use-graph-api) 展示这些执行机制。
 
-当前没有控制 / 交互结构策略或模型调用、审核或内容 Store。生产节点目录仍为空；首次启动基础库不代表已有真实生成服务，不得将测试适配、类型接口或规划标为可用业务能力。
+控制 / 交互结构策略与审核尚未实现。正式文本模型调用与 Artifact 内容通道已有生产实现，其他媒体生成、Asset、Agent、Batch / SubWorkflow 仍未交付；测试原生中断、协议服务与接口声明不能作为这些产品能力的证据。实际验证边界见 [当前架构](architecture.md#文本-ai-与-provider-plugin)。

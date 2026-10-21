@@ -2,6 +2,14 @@ export { DatabaseModule, DatabaseService } from './database/database.service.js'
 export { InfrastructureModule } from './module.js';
 export { RedisService } from './redis/redis.service.js';
 export { SecretsService } from './secrets/secrets.service.js';
+export { SecretsModule } from './secrets/secrets.module.js';
+export { ModelProviderService, ModelConfigurationError } from './models/model-provider.service.js';
+export { ModelProviderModule } from './models/model-provider.module.js';
+export {
+  ProviderPluginModule,
+  createProviderPluginRegistry,
+} from './models/provider-plugin.module.js';
+export { WorkflowCapabilitiesFactory } from './models/workflow-capabilities.factory.js';
 export { StorageService } from './storage/storage.service.js';
 export { StorageModule } from './storage/storage.module.js';
 export { ArtifactModule } from './artifacts/artifact.module.js';

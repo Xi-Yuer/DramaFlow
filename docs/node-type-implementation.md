@@ -20,12 +20,20 @@ NodeCompilationStrategy 接收节点、说明书、统一 Executor、执行上�
 
 ## 目录 API 与前端
 
-GET /api/v1/workflow/node-types 默认认证，no-store。生产 Registry 仍为空，没有占位 LLM 或视频类型。目录查询与连线共用唯一性校验，不按数组顺序选择冲突的 type / version。
+GET /api/v1/workflow/node-types 默认认证，no-store。生产 Registry 注册正式 `ai.text_generate@1`，没有占位图像 / 视频类型。目录只返回 Manifest，查询与连线共用唯一性校验，不按数组顺序选择冲突的 type / version。
 
-GenericWorkflowNode 按精确 Manifest 生成数据 Handle，其 ID 必须等于对应端口 key，显示正式 DataType 的中文摘要，并提供 `control:source` / `control:target` 普通控制出入口；缺少匹配版本显示不可用。控制 Handle 命名空间与数据端口 key 隔离，默认 UI 控制 Handle 不写入领域 portKey。Control Edge 可选命名端口支持结构与转换，不代表已有命名控制端口 Manifest、路由交互或 Branch。React Flow renderer 与两类边的连线、重连、删除事件已接入画布；生产目录仍为空，没有节点添加与 Workflow 持久化，项目仍只保存名称、视口和 revision，没有运行按钮。
+GenericWorkflowNode 按精确 Manifest 生成数据 Handle，其 ID 必须等于对应端口 key，显示正式 DataType 的中文摘要，并提供 `control:source` / `control:target` 普通控制出入口；缺少匹配版本显示不可用。控制 Handle 命名空间与数据端口 key 隔离，默认 UI 控制 Handle 不写入领域 portKey。Control Edge 可选命名端口支持结构与转换，不代表已有命名控制端口 Manifest、路由交互或 Branch。React Flow renderer 与两类边的连线、重连、删除事件已接入画布；尚无节点添加、Workflow 保存 / 发布、模型选择或运行按钮，项目画布保存仍只处理名称、视口和 revision。
+
+## 正式文本节点
+
+`ai.text_generate@1` 是普通 Action，输入为必填 prompt 与可选 system，输出为 text，三者均为 string。config 只声明必填 modelConfigurationId；它是项目内已配置模型能力的 UUID，不保存 pluginId、endpoint、模型名或 API Key。Manifest 的 model-selector 仅是编辑提示，当前没有对应完整前端配置体验。
+
+execute 通过上下文中的 CapabilityInvoker 请求 text.generate，不依赖具体厂商 SDK。同一能力可以由明确注册的不同 Provider 插件提供；Provider / 模型配置由 Worker 作用域能力服务读取和授权。新增厂商不生成新的核心 NodeType，也不为其复制 Compiler 或 Executor。
+
+WorkflowService 保存 Draft 时拒绝已注册 Action 的额外 config 字段，允许必填选择尚未完成；发布时按严格 configSchema 完整校验。已有文本节点因此不能夹带 apiKey、baseURL 等配置字段进入不可变版本；模型配置存在性和运行权限仍由执行边界检查，尚未提供完整发布语义校验。具体模型与凭证边界见 [架构](architecture.md#文本-ai-与-provider-plugin)。
 
 ## 实施边界
 
 数据类型校验与共享兼容算法已实现；RuntimeValue、版本化引用、Artifact / Asset、State 及 Codec / Resolver / Executor / Store / Repository 已有类型或协议。完整 Runtime、内容持久化、大小预算、引用权限与审核投影保持独立；节点业务记录与实现范围见 [架构](architecture.md#数据与-node-基础库)，不使用测试替身提供生产降级。
 
-Data Edge 表达值来源，Control Edge 表达显式执行先后；联合无环检查与执行依赖编译职责分离，普通确定性依赖按目标聚合为 ALL Join。后续议题统一见 [实施方案](implementation-plan.md)，不先跳入 Plugin、Batch 或完整生成流程。
+Data Edge 表达值来源，Control Edge 表达显式执行先后；联合无环检查与执行依赖编译职责分离，普通确定性依赖按目标聚合为 ALL Join。Plugin 文本能力沿既有运行链接入，其他能力的阶段安排统一见 [实施方案](implementation-plan.md)。

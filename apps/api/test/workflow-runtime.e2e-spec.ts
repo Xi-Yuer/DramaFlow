@@ -125,7 +125,10 @@ async function fixture(unknownNode = false) {
       draft: z.record(z.string(), z.json()).parse(definition),
     },
   });
-  const version = await new WorkflowService(database).publish(ownerId, {
+  const version = await new WorkflowService(
+    database,
+    new NodeRegistry(),
+  ).publish(ownerId, {
     workflowId: workflow.id,
     expectedRevision: 1,
   });
@@ -146,7 +149,7 @@ async function waitRun(id: string, status: string) {
   );
 }
 describe('正式 Nest 应用的提交 / 队列 / 执行装配', () => {
-  it('API 只有提交 / Dispatcher，Worker 构造真实执行依赖，生产 Registry 仍为空', async () => {
+  it('API 只有提交 / Dispatcher，Worker 构造真实执行依赖，Registry 提供正式文本 AI 节点', async () => {
     for (const app of [api, worker]) {
       await app.get(WorkflowCheckpointerService).ping();
       expect(app.get(WorkflowRunRepositories)).toBeInstanceOf(
@@ -155,7 +158,9 @@ describe('正式 Nest 应用的提交 / 队列 / 执行装配', () => {
       expect(app.get(WorkflowVersionRepositories)).toBeInstanceOf(
         WorkflowVersionRepositories,
       );
-      expect(app.get(NodeRegistry).listManifests()).toEqual([]);
+      expect(app.get(NodeRegistry).listManifests()).toMatchObject([
+        { type: 'ai.text_generate', version: 1, executionKind: 'action' },
+      ]);
     }
     expect(api.get(WorkflowRunSubmissionFactory)).toBeInstanceOf(
       WorkflowRunSubmissionFactory,

@@ -96,7 +96,10 @@ async function fixture(owner = ownerId) {
       draft: z.record(z.string(), z.json()).parse(artifactDefinition()),
     },
   });
-  const version = await new WorkflowService(database).publish(owner, {
+  const version = await new WorkflowService(
+    database,
+    app.get(NodeRegistry),
+  ).publish(owner, {
     workflowId: workflow.id,
     expectedRevision: 1,
   });
