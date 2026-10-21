@@ -28,7 +28,10 @@ import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { WorkflowRuntimeService } from '../src/workflow/runtime/workflow-runtime.service.js';
-import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
+import {
+  createWorkflowService,
+  storeRuntimeTestVersion,
+} from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
@@ -125,13 +128,15 @@ async function fixture(unknownNode = false) {
       draft: z.record(z.string(), z.json()).parse(definition),
     },
   });
-  const version = await new WorkflowService(
-    database,
-    new NodeRegistry(),
-  ).publish(ownerId, {
-    workflowId: workflow.id,
-    expectedRevision: 1,
-  });
+  const version = unknownNode
+    ? await storeRuntimeTestVersion(database, workflow, definition)
+    : await createWorkflowService(database, new NodeRegistry()).publish(
+        ownerId,
+        {
+          workflowId: workflow.id,
+          expectedRevision: 1,
+        },
+      );
   return {
     projectId: project.id,
     workflowId: workflow.id,

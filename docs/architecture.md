@@ -26,7 +26,7 @@ workflow 包已有 parseWorkflowInputs、collectWorkflowOutputs、createWorkflow
 
 数据库 workflow 保存 draft JSON、revision、名称及时间，以 projectId 唯一约束落实每项目一个逻辑 Workflow。workflow_version 每条保存完整 WorkflowDefinition JSON，不引用 draft 或保存差量；workflowId / version 与 workflowId / sourceRevision 分别唯一，同一草稿修订只能产生一个版本。sourceRevision 必填且为正数，数据库触发器禁止更新版本的所有字段，父级删除按外键级联。共享服务的 WorkflowVersionRepositories.forProject 返回限定项目 / 所有者的只读 PrismaWorkflowVersionRepository，每次查询重新检查权限，经 workflowVersionRecordSchema 校验并把 createdAt 映射为 publishedAt；不存在或无权访问返回 null，不回退 draft / latest。
 
-API 的 workflows/WorkflowService 提供 updateDraft 与 publish，WorkflowsModule 注册并导出服务。两者都显式接收操作者和 expectedRevision，并检查 Workflow 所属项目的所有者。updateDraft 以身份 / 权限 / revision 为条件原子更新 draft、递增 revision，冲突返回 WORKFLOW_REVISION_CONFLICT，不存在或无权访问返回 404。publish 在 ReadCommitted 事务内 SELECT FOR UPDATE 锁定 Workflow，检查修订、拒绝重复发布，经正式 Schema 校验与完整快照后，按已锁定工作流的 max(version) + 1 创建版本。发布结果包含 sourceRevision，发布不修改 draft 或 revision；同修订再次发布返回 WORKFLOW_REVISION_ALREADY_PUBLISHED，不以唯一冲突作为正常分配机制。服务额外使用共享 Registry：已注册 Action 的 Draft config 拒绝声明之外的字段，允许暂缺必填选择；publish 必须通过该 NodeType 严格 configSchema，阻止 endpoint / credentials 混入版本。未知类型仍按既有行为留到 compile 拒绝。草稿编辑 HTTP 已接入；没有发布 HTTP，也没有端口、类型兼容或资源访问的完整发布级语义校验。
+API 的 workflows/WorkflowService 提供 updateDraft 与 publish。updateDraft 按所有者和 expectedRevision 原子更新完整草稿；已注册 Action 只检查允许的配置字段，不要求模型和必填输入已经填写，未知类型也可保留在编辑草稿。Publish 在 ReadCommitted 事务内锁定 Workflow，检查来源修订与重复发布，再按正式 Definition、Registry、Node Schema 和本地模型配置严格验证，通过后才分配 max(version) + 1 并写入完整快照。失败不产生版本、不消耗版本号、不改变 draft / revision；来源修订冲突及同修订重复发布仍分别返回 WORKFLOW_REVISION_CONFLICT / WORKFLOW_REVISION_ALREADY_PUBLISHED。发布和版本 HTTP 见下文。
 
 `packages/workflow/src/compiler/dependency.compiler.ts` 导出 collectNodeDependencies：接收当前 WorkflowEdge 列表，Data / Control Edge 均按两端 nodeId 收集执行依赖，按 target 聚合、按 source 去重并保留首次出现顺序，输出 NodeDependency。同一节点对的不同端口数据边及重复 Data / Control 关系只形成一个上游。DependencyCompiler.compile 直接接收 edges 并调用收集函数，单上游生成字符串 addEdge，多上游只生成一条数组 addEdge（ALL Join），不会拆成多个独立触发边。它保留原始边，不读取或修改 portKey、不获取输出或构造输入；这些仍属 BindingResolver / NodeExecutor。真实 LangGraph 测试覆盖混合边去重后的两种完成顺序、不同路径长度、仅执行一次和上游失败；测试另验证端口不被读取及冻结边保持完整。不新增 NodeDefinition.joinMode 或平台 Join Runtime。If / Switch / Conditional Edge / Send / Batch 候选分支不适用；普通 Action 整图组装复用此 Compiler，运行 HTTP 与执行队列已接入。
 
@@ -55,7 +55,30 @@ initializeForProject 在 ReadCommitted 事务中按 projectId / ownerId 锁定�
 
 读取按项目所有者过滤，初始化在项目行锁内校验所有者；保存复用 updateDraft 的权限和乐观锁，不信任客户端传入的归属。客户端先取得真实 Workflow ID 和 revision，再保存完整 definition；并发保存只有一个请求成功，过期请求返回 409，不覆盖最新草稿。保存不发布版本、不创建 Run / Outbox、不调用模型；允许未选择模型的编辑草稿，仍执行既有结构与已注册节点配置字段校验，不承诺已可执行。Web 尚未调用这些入口。
 
-workflow-editor-api.e2e-spec 使用两个真实 API 实例、密码会话和隔离 PostgreSQL，覆盖新项目原子创建与失败回滚、旧项目只读不初始化、12 次并发初始化、12 次同修订保存、权限及 Origin、所有者变化、独立修订、严格字段和已有版本不变。测试不启动 Worker，也不进行真实模型调用。
+workflow-editor-api.e2e-spec 同时覆盖默认 Workflow 编辑与正式发布，具体边界见下节；初始化和草稿保存均不会调用模型或生成运行。
+
+## Workflow 发布与版本 HTTP API
+
+| 接口                                       | 行为                                                                           |
+| ------------------------------------------ | ------------------------------------------------------------------------------ |
+| POST /api/v1/workflows/:workflowId/publish | 仅接受 `{ expectedRevision }`，成功返回 201 与完整版本快照                     |
+| GET /api/v1/workflows/:workflowId/versions | 版本倒序摘要，每页最多 20 条；可传 `beforeVersion`，响应含 `nextBeforeVersion` |
+| GET /api/v1/workflow-versions/:versionId   | 按明确版本 ID 读取完整不可变快照，不回退到 draft / latest                      |
+
+三个入口默认认证、no-store，按当前项目所有者过滤，不存在或无权访问统一返回 404；发布还遵循 Origin 策略。响应使用 contracts/workflow/workflow-api.ts 的中立 Schema，包含版本身份、项目归属、sourceRevision 与 publishedAt；列表不携带 definition，完整读取和发布响应携带 definition，不返回 Provider、凭证、SDK 错误或运行状态。发布不创建 Run / Outbox，不执行模型，也不要求外部服务此刻在线。
+
+`workflow/definition/validate-publish.ts` 在正式 Definition 结构校验之后补齐静态语义：
+
+- 精确类型 / 版本必须存在且为当前可编译的 Action；节点名称直接使用官方 StateGraph.addNode 检查，校验用 builder 不 compile / invoke。
+- Data Edge 与静态绑定必须指向真实输入 / 输出端口，必填输入必须有来源；Workflow Input 到节点、Data Edge 两端及最终输出采用同一个 isTypeAssignable。常量使用真实 inputSchema 字段校验，全部输入已知时执行整组 Schema；完整 config 使用正式 strict configSchema 校验，不将 transform / 默认值回写快照。
+- 未实现的 Asset 绑定、命名 Control 端口及非 Action 结构拒绝发布；普通 Control Edge 仍表达确定性依赖，联合 DAG 规则沿用现有 Schema。输出采用 auto 时必须存在现有默认存储策略。
+- 静态语义失败返回安全的 WORKFLOW_PUBLISH_VALIDATION_FAILED 和节点 / 端口定位原因；节点配置不合法保留 WORKFLOW_NODE_CONFIGURATION_INVALID。格式错误仍为 VALIDATION_FAILED，不回显原配置值。
+
+当前文本节点的模型绑定由应用层使用正式 textGenerationConfigSchema 与 Manifest 能力声明解析，不从 UI 控件推断。ModelProviderService.assertPublishableConfiguration 在同一个发布事务内验证模型配置、Provider 和项目归属，持有共享行锁直到提交；缺失、跨项目、能力不匹配、模型或 Provider 停用均拒绝发布。插件精确版本必须在当前受信任 Registry 中提供该能力，Provider configuration、模型名与 settings 必须满足同一插件 Schema。该方法只 SELECT 非秘密字段，不读取密文、不解密、不调用插件能力。错误仅保存安全摘要，不泄漏其他项目配置是否存在。
+
+这保证发布时本地已知配置可用，不把 mutable enabled / credentials 冻结进版本。后续停用、凭证轮换或删除不会改写旧版本；执行时 Worker 仍重新鉴权、检查 enabled、解密和校验凭证。动态运行输入、生成输出、跨动态字段的 Schema 约束、Artifact 实际内容 / 权限、网络、额度、模型在线状态、凭证解密与外部受理结果均留在 Runtime 判断。新的 NodeType 若需要其他资源绑定，须显式补齐其发布资源校验，不能绕过当前边界。
+
+workflow-editor-api.e2e-spec 使用正式 HTTP、两个 API 实例及真实 PostgreSQL，覆盖不完整草稿与严格发布、未知类型 / 版本、端口 / 来源 / 输出错误、模型归属 / 能力 / 停用、不可用插件或参数、并发编辑 / 发布、配置停用行锁、旧版本不变、权限、失败无版本和版本列表分页。ai-text.e2e-spec 的正常路径从正式发布 HTTP 进入既有 Outbox / Queue / Worker / 文本插件；原生等待和不兼容历史快照由测试显式建数，不伪装成支持它们正式发布。
 
 ## 生产 Runtime 装配
 
@@ -70,7 +93,7 @@ workflow-runtime.e2e-spec 启动正式 API / Worker AppModule，检查 API 不�
 
 API 的 WorkflowRuntimeModule 注册 WorkflowRunsController，三个路由默认受真实 AuthGuard / Origin 策略保护，返回 Cache-Control: no-store。POST /api/v1/workflow-runs 只接受 workflowVersionId 与 RuntimeValue inputs；Service.startVersion 按当前用户查询版本所属 Workflow / Project，派生内部身份，先 submitStart 创建 pending，再通过 Dispatcher 确认 start Job 已入 Redis。GET /api/v1/workflow-runs/:runId 和 POST /api/v1/workflow-runs/:runId/resume 先按 Run 的项目所有者检查权限，后者只接受必填的 unknown value，再 submitResume 取得持久意图并确认入队；提交不 claim，Controller 不组装 Runtime。
 
-contracts/workflow/workflow-run-api.ts 提供严格请求与 WorkflowRunResponse Schema。响应只包含 Run 业务 ID、版本、状态、RuntimeValue 输入 / 最终输出、稳定错误摘要与 ISO 时间，不公开 projectId / threadId、State 或 checkpoint。不存在与无权访问分别统一为 WORKFLOW_VERSION_NOT_FOUND / WORKFLOW_RUN_NOT_FOUND（404），非 waiting / 原子 claim 失败为 409；配置缺失为 503，节点执行或未知 Runtime 故障返回安全的 500，不返回原始 message、stack 或 cause。既有草稿修订冲突保持 409，不因此增加发布 Controller。
+contracts/workflow/workflow-run-api.ts 提供严格请求与 WorkflowRunResponse Schema。响应只包含 Run 业务 ID、版本、状态、RuntimeValue 输入 / 最终输出、稳定错误摘要与 ISO 时间，不公开 projectId / threadId、State 或 checkpoint。不存在与无权访问分别统一为 WORKFLOW_VERSION_NOT_FOUND / WORKFLOW_RUN_NOT_FOUND（404），非 waiting / 原子 claim 失败为 409；配置缺失为 503，节点执行或未知 Runtime 故障返回安全的 500，不返回原始 message、stack 或 cause。既有草稿修订冲突保持 409；发布 Controller 属于独立的 Workflow 发布入口。
 
 workflow-run-api.e2e-spec 使用两个真实 API HTTP 实例、真实密码会话和签名 Cookie，并启动独立 Worker 子进程。检查 202 / pending / GET、API 进程不调用 Runner、原版本与 thread 的两轮异步恢复、0 值、同等待周期并发提交单意图 / 409、跨用户 404、严格字段和队列不可用时安全 503。中断图只存在于测试 Worker 编译器。
 

@@ -4,9 +4,16 @@ import {
   projectSchema,
   StringType,
   workflowResponseSchema,
+  workflowVersionResponseSchema,
+  workflowVersionListResponseSchema,
+  NumberType,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
-import { DatabaseService } from '@dramaflow/server';
+import {
+  DatabaseService,
+  ModelProviderService,
+  SecretsService,
+} from '@dramaflow/server';
 import {
   createTextGenerationNodeType,
   NodeRegistry,
@@ -14,13 +21,13 @@ import {
 import type { Type } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { AuthService } from '../src/auth/auth.service.js';
 import { mountAuth } from '../src/auth/auth.http.js';
 import { authBaseUrl } from '../src/auth/trusted-origin.js';
 import { ApiExceptionFilter } from '../src/http/exception.filter.js';
-import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
+import { createWorkflowService } from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
@@ -89,6 +96,631 @@ beforeAll(async () => {
     expect(cookie).not.toBe('');
     cookies.push(cookie);
   }
+});
+
+async function textPublication() {
+  const project = await createProject('正式发布测试');
+  const workflow = await readWorkflow(project.id);
+  const models = applications[0]!.app.get(ModelProviderService);
+  const provider = await models.createProvider(userIds[0]!, {
+    projectId: project.id,
+    name: '明确选择的离线测试服务',
+    pluginId: 'openai_compatible',
+    pluginVersion: 1,
+    configuration: { baseURL: 'http://127.0.0.1:1/v1' },
+    credentials: { apiKey: 'test-publish-secret-marker' },
+  });
+  const model = await models.createModelConfiguration(userIds[0]!, {
+    projectId: project.id,
+    providerId: provider.id,
+    capability: 'text.generate',
+    model: 'explicit-test-model',
+    settings: {},
+  });
+  const draft = definition('正式发布内容');
+  draft.nodes[0]!.config = { modelConfigurationId: model.id };
+  return { project, workflow, models, provider, model, draft };
+}
+
+describe('正式 Publish 边界与版本 HTTP', () => {
+  it('合法正式文本定义发布、读取完整快照和版本列表；发布不探活、不解密或创建 Run', async () => {
+    const f = await textPublication();
+    const decrypt = vi.spyOn(SecretsService.prototype, 'decrypt');
+    try {
+      expect(
+        (
+          await api(`/workflows/${f.workflow.id}/draft`, 'PUT', {
+            expectedRevision: 1,
+            definition: f.draft,
+          })
+        ).status,
+      ).toBe(200);
+      const response = await api(
+        `/workflows/${f.workflow.id}/publish`,
+        'POST',
+        { expectedRevision: 2 },
+      );
+      expect(response.status).toBe(201);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      const version = workflowVersionResponseSchema.parse(
+        await response.json(),
+      );
+      expect(version).toMatchObject({
+        workflowId: f.workflow.id,
+        projectId: f.project.id,
+        version: 1,
+        sourceRevision: 2,
+        definition: f.draft,
+      });
+      expect(await readWorkflow(f.project.id)).toMatchObject({
+        revision: 2,
+        draft: f.draft,
+      });
+      const read = await api(
+        `/workflow-versions/${version.id}`,
+        'GET',
+        undefined,
+        0,
+        1,
+      );
+      expect(read.status).toBe(200);
+      expect(await read.json()).toEqual(version);
+      const listed = await api(`/workflows/${f.workflow.id}/versions`);
+      expect(listed.status).toBe(200);
+      const list = workflowVersionListResponseSchema.parse(await listed.json());
+      expect(list.items).toHaveLength(1);
+      expect(list.items[0]).not.toHaveProperty('definition');
+      expect(list.nextBeforeVersion).toBeNull();
+      expect(decrypt).not.toHaveBeenCalled();
+      const text = JSON.stringify({ version, list });
+      for (const privateValue of [
+        'test-publish-secret-marker',
+        '127.0.0.1:1',
+        'encryptedCredentials',
+        'explicit-test-model',
+      ])
+        expect(text).not.toContain(privateValue);
+      expect(
+        await db.workflowRun.count({ where: { projectId: f.project.id } }),
+      ).toBe(0);
+    } finally {
+      decrypt.mockRestore();
+    }
+  });
+
+  it('Draft 允许不完整和不可执行内容，Publish 逐项拒绝，失败不消耗版本或修改草稿', async () => {
+    const f = await textPublication();
+    const cases: [string, (draft: WorkflowDefinition) => void][] = [
+      [
+        'NODE_TYPE_UNAVAILABLE',
+        (g) => {
+          g.nodes[0]!.type = 'missing.node';
+        },
+      ],
+      [
+        'NODE_TYPE_UNAVAILABLE',
+        (g) => {
+          g.nodes[0]!.typeVersion = 99;
+        },
+      ],
+      [
+        'INPUT_SOURCE_MISSING',
+        (g) => {
+          g.nodes[0]!.inputs = {};
+        },
+      ],
+      [
+        'INPUT_PORT_NOT_FOUND',
+        (g) => {
+          g.nodes[0]!.inputs.extra = { type: 'constant', value: 'extra' };
+        },
+      ],
+      [
+        'INPUT_VALUE_INVALID',
+        (g) => {
+          g.nodes[0]!.inputs.prompt = { type: 'constant', value: '' };
+        },
+      ],
+      [
+        'INPUT_TYPE_MISMATCH',
+        (g) => {
+          g.inputs = [{ name: 'prompt', type: NumberType }];
+          g.nodes[0]!.inputs.prompt = { type: 'workflow_input', key: 'prompt' };
+        },
+      ],
+      [
+        'OUTPUT_PORT_NOT_FOUND',
+        (g) => {
+          g.outputs[0]!.source.outputKey = 'missing';
+        },
+      ],
+      [
+        'WORKFLOW_OUTPUT_TYPE_MISMATCH',
+        (g) => {
+          g.outputs[0]!.type = NumberType;
+        },
+      ],
+      [
+        'ASSET_BINDING_UNSUPPORTED',
+        (g) => {
+          g.nodes[0]!.inputs.prompt = {
+            type: 'asset',
+            assetId: 'asset',
+            versionId: 'v1',
+          };
+        },
+      ],
+      [
+        'NODE_CONFIG_INVALID',
+        (g) => {
+          g.nodes[0]!.config = {};
+        },
+      ],
+    ];
+    let revision = 1;
+    for (const [code, mutate] of cases) {
+      const draft = structuredClone(f.draft);
+      mutate(draft);
+      const saved = await api(`/workflows/${f.workflow.id}/draft`, 'PUT', {
+        expectedRevision: revision,
+        definition: draft,
+      });
+      expect(saved.status).toBe(200);
+      revision++;
+      const before = await readWorkflow(f.project.id);
+      const response = await api(
+        `/workflows/${f.workflow.id}/publish`,
+        'POST',
+        { expectedRevision: revision },
+      );
+      expect(response.status).toBe(400);
+      const error = await response.json();
+      if (code === 'NODE_CONFIG_INVALID')
+        expect(error.code).toBe('WORKFLOW_NODE_CONFIGURATION_INVALID');
+      else
+        expect(error.details).toContainEqual(expect.objectContaining({ code }));
+      expect(
+        await db.workflowVersion.count({
+          where: { workflowId: f.workflow.id },
+        }),
+      ).toBe(0);
+      expect(await readWorkflow(f.project.id)).toEqual(before);
+    }
+    // 直接存储的未可信定义也必须经过发布边界重新验证。
+    const corrupt = structuredClone(f.draft);
+    corrupt.outputs[0]!.source.nodeId = 'missing';
+    await db.workflow.update({
+      where: { id: f.workflow.id },
+      data: { draft: z.record(z.string(), z.json()).parse(corrupt) },
+    });
+    expect(
+      (
+        await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+          expectedRevision: revision,
+        })
+      ).status,
+    ).toBe(400);
+    const unsafe = structuredClone(f.draft);
+    unsafe.nodes[0]!.config.apiKey = 'secret-in-untrusted-draft';
+    await db.workflow.update({
+      where: { id: f.workflow.id },
+      data: { draft: z.record(z.string(), z.json()).parse(unsafe) },
+    });
+    const rejected = await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+      expectedRevision: revision,
+    });
+    expect(rejected.status).toBe(400);
+    expect(await rejected.text()).not.toContain('secret-in-untrusted-draft');
+    expect(
+      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
+    ).toBe(0);
+    await api(`/workflows/${f.workflow.id}/draft`, 'PUT', {
+      expectedRevision: revision,
+      definition: f.draft,
+    });
+    const published = await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+      expectedRevision: revision + 1,
+    });
+    expect(published.status).toBe(201);
+    expect(await published.json()).toMatchObject({
+      version: 1,
+      sourceRevision: revision + 1,
+    });
+  });
+
+  it('Data Edge 的两端端口及命名 Control Edge 在 HTTP 发布边界拒绝', async () => {
+    const f = await textPublication();
+    const first = structuredClone(f.draft.nodes[0]!);
+    first.id = 'first';
+    f.draft.nodes.push(first);
+    f.draft.nodes[0]!.inputs = {};
+    f.draft.edges = [
+      {
+        id: 'link',
+        kind: 'data',
+        source: { nodeId: 'first', portKey: 'text' },
+        target: { nodeId: 'text', portKey: 'prompt' },
+      },
+    ];
+    let revision = 1;
+    for (const mode of ['source', 'target', 'control']) {
+      const draft = structuredClone(f.draft);
+      if (mode === 'source') draft.edges[0]!.source.portKey = 'wrong';
+      if (mode === 'target') draft.edges[0]!.target.portKey = 'wrong';
+      if (mode === 'control')
+        draft.edges.push({
+          id: 'control',
+          kind: 'control',
+          source: { nodeId: 'first', portKey: 'approved' },
+          target: { nodeId: 'text' },
+        });
+      expect(
+        (
+          await api(`/workflows/${f.workflow.id}/draft`, 'PUT', {
+            expectedRevision: revision++,
+            definition: draft,
+          })
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+            expectedRevision: revision,
+          })
+        ).status,
+      ).toBe(400);
+      expect(
+        await db.workflowVersion.count({
+          where: { workflowId: f.workflow.id },
+        }),
+      ).toBe(0);
+    }
+  });
+
+  it('缺失、跨项目、跨所有者、停用和能力不匹配的模型配置均拒绝，不泄漏 Provider 信息', async () => {
+    const f = await textPublication();
+    const other = await textPublication();
+    const incompatible = await db.modelConfiguration.create({
+      data: {
+        projectId: f.project.id,
+        providerId: f.provider.id,
+        capability: 'image.generate',
+        model: 'incompatible',
+        settings: {},
+      },
+    });
+    for (const id of [randomUUID(), other.model.id, incompatible.id]) {
+      const draft = structuredClone(f.draft);
+      draft.nodes[0]!.config.modelConfigurationId = id;
+      await db.workflow.update({
+        where: { id: f.workflow.id },
+        data: { draft: z.record(z.string(), z.json()).parse(draft) },
+      });
+      const response = await api(
+        `/workflows/${f.workflow.id}/publish`,
+        'POST',
+        { expectedRevision: 1 },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        code: 'MODEL_CONFIGURATION_UNAVAILABLE',
+      });
+    }
+    await db.project.update({
+      where: { id: other.project.id },
+      data: { ownerId: userIds[1] },
+    });
+    f.draft.nodes[0]!.config.modelConfigurationId = other.model.id;
+    await db.workflow.update({
+      where: { id: f.workflow.id },
+      data: { draft: z.record(z.string(), z.json()).parse(f.draft) },
+    });
+    expect(
+      (
+        await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+          expectedRevision: 1,
+        })
+      ).status,
+    ).toBe(400);
+    f.draft.nodes[0]!.config.modelConfigurationId = f.model.id;
+    await db.workflow.update({
+      where: { id: f.workflow.id },
+      data: { draft: z.record(z.string(), z.json()).parse(f.draft) },
+    });
+    await db.modelConfiguration.update({
+      where: { id: f.model.id },
+      data: { enabled: false },
+    });
+    expect(
+      (
+        await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+          expectedRevision: 1,
+        })
+      ).status,
+    ).toBe(400);
+    await db.modelConfiguration.update({
+      where: { id: f.model.id },
+      data: { enabled: true },
+    });
+    await db.modelProvider.update({
+      where: { id: f.provider.id },
+      data: { enabled: false },
+    });
+    expect(
+      (
+        await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+          expectedRevision: 1,
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
+    ).toBe(0);
+  });
+
+  it('未注册插件、插件不提供该能力、无效 endpoint 或参数不能发布', async () => {
+    const f = await textPublication();
+    for (const mode of [
+      'missing_plugin',
+      'missing_plugin_version',
+      'invalid_endpoint',
+      'invalid_settings',
+    ]) {
+      const provider = await db.modelProvider.create({
+        data: {
+          projectId: f.project.id,
+          name: '不可信导入配置',
+          pluginId:
+            mode === 'missing_plugin' ? 'missing_plugin' : 'openai_compatible',
+          pluginVersion: mode === 'missing_plugin_version' ? 99 : 1,
+          configuration: {
+            baseURL:
+              mode === 'invalid_endpoint' ? 'invalid' : 'http://127.0.0.1:1/v1',
+          },
+          encryptedCredentials: 'not-read-during-publish',
+        },
+      });
+      const model = await db.modelConfiguration.create({
+        data: {
+          projectId: f.project.id,
+          providerId: provider.id,
+          capability: 'text.generate',
+          model: 'explicit-model',
+          settings: mode === 'invalid_settings' ? { temperature: 100 } : {},
+        },
+      });
+      const draft = structuredClone(f.draft);
+      draft.nodes[0]!.config.modelConfigurationId = model.id;
+      await db.workflow.update({
+        where: { id: f.workflow.id },
+        data: { draft: z.record(z.string(), z.json()).parse(draft) },
+      });
+      const response = await api(
+        `/workflows/${f.workflow.id}/publish`,
+        'POST',
+        { expectedRevision: 1 },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        code: 'MODEL_CONFIGURATION_INVALID',
+      });
+      expect(
+        await db.workflowVersion.count({
+          where: { workflowId: f.workflow.id },
+        }),
+      ).toBe(0);
+    }
+  });
+
+  it('stale revision 和 12 次跨 API 并发发布保持原语义，后续 Draft / 停用 / 凭证轮换不改旧版本', async () => {
+    const f = await textPublication();
+    await api(`/workflows/${f.workflow.id}/draft`, 'PUT', {
+      expectedRevision: 1,
+      definition: f.draft,
+    });
+    expect(
+      (
+        await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+          expectedRevision: 1,
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
+    ).toBe(0);
+    const responses = await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        api(
+          `/workflows/${f.workflow.id}/publish`,
+          'POST',
+          { expectedRevision: 2 },
+          0,
+          i % 2,
+        ),
+      ),
+    );
+    expect(responses.filter(({ status }) => status === 201)).toHaveLength(1);
+    expect(responses.filter(({ status }) => status === 409)).toHaveLength(11);
+    const version = workflowVersionResponseSchema.parse(
+      await responses.find(({ status }) => status === 201)!.json(),
+    );
+    for (const response of responses.filter(({ status }) => status === 409))
+      expect(await response.json()).toMatchObject({
+        code: 'WORKFLOW_REVISION_ALREADY_PUBLISHED',
+      });
+    await api(`/workflows/${f.workflow.id}/draft`, 'PUT', {
+      expectedRevision: 2,
+      definition: f.draft,
+    });
+    await f.models.replaceCredentials(
+      userIds[0]!,
+      f.project.id,
+      f.provider.id,
+      { apiKey: 'rotated-test-credential' },
+    );
+    await db.modelProvider.update({
+      where: { id: f.provider.id },
+      data: { enabled: false },
+    });
+    expect(
+      (
+        await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+          expectedRevision: 3,
+        })
+      ).status,
+    ).toBe(400);
+    const old = await api(`/workflow-versions/${version.id}`);
+    expect(await old.json()).toEqual(version);
+    expect(
+      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
+    ).toBe(1);
+    expect(await readWorkflow(f.project.id)).toMatchObject({ revision: 3 });
+  });
+
+  it('并发停用配置时发布等待配置行锁，读取提交后的停用状态后拒绝', async () => {
+    const f = await textPublication();
+    await api(`/workflows/${f.workflow.id}/draft`, 'PUT', {
+      expectedRevision: 1,
+      definition: f.draft,
+    });
+    let release!: () => void;
+    let locked!: (pid: number) => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const ready = new Promise<number>((resolve) => {
+      locked = resolve;
+    });
+    const disabling = db.$transaction(
+      async (tx) => {
+        const [connection] = await tx.$queryRaw<
+          { pid: number }[]
+        >`SELECT pg_backend_pid() AS pid`;
+        await tx.modelConfiguration.update({
+          where: { id: f.model.id },
+          data: { enabled: false },
+        });
+        locked(connection!.pid);
+        await gate;
+      },
+      { timeout: 15000 },
+    );
+    const pid = await ready;
+    const publishing = api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+      expectedRevision: 2,
+    });
+    try {
+      await vi.waitFor(async () => {
+        const [result] = await db.$queryRaw<
+          { waiting: boolean }[]
+        >`SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE ${pid} = ANY(pg_blocking_pids(pid))) AS waiting`;
+        expect(result?.waiting).toBe(true);
+      });
+    } finally {
+      release();
+      await disabling;
+    }
+    expect((await publishing).status).toBe(400);
+    expect(
+      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
+    ).toBe(0);
+  });
+
+  it('发布与版本查询默认认证、隔离所有者并检查写 Origin；严格拒绝客户端定义覆盖', async () => {
+    const project = await createProject();
+    const workflow = await readWorkflow(project.id);
+    const published = await api(`/workflows/${workflow.id}/publish`, 'POST', {
+      expectedRevision: 1,
+    });
+    const version = workflowVersionResponseSchema.parse(await published.json());
+    for (const [path, method, body] of [
+      [`/workflows/${workflow.id}/publish`, 'POST', { expectedRevision: 1 }],
+      [`/workflows/${workflow.id}/versions`, 'GET', undefined],
+      [`/workflow-versions/${version.id}`, 'GET', undefined],
+    ] as const) {
+      expect((await api(path, method, body, null)).status).toBe(401);
+      expect((await api(path, method, body, 1)).status).toBe(404);
+    }
+    expect(
+      (
+        await api(
+          `/workflows/${workflow.id}/publish`,
+          'POST',
+          { expectedRevision: 1 },
+          0,
+          0,
+          'https://untrusted.invalid',
+        )
+      ).status,
+    ).toBe(403);
+    for (const body of [
+      {},
+      { expectedRevision: '1' },
+      { expectedRevision: 1, definition: emptyDraft },
+      { expectedRevision: 1, ownerId: userIds[1] },
+    ])
+      expect(
+        (await api(`/workflows/${workflow.id}/publish`, 'POST', body)).status,
+      ).toBe(400);
+    expect(
+      (
+        await api(`/workflows/${randomUUID()}/publish`, 'POST', {
+          expectedRevision: 1,
+        })
+      ).status,
+    ).toBe(404);
+    expect((await api(`/workflow-versions/${randomUUID()}`)).status).toBe(404);
+    expect((await api(`/workflows/${randomUUID()}/versions`)).status).toBe(404);
+    expect(
+      (await api(`/workflows/${workflow.id}/versions?beforeVersion=invalid`))
+        .status,
+    ).toBe(400);
+    await db.project.update({
+      where: { id: project.id },
+      data: { ownerId: userIds[1] },
+    });
+    expect((await api(`/workflow-versions/${version.id}`)).status).toBe(404);
+    expect((await api(`/workflows/${workflow.id}/versions`)).status).toBe(404);
+  });
+
+  it('版本列表按 version 倒序有界分页，空列表不产生版本', async () => {
+    const project = await createProject();
+    const workflow = await readWorkflow(project.id);
+    const empty = await api(`/workflows/${workflow.id}/versions`);
+    expect(await empty.json()).toEqual({ items: [], nextBeforeVersion: null });
+    for (let revision = 1; revision <= 22; revision++) {
+      if (revision > 1)
+        expect(
+          (
+            await api(`/workflows/${workflow.id}/draft`, 'PUT', {
+              expectedRevision: revision - 1,
+              definition: emptyDraft,
+            })
+          ).status,
+        ).toBe(200);
+      expect(
+        (
+          await api(`/workflows/${workflow.id}/publish`, 'POST', {
+            expectedRevision: revision,
+          })
+        ).status,
+      ).toBe(201);
+    }
+    const first = workflowVersionListResponseSchema.parse(
+      await (await api(`/workflows/${workflow.id}/versions`)).json(),
+    );
+    expect(first.items.map(({ version }) => version)).toEqual(
+      Array.from({ length: 20 }, (_, i) => 22 - i),
+    );
+    expect(first.nextBeforeVersion).toBe(3);
+    const second = workflowVersionListResponseSchema.parse(
+      await (
+        await api(`/workflows/${workflow.id}/versions?beforeVersion=3`)
+      ).json(),
+    );
+    expect(second.items.map(({ version }) => version)).toEqual([2, 1]);
+    expect(second.nextBeforeVersion).toBeNull();
+  });
 });
 
 afterAll(async () => {
@@ -428,10 +1060,10 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
     expect(await readWorkflow(project.id)).toEqual(workflow);
   });
 
-  it('保存不改写已有发布版本；没有新增发布 HTTP 路由，也不生成 Run 或 Outbox', async () => {
+  it('保存不改写已有发布版本，也不生成 Run 或 Outbox', async () => {
     const project = await createProject();
     const workflow = await readWorkflow(project.id);
-    const service = new WorkflowService(
+    const service = createWorkflowService(
       database,
       new NodeRegistry([createTextGenerationNodeType()]),
     );
@@ -459,7 +1091,7 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
           expectedRevision: 2,
         })
       ).status,
-    ).toBe(404);
+    ).toBe(400);
     expect(
       await db.workflowRun.count({ where: { projectId: project.id } }),
     ).toBe(0);

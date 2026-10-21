@@ -24,7 +24,7 @@ import type { AuthService } from '../src/auth/auth.service.js';
 import { mountAuth } from '../src/auth/auth.http.js';
 import { authBaseUrl } from '../src/auth/trusted-origin.js';
 import { ApiExceptionFilter } from '../src/http/exception.filter.js';
-import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
+import { createWorkflowService } from './fixtures/workflow-service.js';
 
 // 默认不创建应用、读取供应商凭证或发送模型请求；仅操作员显式启用后才进行一次收费调用。
 const enabled = process.env.DRAMAFLOW_LIVE_AI === '1';
@@ -273,7 +273,7 @@ describe('显式启用：真实外部文本模型端到端验收', () => {
             draft: z.record(z.string(), z.json()).parse(definition),
           },
         });
-        const version = await new WorkflowService(
+        const version = await createWorkflowService(
           database,
           app.get(NodeRegistry),
         ).publish(ownerId, {

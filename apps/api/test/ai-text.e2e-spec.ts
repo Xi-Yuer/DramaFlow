@@ -19,7 +19,6 @@ import {
   WorkflowExecutionQueue,
   workflowExecutionJobId,
 } from '@dramaflow/server';
-import { NodeRegistry } from '@dramaflow/workflow';
 import type { Type } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -29,7 +28,7 @@ import type { AuthService } from '../src/auth/auth.service.js';
 import { mountAuth } from '../src/auth/auth.http.js';
 import { authBaseUrl } from '../src/auth/trusted-origin.js';
 import { ApiExceptionFilter } from '../src/http/exception.filter.js';
-import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
+import { storeRuntimeTestVersion } from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
@@ -269,6 +268,7 @@ async function published(
   projectId: string,
   modelConfigurationId: string,
   owner = ownerId,
+  legacy = false,
 ) {
   const definition: WorkflowDefinition = {
     inputs: [{ name: 'prompt', type: StringType }],
@@ -302,10 +302,21 @@ async function published(
       draft: z.record(z.string(), z.json()).parse(definition),
     },
   });
-  return new WorkflowService(database, app.get(NodeRegistry)).publish(owner, {
-    workflowId: workflow.id,
-    expectedRevision: 1,
-  });
+  if (legacy) return storeRuntimeTestVersion(database, workflow, definition);
+  const response = await fetch(
+    `${apiBase}/api/v1/workflows/${workflow.id}/publish`,
+    {
+      method: 'POST',
+      headers: {
+        Cookie: cookies.get(owner) ?? '',
+        Origin: new URL(authBaseUrl()).origin,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ expectedRevision: 1 }),
+    },
+  );
+  expect(response.status).toBe(201);
+  return z.object({ id: z.string() }).parse(await response.json());
 }
 async function submit(workflowVersionId: string, owner = ownerId) {
   const response = await fetch(`${apiBase}/api/v1/workflow-runs`, {
@@ -579,7 +590,7 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
     });
   });
 
-  it('缺失 / 禁用配置、禁用 Provider 或坏密文均进入现有 NodeRun failed，不请求模型', async () => {
+  it('历史快照中的缺失 / 禁用配置、禁用 Provider 或坏密文仍由 Runtime 拒绝，不请求模型', async () => {
     for (const mode of [
       'missing',
       'model_disabled',
@@ -606,6 +617,8 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
       const version = await published(
         p.id,
         mode === 'missing' ? randomUUID() : f.configuration.id,
+        ownerId,
+        true,
       );
       const run = await terminal((await submit(version.id)).id, 'failed');
       const nodes = await assertSafePersistence(run.id);
@@ -672,7 +685,12 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
       [otherProject, ownerId],
       [foreign, outsiderId],
     ] as const) {
-      const version = await published(target.id, f.configuration.id, owner);
+      const version = await published(
+        target.id,
+        f.configuration.id,
+        owner,
+        true,
+      );
       const run = await terminal(
         (await submit(version.id, owner)).id,
         'failed',

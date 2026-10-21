@@ -26,7 +26,10 @@ import type { AuthService } from '../src/auth/auth.service.js';
 import { mountAuth } from '../src/auth/auth.http.js';
 import { authBaseUrl } from '../src/auth/trusted-origin.js';
 import { ApiExceptionFilter } from '../src/http/exception.filter.js';
-import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
+import {
+  createWorkflowService,
+  storeRuntimeTestVersion,
+} from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
@@ -248,13 +251,15 @@ async function version(native = false) {
       draft: z.record(z.string(), z.json()).parse(definition),
     },
   });
-  const published = await new WorkflowService(
-    database,
-    new NodeRegistry(),
-  ).publish(ownerId, {
-    workflowId: workflow.id,
-    expectedRevision: 1,
-  });
+  const published = native
+    ? await storeRuntimeTestVersion(database, workflow, definition)
+    : await createWorkflowService(database, new NodeRegistry()).publish(
+        ownerId,
+        {
+          workflowId: workflow.id,
+          expectedRevision: 1,
+        },
+      );
   return { projectId: project.id, workflowVersionId: published.id };
 }
 async function waitRun(id: string, status: string, waitingRevision?: number) {

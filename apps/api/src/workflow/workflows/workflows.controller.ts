@@ -2,6 +2,8 @@ import {
   initializeProjectWorkflowRequestSchema,
   saveWorkflowDraftRequestSchema,
   saveWorkflowDraftResponseSchema,
+  publishWorkflowRequestSchema,
+  workflowVersionResponseSchema,
 } from '@dramaflow/contracts';
 import {
   Body,
@@ -12,6 +14,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 import { Actor } from '../../auth/auth.guard.js';
 import type { AuthActor } from '../../auth/auth.service.js';
@@ -44,6 +47,29 @@ export class ProjectWorkflowsController {
 export class WorkflowsController {
   constructor(private readonly workflows: WorkflowService) {}
 
+  @Post(':workflowId/publish')
+  @Header('Cache-Control', 'no-store')
+  async publish(
+    @Actor() actor: AuthActor,
+    @Param('workflowId') workflowId: string,
+    @Body() body: unknown,
+  ) {
+    const request = publishWorkflowRequestSchema.parse(body);
+    return workflowVersionResponseSchema.parse(
+      await this.workflows.publish(actor.user.id, { ...request, workflowId }),
+    );
+  }
+
+  @Get(':workflowId/versions')
+  @Header('Cache-Control', 'no-store')
+  listVersions(
+    @Actor() actor: AuthActor,
+    @Param('workflowId') workflowId: string,
+    @Query() query: unknown,
+  ) {
+    return this.workflows.listVersions(actor.user.id, workflowId, query);
+  }
+
   @Put(':workflowId/draft')
   @Header('Cache-Control', 'no-store')
   async saveDraft(
@@ -58,5 +84,16 @@ export class WorkflowsController {
         workflowId,
       }),
     );
+  }
+}
+
+@Controller('workflow-versions')
+export class WorkflowVersionsController {
+  constructor(private readonly workflows: WorkflowService) {}
+
+  @Get(':versionId')
+  @Header('Cache-Control', 'no-store')
+  get(@Actor() actor: AuthActor, @Param('versionId') versionId: string) {
+    return this.workflows.getVersion(actor.user.id, versionId);
   }
 }

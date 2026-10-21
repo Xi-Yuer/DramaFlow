@@ -4,6 +4,9 @@ import {
   saveWorkflowDraftRequestSchema,
   saveWorkflowDraftResponseSchema,
   workflowResponseSchema,
+  publishWorkflowRequestSchema,
+  workflowVersionResponseSchema,
+  workflowVersionListResponseSchema,
 } from '../src/index.js';
 
 const draft = { inputs: [], nodes: [], edges: [], outputs: [] };
@@ -49,5 +52,51 @@ describe('Workflow 编辑 HTTP 契约', () => {
     ])
       expect(saveWorkflowDraftRequestSchema.safeParse(value).success).toBe(false);
     expect(saveWorkflowDraftResponseSchema.parse({ revision: 4 })).toEqual({ revision: 4 });
+  });
+});
+
+describe('Workflow 发布与版本 HTTP 契约', () => {
+  it('发布只接受 expectedRevision，不接受客户端替换定义或身份', () => {
+    expect(publishWorkflowRequestSchema.parse({ expectedRevision: 2 })).toEqual({
+      expectedRevision: 2,
+    });
+    for (const value of [
+      {},
+      { expectedRevision: '2' },
+      { expectedRevision: 0 },
+      { expectedRevision: 2, definition: draft },
+      { expectedRevision: 2, workflowId: 'other' },
+    ])
+      expect(publishWorkflowRequestSchema.safeParse(value).success).toBe(false);
+  });
+
+  it('版本完整响应和列表摘要保留来源修订，拒绝秘密或草稿状态字段', () => {
+    const version = {
+      id: 'version-1',
+      workflowId: workflow.id,
+      projectId: workflow.projectId,
+      version: 1,
+      sourceRevision: 3,
+      publishedAt: workflow.createdAt,
+      definition: draft,
+    };
+    expect(workflowVersionResponseSchema.parse(JSON.parse(JSON.stringify(version)))).toEqual(
+      version,
+    );
+    const { definition: _definition, ...summary } = version;
+    expect(
+      workflowVersionListResponseSchema.parse({ items: [summary], nextBeforeVersion: null }),
+    ).toEqual({ items: [summary], nextBeforeVersion: null });
+    for (const extra of [
+      { encryptedCredentials: 'secret' },
+      { ownerId: 'owner' },
+      { draft },
+      { enabled: true },
+    ])
+      expect(workflowVersionResponseSchema.safeParse({ ...version, ...extra }).success).toBe(false);
+    expect(
+      workflowVersionListResponseSchema.safeParse({ items: [version], nextBeforeVersion: null })
+        .success,
+    ).toBe(false);
   });
 });

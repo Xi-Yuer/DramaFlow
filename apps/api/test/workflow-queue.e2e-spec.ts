@@ -5,7 +5,6 @@ import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { NumberType, type WorkflowDefinition } from '@dramaflow/contracts';
-import { NodeRegistry } from '@dramaflow/workflow';
 import {
   DatabaseService,
   WorkflowCheckpointerService,
@@ -17,7 +16,7 @@ import {
   workflowExecutionJobId,
 } from '@dramaflow/server';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
+import { storeRuntimeTestVersion } from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
@@ -143,13 +142,7 @@ async function fixture(native = false, businessFailure = false) {
       draft: z.record(z.string(), z.json()).parse(definition),
     },
   });
-  const version = await new WorkflowService(
-    database,
-    new NodeRegistry(),
-  ).publish(ownerId, {
-    workflowId: workflow.id,
-    expectedRevision: 1,
-  });
+  const version = await storeRuntimeTestVersion(database, workflow, definition);
   const input = {
     projectId: project.id,
     workflowId: workflow.id,

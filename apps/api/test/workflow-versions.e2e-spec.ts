@@ -11,7 +11,10 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
+import {
+  registerTextTestNodes,
+  createWorkflowService,
+} from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
@@ -27,7 +30,10 @@ const db = database.client;
 const ownerId = randomUUID();
 const otherId = randomUUID();
 const repositories = new WorkflowVersionRepositories(database);
-const workflows = new WorkflowService(database, new NodeRegistry());
+const workflows = createWorkflowService(
+  database,
+  registerTextTestNodes(new NodeRegistry()),
+);
 
 beforeAll(async () => {
   for (const id of [ownerId, otherId])

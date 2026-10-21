@@ -32,15 +32,15 @@ test/workflow-versions.e2e-spec.ts 在真实 PostgreSQL 经 WorkflowService 保�
 
 test/workflows.e2e-spec.ts 使用真实服务和两个独立数据库连接，检查 12 次同修订并发编辑只成功一次、过期发布不生成版本、12 次同修订并发发布只生成一个版本并返回明确重复发布冲突，以及新修订继续获得下一版本号。用 PostgreSQL 阻塞信息验证发布实际等待未提交编辑行锁，编辑提交后以新 revision 拒绝过期请求，不依赖固定 sleep 猜测顺序。另覆盖发布重新校验存储草稿、失败不消耗版本号、输入必填 / 严格字段、所有者与过期权限、来源修订唯一 / 正数约束。此文件不测试 HTTP、运行或持久 checkpoint。
 
-test/workflow-editor-api.e2e-spec.ts 使用两个正式 API 实例、真实密码会话和 dramaflow_test，检查新建项目同时建立默认 Workflow、初始化失败整体回滚、只读不写入、旧项目并发初始化同一身份、草稿并发单胜者、独立 Project / Workflow revision、权限变化、Origin、严格字段，以及保存不改变已发布版本或生成 Run / Outbox。只清理自建账号及其级联数据，故障触发器仅针对随机测试项目并在 finally 移除；不启动 Worker 或调用模型。contracts/test/workflow-api.test.ts 检查编辑请求与响应的独立修订、JSON 往返和字段白名单。该 HTTP 验证不代表 Web 已接入持久化。
+test/workflow-editor-api.e2e-spec.ts 使用两个正式 API 实例、真实密码会话和 dramaflow_test，检查新建项目同时建立默认 Workflow、初始化失败整体回滚、只读不写入、旧项目并发初始化同一身份、草稿并发单胜者、独立 Project / Workflow revision、权限变化、Origin、严格字段，以及保存不改变已发布版本或生成 Run / Outbox。只清理自建账号及其级联数据，故障触发器仅针对随机测试项目并在 finally 移除；不启动 Worker 或调用模型。contracts/test/workflow-api.test.ts 检查编辑请求与响应的独立修订、JSON 往返和字段白名单。同文件另验证正式 Publish 的节点 / 端口 / 来源 / 配置 / 模型边界、失败无版本、跨 API 并发单胜者、配置共享行锁、不可变旧快照、版本读取和分页。发布用离线 endpoint 仍可成功，检查 SecretsService.decrypt 未被调用；不以外部在线状态作为条件。该 HTTP 验证不代表 Web 已接入持久化。
 
 test/workflow-runner.e2e-spec.ts 使用真实 PostgreSQL 的版本、WorkflowRun、NodeRun Repository、普通 Action Compiler 和生产 provider 的官方 PostgresSaver，验证首次成功、节点失败、原生暂停、NodeRun completed 但最终输出解析失败、编译失败、完成记录不可用时不反向 failed。版本快照在测试中显式建数，Runner 经生产读取实现获取。用 pnpm test:integration 在 dramaflow_test 运行，测试只清理自己创建的用户、项目、级联记录及 thread checkpoint，不清空开发库。可定向执行该用例；内容持久化由 artifacts.e2e-spec、运行 HTTP 由 workflow-run-api.e2e-spec 另行验证。workflow 包另验证提交时版本读取返回 null 不创建运行；执行时版本读取失败由 claim 成功者记录 load_version 失败。
 
-test/persistent-checkpoint.e2e-spec.ts 是真实 PostgreSQL 跨进程测试，不用 MemorySaver：启动进程 A 的 Nest / Repository / Saver / Compiler / Runner，interrupt 后等待 A 完全退出；再启动 B，从原 workflowVersionId / threadId 恢复并完成。期间通过真实 WorkflowService 更新 / 发布新版本，检查原输入、已完成节点和原版本仍有效。两个全新进程另用 IPC 屏障先同时读到 waiting，释放后只有一个 claim 成功且进入 graph.invoke；第三项验证不可用 checkpoint 数据库使 Nest 初始化失败。子进程导入生产持久化模块与 Repository，原生 interrupt 图是测试专用 Compiler，不能视作 HumanReview 产品或 NodeRun waiting 实现。测试清理只调用官方 deleteThread 删除自建 thread，并关闭连接。health.e2e-spec 验证真正 API 启动和 checkpoint 读取健康项。
+test/persistent-checkpoint.e2e-spec.ts 是真实 PostgreSQL 跨进程测试，不用 MemorySaver：启动进程 A 的 Nest / Repository / Saver / Compiler / Runner，interrupt 后等待 A 完全退出；再启动 B，从原 workflowVersionId / threadId 恢复并完成。期间通过真实 WorkflowService 更新草稿，再显式写入测试专用原生中断图的新版本，检查原输入、已完成节点和原版本仍有效。两个全新进程另用 IPC 屏障先同时读到 waiting，释放后只有一个 claim 成功且进入 graph.invoke；第三项验证不可用 checkpoint 数据库使 Nest 初始化失败。子进程导入生产持久化模块与 Repository，原生 interrupt 图是测试专用 Compiler，不能视作 HumanReview 产品或 NodeRun waiting 实现。测试清理只调用官方 deleteThread 删除自建 thread，并关闭连接。health.e2e-spec 验证真正 API 启动和 checkpoint 读取健康项。
 
 test/workflow-runtime.e2e-spec.ts 动态加载正式 API / Worker AppModule 编译产物，不覆盖生产 provider。验证 API 没有 Runner factory / ExecutionService、Worker 完整 DI、API 事务提交 pending / Outbox 后由实际队列 Consumer 完成同一 Run，以及权限、未知节点、Asset 未配置、无效媒体输出和缺失 checkpoint 的边界。生产 Registry 已注册正式文本节点，空图用例只验证运行装配；模型调用另由文本专项验证。
 
-test/ai-text.e2e-spec.ts 使用真实鉴权 API、正式 WorkflowService 发布、Prisma 配置、Outbox / BullMQ 和独立正式 Worker，通过本机 Chat Completions 协议服务验证生产文本链。覆盖 CLI 加密配置写库、模型 / endpoint 不可改写、同项目复合外键、凭证轮换、缺失 / 禁用配置、坏密文、模型 503 不重试及所有者 / 项目隔离。供应商响应错误与测试凭证不进入持久记录和 Worker 日志。本机协议测试和 plugins 单元测试不能替代真实模型调用。
+test/ai-text.e2e-spec.ts 使用真实鉴权 API、正式发布 HTTP、Prisma 配置、Outbox / BullMQ 和独立正式 Worker，通过本机 Chat Completions 协议服务验证生产文本链。覆盖 CLI 加密配置写库、模型 / endpoint 不可改写、同项目复合外键、凭证轮换、缺失 / 禁用配置、坏密文、模型 503 不重试及所有者 / 项目隔离。不可用或跨项目配置的历史快照显式建数以验证 Runtime 防御，不声称能够通过新 Publish。供应商响应错误与测试凭证不进入持久记录和 Worker 日志。本机协议测试和 plugins 单元测试不能替代真实模型调用。
 
 test/ai-text-live.e2e-spec.ts 默认跳过，不能因本机存在密钥就自动执行。先构建应用、启动基础设施，在受保护的服务器环境明确设置 DRAMAFLOW_LIVE_AI_BASE_URL、DRAMAFLOW_LIVE_AI_MODEL、DRAMAFLOW_LIVE_AI_CREDENTIAL_ENV，以及最后一个变量指定的凭证变量，再从仓库根目录运行 `pnpm test:ai:live`。命令读取根 .env，仅允许本项目本机数据库并使用 dramaflow_test 与随机测试队列，部署测试迁移后执行一次真实外部请求。它创建并发布正式 Workflow，经鉴权 HTTP / 队列 / 正式 Worker 验证 NodeRun 与最终输出，检查凭证不进入版本、运行、checkpoint 或日志，最后清理自建数据。未设置默认厂商或模型，不自动重试；再次显式执行会产生新的外部请求。API Key 不得出现在命令行或测试断言输出。真实验收结果仅维护在 [当前架构](architecture.md#文本-ai-与-provider-plugin)。CLI 输入和失败脱敏另用 `node --test scripts/configure-model-provider.test.mjs` 检查。
 
@@ -51,6 +51,8 @@ test/workflow-run-api.e2e-spec.ts 使用两个真实 HTTP API、密码会话 / �
 test/workflow-queue.e2e-spec.ts 使用真实 PostgreSQL / Redis、正式 Submission / Dispatcher / Consumer，并对独立子进程执行 SIGKILL。覆盖提交事务后未 enqueue、enqueue 后 published 尚未提交、Worker 收件或 claim 后死亡、BullMQ stalled 重投、连续两轮 resume 与 Redis 旧 Job 删除后重投的持久去重。额外验证数据库触发器强制 Outbox INSERT 失败时 Run 一同回滚、投递失败保留意图 / 尝试次数、claim 前临时基础设施故障重试，以及真实 NodeRun execute 失败只记 attempt 1、队列不跑五次业务执行。claim 后结果不明保留 running，意图 recovery_required；不以自动重跑冒充安全恢复。
 
 恢复的数据库用例另外验证同一运行经过两次 resume 完成、同一 State 输出保留、运行记录与 thread 数不增加、恢复失败结束同一记录。两个不同 Repository / Runner 实例通过屏障先都读到 waiting，图执行期间只有一个 claim 成功并 invoke，另一个收到 WORKFLOW_RUN_NOT_WAITING。Repository 用例另测试 12 个并发 claim 的单胜者、完整六状态读取、所有者 / 项目 / 过期权限与非 waiting 不更新；不以纯内存替身证明并发持久化正确。
+
+workflow/test/validate-publish.test.ts 用真实 NodeRegistry / Node Schema、共享 isTypeAssignable 和原生 LangGraph 命名检查验证静态语义；server/test/model-publish.spec.ts 定向检查插件缺失能力时不执行或解密，真实 SQL 锁与项目隔离由 HTTP 集成证明。原生等待、崩溃恢复及历史不兼容图通过 fixtures/workflow-service.ts 显式建版本，正常发布服务不再放行未注册节点；版本 / 草稿并发测试则在测试 Registry 显式注册实际节点声明。
 
 节点类型开发对照 [Node 模型](node-model.md) 与 [Manifest 实施说明](node-type-implementation.md)。分别验证纯 JSON Manifest 的配置类型 / 默认值、输出 storagePolicy 可选且枚举合法 / 输入不接受该字段、服务端三组 Zod 与声明字段一致、精确类型版本注册以及 listManifests 的白名单与数据隔离。Preset 只测试配置模板行为，不作为 Registry 身份；保留 transform 和默认值不回写定义的回归。
 

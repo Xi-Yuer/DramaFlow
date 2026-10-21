@@ -4,7 +4,7 @@ DramaFlow 定位为**面向 AI 视频内容生产的可编排工作流平台，�
 
 当前已有登录、平台鉴权、账户中心、项目管理与 React Flow 画布。每项目一张画布，保存名称、视口及 revision，按所有者隔离。画布已查询节点目录、注册通用 renderer，并接入 Data / Control Edge 连线、重连与删除事件。生产目录提供正式文本生成节点 `ai.text_generate@1`；画布仍无添加节点、Workflow 保存 / 发布、模型配置或运行交互。
 
-Workflow 草稿、完整不可变版本、WorkflowRun / NodeRun 均已持久化。新项目原子创建默认 Workflow，已有项目可通过受鉴权 HTTP 显式初始化、读取和保存草稿；Workflow revision 与 Project revision 独立，保存不发布、不执行，Web 尚未接入。发布仍为内部服务，绑定明确修订。受鉴权保护的 Run start / get / resume HTTP 经 PostgreSQL Outbox、BullMQ 和独立 Worker 执行，原 thread 通过官方 PostgreSQL Checkpointer 恢复；结果不明的执行停在 recovery_required，不自动重跑业务。Artifact metadata 保存 PostgreSQL，JSON / 二进制内容写入 RustFS，State 与历史只保存引用；Asset 内容仍未配置。
+Workflow 草稿、完整不可变版本、WorkflowRun / NodeRun 均已持久化。新项目原子创建默认 Workflow，已有项目可通过受鉴权 HTTP 显式初始化、读取和保存草稿；Workflow revision 与 Project revision 独立，保存不发布、不执行，Web 尚未接入。已有正式发布、版本列表与完整版本读取 HTTP；发布绑定明确修订，严格校验当前 Action DAG 的节点、端口、输入输出和本地模型配置，不执行外部能力。受鉴权保护的 Run start / get / resume HTTP 经 PostgreSQL Outbox、BullMQ 和独立 Worker 执行，原 thread 通过官方 PostgreSQL Checkpointer 恢复；结果不明的执行停在 recovery_required，不自动重跑业务。Artifact metadata 保存 PostgreSQL，JSON / 二进制内容写入 RustFS，State 与历史只保存引用；Asset 内容仍未配置。
 
 正式文本节点通过受信任的 PluginRegistry / Capability 调用模型，Workflow 只引用项目内的模型配置 ID。Provider 实例明确指定插件版本、endpoint 与加密凭证，ModelConfiguration 固定 capability、模型名及参数；已有 OpenAI-compatible 文本参考插件，没有默认厂商或模型。模型配置暂由服务端工具管理，无配置 HTTP / UI；独立 Worker 复用既有 Binding、Codec、NodeRun 与最终输出管线。测试与真实外部调用的验证范围见 [当前架构](docs/architecture.md#文本-ai-与-provider-plugin)。
 

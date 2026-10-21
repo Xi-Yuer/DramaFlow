@@ -13,7 +13,10 @@ import {
 import { NodeRegistry, workflowStateSchema } from '@dramaflow/workflow';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
+import {
+  createWorkflowService,
+  storeRuntimeTestVersion,
+} from './fixtures/workflow-service.js';
 import { persistentTestDefinition } from './fixtures/persistent-workflow-compiler.js';
 
 if (
@@ -158,11 +161,12 @@ async function fixture() {
       draft: z.record(z.string(), z.json()).parse(persistentTestDefinition()),
     },
   });
-  const service = new WorkflowService(database, new NodeRegistry());
-  const version = await service.publish(ownerId, {
-    workflowId: workflow.id,
-    expectedRevision: 1,
-  });
+  const service = createWorkflowService(database, new NodeRegistry());
+  const version = await storeRuntimeTestVersion(
+    database,
+    workflow,
+    persistentTestDefinition(),
+  );
   const identity = {
     ownerId,
     projectId: project.id,
@@ -202,10 +206,11 @@ describe('PostgreSQL Checkpoint 跨进程恢复', () => {
       expectedRevision: 1,
       definition: future,
     });
-    await f.service.publish(ownerId, {
-      workflowId: f.workflow.id,
-      expectedRevision: 2,
-    });
+    await storeRuntimeTestVersion(
+      database,
+      { ...f.workflow, revision: 2 },
+      future,
+    );
     const b = launch({
       action: 'resume',
       ownerId,

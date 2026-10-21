@@ -30,7 +30,7 @@ GenericWorkflowNode 按精确 Manifest 生成数据 Handle，其 ID 必须等于
 
 execute 通过上下文中的 CapabilityInvoker 请求 text.generate，不依赖具体厂商 SDK。同一能力可以由明确注册的不同 Provider 插件提供；Provider / 模型配置由 Worker 作用域能力服务读取和授权。新增厂商不生成新的核心 NodeType，也不为其复制 Compiler 或 Executor。
 
-WorkflowService 保存 Draft 时拒绝已注册 Action 的额外 config 字段，允许必填选择尚未完成；发布时按严格 configSchema 完整校验。已有文本节点因此不能夹带 apiKey、baseURL 等配置字段进入不可变版本；模型配置存在性和运行权限仍由执行边界检查，尚未提供完整发布语义校验。具体模型与凭证边界见 [架构](architecture.md#文本-ai-与-provider-plugin)。
+WorkflowService 保存 Draft 时拒绝已注册 Action 的额外 config 字段，允许必填选择尚未完成；发布时按严格 configSchema 完整校验。发布还验证精确注册类型、端口、输入来源、共享类型兼容、常量及最终输出；文本节点模型配置须存在、归属同项目、enabled 且满足 text.generate，插件和参数由正式 Schema 校验。未实现的 Asset / 命名控制端口 / 非 Action 结构拒绝发布。文本节点不能夹带 apiKey、baseURL 等配置字段进入不可变版本，凭证解密和运行时资源 / 权限仍在执行边界检查。具体模型与凭证边界见 [架构](architecture.md#文本-ai-与-provider-plugin)。
 
 ## 实施边界
 

@@ -11,7 +11,10 @@ import {
 import { NotFoundException } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
+import {
+  registerTextTestNodes,
+  createWorkflowService,
+} from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
@@ -25,9 +28,11 @@ if (
 const database = new DatabaseService();
 const secondConnection = new DatabaseService();
 const db = database.client;
-const registry = new NodeRegistry([createTextGenerationNodeType()]);
-const service = new WorkflowService(database, registry);
-const otherService = new WorkflowService(secondConnection, registry);
+const registry = registerTextTestNodes(
+  new NodeRegistry([createTextGenerationNodeType()]),
+);
+const service = createWorkflowService(database, registry);
+const otherService = createWorkflowService(secondConnection, registry);
 const ownerId = randomUUID();
 const otherId = randomUUID();
 
@@ -138,7 +143,7 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
     ).toBe(0);
   });
 
-  it('正式 AI Node 可保存未选模型的 Draft，发布前必须补齐配置，发布不查询或改写模型身份', async () => {
+  it('正式 AI Node 可保存未选模型的 Draft，发布前必须补齐可用模型配置', async () => {
     const f = await fixture();
     const draft = definition('生成对白');
     draft.nodes[0]!.type = 'ai.text_generate';
@@ -169,13 +174,18 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
       expectedRevision: 11,
       definition: draft,
     });
-    const version = await service.publish(ownerId, {
-      workflowId: f.workflow.id,
-      expectedRevision: 12,
+    await expect(
+      service.publish(ownerId, {
+        workflowId: f.workflow.id,
+        expectedRevision: 12,
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: { code: 'MODEL_CONFIGURATION_UNAVAILABLE' },
     });
-    expect(version.definition.nodes[0]!.config).toEqual({
-      modelConfigurationId: selected,
-    });
+    expect(
+      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
+    ).toBe(0);
   });
 
   it('两个独立连接并发以 revision 8 编辑，只有一个成功写入 revision 9', async () => {

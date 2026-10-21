@@ -25,7 +25,7 @@ import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { WorkflowService } from '../src/workflow/workflows/workflow.service.js';
+import { createWorkflowService } from './fixtures/workflow-service.js';
 import {
   artifactDefinition,
   imageBytes,
@@ -96,7 +96,7 @@ async function fixture(owner = ownerId) {
       draft: z.record(z.string(), z.json()).parse(artifactDefinition()),
     },
   });
-  const version = await new WorkflowService(
+  const version = await createWorkflowService(
     database,
     app.get(NodeRegistry),
   ).publish(owner, {

@@ -13,14 +13,13 @@ function invalidConfiguration(): BadRequestException {
 export function validateWorkflowNodeConfigurations(
   definition: WorkflowDefinition,
   registry: NodeRegistry,
-  phase: 'draft' | 'publish',
 ): void {
   for (const node of definition.nodes) {
     let nodeType: ReturnType<NodeRegistry['get']>;
     try {
       nodeType = registry.get(node.type, node.typeVersion);
     } catch (error) {
-      // 保留未知类型在编译边界报错的既有行为，本层不扩展为发布级 Registry 校验。
+      // 编辑中的草稿可引用尚不可用的类型；正式发布另走完整语义校验。
       if (
         error instanceof NodeRegistrationError &&
         error.code === 'unavailable_type'
@@ -29,14 +28,8 @@ export function validateWorkflowNodeConfigurations(
       throw error;
     }
     if (nodeType.manifest.executionKind !== 'action') continue;
-    if (phase === 'draft') {
-      const allowed = new Set(
-        nodeType.manifest.config.map((field) => field.key),
-      );
-      if (Object.keys(node.config).some((key) => !allowed.has(key)))
-        throw invalidConfiguration();
-    } else if (!nodeType.configSchema.strict().safeParse(node.config).success) {
+    const allowed = new Set(nodeType.manifest.config.map((field) => field.key));
+    if (Object.keys(node.config).some((key) => !allowed.has(key)))
       throw invalidConfiguration();
-    }
   }
 }

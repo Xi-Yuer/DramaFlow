@@ -1,19 +1,33 @@
 import {
   saveWorkflowDraftRequestSchema,
+  publishWorkflowRequestSchema,
   workflowIdentifierSchema,
   workflowResponseSchema,
   type WorkflowResponse,
+  workflowVersionResponseSchema,
+  workflowVersionListQuerySchema,
+  workflowVersionListResponseSchema,
+  type WorkflowVersionListResponse,
+  type WorkflowVersionResponse,
 } from '@dramaflow/contracts';
 import { Prisma } from '@dramaflow/database';
-import { DatabaseService } from '@dramaflow/server';
+import {
+  DatabaseService,
+  ModelProviderService,
+  ModelConfigurationError,
+} from '@dramaflow/server';
 import {
   createWorkflowDefinitionSnapshot,
   NodeRegistry,
   workflowVersionRecordSchema,
   type WorkflowVersionRecord,
+  validateWorkflowForPublish,
+  WorkflowPublishValidationError,
+  textGenerationConfigSchema,
 } from '@dramaflow/workflow';
 import {
   ConflictException,
+  BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -21,13 +35,9 @@ import { z } from 'zod';
 import { validateWorkflowNodeConfigurations } from './validate-node-configurations.js';
 import { createInitialWorkflowData } from './initial-workflow.js';
 
-const revisionSchema = z.number().int().positive();
-const publishInputSchema = z
-  .object({
-    workflowId: workflowIdentifierSchema,
-    expectedRevision: revisionSchema,
-  })
-  .strict();
+const publishInputSchema = publishWorkflowRequestSchema.extend({
+  workflowId: workflowIdentifierSchema,
+});
 const updateDraftInputSchema = saveWorkflowDraftRequestSchema.extend({
   workflowId: workflowIdentifierSchema,
 });
@@ -50,7 +60,69 @@ export class WorkflowService {
   constructor(
     private readonly db: DatabaseService,
     private readonly registry: NodeRegistry,
+    private readonly models: ModelProviderService,
   ) {}
+
+  async listVersions(
+    ownerId: string,
+    rawWorkflowId: string,
+    query: unknown,
+  ): Promise<WorkflowVersionListResponse> {
+    const workflowId = workflowIdentifierSchema.parse(rawWorkflowId);
+    const { beforeVersion } = workflowVersionListQuerySchema.parse(query);
+    const workflow = await this.db.client.workflow.findFirst({
+      where: { id: workflowId, project: { ownerId } },
+      select: { id: true },
+    });
+    if (!workflow) throw new NotFoundException('工作流不存在或无权访问');
+    const rows = await this.db.client.workflowVersion.findMany({
+      where: {
+        workflowId,
+        workflow: { project: { ownerId } },
+        ...(beforeVersion ? { version: { lt: beforeVersion } } : {}),
+      },
+      orderBy: { version: 'desc' },
+      take: 21,
+      select: {
+        id: true,
+        workflowId: true,
+        version: true,
+        sourceRevision: true,
+        createdAt: true,
+        workflow: { select: { projectId: true } },
+      },
+    });
+    const items = rows.slice(0, 20).map(({ workflow, createdAt, ...row }) => ({
+      ...row,
+      projectId: workflow.projectId,
+      publishedAt: createdAt.toISOString(),
+    }));
+    return workflowVersionListResponseSchema.parse({
+      items,
+      nextBeforeVersion: rows.length > 20 ? items.at(-1)!.version : null,
+    });
+  }
+
+  async getVersion(
+    ownerId: string,
+    rawVersionId: string,
+  ): Promise<WorkflowVersionResponse> {
+    const id = workflowIdentifierSchema.parse(rawVersionId);
+    const row = await this.db.client.workflowVersion.findFirst({
+      where: { id, workflow: { project: { ownerId } } },
+      include: { workflow: { select: { projectId: true } } },
+    });
+    if (!row) throw new NotFoundException('工作流版本不存在或无权访问');
+    return workflowVersionResponseSchema.parse({
+      id: row.id,
+      workflowId: row.workflowId,
+      projectId: row.workflow.projectId,
+      version: row.version,
+      sourceRevision: row.sourceRevision,
+      publishedAt: row.createdAt.toISOString(),
+      definition: row.definition,
+    });
+  }
 
   async initializeForProject(
     ownerId: string,
@@ -110,11 +182,7 @@ export class WorkflowService {
     input: unknown,
   ): Promise<{ revision: number }> {
     const request = updateDraftInputSchema.parse(input);
-    validateWorkflowNodeConfigurations(
-      request.definition,
-      this.registry,
-      'draft',
-    );
+    validateWorkflowNodeConfigurations(request.definition, this.registry);
     const draft = z.record(z.string(), z.json()).parse(request.definition);
     return this.db.client.$transaction(async (tx) => {
       // revision 与所有者共同约束原子 UPDATE，不先读草稿再无条件覆盖。
@@ -182,7 +250,56 @@ export class WorkflowService {
         // 此函数内部执行正式 workflowDefinitionSchema.parse 并冻结完整快照。
         // 数据库 draft 不因曾经保存成功而成为可信的运行定义。
         const snapshot = createWorkflowDefinitionSnapshot(workflow.draft);
-        validateWorkflowNodeConfigurations(snapshot, this.registry, 'publish');
+        try {
+          const nodes = validateWorkflowForPublish(snapshot, this.registry);
+          for (const { node, nodeType, config } of nodes) {
+            const requirements = nodeType.manifest.capabilities ?? [];
+            if (requirements.length === 0) continue;
+            // 当前正式能力节点只有文本生成；资源绑定规则属于应用层，不按 UI 控件推断。
+            if (node.type !== 'ai.text_generate')
+              throw new BadRequestException({
+                code: 'WORKFLOW_CAPABILITY_BINDING_UNSUPPORTED',
+                message: '节点能力绑定尚不支持发布',
+              });
+            const { modelConfigurationId } =
+              textGenerationConfigSchema.parse(config);
+            for (const capability of requirements)
+              await this.models.assertPublishableConfiguration(
+                tx,
+                ownerId,
+                workflow.projectId,
+                modelConfigurationId,
+                capability.type,
+              );
+          }
+        } catch (error) {
+          if (error instanceof WorkflowPublishValidationError) {
+            if (error.code === 'NODE_CONFIG_INVALID')
+              throw new BadRequestException({
+                code: 'WORKFLOW_NODE_CONFIGURATION_INVALID',
+                message: '工作流节点配置无效',
+              });
+            throw new BadRequestException({
+              code: 'WORKFLOW_PUBLISH_VALIDATION_FAILED',
+              message: error.message,
+              issues: [
+                {
+                  code: error.code,
+                  nodeId: error.nodeId,
+                  ...(error.portKey === undefined
+                    ? {}
+                    : { portKey: error.portKey }),
+                },
+              ],
+            });
+          }
+          if (error instanceof ModelConfigurationError)
+            throw new BadRequestException({
+              code: error.code,
+              message: '发布所选模型配置无效或不可用',
+            });
+          throw error;
+        }
         const definition = z.record(z.string(), z.json()).parse(snapshot);
         const previous = await tx.workflowVersion.aggregate({
           where: { workflowId: workflow.id },

@@ -7,7 +7,7 @@ import {
 import { z } from 'zod';
 import type { NodeType } from './type.js';
 
-const textGenerationConfigSchema = z.object({ modelConfigurationId: z.uuid() }).strict();
+export const textGenerationConfigSchema = z.object({ modelConfigurationId: z.uuid() }).strict();
 type TextGenerationConfig = z.infer<typeof textGenerationConfigSchema>;
 
 export class TextGenerationCapabilityNotConfiguredError extends Error {
