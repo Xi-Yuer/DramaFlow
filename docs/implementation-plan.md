@@ -4,11 +4,9 @@
 
 ## 当前阶段
 
-2026-10-21：A2 已完成实施与验收，正式发布与版本读取入口已接通，当前 Action DAG 能力的静态可执行性检查已收口到 Publish。实现与验证边界见[发布说明](architecture.md#workflow-发布与版本-http-api)。
+2026-10-21：按本轮授权完成 A5，Web Workflow Editor 已接入真实草稿的读取、显式初始化、位置 / 连线编辑和保存刷新；Project / Workflow revision 独立，冲突与失败保留本地修改。实现和验证边界见[当前架构](architecture.md#web-workflow-draft-持久化)。A1、A2 的初始化与发布边界继续复用。
 
-本轮不接入 Web、不扩展 Provider / Model 管理 API、Run 幂等或历史查询；不增加 NodeType、Human Review、Asset 或 Batch / SubWorkflow，也不在发布时进行外部模型探活。
-
-**本轮停在 A2，不自动执行 A3～A10。下一步候选为 A3：项目级 Provider / 模型配置和安全能力目录管理入口，须单独授权。** 当前仍按可视化文本工作流闭环推进，后续阶段按具体任务逐项实施。
+**本轮停在 A5，不自动执行 A3、A4、A6～A10。** 后续可先单独授权 A3 的项目级 Provider / 模型配置及安全能力目录入口，再推进节点配置与编辑能力；A4 及运行相关任务按原有独立范围授权。当前空草稿没有新增节点入口，A5 不提前补建 Workflow Builder 或发布 / 运行 UI。
 
 本文件是当前阶段、下一步与待决策项的唯一维护入口；推进时原地修订，不堆叠旧计划或逐轮交付流水。文档维护方式见 [开发指南](development.md#文档维护)。
 

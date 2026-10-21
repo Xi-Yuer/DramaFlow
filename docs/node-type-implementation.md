@@ -22,7 +22,7 @@ NodeCompilationStrategy 接收节点、说明书、统一 Executor、执行上�
 
 GET /api/v1/workflow/node-types 默认认证，no-store。生产 Registry 注册正式 `ai.text_generate@1`，没有占位图像 / 视频类型。目录只返回 Manifest，查询与连线共用唯一性校验，不按数组顺序选择冲突的 type / version。
 
-GenericWorkflowNode 按精确 Manifest 生成数据 Handle，其 ID 必须等于对应端口 key，显示正式 DataType 的中文摘要，并提供 `control:source` / `control:target` 普通控制出入口；缺少匹配版本显示不可用。控制 Handle 命名空间与数据端口 key 隔离，默认 UI 控制 Handle 不写入领域 portKey。Control Edge 可选命名端口支持结构与转换，不代表已有命名控制端口 Manifest、路由交互或 Branch。React Flow renderer 与两类边的连线、重连、删除事件已接入画布；尚无节点添加、Workflow 保存 / 发布、模型选择或运行按钮，项目画布保存仍只处理名称、视口和 revision。
+GenericWorkflowNode 按精确 Manifest 生成数据 Handle，其 ID 必须等于对应端口 key，显示正式 DataType 的中文摘要，并提供 `control:source` / `control:target` 普通控制出入口；缺少匹配版本显示不可用。控制 Handle 命名空间与数据端口 key 隔离，默认 UI 控制 Handle 不写入领域 portKey。Control Edge 可选命名端口支持结构与转换，不代表已有命名控制端口 Manifest、路由交互或 Branch。React Flow renderer、节点位置和两类边的连线、重连、删除事件已接入真实草稿，保存 / 刷新通过 Workflow HTTP 闭环；项目信息仍只保存名称、视口及独立 revision。尚无节点添加 / 配置、发布、模型选择或运行按钮，持久化边界见[当前架构](architecture.md#web-workflow-draft-持久化)。
 
 ## 正式文本节点
 

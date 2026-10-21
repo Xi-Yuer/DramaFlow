@@ -2,12 +2,13 @@
 import { useMemo, useState } from 'react';
 import { Background, BackgroundVariant, Controls, ReactFlow, type OnMove } from '@xyflow/react';
 import { useQuery } from '@tanstack/react-query';
-import { App } from 'antd';
+import { Button } from 'antd';
 import type { Project, WorkflowDefinition } from '@dramaflow/contracts';
 import { nodeTypeApi, nodeTypeKeys } from './node-type-api';
 import { WorkflowManifestProvider, workflowNodeTypes } from './workflow-node';
 import { areWorkflowHandlesCompatible } from './workflow-handles';
 import {
+  applyWorkflowNodePositions,
   connectWorkflowNodes,
   disconnectWorkflowEdge,
   reconnectWorkflowEdge,
@@ -18,23 +19,32 @@ import {
 } from './react-flow-adapter';
 
 export function WorkflowCanvas({
+  workflow,
+  onEdit,
+  reloading,
   defaultViewport,
   onMoveEnd,
 }: {
+  workflow: WorkflowDefinition;
+  onEdit: (apply: (current: WorkflowDefinition) => WorkflowDefinition) => void;
+  reloading: boolean;
   defaultViewport: Project['viewport'];
   onMoveEnd: OnMove;
 }) {
-  const { message } = App.useApp();
   const nodeTypes = useQuery({ queryKey: nodeTypeKeys.list, queryFn: nodeTypeApi.list });
-  // 项目接口尚不保存 Workflow；图关系只在该定义中维护，React Flow 是派生视图。
-  const [workflow, setWorkflow] = useState<WorkflowDefinition>({
-    inputs: [],
-    nodes: [],
-    edges: [],
-    outputs: [],
-  });
+  const [nodeView, setNodeView] = useState<
+    ReadonlyMap<string, Pick<WorkflowNode, 'selected' | 'measured'>>
+  >(new Map());
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<ReadonlySet<string>>(new Set());
-  const nodes = useMemo(() => toReactFlowNodes(workflow), [workflow]);
+  const nodes = useMemo(
+    () =>
+      toReactFlowNodes(workflow).map((node) => ({
+        ...node,
+        ...nodeView.get(node.id),
+        deletable: false,
+      })),
+    [workflow, nodeView],
+  );
   const edges = useMemo(
     () =>
       toReactFlowEdges(workflow).map((edge) => ({
@@ -51,22 +61,39 @@ export function WorkflowCanvas({
           nodeTypes={workflowNodeTypes}
           nodes={nodes}
           edges={edges}
-          onConnect={(connection) => {
-            try {
-              setWorkflow(connectWorkflowNodes(workflow, connection, nodeTypes.data ?? []));
-            } catch (error) {
-              void message.error(error instanceof Error ? error.message : '连线失败');
-            }
+          nodesDraggable={!reloading}
+          nodesConnectable={!reloading && !nodeTypes.isPending && !nodeTypes.isError}
+          edgesReconnectable={!reloading}
+          deleteKeyCode={reloading ? null : ['Backspace', 'Delete']}
+          onNodesChange={(changes) => {
+            // 受控 React Flow 仍需接收测量结果；仅缓存在视图，不回写领域草稿。
+            setNodeView((current) => {
+              const viewChanges = changes.filter(
+                (change) => change.type === 'select' || change.type === 'dimensions',
+              );
+              if (!viewChanges.length) return current;
+              const next = new Map(current);
+              for (const change of viewChanges) {
+                if (change.type === 'select')
+                  next.set(change.id, { ...next.get(change.id), selected: change.selected });
+                else if (change.type === 'dimensions' && change.dimensions)
+                  next.set(change.id, { ...next.get(change.id), measured: change.dimensions });
+              }
+              return next;
+            });
+            if (changes.some((change) => change.type === 'position' && change.position))
+              onEdit((current) => applyWorkflowNodePositions(current, changes));
           }}
-          onReconnect={(edge, connection) => {
-            try {
-              setWorkflow(reconnectWorkflowEdge(workflow, edge, connection, nodeTypes.data ?? []));
-            } catch (error) {
-              void message.error(error instanceof Error ? error.message : '重连失败');
-            }
-          }}
+          onConnect={(connection) =>
+            onEdit((current) => connectWorkflowNodes(current, connection, nodeTypes.data ?? []))
+          }
+          onReconnect={(edge, connection) =>
+            onEdit((current) =>
+              reconnectWorkflowEdge(current, edge, connection, nodeTypes.data ?? []),
+            )
+          }
           onEdgesDelete={(deleted) => {
-            setWorkflow((current) => deleted.reduce(disconnectWorkflowEdge, current));
+            onEdit((current) => deleted.reduce(disconnectWorkflowEdge, current));
           }}
           onEdgesChange={(changes) => {
             setSelectedEdgeIds((current) => {
@@ -95,18 +122,28 @@ export function WorkflowCanvas({
           <Controls showInteractive={false} position="bottom-left" />
         </ReactFlow>
       </WorkflowManifestProvider>
-      <div className="canvas-empty">
-        <p>空白画布</p>
-        <span role="status">
-          {nodeTypes.isPending
-            ? '正在加载节点目录…'
-            : nodeTypes.isError
-              ? '节点目录加载失败，请重新加载项目。'
-              : nodeTypes.data.length === 0
-                ? '当前暂无可用节点。'
-                : '已加载节点目录，工作流编辑与保存尚未开放。'}
-        </span>
-      </div>
+      {workflow.nodes.length === 0 ? (
+        <div className="canvas-empty">
+          <p>空白画布</p>
+          <span role="status">
+            {nodeTypes.isPending
+              ? '正在加载节点目录…'
+              : nodeTypes.isError
+                ? '节点目录加载失败，请重新加载项目。'
+                : nodeTypes.data.length === 0
+                  ? '当前暂无可用节点。'
+                  : '当前草稿还没有节点。节点添加与配置尚未开放。'}
+          </span>
+        </div>
+      ) : null}
+      {workflow.nodes.length > 0 && nodeTypes.isError ? (
+        <div className="canvas-catalog-error" role="status">
+          节点目录加载失败，已有草稿仍保留。
+          <Button size="small" onClick={() => void nodeTypes.refetch()}>
+            重试加载目录
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -583,9 +583,33 @@ a {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 56px;
-  padding: 0 12px 0 8px;
+  flex-wrap: wrap;
+  min-height: 56px;
+  padding: 8px 12px 8px 8px;
   border-bottom: 1px solid #ffffff0c;
+}
+.canvas-save-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.canvas-notice {
+  margin: 8px 12px 0;
+  flex-shrink: 0;
+}
+.canvas-catalog-error {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  color: var(--muted);
+  background: #18191d;
+  border: 1px solid #ffffff12;
+  border-radius: 10px;
 }
 .canvas-name {
   width: min(280px, 32vw);
@@ -672,7 +696,6 @@ a {
   .canvas-name {
     width: 120px;
   }
-  .canvas-status,
   .canvas-top .account-menu-name {
     display: none;
   }

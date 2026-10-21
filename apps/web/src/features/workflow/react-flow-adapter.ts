@@ -12,7 +12,7 @@ import {
   type NodeTypeManifest,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
-import type { Edge, Node } from '@xyflow/react';
+import type { Edge, Node, NodeChange } from '@xyflow/react';
 import { z } from 'zod';
 import { controlHandleId, parseWorkflowHandle } from './workflow-handles';
 
@@ -94,6 +94,23 @@ export function fromReactFlowNode(input: unknown): NodeDefinition {
 
 export function toReactFlowNodes(input: unknown): WorkflowNode[] {
   return workflowDefinitionSchema.parse(input).nodes.map(toReactFlowNode);
+}
+
+// 位置变更只更新领域布局；选择、测量、拖动标记及内部增删事件不进入 Definition。
+export function applyWorkflowNodePositions(
+  input: unknown,
+  changes: readonly NodeChange<WorkflowNode>[],
+): WorkflowDefinition {
+  const workflow = workflowDefinitionSchema.parse(input);
+  for (const change of changes) {
+    if (change.type !== 'position' || !change.position) continue;
+    const node = workflow.nodes.find((node) => node.id === change.id);
+    if (node)
+      node.ui.position = z
+        .object({ x: z.number().finite(), y: z.number().finite() })
+        .parse(change.position);
+  }
+  return workflow;
 }
 
 // 默认控制 Handle 是 UI 标识；命名控制端口保留方向命名空间并无损映射。

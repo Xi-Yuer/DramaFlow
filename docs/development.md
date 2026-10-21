@@ -58,7 +58,7 @@ workflow/test/validate-publish.test.ts 用真实 NodeRegistry / Node Schema、�
 
 正式 WorkflowDefinition 测试检查三类 StaticInputBinding、两类边引用与全局 ID 唯一、自连接及联合 DAG；Data Edge 另检查目标数据端口单连接与静态 Binding 冲突，Control Edge 不占用输入并允许多个控制上游。检查控制端口可省略或命名，拒绝旧 ConnectionBinding。通用 factory 继续用独立自定义 Schema 测试，不强加正式 Node 协议。静态成功不证明端口存在、真实值有效或资产可访问，也不替代独立依赖收集与运行输入绑定检查；assetId / versionId 只是明确版本的引用声明。
 
-React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Handle 命名空间、控制端口省略与命名映射、跨类连线拒绝，以及删除 / 重连按边种类与完整快照防止误改。数据连线还检查精确版本 Manifest、共享 isTypeAssignable、目标单连接与数组输入不聚合、移除被显式替换的静态 Binding；节点转换检查临时字段剔除，renderer 检查数据端口 key、普通控制 Handle 与不可用状态。目录 API 使用真实默认鉴权与 no-store，前端处理加载、错误与空态；生产 Registry 提供正式文本节点，不用假类型填充。画布已接入两类边事件，但没有节点添加与 Workflow 保存入口，项目保存继续只处理名称、视口和 revision。
+React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Handle 命名空间、控制端口省略与命名映射、跨类连线拒绝，以及删除 / 重连按边种类与完整快照防止误改。数据连线还检查精确版本 Manifest、共享 isTypeAssignable、目标单连接与数组输入不聚合、移除被显式替换的静态 Binding；节点转换检查临时字段剔除，renderer 检查数据端口 key、普通控制 Handle 与不可用状态。目录 API 使用真实默认鉴权与 no-store，前端处理加载、错误与空态；生产 Registry 提供正式文本节点，不用假类型填充。画布已接入真实草稿、节点位置及两类边事件，草稿保存与项目名称 / 视口保存使用独立 revision；尚无节点添加与配置入口。
 
 数据库模型在 packages/database/prisma/schema.prisma 定义。执行迁移前核对 DATABASE_URL 仅指向本项目开发库，再运行 pnpm db:migrate。迁移影响范围与操作方式统一见 [部署与数据库](deployment.md)。
 
@@ -66,7 +66,7 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 
 认证相关开发先阅读 authentication.md。新增业务 API 默认受 AuthGuard 保护，公开接口需显式 Public；修改角色、停用或会话逻辑后执行隔离数据库集成测试。
 
-项目接口或保存协议变更后，执行 pnpm check 和 pnpm test:integration，重点验证名称/视口边界、所有者隔离、分页、revision 冲突及旧节点/插件字段被拒绝；浏览器检查登录、新建项目、名称和视口保存、重新加载及账户中心。画布当前仅查询节点目录，项目保存接口不保存或执行节点；独立的 State / Action 适配测试覆盖确定性数据流，不覆盖应用运行入口、生产持久化、队列或真实模型。
+项目接口或保存协议变更后，执行 pnpm check 和 pnpm test:integration，重点验证名称/视口边界、所有者隔离、分页、revision 冲突及旧节点/插件字段被拒绝；浏览器检查登录、新建项目、名称和视口保存、重新加载及账户中心。画布通过独立 Workflow HTTP 保存完整定义，项目保存接口仍不保存或执行节点；独立的 State / Action 适配测试覆盖确定性数据流，不覆盖应用运行入口、生产持久化、队列或真实模型。
 
 仅更新架构和规划文档时，检查 Markdown 格式、相对链接、当前实现描述及模型约束的一致性；不把未运行的构建、集成测试或模型调用写成已通过。后续各步新增真实能力后，再更新相应验证范围。
 
@@ -102,3 +102,11 @@ React Flow 测试检查两类边 ID / 端点往返、edge.data.kind 与控制 Ha
 按改动选择 contracts 的数据 / 节点协议测试、workflow 的 Registry / 编译包装 / State 通道与并行增量 / 输入解析 / Codec / 存储策略 / Action Executor 测试，以及相关 API / Web 类型检查和定向用例。DataType / RuntimeValue / Artifact / Asset 的结构测试不代表已有内容持久化；WorkflowRun / NodeRun 生命周期另执行隔离 PostgreSQL 集成测试；生产 Checkpointer 的恢复能力用跨进程数据库测试验证，不能用 MemorySaver 单元测试替代。Artifact 生产内容链由 artifacts.e2e-spec 另行验证，Asset 尚未实现。避免例行全量测试和浏览器测试，不因修改共享类型而重跑无关存储、认证或部署检查。
 
 WorkflowExecutionJob 契约单测检查仅携带业务 Run ID、resume executionId / value，严格拒绝 State / Definition / thread / version 副本并保留 falsy 值。workflow-run-submission.test.ts 的内存 Repository / MemorySaver 只验证提交与执行分离，不作为生产事务 / Queue 证明；实际事务回滚和崩溃重投由上述 PostgreSQL / Redis 集成覆盖。
+
+## Web Workflow 浏览器验证
+
+A5 的定向检查先运行 `pnpm --filter @dramaflow/web test`、Web lint / typecheck / build，再按需要运行 `pnpm test:web:workflow`。后者使用已安装的 Playwright 与系统 Google Chrome，不下载浏览器；需 Node 24、本机 `.env`、已就绪的 PostgreSQL / Redis / RustFS，以及已创建的 `dramaflow_test`（可先运行既有 `pnpm test:integration` 初始化测试库）。
+
+脚本只接受本机 DramaFlow 数据库地址，固定改用 `dramaflow_test`，部署已有迁移，构建 API / Web，并在 3200 / 3201 启动测试服务，使用随机队列前缀与临时测试账号。普通项目及草稿经真实 HTTP 建立，只有模拟旧项目无 Workflow 的场景直接建数；结束后清理本次临时账号及其项目，不清空开发库、共享队列或对象存储。测试包含正常保存刷新与失败 / 冲突边界，不发布、不运行、不调用外部模型。
+
+该命令会为测试代理地址构建 Web；测试结束后，使用常规 `pnpm build` / `pnpm dev` 恢复正常代理配置。不要同时运行其他使用测试库或 3200 / 3201 的检查。失败截图保存在被 Git 忽略的 `apps/web/test-results/`。

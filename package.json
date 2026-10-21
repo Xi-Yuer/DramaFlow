@@ -28,7 +28,8 @@
     "test:ai:live": "node scripts/test-ai-live.mjs",
     "test:storage": "node scripts/test-storage.mjs",
     "auth:bootstrap": "pnpm exec turbo run build --filter=@dramaflow/api && node scripts/provision-user.mjs --admin",
-    "auth:create-user": "pnpm exec turbo run build --filter=@dramaflow/api && node scripts/provision-user.mjs"
+    "auth:create-user": "pnpm exec turbo run build --filter=@dramaflow/api && node scripts/provision-user.mjs",
+    "test:web:workflow": "node scripts/test-web-workflow.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

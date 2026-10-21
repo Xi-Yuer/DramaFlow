@@ -4,7 +4,7 @@ DramaFlow 是面向团队自部署的 AI 视频生产工作流平台，漫剧优
 
 ## 已实现的基础工程
 
-应用已有登录、平台鉴权、账户中心、项目管理和 React Flow 画布。画布注册通用节点 renderer、查询真实节点目录，并接入 Data / Control Edge 连线、重连与删除事件。目录已有正式文本生成节点；画布没有添加节点、Workflow 保存 / 发布、模型选择或运行交互，没有业务对话。
+应用已有登录、平台鉴权、账户中心、项目管理和 React Flow 画布。画布注册通用节点 renderer、查询真实节点目录，并接入 Data / Control Edge 连线、重连与删除事件。目录已有正式文本生成节点；画布已加载并保存真实 Workflow Draft，支持节点位置和连线编辑；没有添加节点、发布、模型选择或运行交互，没有业务对话。
 
 Next.js 使用 App Router、Ant Design 深色主题和 TanStack Query。认证通过同源代理接入 NestJS Better Auth 白名单入口，业务 API 默认受真实全局 AuthGuard 保护。PostgreSQL / Prisma 保存身份、资料、凭证、会话、认证限流、基础项目、Workflow / WorkflowVersion 及 WorkflowRun / NodeRun 业务记录；Redis 与 RustFS 提供基础服务。会话与角色边界见 [认证实施](authentication.md)。
 
@@ -53,7 +53,7 @@ executeResume 只接受 workflowRunId 与 unknown value，getById 校验 waiting
 
 initializeForProject 在 ReadCommitted 事务中按 projectId / ownerId 锁定项目行，等待锁后查询现有 Workflow，仅缺失时创建；既有 workflow.projectId 唯一约束作为数据库防线。重复或跨实例并发初始化返回同一身份，不更新已有名称、草稿、revision 或 updatedAt，也不修改 Project。此选择逻辑只属于当前应用的项目默认工作流入口；Workflow、Version、Run 和 Runtime 仍以独立 Workflow ID 工作，没有新增永久单工作流的内核约束或数据库迁移。
 
-读取按项目所有者过滤，初始化在项目行锁内校验所有者；保存复用 updateDraft 的权限和乐观锁，不信任客户端传入的归属。客户端先取得真实 Workflow ID 和 revision，再保存完整 definition；并发保存只有一个请求成功，过期请求返回 409，不覆盖最新草稿。保存不发布版本、不创建 Run / Outbox、不调用模型；允许未选择模型的编辑草稿，仍执行既有结构与已注册节点配置字段校验，不承诺已可执行。Web 尚未调用这些入口。
+读取按项目所有者过滤，初始化在项目行锁内校验所有者；保存复用 updateDraft 的权限和乐观锁，不信任客户端传入的归属。客户端先取得真实 Workflow ID 和 revision，再保存完整 definition；并发保存只有一个请求成功，过期请求返回 409，不覆盖最新草稿。保存不发布版本、不创建 Run / Outbox、不调用模型；允许未选择模型的编辑草稿，仍执行既有结构与已注册节点配置字段校验，不承诺已可执行。Web 已调用这些入口，加载和保存边界见下文。
 
 workflow-editor-api.e2e-spec 同时覆盖默认 Workflow 编辑与正式发布，具体边界见下节；初始化和草稿保存均不会调用模型或生成运行。
 
@@ -195,7 +195,17 @@ Workflow.edges 是节点间连接的唯一来源。Data Edge 的 id、source.nod
 
 controlEdgeToReactFlowEdge 使用 edge.data.kind=control 区分控制边，默认控制 Handle 为 `control:source` / `control:target`，命名端口映射到 `control:source:approved` 等保留命名空间，避免与数据端口 key 冲突；领域仅保存可选实际 portKey，不保存默认 UI 控制 Handle。两类边都保留 ID 与端点，连接只允许 Data → Data 或 Control → Control。断连和重连核对种类及完整旧边快照，防止过期事件修改新连接；连接辅助函数不做运行值校验或调度。
 
-GenericWorkflowNode 根据精确类型版本 Manifest 自动生成数据 Handle、显示端口类型与配置摘要，并提供普通控制出入口；缺失版本显示不可用，图标采用受控映射。命名控制端口只有结构与转换支持，尚无对应 Manifest、路由交互或 Branch 实现。画布以本地 WorkflowDefinition 派生 React Flow nodes / edges，onConnect / onReconnect / onEdgesDelete 使用上述适配操作；已注册 renderer、加载目录并处理加载 / 错误 / 空态。生产目录已提供正式文本节点，尚无节点添加、Workflow 保存 / 发布及模型选择入口。项目保存按钮仍只处理名称、视口及 revision。
+GenericWorkflowNode 根据精确类型版本 Manifest 自动生成数据 Handle、显示端口类型与配置摘要，并提供普通控制出入口；缺失版本显示不可用，图标采用受控映射。命名控制端口只有结构与转换支持，尚无对应 Manifest、路由交互或 Branch 实现。画布从受鉴权 HTTP 取得真实 Workflow Draft，以完整 WorkflowDefinition 派生 React Flow nodes / edges。onNodesChange 只将位置回写 ui.position，onConnect / onReconnect / onEdgesDelete 使用上述适配操作；选择和测量状态留在表现层，受控 React Flow 的测量结果由视图缓存承接；Tailwind loader 只处理 globals.css，CSS Module 保留原生类名导出。现有节点配置、Preset、静态绑定、Workflow 输入输出及两类边均保留，未知类型显示不可用但不会因移动或保存丢失。当前不开放节点添加、删除及配置表单，也无发布或模型选择入口。
+
+### Web Workflow Draft 持久化
+
+CanvasPage 先读取项目，再 GET 默认 Workflow；查询失败不以本地空图兜底。旧项目 GET 404 时显示“初始化工作流”，只有用户点击才 POST，初始化成功取得真实身份、revision 和草稿后进入画布。正常新项目直接读取创建时已有的默认 Workflow。节点目录失败不清空已读取草稿，连线操作在目录就绪后才开放。
+
+useWorkflowDraft 持有 Workflow ID、revision、完整定义和已确认保存快照。保存草稿提交 expectedRevision 与完整 definition，只使用共享草稿协议，不复制严格发布校验。保存成功推进 Workflow revision，仅确认本次提交的快照；请求期间的新编辑继续显示未保存。网络、服务端或响应协议失败不推进客户端修订、不清除本地修改；409 锁住草稿保存，明确提示冲突。用户可取消重新读取并保留修改，也可确认放弃当前图修改后读取服务器版本；重新读取失败继续保留本地图和冲突。
+
+项目名称 / 视口与 Workflow 分别保存、分别显示状态和 revision。Project 保存及冲突重读不替换图，Workflow 重读不覆盖项目名称 / 视口。Cmd/Ctrl+S 保存草稿；点击返回项目或关闭 / 刷新页面时，若有未保存或尚未确认的修改则提示。编辑器查询不在窗口聚焦或网络重连时自动重载，以免替换本地修改。后台会话检查的临时故障保留编辑器并提示重试；明确 401 / 403 仍隐藏受保护内容，所有保存照常由服务端鉴权。刷新或重新进入通过 HTTP 重建画布。保存不发布版本、不创建运行。
+
+Web 单元测试覆盖 HTTP 契约、失败状态、保存期间编辑以及 adapter 完整字段往返。独立 Playwright 测试经真实 API / PostgreSQL 验证新项目、旧项目显式初始化、已有草稿移动 / 连线删除后的保存刷新、修订独立、409、读取与保存失败、后台会话检查的临时故障 / 访问拒绝及越权页面。测试不调用外部模型；普通测试图通过正式 HTTP 写入，仅旧项目场景直接构造无 Workflow 的历史数据。运行方式见[开发指南](development.md#web-workflow-浏览器验证)。
 
 ## 目录与依赖
 

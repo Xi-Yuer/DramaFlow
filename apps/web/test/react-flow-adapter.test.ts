@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyWorkflowNodePositions,
   connectWorkflowNodes,
   disconnectWorkflowEdge,
   fromReactFlowEdge,
@@ -500,5 +501,56 @@ describe('Data Edge 删除与重连', () => {
     const exported = fromReactFlowEdge(edge);
     edge.targetHandle = 'style';
     expect(exported.target.portKey).toBe('script');
+  });
+});
+
+describe('持久化草稿的位置编辑', () => {
+  it('仅更新位置，保留完整输入输出、配置、Preset 和两类边；不改变原快照', () => {
+    const input = workflow();
+    input.outputs = [
+      {
+        name: 'result',
+        type: { kind: 'primitive', name: 'string' },
+        source: { nodeId: 'storyboard', outputKey: 'text' },
+      },
+    ];
+    input.edges.push({
+      id: 'control',
+      kind: 'control',
+      source: { nodeId: 'script', portKey: 'done' },
+      target: { nodeId: 'storyboard', portKey: 'start' },
+    });
+    const snapshot = structuredClone(input);
+    const result = applyWorkflowNodePositions(input, [
+      { type: 'select', id: 'script', selected: true },
+      { type: 'dimensions', id: 'script', dimensions: { width: 320, height: 180 } },
+      { type: 'position', id: 'storyboard', position: { x: 333, y: 444 }, dragging: true },
+      { type: 'remove', id: 'script' },
+    ]);
+    const expected = structuredClone(input);
+    expected.nodes[1].ui.position = { x: 333, y: 444 };
+    expect(result).toEqual(expected);
+    expect(input).toEqual(snapshot);
+    expect(
+      workflowDefinitionSchema.parse({
+        ...result,
+        nodes: toReactFlowNodes(result).map(fromReactFlowNode),
+        edges: toReactFlowEdges(result).map(fromReactFlowEdge),
+      }),
+    ).toEqual(expected);
+  });
+  it('不要求节点可发布，但拒绝非有限坐标', () => {
+    const input = workflow();
+    expect(
+      applyWorkflowNodePositions(input, [
+        { type: 'position', id: 'script', position: { x: 12, y: 34 } },
+      ]).nodes[0].config,
+    ).toEqual({});
+    expect(() =>
+      applyWorkflowNodePositions(input, [
+        { type: 'position', id: 'script', position: { x: NaN, y: 0 } },
+      ]),
+    ).toThrow();
+    expect(input).toEqual(workflow());
   });
 });
