@@ -53,11 +53,16 @@ const completionResponseSchema = z.object({
 export class OpenAICompatiblePlugin implements ProviderPlugin {
   readonly id = 'openai_compatible';
   readonly version = 1;
+  readonly management = {
+    name: 'OpenAI 兼容协议',
+    description: '使用明确配置的兼容 Chat Completions 地址和模型，不限定模型厂商。',
+  };
   readonly configSchema = openAICompatibleConfigurationSchema;
   readonly credentialsSchema = openAICompatibleCredentialsSchema;
   readonly capabilities: ProviderPlugin['capabilities'] = [
     {
       type: 'text.generate',
+      metadata: { name: '文本生成' },
       inputSchema: textGenerationInputSchema,
       outputSchema: textGenerationOutputSchema,
       modelSettingsSchema: textGenerationSettingsSchema,

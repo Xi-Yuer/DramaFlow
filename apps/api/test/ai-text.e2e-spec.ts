@@ -8,6 +8,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import {
+  modelProviderSchema,
+  managedModelConfigurationSchema,
   StringType,
   workflowRunResponseSchema,
   type WorkflowDefinition,
@@ -245,21 +247,44 @@ async function project(owner = ownerId) {
   });
 }
 async function configured(projectId: string, model = `model-${randomUUID()}`) {
-  const provider = await providers.createProvider(ownerId, {
-    projectId,
-    name: '显式选择的兼容协议实例',
-    pluginId: 'openai_compatible',
-    pluginVersion: 1,
-    configuration: { baseURL: providerBase },
-    credentials: { apiKey: credential },
-  });
-  const configuration = await providers.createModelConfiguration(ownerId, {
-    projectId,
-    providerId: provider.id,
-    capability: 'text.generate',
-    model,
-    settings: { temperature: 0, maxOutputTokens: 64 },
-  });
+  const headers = {
+    Cookie: cookies.get(ownerId) ?? '',
+    Origin: origin,
+    'Content-Type': 'application/json',
+  };
+  const providerResponse = await fetch(
+    `${apiBase}/api/v1/projects/${projectId}/providers`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: '显式选择的兼容协议实例',
+        pluginId: 'openai_compatible',
+        pluginVersion: 1,
+        configuration: { baseURL: providerBase },
+        credentials: { apiKey: credential },
+      }),
+    },
+  );
+  expect(providerResponse.status).toBe(201);
+  const provider = modelProviderSchema.parse(await providerResponse.json());
+  const modelResponse = await fetch(
+    `${apiBase}/api/v1/projects/${projectId}/model-configurations`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        providerId: provider.id,
+        capability: 'text.generate',
+        model,
+        settings: { temperature: 0, maxOutputTokens: 64 },
+      }),
+    },
+  );
+  expect(modelResponse.status).toBe(201);
+  const configuration = managedModelConfigurationSchema.parse(
+    await modelResponse.json(),
+  );
   expect(JSON.stringify({ provider, configuration })).not.toContain(credential);
   expect(provider).not.toHaveProperty('encryptedCredentials');
   return { provider, configuration, model };

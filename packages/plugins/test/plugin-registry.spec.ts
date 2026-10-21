@@ -141,3 +141,53 @@ describe('受信任静态 PluginRegistry', () => {
     expect(error instanceof Error ? error.stack : '').not.toContain('Authorization');
   });
 });
+
+describe('安全管理目录', () => {
+  it('只公开明确允许配置的插件与精确版本，从正式 Schema 生成约束且不包含执行对象', () => {
+    const privatePlugin = fixture(1);
+    const publicPlugin: ProviderPlugin = { ...fixture(2), management: { name: '自选服务' } };
+    const registry = new PluginRegistry([privatePlugin, publicPlugin]);
+    const catalog = registry.listConfigurable();
+    expect(catalog).toHaveLength(1);
+    expect(catalog[0]).toMatchObject({
+      id: 'chosen_provider',
+      version: 2,
+      name: '自选服务',
+      credentialFields: [{ key: 'token', required: true, minLength: 1 }],
+    });
+    expect(catalog[0]!.capabilities[0]!.modelSettingsSchema).toMatchObject({
+      properties: { temperature: { type: 'number', minimum: 0, maximum: 2 } },
+      additionalProperties: false,
+    });
+    expect(JSON.stringify(catalog)).not.toMatch(
+      /invoke|credentialsSchema|inputSchema|outputSchema/,
+    );
+    expect(() => registry.getConfigurable('chosen_provider', 1)).toThrowError(CapabilityError);
+    expect(registry.get('chosen_provider', 1)).toBeDefined();
+    catalog[0]!.name = '客户端改名';
+    expect(registry.listConfigurable()[0]!.name).toBe('自选服务');
+  });
+  it('凭证 Schema 中的默认值、枚举、描述及示例不会出现在目录', () => {
+    const marker = 'catalog-secret-marker';
+    const registry = new PluginRegistry([
+      {
+        ...fixture(),
+        management: { name: '测试' },
+        credentialsSchema: z
+          .object({
+            token: z
+              .string()
+              .min(1)
+              .max(100)
+              .default(marker)
+              .meta({ description: marker, examples: [marker] }),
+          })
+          .strict(),
+      },
+    ]);
+    expect(JSON.stringify(registry.listConfigurable())).not.toContain(marker);
+    expect(registry.listConfigurable()[0]!.credentialFields).toEqual([
+      { key: 'token', required: false, minLength: 1, maxLength: 100 },
+    ]);
+  });
+});

@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import {
+  providerPluginDescriptionSchema,
+  type ProviderPluginDescription,
+} from '@dramaflow/contracts';
+import {
   CapabilityError,
   externalCapabilityError,
   type CapabilityErrorCode,
@@ -63,6 +67,7 @@ export class PluginRegistry {
         throw new CapabilityError('PLUGIN_REGISTRATION_INVALID');
       seen.add(capability.type);
       return Object.freeze({
+        ...(capability.metadata ? { metadata: Object.freeze({ ...capability.metadata }) } : {}),
         type: capability.type,
         inputSchema: capability.inputSchema,
         outputSchema: capability.outputSchema,
@@ -75,6 +80,7 @@ export class PluginRegistry {
     this.plugins.set(
       key,
       Object.freeze({
+        ...(plugin.management ? { management: Object.freeze({ ...plugin.management }) } : {}),
         id: plugin.id,
         version: plugin.version,
         configSchema: plugin.configSchema,
@@ -98,6 +104,46 @@ export class PluginRegistry {
     );
     if (!capability) throw new CapabilityError('CAPABILITY_NOT_AVAILABLE');
     return capability;
+  }
+
+  getConfigurable(pluginId: string, version: number): ProviderPlugin {
+    const plugin = this.get(pluginId, version);
+    if (!plugin.management) throw new CapabilityError('PLUGIN_NOT_AVAILABLE');
+    return plugin;
+  }
+
+  listConfigurable(): ProviderPluginDescription[] {
+    return [...this.plugins.values()]
+      .filter((plugin) => plugin.management)
+      .map((plugin) => {
+        const credentials = z.toJSONSchema(plugin.credentialsSchema, { io: 'input' });
+        const required = new Set(credentials.required ?? []);
+        return providerPluginDescriptionSchema.parse({
+          id: plugin.id,
+          version: plugin.version,
+          ...plugin.management,
+          configurationSchema: z.toJSONSchema(plugin.configSchema, { io: 'input' }),
+          credentialFields: Object.entries(credentials.properties ?? {}).map(([key, value]) => ({
+            key,
+            required: required.has(key),
+            ...(typeof value === 'object' && typeof value.minLength === 'number'
+              ? { minLength: value.minLength }
+              : {}),
+            ...(typeof value === 'object' && typeof value.maxLength === 'number'
+              ? { maxLength: value.maxLength }
+              : {}),
+          })),
+          capabilities: plugin.capabilities.map((capability) => ({
+            type: capability.type,
+            name: capability.metadata?.name ?? capability.type,
+            ...(capability.metadata?.description
+              ? { description: capability.metadata.description }
+              : {}),
+            modelSettingsSchema: z.toJSONSchema(capability.modelSettingsSchema, { io: 'input' }),
+          })),
+        });
+      })
+      .sort((a, b) => a.id.localeCompare(b.id) || a.version - b.version);
   }
 
   async invoke(request: InvokeCapabilityInput): Promise<unknown> {

@@ -7,10 +7,17 @@ import {
   type CreateModelConfiguration,
   type ModelProvider,
   type ModelConfiguration,
+  type ModelAvailability,
+  managedModelConfigurationSchema,
+  modelProviderListSchema,
+  modelConfigurationListSchema,
+  setModelResourceEnabledRequestSchema,
+  modelManagementListQuerySchema,
+  providerPluginCatalogSchema,
 } from '@dramaflow/contracts';
 import { PluginRegistry } from '@dramaflow/plugins';
 import type { Prisma } from '@dramaflow/database';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 import { DatabaseService } from '../database/database.service.js';
 import { SecretsService } from '../secrets/secrets.service.js';
@@ -28,6 +35,53 @@ export class ModelConfigurationError extends Error {
     super('模型能力配置无效或不可用');
     this.name = 'ModelConfigurationError';
   }
+}
+
+// 读取路径从数据库投影中排除密文，不依靠序列化时删除秘密字段。
+const providerSelect = {
+  id: true,
+  projectId: true,
+  name: true,
+  pluginId: true,
+  pluginVersion: true,
+  configuration: true,
+  enabled: true,
+  createdAt: true,
+} satisfies Prisma.ModelProviderSelect;
+const modelSelect = {
+  id: true,
+  projectId: true,
+  providerId: true,
+  capability: true,
+  model: true,
+  settings: true,
+  enabled: true,
+  createdAt: true,
+  provider: { select: providerSelect },
+} satisfies Prisma.ModelConfigurationSelect;
+type ProviderRow = Prisma.ModelProviderGetPayload<{ select: typeof providerSelect }>;
+type ModelRow = Prisma.ModelConfigurationGetPayload<{ select: typeof modelSelect }>;
+function providerDto(row: ProviderRow): ModelProvider {
+  return modelProviderSchema.parse({
+    id: row.id,
+    projectId: row.projectId,
+    name: row.name,
+    pluginId: row.pluginId,
+    pluginVersion: row.pluginVersion,
+    configuration: row.configuration,
+    enabled: row.enabled,
+    createdAt: row.createdAt.toISOString(),
+  });
+}
+function pageAfter(cursor: { id: string; createdAt: Date } | null) {
+  return cursor
+    ? {
+        OR: [
+          { createdAt: { lt: cursor.createdAt } },
+          { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+        ],
+      }
+    : {};
 }
 
 @Injectable()
@@ -54,7 +108,7 @@ export class ModelProviderService {
     let configuration: z.infer<typeof jsonObject>;
     let credentials: Record<string, string>;
     try {
-      const plugin = this.plugins.get(value.pluginId, value.pluginVersion);
+      const plugin = this.plugins.getConfigurable(value.pluginId, value.pluginVersion);
       configuration = jsonObject.parse(plugin.configSchema.parse(value.configuration));
       credentials = z
         .record(z.string(), z.string())
@@ -72,16 +126,7 @@ export class ModelProviderService {
         encryptedCredentials: this.secrets.encrypt(JSON.stringify(credentials), ownerId),
       },
     });
-    return modelProviderSchema.parse({
-      id: row.id,
-      projectId: row.projectId,
-      name: row.name,
-      pluginId: row.pluginId,
-      pluginVersion: row.pluginVersion,
-      configuration: row.configuration,
-      enabled: row.enabled,
-      createdAt: row.createdAt.toISOString(),
-    });
+    return providerDto(row);
   }
 
   async createModelConfiguration(
@@ -97,12 +142,15 @@ export class ModelProviderService {
         id: value.providerId,
         projectId: value.projectId,
         project: { ownerId },
-        enabled: true,
       },
+      select: providerSelect,
     });
     if (!provider) throw new NotFoundException('Provider 不存在或无权访问');
+    if (!provider.enabled) throw new ModelConfigurationError('MODEL_PROVIDER_UNAVAILABLE');
     let settings: z.infer<typeof jsonObject>;
     try {
+      const plugin = this.plugins.getConfigurable(provider.pluginId, provider.pluginVersion);
+      jsonObject.parse(plugin.configSchema.parse(provider.configuration));
       settings = jsonObject.parse(
         this.plugins
           .getCapability(provider.pluginId, provider.pluginVersion, value.capability)
@@ -192,6 +240,7 @@ export class ModelProviderService {
         projectId: z.uuid().parse(projectId),
         project: { ownerId },
       },
+      select: providerSelect,
     });
     if (!provider) throw new NotFoundException('Provider 不存在或无权访问');
     let parsed: Record<string, string>;
@@ -215,5 +264,144 @@ export class ModelProviderService {
       data: { encryptedCredentials: this.secrets.encrypt(JSON.stringify(parsed), ownerId) },
     });
     if (changed.count !== 1) throw new NotFoundException('Provider 不存在或无权访问');
+  }
+
+  listProviderPlugins() {
+    return providerPluginCatalogSchema.parse({ items: this.plugins.listConfigurable() });
+  }
+
+  async getProvider(
+    ownerId: string,
+    projectId: string,
+    providerId: string,
+  ): Promise<ModelProvider> {
+    await this.authorize(ownerId, projectId);
+    const row = await this.db.client.modelProvider.findFirst({
+      where: { id: z.uuid().parse(providerId), projectId, project: { ownerId } },
+      select: providerSelect,
+    });
+    if (!row) throw new NotFoundException('Provider 不存在或无权访问');
+    return providerDto(row);
+  }
+
+  async listProviders(ownerId: string, projectId: string, query: unknown) {
+    await this.authorize(ownerId, projectId);
+    const { cursor } = modelManagementListQuerySchema.parse(query);
+    const where = { projectId, project: { ownerId } };
+    const after = cursor
+      ? await this.db.client.modelProvider.findFirst({
+          where: { ...where, id: cursor },
+          select: { id: true, createdAt: true },
+        })
+      : null;
+    if (cursor && !after) throw new BadRequestException('分页游标无效');
+    const rows = await this.db.client.modelProvider.findMany({
+      where: { ...where, ...pageAfter(after) },
+      select: providerSelect,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 51,
+    });
+    return modelProviderListSchema.parse({
+      items: rows.slice(0, 50).map(providerDto),
+      nextCursor: rows.length > 50 ? rows[49]!.id : null,
+    });
+  }
+
+  async setProviderEnabled(
+    ownerId: string,
+    projectId: string,
+    providerId: string,
+    enabled: boolean,
+  ) {
+    const value = setModelResourceEnabledRequestSchema.parse({ enabled });
+    await this.authorize(ownerId, projectId);
+    const changed = await this.db.client.modelProvider.updateMany({
+      where: { id: z.uuid().parse(providerId), projectId, project: { ownerId } },
+      data: value,
+    });
+    if (changed.count !== 1) throw new NotFoundException('Provider 不存在或无权访问');
+    return this.getProvider(ownerId, projectId, providerId);
+  }
+
+  private availability(row: ModelRow): ModelAvailability {
+    const unavailable = (
+      unavailableReason: ModelAvailability['unavailableReason'],
+    ): ModelAvailability => ({ selectable: false, unavailableReason });
+    if (!row.enabled) return unavailable('MODEL_DISABLED');
+    if (!row.provider.enabled) return unavailable('PROVIDER_DISABLED');
+    let plugin;
+    try {
+      plugin = this.plugins.get(row.provider.pluginId, row.provider.pluginVersion);
+    } catch {
+      return unavailable('PLUGIN_UNAVAILABLE');
+    }
+    const capability = plugin.capabilities.find((item) => item.type === row.capability);
+    if (!capability) return unavailable('CAPABILITY_UNAVAILABLE');
+    try {
+      jsonObject.parse(plugin.configSchema.parse(row.provider.configuration));
+      jsonObject.parse(capability.modelSettingsSchema.parse(row.settings));
+      createModelConfigurationSchema.shape.model.parse(row.model);
+    } catch {
+      return unavailable('CONFIGURATION_INVALID');
+    }
+    return { selectable: true, unavailableReason: null };
+  }
+
+  private managedModelDto(row: ModelRow) {
+    return managedModelConfigurationSchema.parse({
+      id: row.id,
+      projectId: row.projectId,
+      providerId: row.providerId,
+      capability: row.capability,
+      model: row.model,
+      settings: row.settings,
+      enabled: row.enabled,
+      createdAt: row.createdAt.toISOString(),
+      availability: this.availability(row),
+    });
+  }
+
+  async getManagedModelConfiguration(ownerId: string, projectId: string, id: string) {
+    await this.authorize(ownerId, projectId);
+    const row = await this.db.client.modelConfiguration.findFirst({
+      where: { id: z.uuid().parse(id), projectId, project: { ownerId } },
+      select: modelSelect,
+    });
+    if (!row) throw new NotFoundException('模型配置不存在或无权访问');
+    return this.managedModelDto(row);
+  }
+
+  async listModelConfigurations(ownerId: string, projectId: string, query: unknown) {
+    await this.authorize(ownerId, projectId);
+    const { cursor } = modelManagementListQuerySchema.parse(query);
+    const where = { projectId, project: { ownerId } };
+    const after = cursor
+      ? await this.db.client.modelConfiguration.findFirst({
+          where: { ...where, id: cursor },
+          select: { id: true, createdAt: true },
+        })
+      : null;
+    if (cursor && !after) throw new BadRequestException('分页游标无效');
+    const rows = await this.db.client.modelConfiguration.findMany({
+      where: { ...where, ...pageAfter(after) },
+      select: modelSelect,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 51,
+    });
+    return modelConfigurationListSchema.parse({
+      items: rows.slice(0, 50).map((row) => this.managedModelDto(row)),
+      nextCursor: rows.length > 50 ? rows[49]!.id : null,
+    });
+  }
+
+  async setModelEnabled(ownerId: string, projectId: string, id: string, enabled: boolean) {
+    const value = setModelResourceEnabledRequestSchema.parse({ enabled });
+    await this.authorize(ownerId, projectId);
+    const changed = await this.db.client.modelConfiguration.updateMany({
+      where: { id: z.uuid().parse(id), projectId, project: { ownerId } },
+      data: value,
+    });
+    if (changed.count !== 1) throw new NotFoundException('模型配置不存在或无权访问');
+    return this.getManagedModelConfiguration(ownerId, projectId, id);
   }
 }

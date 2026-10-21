@@ -110,3 +110,9 @@ A5 的定向检查先运行 `pnpm --filter @dramaflow/web test`、Web lint / typ
 脚本只接受本机 DramaFlow 数据库地址，固定改用 `dramaflow_test`，部署已有迁移，构建 API / Web，并在 3200 / 3201 启动测试服务，使用随机队列前缀与临时测试账号。普通项目及草稿经真实 HTTP 建立，只有模拟旧项目无 Workflow 的场景直接建数；结束后清理本次临时账号及其项目，不清空开发库、共享队列或对象存储。测试包含正常保存刷新与失败 / 冲突边界，不发布、不运行、不调用外部模型。
 
 该命令会为测试代理地址构建 Web；测试结束后，使用常规 `pnpm build` / `pnpm dev` 恢复正常代理配置。不要同时运行其他使用测试库或 3200 / 3201 的检查。失败截图保存在被 Git 忽略的 `apps/web/test-results/`。
+
+## 模型管理验证
+
+管理 API 的契约、Registry 公共目录与 Secret 边界使用 contracts / plugins / server 单元测试；`pnpm typecheck --filter=@dramaflow/api...` 同时检查相关测试类型，`pnpm lint --filter=@dramaflow/api...` 检查服务端及共享包。正式路径与安全语义见[管理 HTTP](architecture.md#plugin--provider--模型配置管理-http)。
+
+`pnpm test:integration` 在隔离库验证 `model-management.e2e-spec.ts` 的真实 HTTP、启停 / 轮换、字段与所有者隔离、分页及错误脱敏；现有发布测试验证模型状态与事务边界，文本集成从管理 HTTP 配置后进入既有 Worker Runtime。普通测试只调用本机协议服务，真实收费模型调用仍须独立明确授权。不新增迁移或要求清理开发数据。

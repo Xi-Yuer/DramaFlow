@@ -167,13 +167,44 @@ WorkflowRun 测试检查协议 JSON 往返、输入输出 RuntimeValue map、独
 
 `packages/server/src/models` 提供生产 ModelProviderService、Prisma 配置读取和按 Run 限定权限的 CapabilityInvoker。model_provider 保存所属项目、插件身份 / 版本、endpoint 等配置及加密凭证；model_configuration 单独保存 Provider 引用、capability、模型名与参数。数据库约束同项目引用，插件 / 模型配置身份不可改写；禁用状态可变，凭证可通过显式服务操作轮换。改用其他模型或 endpoint 需创建新配置，旧 WorkflowVersion 的 modelConfigurationId 不变；凭证轮换和配置禁用不会把新模型静默替换进旧运行。每次调用按当前项目所有者和真实 Run 重新核验权限，拒绝跨项目、跨所有者、禁用或缺失配置。
 
-凭证使用既有 SecretsService 的 AES-256-GCM，ownerId 作为 AAD；安全 DTO 不返回明文或密文。Workflow / Version 只保存配置 UUID，NodeRun 与 checkpoint 不保存 endpoint、凭证或能力服务对象。API 与 Worker 可注入 ModelProviderService；当前没有配置 Controller 或模型选择 UI，服务端配置工具见 [部署说明](deployment.md#文本模型-provider-配置)。调用前才解密，配置缺失或坏密文在现有 execute 阶段失败，不新建另一套运行记录。
+凭证使用既有 SecretsService 的 AES-256-GCM，ownerId 作为 AAD；安全 DTO 不返回明文或密文。Workflow / Version 只保存配置 UUID，NodeRun 与 checkpoint 不保存 endpoint、凭证或能力服务对象。API 与 Worker 可注入 ModelProviderService；正式管理 HTTP 见下节，模型选择 UI 尚未接入。服务端配置工具继续可用，见 [部署说明](deployment.md#文本模型-provider-配置)。调用前才解密，配置缺失或坏密文在现有 execute 阶段失败，不新建另一套运行记录。
 
 模型调用有界超时，默认 60 秒，可明确配置为 100 毫秒至 180 秒；LangChain 与 SDK 重试关闭，不流式返回。适配器隔离父级与自动 tracing、关闭 SDK 日志；全局 LANGCHAIN_VERBOSE=true 时拒绝调用。连接中断、超时或 5xx 的外部受理结果可能不明，不自动再次发送；Worker 仍沿既有 NodeRun / WorkflowRun 失败及 Outbox 终态记录，不承诺外部调用 exactly-once。原始供应商响应、message、cause 不进入持久错误摘要。
 
 `ai-text.e2e-spec.ts` 已通过 6 项真实基础设施测试，路径为鉴权 HTTP、正式发布、PostgreSQL Outbox、BullMQ、独立正式 Worker、文本节点与本机 OpenAI-compatible 协议服务。覆盖配置 / 凭证不可用、503 不重试、项目 / 所有者隔离、配置不可改写、凭证轮换、服务端 CLI 真实写库，以及持久记录和 Worker 日志无凭证；本机协议服务不冒充外部模型。全仓库 check 与隔离数据库集成均通过，默认集成跳过真实收费调用。
 
 2026-10-21 已显式执行 `ai-text-live.e2e-spec.ts`：使用操作者选择的 DeepSeek `deepseek-flash`，通过正式发布、HTTP 202、Outbox、BullMQ、独立 Worker、生产文本 Node 和参考插件完成真实外部模型请求，NodeRun attempt 为 1，WorkflowRun completed，并取得非空文本最终输出。用例检查 Version / Draft、Run / NodeRun、Outbox、所有 checkpoint 与 Worker 日志不含该凭证明文，结束后清理自建测试记录与 thread。此项使用真实服务，没有覆盖或替换 Registry / Compiler / SDK；本机协议服务负责失败边界，真实调用只验证本次选择的服务与模型。可用 `pnpm test:ai:live` 显式复验，参数和边界见 [开发指南](development.md)。
+
+## Plugin / Provider / 模型配置管理 HTTP
+
+`apps/api/src/models` 提供模型管理 Controller，复用共享 ModelProviderService、SecretsService 与生产 PluginRegistry。业务 API 默认认证，写入遵循既有 Origin 校验，所有管理响应为 no-store。资源不存在或不属于当前用户 / 路径项目时统一 404；无效请求与插件 Schema 校验失败为安全 400，已停用 Provider 不接受新模型绑定并返回 409，加密或服务故障为安全 503。
+
+以下路径均以 `/api/v1` 为前缀：
+
+| 方法与路径                                                 | 行为                                                                    |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------- |
+| GET /provider-plugins                                      | 已安装且显式允许配置的插件精确版本、安全配置描述与能力参数目录          |
+| GET /projects/:projectId/providers                         | 当前项目 Provider 列表                                                  |
+| POST /projects/:projectId/providers                        | 显式指定名称、插件版本、configuration 与 credentials 创建 Provider，201 |
+| GET /projects/:projectId/providers/:providerId             | 安全 Provider 详情，不读取凭证密文                                      |
+| PATCH /projects/:projectId/providers/:providerId           | 仅接受 enabled，返回当前安全 DTO                                        |
+| PUT /projects/:projectId/providers/:providerId/credentials | 校验后完整替换凭证密文，204，无返回值                                   |
+| GET /projects/:projectId/model-configurations              | 当前项目模型配置与静态可选性列表                                        |
+| POST /projects/:projectId/model-configurations             | 指定 providerId、capability、model 和 settings 创建不可变绑定，201      |
+| GET /projects/:projectId/model-configurations/:modelId     | 模型配置详情与静态可选性                                                |
+| PATCH /projects/:projectId/model-configurations/:modelId   | 仅接受 enabled，不改变能力或模型绑定                                    |
+
+共享请求 / 响应 Schema 位于 `contracts/ai/model-management.ts`。项目身份仅来自路径，创建体不接受 projectId / ownerId。两个列表按 createdAt / id 倒序，每页至多 50 条，以 nextCursor 继续读取；游标仅在同项目 / 所有者作用域内有效。模型选择器可结合插件目录、Provider 目录 / 详情与模型列表，按 capability 和 availability.selectable 筛选，保存 modelConfigurationId；不需要访问内部 Service 或凭证。
+
+Plugin 的可选 management 元数据显式允许新配置，缺省插件仍可被 Runtime 精确查找，但不出现在管理目录，也不能创建新 Provider / 模型绑定。公共目录只返回可序列化描述；configurationSchema 和 modelSettingsSchema 从正式 Zod Schema 生成 JSON Schema，凭证仅公开字段名、必填及长度约束，不输出默认值、示例、枚举或完整凭证 Schema。服务器继续用原 Zod Schema 校验，包括 JSON Schema 无法表达的自定义约束。目录不携带 invoke、Zod 对象、SDK 或输入的凭证值。
+
+沿用数据库不可变约束：Provider 名称、projectId、pluginId / version、configuration，以及模型的 providerId、capability、model、settings 均不可 PATCH。换 endpoint / 插件 / 模型 / 参数或 Provider 名称须创建新配置；没有删除或覆盖绑定入口。启停使用所有者作用域内的原子字段更新，重复设置幂等，最后成功写入生效，不引入另一套 revision，也不推进 Project / Workflow revision。启停与凭证轮换修改不同字段，并发不互相覆盖。
+
+停用 Provider 不批量改写其模型的 enabled；重新启用模型不隐式启用 Provider。模型 availability 仅根据当前 enabled、插件 / capability 存在性及正式非秘密配置 Schema 判断，带稳定不可选原因；不解密、不探活、不查询全网模型目录。可选性只是本地状态，凭证解密、权限重检和外部服务状态仍在 Runtime 判断。发布继续在自己的事务锁内验证，管理变更不会修改已发布版本。
+
+Provider 创建与完整凭证轮换复用 AES-256-GCM 和 ownerId AAD。读取数据库投影不包含 encryptedCredentials，输出白名单也不包含 credentials；停用的 Provider 仍可轮换凭证。校验或加密失败保留旧密文。Controller 不透传原始 Zod issues、插件 / 数据库 / 加密异常；全局错误过滤器对模型管理路径的前置 JSON 解析错误和未知错误同样脱敏，不在响应或日志中复制秘密。
+
+`model-management.e2e-spec.ts` 经真实鉴权 HTTP / PostgreSQL 检查目录、创建 / 读取 / 启停 / 轮换、跨用户与跨项目隔离、分页、严格字段白名单、失败无写入、错误与日志脱敏、并发字段更新及旧版本不变。`ai-text.e2e-spec.ts` 的正常配置路径已改用管理 HTTP，再经过正式发布、Outbox / Queue 和独立 Worker，验证绑定可被现有 Runtime 使用；本机兼容协议服务只用于测试，不代表本轮调用了外部模型。
 
 ## Artifact 生产数据通道
 

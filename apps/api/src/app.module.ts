@@ -1,3 +1,4 @@
+import { ModelManagementModule } from './models/model-management.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -12,6 +13,7 @@ import { WorkflowsModule } from './workflow/workflows/workflows.module.js';
   imports: [
     InfrastructureModule,
     ModelProviderModule,
+    ModelManagementModule,
     AuthModule,
     UsersModule,
     ProjectsModule,

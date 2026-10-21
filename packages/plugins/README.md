@@ -8,6 +8,6 @@ OpenAICompatiblePlugin@1 实现 text.generate，通过 LangChain ChatOpenAICompl
 
 模型调用隔离父级及自动 LangSmith tracing，关闭 SDK 日志；LANGCHAIN_VERBOSE=true 时明确拒绝执行，避免全局详细日志打印原始供应商异常。超时、连接断开与 5xx 标记 outcome_unknown，不能作为自动重发依据。测试包含本机 HTTP 协议服务，证明标准协议、无自动重试、超时与错误脱敏，不代表真实模型质量或实际供应商调用验证。
 
-Capability 表达能力，Plugin 适配提供者，Tool 表达操作；不要求固定调用层级。没有默认 Provider、动态 npm 插件加载、远程安装或插件市场。浏览器只读取安全声明，适配器和密钥留在服务端。数据库配置、所有者/项目权限与密钥加密属于应用基础设施，本包不访问数据库或全局工作流 State。
+Capability 表达能力，Plugin 适配提供者，Tool 表达操作；不要求固定调用层级。没有默认 Provider、动态 npm 插件加载、远程安装或插件市场。Plugin 可用 management 元数据显式允许产品配置；未声明者不进入管理目录，也不接受新绑定。listConfigurable 从正式 Schema 导出安全 JSON Schema 与凭证字段约束，不输出执行实现、完整凭证 Schema 或其中的默认值 / 示例；Runtime 的精确版本读取独立保留。浏览器只读取安全声明，适配器和密钥留在服务端。数据库配置、所有者/项目权限与密钥加密属于应用基础设施，本包不访问数据库或全局工作流 State。
 
 顶层职责见 [平台核心模型](../../docs/platform-model.md)，当前阶段见 [实施方案](../../docs/implementation-plan.md)。

@@ -56,7 +56,7 @@ API 在 enqueue 确认前不返回成功受理，Redis 不可用返回 WORKFLOW_
 
 新增 [Provider / 模型配置迁移](../packages/database/prisma/migrations/20261020070000_model_providers/migration.sql)，分别保存 Provider 实例和能力 / 模型绑定；同项目复合外键阻止身份拼接，触发器固定插件版本、endpoint、模型和参数。迁移只新增表、索引与约束，不重置既有数据；本机开发库与隔离测试库均已部署。凭证密文和 enabled 状态可按明确服务操作更新，不改变旧 WorkflowVersion 的模型选择。
 
-API 与 Worker 装配 ModelProviderModule，正式节点目录提供 `ai.text_generate@1`；Node config 只接受 modelConfigurationId。模型配置没有 HTTP / UI 管理入口，服务端可用以下 CLI 创建明确选择的 Provider 与模型配置：
+API 与 Worker 装配 ModelProviderModule，正式节点目录提供 `ai.text_generate@1`；Node config 只接受 modelConfigurationId。模型配置已有[正式 HTTP 管理入口](architecture.md#plugin--provider--模型配置管理-http)，尚无管理 UI。服务端也可继续使用以下 CLI 创建明确选择的 Provider 与模型配置：
 
 ```sh
 pnpm build
