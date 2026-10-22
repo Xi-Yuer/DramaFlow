@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { App, Button } from 'antd';
 import type { Project, WorkflowDefinition } from '@dramaflow/contracts';
 import { nodeTypeApi, nodeTypeKeys } from './node-type-api';
-import { WorkflowModelActionsContext } from './model-selector';
+import { WorkflowModelActionsContext, type ModelSelectionIntent, type ModelSelectionResume } from './model-selector';
 import { replaceNodeInput } from './template-input';
 import { WorkflowInputContext } from './workflow-input-context';
 import { WorkflowManifestProvider, workflowNodeTypes } from './workflow-node';
@@ -34,6 +34,8 @@ export function WorkflowCanvas({
   workflow,
   onEdit,
   onOpenProvider,
+  modelResume = null,
+  onModelResumeConsumed,
   reloading,
   interactionLocked = false,
   defaultViewport,
@@ -42,7 +44,13 @@ export function WorkflowCanvas({
   projectId: string;
   workflow: WorkflowDefinition;
   onEdit: (apply: (current: WorkflowDefinition) => WorkflowDefinition) => void;
-  onOpenProvider: (providerDefinitionId: string, mode: 'configure' | 'manage') => void;
+  onOpenProvider: (
+    providerDefinitionId: string,
+    mode: 'configure' | 'manage',
+    intent?: ModelSelectionIntent,
+  ) => void;
+  modelResume?: ModelSelectionResume | null;
+  onModelResumeConsumed?: () => void;
   reloading: boolean;
   interactionLocked?: boolean;
   defaultViewport: Project['viewport'];
@@ -98,6 +106,8 @@ export function WorkflowCanvas({
           projectId,
           disabled: locked,
           onOpenProvider,
+          resume: modelResume,
+          onResumeConsumed: onModelResumeConsumed ?? (() => undefined),
           onSelectModel: (nodeId, modelConfigurationId) =>
             onEdit((current) => ({
               ...current,

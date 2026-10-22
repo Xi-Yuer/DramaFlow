@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -22,16 +23,36 @@ import {
   filterSelectorGroups,
   groupSelectorModels,
   modelsForCapabilities,
+  resumeModelSelection,
   type SelectorGroup,
   type SelectorModelRow,
 } from './model-selector-options';
 import './model-selector.css';
 
+export interface ModelSelectionIntent {
+  nodeId: string;
+  catalogId: string;
+  displayName: string;
+  providerDefinitionId: string;
+  capability: string;
+}
+
+export interface ModelSelectionResume extends ModelSelectionIntent {
+  providerId: string;
+  resumedAt: number;
+}
+
 export interface WorkflowModelActions {
   projectId: string;
   disabled: boolean;
   onSelectModel: (nodeId: string, modelConfigurationId: string) => void;
-  onOpenProvider: (providerDefinitionId: string, mode: 'configure' | 'manage') => void;
+  onOpenProvider: (
+    providerDefinitionId: string,
+    mode: 'configure' | 'manage',
+    intent?: ModelSelectionIntent,
+  ) => void;
+  resume: ModelSelectionResume | null;
+  onResumeConsumed: () => void;
 }
 
 export const WorkflowModelActionsContext = createContext<WorkflowModelActions | null>(null);
@@ -78,8 +99,14 @@ export function ModelSelector({
   } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [handledResumeId, setHandledResumeId] = useState<string | null>(null);
+  const resume = actions?.resume?.nodeId === nodeId ? actions.resume : null;
+  const resumeId = resume ? `${resume.providerId}:${resume.catalogId}` : null;
   const enabled =
-    Boolean(actions) && client && capabilityTypes.length > 0 && (open || hasValue || addTarget !== null);
+    Boolean(actions) &&
+    client &&
+    capabilityTypes.length > 0 &&
+    (open || hasValue || addTarget !== null || resume !== null);
   const catalogQueries = useQueries({
     queries: capabilityTypes.map((capability) => ({
       ...queryOptions,
@@ -106,6 +133,47 @@ export function ModelSelector({
     queryFn: ({ signal }) => modelApi.models(actions!.projectId, signal),
     enabled: enabled && Boolean(actions),
   });
+  const resumeReady =
+    resume !== null &&
+    !actions?.disabled &&
+    models.isSuccess &&
+    providers.isSuccess &&
+    !models.isFetching &&
+    !providers.isFetching &&
+    models.dataUpdatedAt >= resume.resumedAt &&
+    providers.dataUpdatedAt >= resume.resumedAt &&
+    (providers.data ?? []).some((item) => item.id === resume.providerId && item.enabled);
+  const decision = resume && resumeReady
+    ? resumeModelSelection({
+        providerId: resume.providerId,
+        catalogId: resume.catalogId,
+        capability: resume.capability,
+        configurations: models.data ?? [],
+      })
+    : null;
+  const selectId = decision?.kind === 'select' ? decision.configurationId : null;
+  if (decision && resume && resumeId && handledResumeId !== resumeId) {
+    setHandledResumeId(resumeId);
+    if (decision.kind === 'add') {
+      setAddTarget({
+        catalogId: resume.catalogId,
+        displayName: resume.displayName,
+        providerId: resume.providerId,
+        capability: resume.capability,
+      });
+    }
+    if (decision.kind === 'choose') {
+      setOpen(true);
+      setQuery(resume.displayName);
+    }
+  }
+  const onSelectModel = actions?.onSelectModel;
+  const onResumeConsumed = actions?.onResumeConsumed;
+  useEffect(() => {
+    if (!resumeId || handledResumeId !== resumeId || !onResumeConsumed) return;
+    if (selectId) onSelectModel?.(nodeId, selectId);
+    onResumeConsumed();
+  }, [handledResumeId, nodeId, onResumeConsumed, onSelectModel, resumeId, selectId]);
   if (actions?.disabled && open) setOpen(false);
 
   if (!actions || capabilityTypes.length === 0) return <span>选择模型</span>;
@@ -225,9 +293,15 @@ export function ModelSelector({
                   busyId={busyId}
                   onSelect={select}
                   onEnable={(configurationId) => void enable(configurationId)}
-                  onConfigure={() => {
+                  onConfigure={(row) => {
                     setOpen(false);
-                    actions.onOpenProvider(group.providerDefinitionId, 'configure');
+                    actions.onOpenProvider(group.providerDefinitionId, 'configure', {
+                      nodeId,
+                      catalogId: row.id,
+                      displayName: row.displayName,
+                      providerDefinitionId: group.providerDefinitionId,
+                      capability,
+                    });
                   }}
                   onManage={() => {
                     setOpen(false);
@@ -252,14 +326,27 @@ export function ModelSelector({
       >
         <Button
           className="nodrag nopan nowheel model-selector-trigger"
-          aria-label={hasValue ? `已选 ${hasValue && pending ? '正在读取所选模型' : described.label}` : '选择模型'}
+          aria-label={
+            !hasValue
+              ? '选择模型'
+              : hasValue && pending
+                ? '已选 正在读取所选模型'
+                : described.detail
+                  ? `已选 ${described.label}，${described.detail}`
+                  : `已选 ${described.label}`
+          }
           aria-expanded={open}
           title={pending ? '正在读取所选模型' : described.title}
           disabled={actions.disabled}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          <span className="model-selector-name">
-            {hasValue && pending ? '正在读取所选模型' : described.label}
+          <span className="model-selector-selection">
+            <span className="model-selector-name">
+              {hasValue && pending ? '正在读取所选模型' : described.label}
+            </span>
+            {hasValue && !pending && described.detail ? (
+              <span className="model-selector-detail">{described.detail}</span>
+            ) : null}
           </span>
         </Button>
       </Popover>
@@ -328,7 +415,7 @@ function ModelGroup({
   busyId: string | null;
   onSelect: (configurationId: string) => void;
   onEnable: (configurationId: string) => void;
-  onConfigure: () => void;
+  onConfigure: (row: SelectorModelRow) => void;
   onManage: () => void;
   onAdd: (row: SelectorModelRow) => void;
 }) {
@@ -365,7 +452,12 @@ function ModelGroup({
                 <span className="model-selector-state pending">{modelStatusLabel(model.status.kind)}</span>
                 <div className="model-selector-actions">
                   {model.status.kind === 'unconfigured' ? (
-                    <Button size="small" autoInsertSpace={false} aria-label={`配置 ${group.providerName}`} onClick={onConfigure}>
+                    <Button
+                      size="small"
+                      autoInsertSpace={false}
+                      aria-label={`配置 ${group.providerName}`}
+                      onClick={() => onConfigure(model)}
+                    >
                       配置
                     </Button>
                   ) : null}
@@ -476,7 +568,7 @@ function AddCatalogModel({
       keyboard={!busy}
       destroyOnHidden
       footer={[
-        <Button key="cancel" disabled={busy} onClick={onClose}>
+        <Button key="cancel" autoInsertSpace={false} disabled={busy} onClick={onClose}>
           取消
         </Button>,
         <Button

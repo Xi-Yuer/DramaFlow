@@ -4,6 +4,7 @@ import {
   filterSelectorGroups,
   groupSelectorModels,
   modelsForCapabilities,
+  resumeModelSelection,
   type CatalogModelRef,
   type SelectorConfiguration,
   type SelectorProviderInstance,
@@ -87,7 +88,7 @@ describe('文本模型选择分组', () => {
     });
     expect(openaiGroup?.models[0]?.status).toEqual({
       kind: 'available',
-      choices: [{ configurationId: gpt, detail: null }],
+      choices: [{ configurationId: gpt, detail: '最大输出 128' }],
     });
     expect(anthropicGroup?.models[0]?.status).toEqual({ kind: 'not-added', providerId: anthropic });
     expect(openaiGroup?.models[0]).not.toHaveProperty('pluginId');
@@ -165,7 +166,7 @@ describe('文本模型选择分组', () => {
         definitions,
         catalog: visible,
       }),
-    ).toEqual({ label: 'GPT-4o', title: 'OpenAI · GPT-4o' });
+    ).toEqual({ label: 'GPT-4o', title: 'OpenAI · GPT-4o，最大输出 128', detail: '最大输出 128' });
     expect(
       describeSelection({
         configurationId: claude,
@@ -184,5 +185,43 @@ describe('文本模型选择分组', () => {
         catalog: visible,
       }).label,
     ).toBe('选择模型');
+  });
+
+  it('供应商配置完成后，按原来的目录模型决定继续添加、直接选择或回到列表', () => {
+    const target = {
+      providerId: openai,
+      catalogId: 'gpt-4o',
+      capability: 'text.generate',
+    };
+    expect(resumeModelSelection({ ...target, configurations: [] })).toEqual({
+      kind: 'add',
+      providerId: openai,
+    });
+    expect(resumeModelSelection({ ...target, configurations: [configuration()] })).toEqual({
+      kind: 'select',
+      configurationId: gpt,
+    });
+    expect(
+      resumeModelSelection({
+        ...target,
+        configurations: [configuration(), configuration({ id: claude, createdAt: '2026-10-22T00:00:03.000Z' })],
+      }).kind,
+    ).toBe('choose');
+    expect(
+      resumeModelSelection({
+        ...target,
+        configurations: [
+          configuration({
+            availability: { selectable: false, unavailableReason: 'MODEL_DISABLED' },
+          }),
+        ],
+      }).kind,
+    ).toBe('choose');
+    expect(
+      resumeModelSelection({
+        ...target,
+        configurations: [configuration({ providerId: anthropic })],
+      }),
+    ).toEqual({ kind: 'add', providerId: openai });
   });
 });

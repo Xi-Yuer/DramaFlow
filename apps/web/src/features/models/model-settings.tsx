@@ -39,12 +39,20 @@ export function ModelSettings({
   projectId,
   projectName,
   setupRequest = null,
+  onIntentCancelled,
+  onIntentProviderReady,
   onClose,
 }: {
   open: boolean;
   projectId: string;
   projectName: string;
-  setupRequest?: { definitionId: string; mode: 'configure' | 'manage' } | null;
+  setupRequest?: {
+    definitionId: string;
+    mode: 'configure' | 'manage';
+    intent?: { providerDefinitionId: string } | null;
+  } | null;
+  onIntentCancelled?: () => void;
+  onIntentProviderReady?: (provider: ModelProvider) => void;
   onClose: () => void;
 }) {
   return (
@@ -63,6 +71,8 @@ export function ModelSettings({
         projectId={projectId}
         projectName={projectName}
         setupRequest={setupRequest}
+        onIntentCancelled={onIntentCancelled}
+        onIntentProviderReady={onIntentProviderReady}
       />
     </Drawer>
   );
@@ -82,10 +92,18 @@ function ModelSettingsContent({
   projectId,
   projectName,
   setupRequest,
+  onIntentCancelled,
+  onIntentProviderReady,
 }: {
   projectId: string;
   projectName: string;
-  setupRequest: { definitionId: string; mode: 'configure' | 'manage' } | null;
+  setupRequest: {
+    definitionId: string;
+    mode: 'configure' | 'manage';
+    intent?: { providerDefinitionId: string } | null;
+  } | null;
+  onIntentCancelled?: () => void;
+  onIntentProviderReady?: (provider: ModelProvider) => void;
 }) {
   const cache = useQueryClient(),
     { message } = App.useApp();
@@ -368,15 +386,32 @@ function ModelSettingsContent({
         <ConfigureCatalogProviderForm
           projectId={projectId}
           provider={configuring}
-          onClose={() => setForm(null)}
-          onCreated={(provider) => {
+          onClose={() => {
+            if (
+              setupRequest?.intent &&
+              setupRequest.mode === 'configure' &&
+              setupRequest.intent.providerDefinitionId === configuring.id
+            )
+              onIntentCancelled?.();
+            setForm(null);
+          }}
+          onCreated={async (provider) => {
             cache.setQueryData<ModelProvider[]>(modelKeys.providers(projectId), (current) => [
               provider,
               ...(current ?? []).filter((item) => item.id !== provider.id),
             ]);
-            setForm(null);
+            try {
+              await reloadResources();
+            } catch {
+              // 供应商已经保存。列表随后由选择器重新读取。
+            }
             void message.success('访问凭证已保存');
-            void reloadResources();
+            const continueSelection =
+              setupRequest?.intent &&
+              setupRequest.mode === 'configure' &&
+              setupRequest.intent.providerDefinitionId === configuring.id;
+            if (continueSelection) onIntentProviderReady?.(provider);
+            else setForm(null);
           }}
         />
       ) : null}

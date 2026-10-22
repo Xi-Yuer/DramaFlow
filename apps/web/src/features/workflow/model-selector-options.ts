@@ -81,12 +81,13 @@ export function modelsForCapabilities(
   return matched;
 }
 
-function choiceDetail(settings: Readonly<Record<string, unknown>>, multiple: boolean) {
-  if (!multiple) return null;
+export function configurationParameterSummary(settings: Readonly<Record<string, unknown>>) {
   const parts: string[] = [];
-  if (typeof settings.maxOutputTokens === 'number') parts.push(`最大输出 ${settings.maxOutputTokens}`);
-  if (typeof settings.temperature === 'number') parts.push(`随机度 ${settings.temperature}`);
-  return parts.join(' · ') || '已有配置';
+  if (typeof settings.maxOutputTokens === 'number' && Number.isFinite(settings.maxOutputTokens))
+    parts.push(`最大输出 ${settings.maxOutputTokens}`);
+  if (typeof settings.temperature === 'number' && Number.isFinite(settings.temperature))
+    parts.push(`随机度 ${settings.temperature}`);
+  return parts.join(' · ') || null;
 }
 
 function earliest(instances: readonly SelectorProviderInstance[]) {
@@ -124,7 +125,9 @@ export function groupSelectorModels(input: {
         kind: 'available',
         choices: ordered.map((configuration) => ({
           configurationId: configuration.id,
-          detail: choiceDetail(configuration.settings, ordered.length > 1),
+          detail:
+            configurationParameterSummary(configuration.settings) ??
+            (ordered.length > 1 ? '已有配置' : null),
         })),
       };
     } else if (enabled.length === 0) status = { kind: 'provider-disabled' };
@@ -171,19 +174,53 @@ export function filterSelectorGroups(groups: readonly SelectorGroup[], query: st
     .filter((group) => group.models.length > 0);
 }
 
+export interface ModelSelectionResumeInput {
+  providerId: string;
+  catalogId: string;
+  capability: string;
+  configurations: readonly SelectorConfiguration[];
+}
+
+export type ModelSelectionResumeDecision =
+  | { kind: 'select'; configurationId: string }
+  | { kind: 'choose' }
+  | { kind: 'add'; providerId: string };
+
+// 配置供应商之后如何继续原来的目录模型。只看当前项目里的 ModelConfiguration，不保存这次判断。
+export function resumeModelSelection(input: ModelSelectionResumeInput): ModelSelectionResumeDecision {
+  const matching = input.configurations.filter(
+    (configuration) =>
+      configuration.providerId === input.providerId &&
+      configuration.model === input.catalogId &&
+      configuration.capability === input.capability,
+  );
+  const selectable = matching.filter((configuration) => configuration.availability.selectable);
+  if (selectable.length === 1) {
+    const configurationId = selectable[0]?.id;
+    if (configurationId) return { kind: 'select', configurationId };
+  }
+  if (matching.length > 0) return { kind: 'choose' };
+  return { kind: 'add', providerId: input.providerId };
+}
+
 export function describeSelection(input: {
   configurationId: unknown;
-  configurations: readonly { id: string; model: string; providerId: string }[];
+  configurations: readonly {
+    id: string;
+    model: string;
+    providerId: string;
+    settings?: Readonly<Record<string, unknown>>;
+  }[];
   providers: readonly { id: string; providerDefinitionId: string | null }[];
   definitions: readonly SelectorProviderDefinition[];
   catalog: readonly CatalogModelRef[];
 }) {
   if (input.configurationId === undefined || input.configurationId === null || input.configurationId === '')
-    return { label: '选择模型', title: '选择模型' };
+    return { label: '选择模型', title: '选择模型', detail: null };
   if (typeof input.configurationId !== 'string')
-    return { label: '模型配置不可用', title: '模型配置不可用' };
+    return { label: '模型配置不可用', title: '模型配置不可用', detail: null };
   const configuration = input.configurations.find((item) => item.id === input.configurationId);
-  if (!configuration) return { label: '模型配置不可用', title: '模型配置不可用' };
+  if (!configuration) return { label: '模型配置不可用', title: '模型配置不可用', detail: null };
   const provider = input.providers.find((item) => item.id === configuration.providerId);
   const catalogItem = input.catalog.find(
     (item) =>
@@ -192,9 +229,14 @@ export function describeSelection(input: {
   const providerName = input.definitions.find(
     (item) => item.id === provider?.providerDefinitionId,
   )?.displayName;
+  const detail = configuration.settings ? configurationParameterSummary(configuration.settings) : null;
   if (catalogItem) {
     const title = providerName ? `${providerName} · ${catalogItem.displayName}` : catalogItem.displayName;
-    return { label: catalogItem.displayName, title };
+    return { label: catalogItem.displayName, title: detail ? `${title}，${detail}` : title, detail };
   }
-  return { label: configuration.model, title: configuration.model };
+  return {
+    label: configuration.model,
+    title: detail ? `${configuration.model}，${detail}` : configuration.model,
+    detail,
+  };
 }

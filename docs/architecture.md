@@ -141,7 +141,7 @@ Provider 与模型绑定不可改写；凭证可轮换，enabled 可变。每次
 
 ## Web 项目模型设置
 
-项目画布内提供模型设置抽屉。模型供应商页以 Provider Catalog 为卡片，展示目录中的名称和能力；未配置时按 credentialFields 提交目录创建接口，已配置由同一定义的 Provider Instance 判断，并可轮换凭证和启停。自定义接入单独保留插件 Schema。模型页仍手写模型 id。`ai.text_generate` 的 model-selector 按节点声明的 `text.generate` 查询 Model Catalog，按 Provider 分组展示显示名；已有可选 ModelConfiguration 时只把 `modelConfigurationId` 写入节点。Provider 未配置时进入对应的凭证配置。Provider 已配置但该目录模型还没有 ModelConfiguration 时，沿用模型配置创建接口，并填写该能力已有的生成参数。未知结构禁止提交。Secret 不进入 Form store、Query / Mutation 缓存、URL 或浏览器存储；请求发出及退出组件时清空，不回填已保存值。创建 / 轮换不触发模型生成，设置操作不丢失未保存画布。
+项目画布内提供模型设置抽屉。模型供应商页以 Provider Catalog 为卡片，展示目录中的名称和能力；未配置时按 credentialFields 提交目录创建接口，已配置由同一定义的 Provider Instance 判断，并可轮换凭证和启停。自定义接入单独保留插件 Schema。模型页仍手写模型 id。`ai.text_generate` 的 model-selector 按节点声明的 `text.generate` 查询 Model Catalog，按 Provider 分组展示显示名；已有可选 ModelConfiguration 时只把 `modelConfigurationId` 写入节点。Provider 未配置时进入对应的凭证配置。若这次配置是从节点的某个目录模型进入且成功，配置完成后继续该模型：没有可用 ModelConfiguration 时进入添加流程并在创建后选中，已有一个可用配置时直接选中，有多个或暂不可选时回到该模型的选择列表。用户取消配置或取消添加则不写入节点。该意图不进入 WorkflowDefinition。Provider 已配置但该目录模型还没有 ModelConfiguration 时，沿用模型配置创建接口，并填写该能力已有的生成参数。已选模型展示当前 ModelConfiguration 的最大输出和随机度，节点不另存参数。未知结构禁止提交。Secret 不进入 Form store、Query / Mutation 缓存、URL 或浏览器存储；请求发出及退出组件时清空，不回填已保存值。创建 / 轮换不触发模型生成，设置操作不丢失未保存画布。
 
 ## Artifact 生产数据通道
 

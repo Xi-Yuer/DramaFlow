@@ -6,7 +6,7 @@
 
 节点界面只读取 JSON Manifest。配置控件在 config[].ui，输入提示在 ui.inputs，数值范围来自配置字段，不在 slider 上再存一份。category 固定八类，图标和 component 使用受控映射。数据 Handle.id 等于端口 key；控制 Handle 使用 `control:source` / `control:target`，命名端口使用 `control:source:<name>`。连线只允许同类 Handle。已有 constant、template、workflow_input 或 asset 的输入端口，确认替换后才建立 Data Edge 并删除原绑定；取消则图与绑定不变。selected、dragging、measured 不持久化。保存失败不显示已保存；会话检查暂时失败时保留编辑器，明确拒绝访问时隐藏内容。行为见 [Node](node-model.md) 和 [架构](architecture.md#react-flow-数据适配)。
 
-模型设置面向用户使用“模型供应商 / 模型”。模型供应商页以 Provider Catalog 为卡片，名称、能力和凭证字段来自目录，是否已配置由 Provider Instance 判断。自定义接入是单独入口，仍使用插件 Schema 指定兼容地址。Secret 不回填、不进入缓存，创建和轮换是独立操作。文本节点的模型选择器只展示节点所需能力的 Model Catalog，并写回已有或新建的 `modelConfigurationId`。见 [架构](architecture.md#web-项目模型设置)。文本节点的 prompt 与 system 可以从自身和下游以外的节点插入可赋给 string 的输出；编辑时按当前节点显示名和端口显示名展示，保存的 template 仍用 `{{alias}}` 对应 nodeId 与 portKey。每个端口单独保存 template 或 constant，不把变量写成 Data Edge。
+模型设置面向用户使用“模型供应商 / 模型”。模型供应商页以 Provider Catalog 为卡片，名称、能力和凭证字段来自目录，是否已配置由 Provider Instance 判断。自定义接入是单独入口，仍使用插件 Schema 指定兼容地址。Secret 不回填、不进入缓存，创建和轮换是独立操作。文本节点的模型选择器只展示节点所需能力的 Model Catalog，并写回已有或新建的 `modelConfigurationId`。从节点某个目录模型进入供应商配置并成功后，继续该模型的添加或选择；取消则不继续。这次意图只留在当前界面。设置页主动配置供应商仍停在设置。已选模型展示该配置的最大输出和随机度。见 [架构](architecture.md#web-项目模型设置)。文本节点的 prompt 与 system 可以从自身和下游以外的节点插入可赋给 string 的输出；编辑时按当前节点显示名和端口显示名展示，保存的 template 仍用 `{{alias}}` 对应 nodeId 与 portKey。每个端口单独保存 template 或 constant，不把变量写成 Data Edge。
 
 ## 可直接用于后续实施的样式提示词
 

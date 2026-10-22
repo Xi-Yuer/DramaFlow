@@ -10,6 +10,7 @@ import { ApiError } from '@/lib/http';
 import { AccountMenuButton } from '@/features/auth/account-menu';
 import { ModelSettings } from '@/features/models/model-settings';
 import { WorkflowCanvas } from '@/features/workflow/workflow-canvas';
+import type { ModelSelectionIntent, ModelSelectionResume } from '@/features/workflow/model-selector';
 import { useWorkflowDraft } from '@/features/workflow/use-workflow-draft';
 import { projectApi } from './project-api';
 import { clampViewport, draftSignature } from './viewport';
@@ -37,7 +38,9 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
   const [setupRequest, setSetupRequest] = useState<{
     definitionId: string;
     mode: 'configure' | 'manage';
+    intent: ModelSelectionIntent | null;
   } | null>(null);
+  const [modelResume, setModelResume] = useState<ModelSelectionResume | null>(null);
   const [name, setName] = useState(project.name);
   const [viewport, setViewport] = useState(project.viewport);
   const [saving, setSaving] = useState(false);
@@ -310,6 +313,17 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
         projectId={project.id}
         projectName={name}
         setupRequest={setupRequest}
+        onIntentCancelled={() =>
+          setSetupRequest((current) => (current ? { ...current, intent: null } : null))
+        }
+        onIntentProviderReady={(provider) => {
+          const intent = setupRequest?.intent;
+          setModelSettingsOpen(false);
+          setSetupRequest(null);
+          if (intent && provider.providerDefinitionId === intent.providerDefinitionId) {
+            setModelResume({ ...intent, providerId: provider.id, resumedAt: Date.now() });
+          }
+        }}
         onClose={() => {
           setModelSettingsOpen(false);
           setSetupRequest(null);
@@ -320,10 +334,12 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
         projectId={project.id}
         workflow={draft.definition}
         onEdit={draft.edit}
-        onOpenProvider={(definitionId, mode) => {
-          setSetupRequest({ definitionId, mode });
+        onOpenProvider={(definitionId, mode, intent) => {
+          setSetupRequest({ definitionId, mode, intent: intent ?? null });
           setModelSettingsOpen(true);
         }}
+        modelResume={modelResume}
+        onModelResumeConsumed={() => setModelResume(null)}
         reloading={draft.operation === 'reloading'}
         interactionLocked={modelSettingsOpen}
         defaultViewport={project.viewport}

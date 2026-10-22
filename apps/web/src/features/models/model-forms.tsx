@@ -48,7 +48,7 @@ export function ConfigureCatalogProviderForm({
   projectId: string;
   provider: ProviderCatalogItem;
   onClose: () => void;
-  onCreated: (provider: ModelProvider) => void;
+  onCreated: (provider: ModelProvider) => void | Promise<void>;
 }) {
   const [form] = Form.useForm();
   const compiled = trySchemaFields(provider.configurationSchema);
@@ -84,7 +84,7 @@ export function ConfigureCatalogProviderForm({
       const submitted = { ...credentials };
       setCredentials({});
       sent = true;
-      onCreated(
+      await onCreated(
         await modelApi.createCatalogProvider(projectId, {
           name,
           providerDefinitionId: provider.id,
