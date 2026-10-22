@@ -367,12 +367,14 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
         }
         values={workflowRun.values}
         state={workflowRun.state}
+        runStatus={workflowRun.runStatus}
         onSelectVersion={workflowRun.selectVersion}
         onChangeInput={workflowRun.changeInput}
         onRun={() => void workflowRun.run()}
         onRetry={() => void workflowRun.retry()}
         onRetryVersions={() => void workflowRun.retryVersions()}
         onRetryVersion={() => void workflowRun.retryVersion()}
+        onRefreshRunStatus={() => void workflowRun.refreshRunStatus()}
       />
       <ModelSettings
         open={modelSettingsOpen}

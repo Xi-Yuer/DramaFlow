@@ -22,6 +22,10 @@ export const workflowKeys = {
 };
 
 export const workflowApi = {
+  getRun: (runId: string, signal?: AbortSignal) =>
+    request(`/workflow-runs/${encodeURIComponent(runId)}`, workflowRunResponseSchema, {
+      signal,
+    }),
   startRun: (input: StartWorkflowRunRequest) =>
     request('/workflow-runs', workflowRunResponseSchema, {
       method: 'POST',

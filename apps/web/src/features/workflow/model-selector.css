@@ -34,6 +34,23 @@
   font-weight: 550;
 }
 
+.model-selector-section {
+  display: grid;
+  gap: 8px;
+}
+
+.model-selector-section + .model-selector-section {
+  padding-top: 10px;
+  border-top: 1px solid #ffffff0d;
+}
+
+.model-selector-panel h2 {
+  margin: 0;
+  color: #efeff2;
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .model-selector-panel ul {
   display: grid;
   gap: 4px;

@@ -8,6 +8,14 @@
   border-bottom: 1px solid #ffffff0c;
 }
 
+.statusPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #ffffff0c;
+}
+
 .header,
 .fieldHeading,
 .actions {

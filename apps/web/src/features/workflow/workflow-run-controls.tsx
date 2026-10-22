@@ -19,6 +19,8 @@ import {
   type WorkflowInputFormValues,
   type WorkflowRunState,
 } from './workflow-run';
+import { WorkflowRunStatusView } from './workflow-run-status-controls';
+import type { WorkflowRunStatusState } from './workflow-run-status';
 import styles from './workflow-run.module.css';
 
 type PublishedVersion = WorkflowVersionListResponse['items'][number];
@@ -34,12 +36,14 @@ export function WorkflowRunControls({
   draftDirty,
   values,
   state,
+  runStatus,
   onSelectVersion,
   onChangeInput,
   onRun,
   onRetry,
   onRetryVersions,
   onRetryVersion,
+  onRefreshRunStatus,
 }: {
   versions: PublishedVersion[];
   selectedVersionId: string | null;
@@ -51,12 +55,14 @@ export function WorkflowRunControls({
   draftDirty: boolean;
   values: WorkflowInputFormValues;
   state: WorkflowRunState;
+  runStatus: WorkflowRunStatusState;
   onSelectVersion: (versionId: string) => void;
   onChangeInput: (name: string, value: WorkflowInputFormValue) => void;
   onRun: () => void;
   onRetry: () => void;
   onRetryVersions: () => void;
   onRetryVersion: () => void;
+  onRefreshRunStatus: () => void;
 }) {
   const submitting = state.phase === 'submitting';
   const build = version ? buildWorkflowRunInputs(version.definition.inputs, values) : null;
@@ -291,6 +297,7 @@ export function WorkflowRunControls({
           }
         />
       ) : null}
+      <WorkflowRunStatusView state={runStatus} onRefresh={onRefreshRunStatus} />
     </section>
   );
 }

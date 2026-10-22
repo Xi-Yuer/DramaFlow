@@ -20,11 +20,14 @@ import { SchemaFormFields } from '../models/schema-form';
 import { trySchemaFields } from '../models/schema-fields';
 import {
   describeSelection,
+  filterConfiguredGroups,
   filterSelectorGroups,
+  groupConfiguredModels,
   groupSelectorModels,
   modelsForCapabilities,
   resumeModelSelection,
   type SelectorGroup,
+  type ConfiguredSelectorGroup,
   type SelectorModelRow,
 } from './model-selector-options';
 import './model-selector.css';
@@ -143,14 +146,15 @@ export function ModelSelector({
     models.dataUpdatedAt >= resume.resumedAt &&
     providers.dataUpdatedAt >= resume.resumedAt &&
     (providers.data ?? []).some((item) => item.id === resume.providerId && item.enabled);
-  const decision = resume && resumeReady
-    ? resumeModelSelection({
-        providerId: resume.providerId,
-        catalogId: resume.catalogId,
-        capability: resume.capability,
-        configurations: models.data ?? [],
-      })
-    : null;
+  const decision =
+    resume && resumeReady
+      ? resumeModelSelection({
+          providerId: resume.providerId,
+          catalogId: resume.catalogId,
+          capability: resume.capability,
+          configurations: models.data ?? [],
+        })
+      : null;
   const selectId = decision?.kind === 'select' ? decision.configurationId : null;
   if (decision && resume && resumeId && handledResumeId !== resumeId) {
     setHandledResumeId(resumeId);
@@ -193,26 +197,39 @@ export function ModelSelector({
     definitions: definitionItems,
     catalog,
   });
-  const groups = filterSelectorGroups(
-    groupSelectorModels({
+  const configuredGroups = filterConfiguredGroups(
+    groupConfiguredModels({
       catalog,
-      definitions: definitionItems,
       providers: providerItems,
       configurations: configurationItems,
-      capability,
+      capabilityTypes,
     }),
     query,
   );
-  const pending =
-    catalogQueries.some((item) => item.isPending) ||
-    definitions.isPending ||
-    providers.isPending ||
-    models.isPending;
-  const failed =
-    catalogQueries.find((item) => item.isError)?.error ??
-    definitions.error ??
-    providers.error ??
-    models.error;
+  const configurationPending = providers.isPending || models.isPending;
+  const configurationFailed = providers.error ?? models.error;
+  const discoveryPending =
+    catalogQueries.some((item) => item.isPending) || definitions.isPending;
+  const discoveryFailed =
+    catalogQueries.find((item) => item.isError)?.error ?? definitions.error;
+  const discoveryGroups =
+    discoveryPending || discoveryFailed
+      ? []
+      : filterSelectorGroups(
+          groupSelectorModels({
+            catalog,
+            definitions: definitionItems,
+            providers: providerItems,
+            configurations: configurationItems,
+            capability,
+          })
+            .map((group) => ({
+              ...group,
+              models: group.models.filter((model) => model.status.kind !== 'available'),
+            }))
+            .filter((group) => group.models.length > 0),
+          query,
+        );
 
   function select(configurationId: string) {
     actions!.onSelectModel(nodeId, configurationId);
@@ -266,59 +283,100 @@ export function ModelSelector({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
-            {failed ? (
+            {configurationFailed ? (
               <Alert
                 showIcon
                 type="error"
-                title="模型目录读取失败"
-                description={failure(failed)}
+                title="项目模型配置读取失败"
+                description={failure(configurationFailed)}
                 action={
                   <Button size="small" onClick={reload}>
                     重试
                   </Button>
                 }
               />
-            ) : pending ? (
+            ) : configurationPending ? (
               <Spin size="small" />
-            ) : groups.length === 0 ? (
-              <p className="model-selector-empty" role="status">
-                {query.trim() ? '没有匹配的模型' : '没有可选择的模型'}
-              </p>
             ) : (
-              groups.map((group) => (
-                <ModelGroup
-                  key={group.providerDefinitionId}
-                  group={group}
-                  selectedId={typeof value === 'string' ? value : undefined}
-                  busyId={busyId}
-                  onSelect={select}
-                  onEnable={(configurationId) => void enable(configurationId)}
-                  onConfigure={(row) => {
-                    setOpen(false);
-                    actions.onOpenProvider(group.providerDefinitionId, 'configure', {
-                      nodeId,
-                      catalogId: row.id,
-                      displayName: row.displayName,
-                      providerDefinitionId: group.providerDefinitionId,
-                      capability,
-                    });
-                  }}
-                  onManage={() => {
-                    setOpen(false);
-                    actions.onOpenProvider(group.providerDefinitionId, 'manage');
-                  }}
-                  onAdd={(row) => {
-                    if (row.status.kind !== 'not-added') return;
-                    setOpen(false);
-                    setAddTarget({
-                      catalogId: row.id,
-                      displayName: row.displayName,
-                      providerId: row.status.providerId,
-                      capability,
-                    });
-                  }}
-                />
-              ))
+              <>
+                {discoveryFailed ? (
+                  <Alert
+                    showIcon
+                    type="warning"
+                    title="模型目录读取失败"
+                    description="已配置模型仍可选择；暂时无法发现或添加目录模型。"
+                    action={
+                      <Button size="small" onClick={reload}>
+                        重试
+                      </Button>
+                    }
+                  />
+                ) : null}
+                {configuredGroups.length ? (
+                  <div className="model-selector-section" aria-label="已配置模型">
+                    <h2>已配置模型</h2>
+                    {configuredGroups.map((group) => (
+                      <ConfiguredModelGroup
+                        key={group.providerId}
+                        group={group}
+                        selectedId={typeof value === 'string' ? value : undefined}
+                        onSelect={select}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                {discoveryPending ? (
+                  <p className="model-selector-empty" role="status">
+                    正在读取可添加模型…
+                  </p>
+                ) : null}
+                {discoveryGroups.length ? (
+                  <div className="model-selector-section" aria-label="发现并添加模型">
+                    <h2>发现并添加模型</h2>
+                    {discoveryGroups.map((group) => (
+                      <ModelGroup
+                        key={group.providerDefinitionId}
+                        group={group}
+                        selectedId={typeof value === 'string' ? value : undefined}
+                        busyId={busyId}
+                        onSelect={select}
+                        onEnable={(configurationId) => void enable(configurationId)}
+                        onConfigure={(row) => {
+                          setOpen(false);
+                          actions.onOpenProvider(group.providerDefinitionId, 'configure', {
+                            nodeId,
+                            catalogId: row.id,
+                            displayName: row.displayName,
+                            providerDefinitionId: group.providerDefinitionId,
+                            capability,
+                          });
+                        }}
+                        onManage={() => {
+                          setOpen(false);
+                          actions.onOpenProvider(group.providerDefinitionId, 'manage');
+                        }}
+                        onAdd={(row) => {
+                          if (row.status.kind !== 'not-added') return;
+                          setOpen(false);
+                          setAddTarget({
+                            catalogId: row.id,
+                            displayName: row.displayName,
+                            providerId: row.status.providerId,
+                            capability,
+                          });
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                {configuredGroups.length === 0 &&
+                discoveryGroups.length === 0 &&
+                !discoveryPending ? (
+                  <p className="model-selector-empty" role="status">
+                    {query.trim() ? '没有匹配的模型' : '没有可选择的模型'}
+                  </p>
+                ) : null}
+              </>
             )}
             {actionError ? <Alert showIcon type="error" title={actionError} /> : null}
           </div>
@@ -329,22 +387,22 @@ export function ModelSelector({
           aria-label={
             !hasValue
               ? '选择模型'
-              : hasValue && pending
+                : hasValue && configurationPending
                 ? '已选 正在读取所选模型'
                 : described.detail
                   ? `已选 ${described.label}，${described.detail}`
                   : `已选 ${described.label}`
           }
           aria-expanded={open}
-          title={pending ? '正在读取所选模型' : described.title}
+          title={configurationPending ? '正在读取所选模型' : described.title}
           disabled={actions.disabled}
           onMouseDown={(event) => event.stopPropagation()}
         >
           <span className="model-selector-selection">
             <span className="model-selector-name">
-              {hasValue && pending ? '正在读取所选模型' : described.label}
+              {hasValue && configurationPending ? '正在读取所选模型' : described.label}
             </span>
-            {hasValue && !pending && described.detail ? (
+            {hasValue && !configurationPending && described.detail ? (
               <span className="model-selector-detail">{described.detail}</span>
             ) : null}
           </span>
@@ -391,6 +449,46 @@ function EnableModelButton({
     >
       启用
     </Button>
+  );
+}
+
+export function ConfiguredModelGroup({
+  group,
+  selectedId,
+  onSelect,
+}: {
+  group: ConfiguredSelectorGroup;
+  selectedId: string | undefined;
+  onSelect: (configurationId: string) => void;
+}) {
+  return (
+    <div role="group" aria-label={group.providerName}>
+      <h3>{group.providerName}</h3>
+      <ul>
+        {group.models.map((model) => {
+          const selected = model.configurationId === selectedId;
+          return (
+            <li key={model.configurationId}>
+              <button
+                type="button"
+                className="model-selector-option"
+                role="option"
+                aria-selected={selected}
+                data-configuration-id={model.configurationId}
+                onClick={() => onSelect(model.configurationId)}
+              >
+                <span className="model-selector-name">{model.displayName}</span>
+                <span className="model-selector-state">
+                  {selected ? <Check size={14} aria-hidden="true" /> : null}
+                  可用
+                </span>
+                {model.detail ? <small>{model.detail}</small> : null}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -449,7 +547,9 @@ function ModelGroup({
             ) : (
               <div className="model-selector-static">
                 <span className="model-selector-name">{model.displayName}</span>
-                <span className="model-selector-state pending">{modelStatusLabel(model.status.kind)}</span>
+                <span className="model-selector-state pending">
+                  {modelStatusLabel(model.status.kind)}
+                </span>
                 <div className="model-selector-actions">
                   {model.status.kind === 'unconfigured' ? (
                     <Button
@@ -462,7 +562,12 @@ function ModelGroup({
                     </Button>
                   ) : null}
                   {model.status.kind === 'provider-disabled' ? (
-                    <Button size="small" autoInsertSpace={false} aria-label={`管理 ${group.providerName}`} onClick={onManage}>
+                    <Button
+                      size="small"
+                      autoInsertSpace={false}
+                      aria-label={`管理 ${group.providerName}`}
+                      onClick={onManage}
+                    >
                       管理
                     </Button>
                   ) : null}
@@ -475,7 +580,12 @@ function ModelGroup({
                     />
                   ) : null}
                   {model.status.kind === 'not-added' ? (
-                    <Button size="small" autoInsertSpace={false} aria-label={`添加 ${model.displayName}`} onClick={() => onAdd(model)}>
+                    <Button
+                      size="small"
+                      autoInsertSpace={false}
+                      aria-label={`添加 ${model.displayName}`}
+                      onClick={() => onAdd(model)}
+                    >
                       添加
                     </Button>
                   ) : null}
@@ -526,7 +636,9 @@ function AddCatalogModel({
     let sent = false;
     try {
       const values: unknown = await form.validateFields();
-      const settings = compiled.form.validate(z.object({ settings: z.unknown() }).parse(values).settings);
+      const settings = compiled.form.validate(
+        z.object({ settings: z.unknown() }).parse(values).settings,
+      );
       sent = true;
       onCreated(
         await modelApi.createModel(projectId, {
@@ -537,7 +649,8 @@ function AddCatalogModel({
         }),
       );
     } catch (error) {
-      if (sent) setError(error instanceof ApiError ? error.message : '模型配置未确认，请刷新后核对');
+      if (sent)
+        setError(error instanceof ApiError ? error.message : '模型配置未确认，请刷新后核对');
       else if (!(error instanceof Object && 'errorFields' in error)) setError('请检查生成参数');
     } finally {
       lock.current = false;
@@ -553,7 +666,12 @@ function AddCatalogModel({
     body = <Alert showIcon type="error" title={compiled?.error ?? '当前无法添加该模型'} />;
   else
     body = (
-      <Form form={form} layout="vertical" requiredMark={false} initialValues={{ settings: compiled.form.defaults }}>
+      <Form
+        form={form}
+        layout="vertical"
+        requiredMark={false}
+        initialValues={{ settings: compiled.form.defaults }}
+      >
         <SchemaFormFields schema={compiled.form} group="settings" disabled={busy} />
       </Form>
     );

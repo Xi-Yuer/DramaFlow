@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   describeSelection,
+  filterConfiguredGroups,
   filterSelectorGroups,
+  groupConfiguredModels,
   groupSelectorModels,
   modelsForCapabilities,
   resumeModelSelection,
@@ -42,6 +44,7 @@ const catalog: CatalogModelRef[] = [
 function provider(overrides: Partial<SelectorProviderInstance> = {}): SelectorProviderInstance {
   return {
     id: openai,
+    name: 'OpenAI 项目配置',
     providerDefinitionId: 'openai',
     enabled: true,
     createdAt: '2026-10-22T00:00:00.000Z',
@@ -61,6 +64,133 @@ function configuration(overrides: Partial<SelectorConfiguration> = {}): Selector
   };
 }
 
+describe('项目 ModelConfiguration 主选择列表', () => {
+  const deepseekProvider = provider({
+    id: '00000000-0000-4000-8000-000000000041',
+    name: 'DeepSeek',
+    providerDefinitionId: null,
+  });
+  const deepseek = configuration({
+    id: '00000000-0000-4000-8000-000000000042',
+    providerId: deepseekProvider.id,
+    model: 'deepseek-flash',
+  });
+
+  it('没有 Catalog entry 的 selectable custom configuration 仍按实际 Provider 显示', () => {
+    const groups = groupConfiguredModels({
+      catalog,
+      providers: [deepseekProvider],
+      configurations: [deepseek],
+      capabilityTypes: ['text.generate'],
+    });
+    expect(groups).toEqual([
+      {
+        providerId: deepseekProvider.id,
+        providerName: 'DeepSeek',
+        models: [
+          {
+            configurationId: deepseek.id,
+            model: 'deepseek-flash',
+            displayName: 'deepseek-flash',
+            detail: '最大输出 128',
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('capability 不匹配或 unavailable 的配置不作为新选项', () => {
+    expect(
+      groupConfiguredModels({
+        catalog,
+        providers: [deepseekProvider],
+        configurations: [
+          deepseek,
+          configuration({
+            id: '00000000-0000-4000-8000-000000000043',
+            providerId: deepseekProvider.id,
+            capability: 'image.generate',
+          }),
+          configuration({
+            id: '00000000-0000-4000-8000-000000000044',
+            providerId: deepseekProvider.id,
+            availability: { selectable: false, unavailableReason: 'MODEL_DISABLED' },
+          }),
+        ],
+        capabilityTypes: ['text.generate'],
+      })[0]?.models.map((item) => item.configurationId),
+    ).toEqual([deepseek.id]);
+  });
+
+  it('Catalog 只能丰富名称，不能决定已有 configuration 是否可见', () => {
+    const privateModel = configuration({ model: 'private-deployment' });
+    const groups = groupConfiguredModels({
+      catalog: [],
+      providers: [provider()],
+      configurations: [privateModel],
+      capabilityTypes: ['text.generate'],
+    });
+    expect(groups[0]?.models[0]).toMatchObject({
+      configurationId: privateModel.id,
+      model: 'private-deployment',
+      displayName: 'private-deployment',
+    });
+    expect(filterConfiguredGroups(groups, 'OpenAI')[0]?.providerId).toBe(openai);
+    expect(filterConfiguredGroups(groups, 'private')[0]?.models).toHaveLength(1);
+  });
+
+  it('官方 Catalog 配置使用目录显示名，但选择 identity 仍是 configuration id', () => {
+    const groups = groupConfiguredModels({
+      catalog,
+      providers: [provider()],
+      configurations: [configuration()],
+      capabilityTypes: ['text.generate'],
+    });
+    expect(groups[0]?.models[0]).toMatchObject({
+      configurationId: gpt,
+      model: 'gpt-4o',
+      displayName: 'GPT-4o',
+    });
+  });
+
+  it('describeSelection 优先 Configuration + Provider，custom 无 Catalog 也能显示', () => {
+    expect(
+      describeSelection({
+        configurationId: deepseek.id,
+        configurations: [deepseek],
+        providers: [deepseekProvider],
+        definitions,
+        catalog: [],
+      }),
+    ).toEqual({
+      label: 'deepseek-flash',
+      title: 'DeepSeek · deepseek-flash，最大输出 128',
+      detail: '最大输出 128',
+    });
+  });
+
+  it('已选配置后来 unavailable 时保留 identity 并明确状态', () => {
+    expect(
+      describeSelection({
+        configurationId: deepseek.id,
+        configurations: [
+          {
+            ...deepseek,
+            availability: { selectable: false, unavailableReason: 'PROVIDER_DISABLED' },
+          },
+        ],
+        providers: [deepseekProvider],
+        definitions,
+        catalog: [],
+      }),
+    ).toEqual({
+      label: 'deepseek-flash',
+      title: 'DeepSeek · deepseek-flash，供应商已停用',
+      detail: '供应商已停用',
+    });
+  });
+});
+
 describe('文本模型选择分组', () => {
   it('只保留节点声明的能力，并按目录中的供应商分组', () => {
     const visible = modelsForCapabilities(catalog, ['text.generate']);
@@ -73,9 +203,9 @@ describe('文本模型选择分组', () => {
       capability: 'text.generate',
     });
     expect(groups.map((group) => group.providerName)).toEqual(['Anthropic', 'OpenAI']);
-    expect(groups.every((group) => group.models.every((model) => model.status.kind === 'unconfigured'))).toBe(
-      true,
-    );
+    expect(
+      groups.every((group) => group.models.every((model) => model.status.kind === 'unconfigured')),
+    ).toBe(true);
   });
 
   it('已有可执行配置时可直接对应到 configuration id，目录项本身不是配置', () => {
@@ -98,10 +228,7 @@ describe('文本模型选择分组', () => {
     const groups = groupSelectorModels({
       catalog: modelsForCapabilities(catalog, ['text.generate']).slice(1),
       definitions,
-      providers: [
-        provider({ id: anthropic, createdAt: '2026-10-22T00:00:02.000Z' }),
-        provider(),
-      ],
+      providers: [provider({ id: anthropic, createdAt: '2026-10-22T00:00:02.000Z' }), provider()],
       configurations: [],
       capability: 'text.generate',
     });
@@ -151,8 +278,12 @@ describe('文本模型选择分组', () => {
       configurations: [],
       capability: 'text.generate',
     });
-    expect(filterSelectorGroups(groups, 'gpt').map((group) => group.providerName)).toEqual(['OpenAI']);
-    expect(filterSelectorGroups(groups, 'claude-sonnet')[0]?.models[0]?.displayName).toBe('Claude Sonnet 4');
+    expect(filterSelectorGroups(groups, 'gpt').map((group) => group.providerName)).toEqual([
+      'OpenAI',
+    ]);
+    expect(filterSelectorGroups(groups, 'claude-sonnet')[0]?.models[0]?.displayName).toBe(
+      'Claude Sonnet 4',
+    );
     expect(filterSelectorGroups(groups, '不存在')).toEqual([]);
   });
 
@@ -166,7 +297,11 @@ describe('文本模型选择分组', () => {
         definitions,
         catalog: visible,
       }),
-    ).toEqual({ label: 'GPT-4o', title: 'OpenAI · GPT-4o，最大输出 128', detail: '最大输出 128' });
+    ).toEqual({
+      label: 'GPT-4o',
+      title: 'OpenAI 项目配置 · GPT-4o，最大输出 128',
+      detail: '最大输出 128',
+    });
     expect(
       describeSelection({
         configurationId: claude,
@@ -204,7 +339,10 @@ describe('文本模型选择分组', () => {
     expect(
       resumeModelSelection({
         ...target,
-        configurations: [configuration(), configuration({ id: claude, createdAt: '2026-10-22T00:00:03.000Z' })],
+        configurations: [
+          configuration(),
+          configuration({ id: claude, createdAt: '2026-10-22T00:00:03.000Z' }),
+        ],
       }).kind,
     ).toBe('choose');
     expect(

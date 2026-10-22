@@ -44,12 +44,20 @@ const props: Parameters<typeof WorkflowRunControls>[0] = {
     accepted: null,
     error: null,
   },
+  runStatus: {
+    phase: 'idle',
+    runId: null,
+    run: null,
+    error: null,
+    refreshing: false,
+  },
   onSelectVersion: () => undefined,
   onChangeInput: () => undefined,
   onRun: () => undefined,
   onRetry: () => undefined,
   onRetryVersions: () => undefined,
   onRetryVersion: () => undefined,
+  onRefreshRunStatus: () => undefined,
 };
 
 describe('Workflow Run 基础界面（静态组件测试）', () => {

@@ -11,6 +11,8 @@ import {
   type WorkflowInputFormValue,
   type WorkflowInputFormValues,
 } from './workflow-run';
+import { workflowRunTrackingId } from './workflow-run-status';
+import { useWorkflowRunStatus } from './use-workflow-run-status';
 
 type PublishedVersion = WorkflowVersionListResponse['items'][number];
 
@@ -80,6 +82,7 @@ export function useWorkflowRun(workflowId: string, preferredVersion: PublishedVe
     controller.getSnapshot,
     controller.getSnapshot,
   );
+  const runStatus = useWorkflowRunStatus(workflowRunTrackingId(state));
   const [form, setForm] = useState<{
     versionId: string | null;
     values: WorkflowInputFormValues;
@@ -126,10 +129,12 @@ export function useWorkflowRun(workflowId: string, preferredVersion: PublishedVe
     versionError: version.isError,
     values,
     state,
+    runStatus: runStatus.state,
     selectVersion,
     changeInput,
     run,
     retry: () => controller.retry(),
+    refreshRunStatus: () => runStatus.refresh(),
     retryVersions: () => versions.refetch(),
     retryVersion: () => version.refetch(),
   };
