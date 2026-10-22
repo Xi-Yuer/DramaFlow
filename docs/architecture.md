@@ -129,7 +129,7 @@ Provider 与模型绑定不可改写；凭证可轮换，enabled 可变。每次
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | GET /provider-plugins                                          | 受信任且允许配置的插件精确版本、JSON Schema 和凭证字段约束                                          |
 | GET /provider-catalog                                          | 官方 Provider 的安全目录：id、名称、能力、凭证字段和用户配置 Schema                                 |
-| GET /model-catalog                                             | 官方模型目录。可选 `capability` 精确筛选；项含稳定模型 id、显示名、providerDefinitionId 和能力       |
+| GET /model-catalog                                             | 官方模型目录。可选 `capability` 精确筛选；项含稳定模型 id、显示名、providerDefinitionId 和能力      |
 | GET / POST /projects/:projectId/providers                      | Provider 列表 / 按插件 Schema 创建                                                                  |
 | POST /projects/:projectId/providers/catalog                    | 按 Provider Definition 创建实例。请求为定义 id、名称和凭证；官方 Provider 不接受用户填写的 endpoint |
 | GET / PATCH /projects/:projectId/providers/:providerId         | 安全详情 / 修改 enabled                                                                             |
@@ -141,7 +141,7 @@ Provider 与模型绑定不可改写；凭证可轮换，enabled 可变。每次
 
 ## Web 项目模型设置
 
-项目画布内提供模型设置抽屉，支持 Provider / 模型创建、列表、详情、启停和独立凭证轮换。普通添加读取 Provider Catalog：选择服务后只填写目录声明的凭证，并调用目录创建接口。自定义接入仍提交插件 Schema。模型创建仍手写模型 id，尚未按 Model Catalog 的 Capability 筛选；节点上的模型选择器也未实现。未知结构禁止提交。Secret 不进入 Form store、Query / Mutation 缓存、URL 或浏览器存储；请求发出及退出组件时清空，不回填已保存值。创建 / 轮换不触发模型生成，设置操作不丢失未保存画布。
+项目画布内提供模型设置抽屉。模型供应商页以 Provider Catalog 为卡片，展示目录中的名称和能力；未配置时按 credentialFields 提交目录创建接口，已配置由同一定义的 Provider Instance 判断，并可轮换凭证和启停。自定义接入单独保留插件 Schema。模型页仍手写模型 id，尚未按 Model Catalog 的 Capability 筛选；节点上的模型选择器也未实现。未知结构禁止提交。Secret 不进入 Form store、Query / Mutation 缓存、URL 或浏览器存储；请求发出及退出组件时清空，不回填已保存值。创建 / 轮换不触发模型生成，设置操作不丢失未保存画布。
 
 ## Artifact 生产数据通道
 

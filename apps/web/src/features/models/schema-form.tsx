@@ -1,7 +1,7 @@
 'use client';
 import { Form, Input, InputNumber, Select } from 'antd';
 import type { InputHTMLAttributes } from 'react';
-import type { ProviderPluginDescription } from '@dramaflow/contracts';
+import type { ProviderCatalogItem } from '@dramaflow/contracts';
 import { fieldLabel, type SchemaField, type SchemaFields } from './schema-fields';
 
 function ScalarInput({
@@ -111,7 +111,7 @@ export function CredentialInputs({
   onChange,
   disabled,
 }: {
-  fields: ProviderPluginDescription['credentialFields'];
+  fields: ProviderCatalogItem['credentialFields'];
   values: Record<string, string>;
   onChange: (values: Record<string, string>) => void;
   disabled: boolean;
@@ -133,7 +133,7 @@ export function CredentialInputs({
   ));
 }
 export function validateCredentials(
-  fields: ProviderPluginDescription['credentialFields'],
+  fields: ProviderCatalogItem['credentialFields'],
   values: Record<string, string>,
 ) {
   for (const field of fields) {

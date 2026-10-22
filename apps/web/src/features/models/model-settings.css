@@ -112,6 +112,40 @@
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+.model-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.model-advanced-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 18px;
+  border-top: 1px solid #ffffff12;
+}
+.model-advanced-entry h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.model-advanced-entry p {
+  color: #a2a2ad;
+  font-size: 12px;
+  line-height: 1.7;
+  margin-top: 4px;
+}
+.model-manage-list {
+  display: grid;
+  gap: 16px;
+}
+.model-manage-instance h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
 .model-status-note {
   font-size: 12px;
   line-height: 1.7;
@@ -171,7 +205,8 @@
     padding: 16px;
   }
   .model-settings-heading,
-  .model-section-heading {
+  .model-section-heading,
+  .model-advanced-entry {
     flex-wrap: wrap;
   }
   .model-settings-heading h2 {

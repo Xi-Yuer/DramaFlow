@@ -6,7 +6,7 @@
 
 节点界面只读取 JSON Manifest。配置控件在 config[].ui，输入提示在 ui.inputs，数值范围来自配置字段，不在 slider 上再存一份。category 固定八类，图标和 component 使用受控映射。数据 Handle.id 等于端口 key；控制 Handle 使用 `control:source` / `control:target`，命名端口使用 `control:source:<name>`。连线只允许同类 Handle。selected、dragging、measured 不持久化。保存失败不显示已保存；会话检查暂时失败时保留编辑器，明确拒绝访问时隐藏内容。行为见 [Node](node-model.md) 和 [架构](architecture.md#react-flow-数据适配)。
 
-模型设置面向用户使用“模型供应商 / 模型”。普通添加从 Provider Catalog 选择服务，并只呈现目录声明的凭证字段；前端不硬编码厂商清单。自定义接入仍使用插件 Schema，用于自行指定兼容地址。Secret 不回填、不进入缓存，创建和轮换是独立操作。见 [架构](architecture.md#web-项目模型设置)。
+模型设置面向用户使用“模型供应商 / 模型”。模型供应商页以 Provider Catalog 为卡片，名称、能力和凭证字段来自目录，是否已配置由 Provider Instance 判断。自定义接入是单独入口，仍使用插件 Schema 指定兼容地址。Secret 不回填、不进入缓存，创建和轮换是独立操作。见 [架构](architecture.md#web-项目模型设置)。
 
 ## 可直接用于后续实施的样式提示词
 
