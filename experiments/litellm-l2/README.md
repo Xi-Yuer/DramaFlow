@@ -1,6 +1,6 @@
 # LiteLLM Secret 与故障协议验证
 
-真实 Gateway 固定为 `1.104.5`，复用 [L1 镜像 digest](../litellm-l1/image.lock.json)，本次实际运行 `linux/arm64`。实验不加载项目 `.env`，不连接数据库 / Redis，不调用收费模型，不装配正式 Worker、Plugin 或 Workflow。完整协议见[调用协议](../../docs/litellm-call-protocol.md)，实际案例见[脱敏结果](result.json)。
+真实 Gateway 固定为 `1.104.5`，复用 [L1 镜像 digest](../litellm-l1/image.lock.json)，本次实际运行 `linux/arm64`。实验不加载项目 `.env`，不连接数据库 / Redis，不调用收费模型，不装配正式 Worker、Plugin 或 Workflow。当时的调用协议见[调用协议](../litellm-call-protocol.md)，实际案例见[脱敏结果](result.json)。
 
 **结论 NO-GO。** 已执行 61 个 invocation 案例；除 HTTP 307 外，上游均收到 0 或 1 次请求。OpenAI 和原生 Anthropic 的 307 场景各收到两次 POST，第二跳位于原始 endpoint allowlist 之外的路径，Gateway 最终仍返回 200。配置中的零 retry / fallback 没有阻止这种 HTTP client 跳转。
 

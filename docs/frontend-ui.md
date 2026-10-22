@@ -1,18 +1,12 @@
 # 前端设计要求与样式提示词
 
-## 使用约定
+实施界面前阅读下方提示词，只应用到当轮指定的页面或组件，不据此恢复未授权功能或重做整站。
 
-本文件定义后续界面的视觉与交互方向。实施前阅读下方提示词，按用户当轮指定的页面或组件应用，不据此自动恢复业务功能或重做整站。
+当前使用 Ant Design、Next.js 和 TanStack Query，主题入口为 `apps/web/src/app/theme.ts`。登录和账户中心已使用石墨灰与青色主题。通用表单、选择器、菜单、提示和弹窗复用组件库，定制样式集中在页面布局。
 
-当前使用 Ant Design、Next.js Registry 和 TanStack Query，主题入口为 `apps/web/src/app/theme.ts`。登录页和账户中心已应用石墨灰与青色主题，通用表单、密码输入、选择器、页签、菜单、提示和弹窗复用组件库。定制样式集中在页面布局与少量装饰；后续按具体模块继续遵守下方提示词。
+节点界面只读取 JSON Manifest。配置控件在 config[].ui，输入提示在 ui.inputs，数值范围来自配置字段，不在 slider 上再存一份。category 固定八类，图标和 component 使用受控映射。数据 Handle.id 等于端口 key；控制 Handle 使用 `control:source` / `control:target`，命名端口使用 `control:source:<name>`。连线只允许同类 Handle。selected、dragging、measured 不持久化。保存失败不显示已保存；会话检查暂时失败时保留编辑器，明确拒绝访问时隐藏内容。行为见 [Node](node-model.md) 和 [架构](architecture.md#react-flow-数据适配)。
 
-节点界面读取纯 JSON NodeTypeManifest，配置由 config 字段数组描述，控件提示只在 config[].ui；输入提示位于 ui.inputs。metadata.category 固定八类，图标与 component 使用受控映射，不加载 Zod、execute 或模型实例。number 的范围来自配置字段，不在 slider UI 重复保存。DataType 使用 primitive / named / array / object / union / any，数据端口 key 对应数据 Handle.id；声明不代表已有配置表单、模型或资产选择服务，边界见 [Manifest 实施说明](node-type-implementation.md)。
-
-react-flow-adapter.ts 将 Workflow.edges 中的 Data / Control Edge 映射为 React Flow Edge，以 edge.data.kind 区分并保留边 ID、两端节点与端口。数据 Handle.id 必须等于 Manifest 的端口 key；控制 Handle 使用 `control:source` / `control:target`，命名端口使用 `control:source:approved` 等保留命名空间。默认 UI 控制 Handle 不进入领域 portKey，连线仅允许同类 Handle 相连。
-
-显式数据连线先对照精确版本 Manifest 检查端口、共享静态类型兼容及目标单连接，再创建 Data Edge，并移除被显式替换的目标静态 Binding；数组输入也不自动接收多条数据边。控制边不占用静态输入，不自动从数据边补齐。断连和重连核对边种类与完整旧快照；selected、dragging、measured 不持久化。GenericWorkflowNode 只生成 Manifest 数据 Handle 与普通控制出入口，命名控制端口的路由交互尚未设计。画布读取真实 Workflow Draft、查询正式节点目录，并接入节点位置与两类边事件。草稿和项目信息分别保存与显示状态，各自使用独立 revision。旧项目缺少 Workflow 时需显式初始化；冲突保留本地修改，确认后才重读对应资源，不联动丢弃另一类编辑。保存失败不显示已保存。后台会话检查的临时故障保留编辑器并提示重试，明确拒绝访问时仍隐藏内容。节点添加和配置表单尚未开放。相关边界见 [Node 模型](node-model.md)。
-
-项目模型设置在画布内用抽屉展示，表单复用 AntD Modal / Form / Input / Select。面向用户使用“模型供应商 / 模型”，接入方式和能力来自安全目录，不在前端硬编码厂商清单；[LiteLLM 接入档案评估](litellm-integration.md#a4模型发现与-a6)仅保留为已否决（NO-GO）的历史方案。配置表单只支持能完整呈现的公开 Schema，未知结构应明确关闭提交。Secret 不回填、不用假密文作输入值，创建 / 轮换发送后即清空；轮换必须是独立操作。启停后读取服务端可选性，不在 Web 推测外部服务是否在线。交互与边界见[当前架构](architecture.md#web-项目模型设置)。
+模型设置面向用户使用“模型供应商 / 模型”，接入方式来自安全目录，不在前端硬编码厂商。表单只提交能完整呈现的 Schema。Secret 不回填、不进入缓存，创建和轮换是独立操作。见 [架构](architecture.md#web-项目模型设置)。
 
 ## 可直接用于后续实施的样式提示词
 

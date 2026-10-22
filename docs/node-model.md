@@ -12,7 +12,7 @@ Data Edge 提供输入值来源，Control Edge 提供先后关系，不自动相
 
 ## Manifest 与端口
 
-Manifest 固定 type / version 与 executionKind（action / control / composite / interaction）；category 是独立的 UI 分类。只公开 JSON，不携带 Zod、execute、编译器或服务实例。
+Manifest 固定 type / version 与 executionKind（action / control / composite / interaction）。category 是独立的 UI 分类，固定八类；图标和 component 使用受控映射。只公开 JSON，不携带 Zod、execute、编译器或服务实例。
 
 数据端口使用正式 DataType，Handle.id 等于端口 key，同方向唯一。required 表示可省略，null 用 union 表达；集合用 array.itemType，没有 multiple。输出 storagePolicy 为 inline / reference / auto，缺省 auto，不改变端口类型。
 

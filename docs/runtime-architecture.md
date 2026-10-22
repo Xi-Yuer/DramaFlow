@@ -57,17 +57,9 @@ executeResume 只接受 Run ID / value，原子 claim waiting → running，保�
 
 使用 LangGraph Command 继续原快照；单个 interrupt 的 falsy value 通过其原生 interrupt ID 映射适配，不把 null / 0 / false 当作缺参。恢复后可再次 waiting。Runner 不查询 interaction NodeRun，具体关联留待 Human Review 设计。
 
-### 生产应用装配
+### 生产装配、文本调用与 Run HTTP
 
-API 事务提交并确认 enqueue，Worker 核验持久意图后执行。Job 不复制定义 / State / thread。claim 前基础设施故障可重投，业务失败不可重跑；claim 后结果不明记 recovery_required，已有业务终态只补记意图。持久去重不依赖 Redis Job 一直存在，详见[架构](architecture.md#workflow-execution-queue)。
-
-### 文本 Capability 调用边界
-
-Node 只引用 modelConfigurationId；server 负责当前 Run / 项目授权、配置读取与解密，PluginRegistry 负责统一校验和安全错误投影，ProviderCapability 内部调用 SDK。客户端只按 invocation 创建。当前实现、参数、retry / redirect 与日志边界集中在[文本能力](architecture.md#文本-ai-与-provider-plugin)。
-
-### Run HTTP 边界
-
-用户身份来自 Actor，版本反查资源归属，拒绝客户端声明 thread / 状态 / 项目身份。start / resume 返回 202；GET 公开安全业务 DTO；404 隐藏资源是否存在，非 waiting 为 409。入队未确认时安全 503 仍可能已经提交意图，不能盲目重提；HTTP 断开不会取消执行，也没有 fire-and-forget 兜底。
+API 事务提交并确认入队，Worker 核验持久意图后执行。Job 不复制定义、State 或 thread。claim、重投和 recovery_required 见[架构](architecture.md#workflow-execution-queue)。Node 只保存 modelConfigurationId，调用边界见[文本能力](architecture.md#文本-ai-与-provider-plugin)。Run 身份从当前用户和固定版本派生，受理与错误见[Run API](architecture.md#workflow-run-http-api)。
 
 ## State 与持久化
 
@@ -83,7 +75,7 @@ Definition / Version 保存静态流程，Run 保存运行身份，State 保存�
 | variables | 显式工作流变量，不开放节点任意读写 |
 | execution | 图控制状态，目前保留为空 |
 
-State 类型与 Annotation 共处 runtime/state.ts；run / inputs / variables / execution 为单值通道，Action wrapper 只写 outputs。
+State 类型与 Annotation 共处 runtime/state.ts。run / inputs / variables / execution 为单值通道，Action wrapper 只写 outputs。不增加 isInterrupted。通道定义不代表 checkpoint 已经持久化。
 
 ### 并行与历史
 

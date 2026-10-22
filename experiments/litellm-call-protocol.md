@@ -1,10 +1,10 @@
 # LiteLLM 模型调用协议
 
-> 此候选实现未通过准入，LiteLLM 路线已停止。保留协议分析及 L1 / L2 / L2.1 证据；allowlist、Secret 所有权和 outcome 分析可供后续独立评估参考，不表示将实施 `litellm@1`。当前方向见[实施方案](implementation-plan.md#当前阶段)。
+> 此候选实现未通过准入，LiteLLM 路线已停止。下文只保留当时的协议分析及 L1 / L2 / L2.1 证据，不实施 `litellm@1`。当前方向见[实施方案](../docs/implementation-plan.md#技术路线结论)。
 
-本文定义后续 `litellm@1` 必须遵守的调用、安全投影和失败语义，不表示生产 Plugin / Runtime 已实现。证据来自固定 LiteLLM `1.104.5` 镜像中的实际代码与[真实 Gateway 故障实验](../experiments/litellm-l2/README.md)，镜像 digest 复用[锁文件](../experiments/litellm-l1/image.lock.json)。当前阶段与后续授权只维护在[实施方案](implementation-plan.md)。
+本文记录已停止的 `litellm@1` 候选约束，供复核否决原因。证据来自固定 LiteLLM `1.104.5` 镜像与[真实 Gateway 故障实验](litellm-l2/README.md)，镜像 digest 复用[锁文件](litellm-l1/image.lock.json)。
 
-**当前存在准入阻塞：零 retry / fallback 配置仍跟随 Provider 307/308，再次发送生成 POST；原生 Anthropic 还将 x-api-key 传给跨 hostname、端口及 HTTPS downgrade 的目标。正式 OpenAI session 注入只修复 OpenAI，普通 forward proxy / CONNECT 均无效。本文的“最多发送一次”要求尚未被当前 Gateway 配置满足，不能据此进入正式部署。证据见 [No-Redirect 专项](../experiments/litellm-l2-1/README.md)。**
+**准入阻塞仍然成立：零 retry / fallback 配置仍跟随 Provider 307/308，再次发送生成 POST；原生 Anthropic 还将 x-api-key 传给跨 hostname、端口及 HTTPS downgrade 的目标。正式 OpenAI session 注入只修复 OpenAI，普通 forward proxy / CONNECT 均无效。证据见 [No-Redirect 专项](litellm-l2-1/README.md)。**
 
 ## 调用与发送约束
 

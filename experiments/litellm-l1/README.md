@@ -93,4 +93,4 @@ Gateway 无认证返回 401；错误 master key 或把 Provider key 当 Gateway 
 
 尚未验证 Azure / Bedrock / Vertex 的附加认证字段与生命周期，不能外推为任意 Provider 均支持同样的 override。没有测试 metadata / 模型管理 API，也不因此依赖其稳定性。本轮没有运行 429 / 503、断连、超时、流式或 Worker 崩溃的完整故障矩阵；这些仍属于后续任务。
 
-整体职责与所有权见[架构评估](../../docs/litellm-integration.md)，当前阶段及下一步仅维护在[实施方案](../../docs/implementation-plan.md#litellm-集成任务拆解)。
+整体职责与所有权见[架构评估](../litellm-integration.md)。路线结论见[实施方案](../../docs/implementation-plan.md#技术路线结论)。

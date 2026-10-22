@@ -1,12 +1,12 @@
 # LiteLLM 集成架构评估
 
-> 历史候选方案：LiteLLM 已在 L2.1 被否决，L3～L9 停止。下文保留原评估与证据，不能作为当前实施授权；工作方向与最新方案确认统一见[实施方案](implementation-plan.md#当前阶段)。不再为 LiteLLM 增加安全关键 L7 代理。
+> 历史候选方案：LiteLLM 已在 L2.1 被否决，L3～L9 停止。下文只保留否决证据，不能作为实施授权。生产文本能力已使用 Vercel AI SDK，见[实施方案](../docs/implementation-plan.md#技术路线结论)。
 
-本文记录拟议的集成边界，不表示 Runtime 集成已交付。代码评估基线为 `19ba4f4`；资料核对日期为 2026-10-21，读取了用户提供的[中文文档](https://docs.litellm.com.cn/docs/)、[上游文档](https://docs.litellm.ai/docs/)与 BerriAI 官方源码。固定 `1.104.5` 镜像的请求级凭证、双协议及无 DB 实测见[隔离验证](../experiments/litellm-l1/README.md)。在线文档和 `main` 不能替代固定发行版验收。当前阶段、下一步和任务依赖统一维护在[实施方案](implementation-plan.md#litellm-集成任务拆解)；已实现能力仍以[当前架构](architecture.md#文本-ai-与-provider-plugin)为准。
+本文记录曾经拟议的集成边界，不表示 Runtime 集成已交付。代码评估基线为 `19ba4f4`；资料核对日期为 2026-10-21。固定 `1.104.5` 镜像的实测见[隔离验证](litellm-l1/README.md)。在线文档和 `main` 不能替代固定发行版验收。已实现能力以[当前架构](../docs/architecture.md#文本-ai-与-provider-plugin)为准。
 
 ## 推荐结论
 
-固定版本的[No-Redirect 专项](../experiments/litellm-l2-1/README.md)确认当前直接出站方案不能准入：307/308 让两个协议重复生成 POST，Anthropic x-api-key 还被带往跨 origin 及 HTTPS downgrade 的目标。正式 OpenAI session 注入不能覆盖 Anthropic，普通 forward proxy / CONNECT 无效。保持 **NO-GO**；L7 过滤、其他 Gateway 和统一 SDK 是待选择的替代路线，未自动采用。已确认的所有权与产品模型继续保留，安全投影、outcome、缓存及 timeout 约束见[模型调用协议](litellm-call-protocol.md)。
+固定版本的[No-Redirect 专项](litellm-l2-1/README.md)确认直接出站方案不能准入：307/308 让两个协议重复生成 POST，Anthropic x-api-key 还被带往跨 origin 及 HTTPS downgrade 的目标。正式 OpenAI session 注入不能覆盖 Anthropic，普通 forward proxy / CONNECT 无效。结论保持 **NO-GO**。生产没有采用 L7 过滤或其他 Gateway，文本接入已使用 Vercel AI SDK。安全投影、outcome、缓存及 timeout 的当时分析见[模型调用协议](litellm-call-protocol.md)。
 
 采用独立、内网部署的 LiteLLM Gateway，作为受信任 `litellm@1` 插件的底层 AI 协议兼容服务。保留 DramaFlow 的 Provider Instance、Model Configuration、凭证加密、能力契约、发布校验和 Worker 解析。模型配置只由 DramaFlow 管理；不建立 LiteLLM 用户模型数据库或双向配置同步。
 

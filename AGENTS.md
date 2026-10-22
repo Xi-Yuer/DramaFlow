@@ -26,7 +26,7 @@
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 确认当前阶段 / 实现范围           | [实施方案](docs/implementation-plan.md) / [当前架构](docs/architecture.md)，按需选读                                                                                 |
 | 产品范围、上下文与建议            | [平台模型](docs/platform-model.md)                                                                                                                                   |
-| Workflow / Node / Runtime         | 按问题选择 [Workflow](docs/workflow-model.md)、[Node](docs/node-model.md)、[类型说明书](docs/node-type-implementation.md) 或 [Runtime](docs/runtime-architecture.md) |
+| Workflow / Node / 数据 / Runtime  | 按问题选择 [Workflow](docs/workflow-model.md)、[Node](docs/node-model.md)、[数据模型](docs/data-model.md) 或 [Runtime](docs/runtime-architecture.md)                       |
 | 页面与交互                        | [前端规范](docs/frontend-ui.md)，实施前必读样式提示词；复用成熟组件                                                                                                  |
 | 身份、权限、会话与凭证            | [认证与安全](docs/authentication.md)                                                                                                                                 |
 | 数据库、部署、数据重置 / 对象存储 | [部署与数据](docs/deployment.md) / [RustFS](docs/object-storage.md)                                                                                                  |

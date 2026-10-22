@@ -1,221 +1,44 @@
-# Workflow 模型：② 静态定义、版本与运行
+# Workflow 协议
 
-本文维护 Workflow 层的当前设计结论，承接 [平台核心模型](platform-model.md)。这里只确定流程的身份、静态定义、输入输出契约、不可变版本及运行边界，不设计 Node 内部执行、数据库表或 Runtime 调度实现。实现现状见 [当前架构](architecture.md)，设计进度见 [分步设计与实施方案](implementation-plan.md)。
-
-已有代码范围统一见 [Workflow 基础库](architecture.md#workflow-基础库)、[Workflow 编辑 API](architecture.md#workflow-编辑-http-api)和 [Run API](architecture.md#workflow-run-http-api)；领域设计不代表所有产品操作已经交付。
-
-## 核心关系
-
-Workflow 是受管理的流程对象，保存身份、元数据及可编辑草稿；WorkflowDefinition 是静态流程定义，不包含运行状态。
+流程身份、静态定义、输入输出契约、不可变版本和运行边界。节点内部见 [Node](node-model.md)，值与引用见 [数据模型](data-model.md)，执行见 [Runtime](runtime-architecture.md)，已实现接口见 [架构](architecture.md)。
 
 ```text
-Workflow
-    ├── Metadata
-    └── draft: WorkflowDefinition
-            ├── inputs
-            ├── nodes
-            ├── edges
-            └── outputs
-                    │
-                    │ publish / version：校验并冻结完整定义
-                    ▼
-            WorkflowVersion（不可变快照）
-                    │
-                    │ execute：显式选择版本并提供本次输入
-                    ▼
-            WorkflowRun（一次实际运行）
-                    └── State / NodeRun / Asset 引用 / Interrupt
+Workflow（身份、元数据、draft）
+  └── WorkflowDefinition（inputs / nodes / edges / outputs）
+        └── publish → WorkflowVersion（不可变快照，不执行）
+              └── execute → WorkflowRun（绑定该版本的一次运行）
 ```
 
-图中的发布作用于整个 WorkflowDefinition，包含 inputs、nodes、edges、outputs，而非只冻结节点和连线。Versions 与 Runs 分别关联 Workflow，不要求作为嵌套数组随每次读取整体返回，也不据此规定数据库结构。
+一个项目当前编辑其默认逻辑 Workflow。Workflow 身份不永久等于项目身份。Canvas 只是编辑视图。
 
-## Workflow 与 WorkflowDefinition
+edges 是节点间连接的唯一来源。Node.inputs 只保存 constant、workflow_input、asset，不保存连线。布局在 ui.position，不决定执行语义；React Flow 的临时交互状态不进入定义。
 
-Workflow 回答“这是谁的哪一个流程、草稿是什么”；WorkflowDefinition 回答“有哪些节点、怎样连接、接受什么输入、暴露什么输出”。当前产品阶段一个项目恰好一张 Canvas，编辑其默认逻辑 Workflow；默认选择和初始化属于应用边界，不将 Workflow 核心身份永久限定为项目身份。Canvas 是编辑视图，不是 Runtime 的执行状态。
+三套编号不能混用：Project.revision 管名称和视口，Workflow.revision 管草稿，发布 version 管不可变快照。项目名称与工作流名称独立。
 
-contracts 已导出正式 WorkflowDefinition / workflowDefinitionSchema；通用 createWorkflowSchemas 仍要求显式传入 DataType、Node、Edge Schema。正式定义使用 NodeDefinition 和 WorkflowEdge，保留四个顶层组成。edges 是节点间连接的唯一来源，分别以 Data Edge 表达值来源、Control Edge 表达显式执行先后；Node.inputs 只保存非连线输入。节点细节见 [Node 模型](node-model.md)。
+## 输入与输出
 
-```ts
-interface Workflow {
-  id: string;
-  projectId: string;
-  name: string;
-  description?: string;
-  revision: number;
-  draft: WorkflowDefinition;
-  createdAt: string;
-  updatedAt: string;
-}
+运行输入以所选版本的契约为准，不依赖某种 Start Node。名称在输入、输出和来源键中唯一，须以英文字母开头，只含字母、数字、下划线，并拒绝原型保留名。
 
-interface WorkflowDefinition {
-  inputs: WorkflowInput[];
-  nodes: NodeDefinition[];
-  edges: WorkflowEdge[];
-  outputs: WorkflowOutput[];
-}
-```
+媒体和资料使用可校验引用，不把二进制或服务器本地路径写入定义。静态兼容不代替真实值校验，类型规则见数据模型。
 
-Inputs 与 Outputs 只在 WorkflowDefinition 内定义，随草稿和版本分别保存；不在 Workflow 顶层再维护一份可独立修改的契约。版本、运行的关联也不改变 WorkflowDefinition 的四个组成部分。
+最后一个节点的输出不是 Workflow Output。输出显式声明 name、type，以及来源 nodeId 和 outputKey。来源必须存在且类型兼容。WorkflowRun.outputs 只按声明名称收集；缺失输出不能用空值或其他节点结果补齐。
 
-视口与节点布局不决定执行语义；节点布局当前必填保存在 ui.position，React Flow 临时交互状态不进入定义。Project revision 管理项目名称与视口保存，Workflow revision 管理完整草稿保存，发布 version 标识不可变快照，三者不得混用。项目与 Workflow 名称各自独立，不因保存项目而改写工作流元数据。
+## 版本
 
-## Inputs：工作流的显式输入契约
+发布校验并冻结完整定义，不修改草稿 revision，不调用模型。保存草稿和发布都携带 expectedRevision。过期保存返回 WORKFLOW_REVISION_CONFLICT。同一 workflowId 与 sourceRevision 只能发布一次，重复请求返回 WORKFLOW_REVISION_ALREADY_PUBLISHED。失败不写版本、不消耗版本号。
 
-Workflow 是具有明确 Input Contract 的可执行单元。运行输入以该版本的契约为准，不能只依赖 Start Node 内部的几个字符串，也不要求以某种 Start Node 形式才能声明输入。
+运行只能绑定明确的 WorkflowVersion，不能在执行中读取草稿或“最新版”。密钥不进入定义或版本。能力后来失效时明确失败，不能自动换插件。
 
-| 类别       | 需要表达的值                                    | 边界                                                                 |
-| ---------- | ----------------------------------------------- | -------------------------------------------------------------------- |
-| 基础值     | `string`、`number`、`boolean`                   | 提供明确的类型与约束                                                 |
-| 媒体与文件 | `file`、`image`、`video`、`audio`               | 使用受管理、可校验的素材引用，不把文件二进制或服务端本地路径塞入定义 |
-| 领域资料   | `asset`、`character`、`scene`，以及后续产品资料 | 明确引用或结构契约；具体领域模型在数据与资产阶段确定                 |
-| 复合值     | `array`、`json`                                 | 数组声明元素类型；复杂字段和真实值约束由服务端 Zod 明确声明          |
+## 运行
 
-例如，小说转漫剧可以声明小说文件引用、目标集数、视频风格；广告流程可以声明产品资料、目标受众、时长和带枚举约束的投放平台。这些是契约需求示意，不代表已有资产或领域运行值实现。当前最小 DataType 还包括 any，静态匹配不替代真实值校验。
+状态为 pending、running、waiting、completed、failed、cancelled。合法转换：pending → running；running → waiting / completed / failed / cancelled；waiting → running / cancelled。waiting 恢复后若失败，必须先回到 running。终态不再更新。首次进入 running 写 startedAt，恢复不改它；终态写 completedAt。
 
-输入名称必须唯一，输入输出名称及来源输出键目前采用以英文字母开头的字母、数字、下划线标识，并拒绝原型相关保留属性名。启动前按所选版本的契约校验实际输入及素材访问权限，不合格的输入不能进入执行。必填、默认值、空值、复合结构与类型兼容规则随 DataType / 数据流模型细化，不在这里先建立另一套类型系统。
+threadId 必填，独立于 Run.id，不能在缺失时推断为相等。同一版本可以多次运行，彼此隔离，不回写定义。inputs / outputs 是 RuntimeValue；error 只保留 stage、可选 code 和 message。
 
-基础库的值契约使用显式 Zod Schema，可校验基础值与复合值，也可执行该 Schema 明确声明的可选或默认行为；这不预设未来编辑协议如何表达默认值。素材引用的具体结构和访问权限仍由资产及应用模型决定。
+提交只保存 pending 与 start 意图，或在 waiting 周期创建恢复意图，不 claim。恢复只接受 Run ID 和不透明 value，版本与 thread 取原运行。非 waiting 返回 WORKFLOW_RUN_NOT_WAITING。waiting 是业务投影；暂停和恢复使用 LangGraph interrupt / Command.resume，不另建状态机。
 
-## Outputs：显式暴露的结果契约
+## 图与组合
 
-**最后一个节点的输出不等于 Workflow Output。** 工作流可以同时暴露视频、封面和发布文案，也可以只暴露内部某些节点结果；节点结果是否被其他节点消费，与是否被声明为最终输出是两回事。
+Data Edge 声明值来源，Control Edge 声明显式先后；创建前者不自动补后者。目标数据端口至多一条 Data Edge，且不能与静态绑定并存。数组不表示多连接聚合。控制边不占输入，可以有多个控制上游。两类边合并后必须无环。普通确定性上游按节点对去重后 ALL Join，见 [Runtime](runtime-architecture.md#普通确定性依赖的-all-join)。命名控制端口、条件和分支尚未实现。
 
-```ts
-interface WorkflowOutput {
-  name: string;
-  type: DataType;
-  source: {
-    nodeId: string;
-    outputKey: string;
-  };
-}
-```
-
-例如：
-
-```text
-finalVideo  ← videoCompose.output
-cover       ← coverGenerator.image
-publishText ← copyWriter.text
-```
-
-输出名称必须唯一，来源节点和输出键必须存在，来源类型与暴露类型必须兼容。发布校验依赖后续 Node 输出契约，运行收集结果时还要校验实际值。`WorkflowRun.outputs` 按声明的名称组织结果，不自动返回所有节点结果，也不能把任意最后完成节点的结果当成成功输出。
-
-条件分支被跳过、可选输出、集合结果以及嵌套路径的具体规则留到 Node / 数据流与运行阶段；不能用空值或任意上游结果静默补齐缺失输出。节点接收多个上游结果的规则属于 Node / 数据流模型，不由 Workflow Output 反向决定。
-
-## WorkflowVersion：发布后的不可变定义
-
-```ts
-interface WorkflowVersion {
-  id: string;
-  workflowId: string;
-  version: number;
-  definition: WorkflowDefinition;
-  publishedAt: string;
-}
-```
-
-发布表示校验草稿并创建不可变快照，不触发生成或执行。快照包含完整输入输出契约、节点及连线；后续草稿修改只影响之后发布的版本，不能回写已发布版本或已有运行。
-
-Project.revision 管理名称 / 视口保存，Workflow.revision 管理草稿编辑，两者独立，也都不等于发布版本号。updateDraft 必须携带 expectedRevision，以原子条件更新递增修订，过期请求返回 WORKFLOW_REVISION_CONFLICT。publish 同样绑定 expectedRevision，在事务内锁定工作流、重新校验完整定义并分配版本号，不修改草稿修订。数据库 sourceRevision 记录快照来源，同一 workflowId / sourceRevision 只能发布一次，重复请求返回 WORKFLOW_REVISION_ALREADY_PUBLISHED；版本读取保持只读，服务与测试范围见 [架构](architecture.md#workflow-基础库)。
-
-发布与启动需要保证定义的结构、引用、输入输出和依赖有效；节点细节、类型兼容及图校验规则分别由后续模型补齐。安全密钥不进入定义或版本。此处的不可变性要求持久化与服务边界共同保证，不因某个 TypeScript 类型标记就视为实现完成。
-
-运行只能绑定明确的 WorkflowVersion，不能在执行中读取草稿或动态解析“最新版”。固定定义不意味着供应商一定持续可用；能力缺失或配置失效时明确报告，不能通过自动换插件改变本次运行语义。
-
-## WorkflowRun：一次实际运行
-
-```ts
-type WorkflowRunStatus = 'pending' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
-
-interface WorkflowRun {
-  id: string;
-  projectId: string;
-  workflowId: string;
-  workflowVersionId: string;
-  threadId: string;
-  status: WorkflowRunStatus;
-  inputs: Record<string, RuntimeValue>;
-  outputs?: Record<string, RuntimeValue>;
-  error?: WorkflowRunError;
-  createdAt: string;
-  startedAt?: string;
-  completedAt?: string;
-}
-```
-
-完整协议复用既有运行元数据和六种状态，threadId 必填且独立于 Run.id。创建时可以选择相同的 ID 值，但不能在缺少 threadId 时推断或固定为相等。协议、Repository 与数据库的实际范围见 [当前架构](architecture.md#数据与-node-基础库)。
-
-`workflowVersionId` 必须属于同一个 `workflowId`，读取或启动时都必须检查对应项目权限。同一版本可以多次运行，各次输入、State、资产引用、节点执行结果、错误及等待记录相互隔离，不反写进 WorkflowDefinition。
-
-inputs / outputs 保存 RuntimeValue map，不复制解码媒体或整个 State.outputs；outputs 是按工作流声明名称组织的最终对外结果。WorkflowRunError 保存 stage、可选 code 与 message 的稳定摘要，不保存原始异常。实际值仍须通过对应版本的业务契约校验；运行记录的结构校验不替代它。时间字段采用 ISO 字符串。
-
-| 状态        | 语义                                         |
-| ----------- | -------------------------------------------- |
-| `pending`   | 已创建，尚未开始执行                         |
-| `running`   | 正在推进执行                                 |
-| `waiting`   | 等待明确的外部条件或人工操作，仍是同一次运行 |
-| `completed` | 按定义完成，并形成符合输出契约的结果         |
-| `failed`    | 本次运行失败                                 |
-| `cancelled` | 本次运行被取消                               |
-
-合法转换固定为 pending → running；running → waiting / completed / failed / cancelled；waiting → running / cancelled。waiting 恢复后如遇失败，必须经过 running 再进入 failed；终态不再更新。首次进入 running 写 startedAt，waiting → running 保留首次开始时间，终态写 completedAt。Repository 只提供明确领域操作，不开放任意 updateStatus，也不靠状态记录调度 Graph。
-
-提交服务事务保存 pending / Outbox 或本轮恢复意图，不 claim；Runner.executeStart 通过 claimPendingForStart 原子抢占首次执行，Runner.executeResume 通过 Repository.claimWaitingForResume 原子抢占 waiting → running，不能凭普通读取再调用 markRunning。getById 和 claim 都限定项目 / 所有者；非 waiting 或 claim 竞争失败向调用方返回 WORKFLOW_RUN_NOT_WAITING，不执行 Graph。恢复只允许提供 Run ID 和不透明 value，版本与 thread 一律取原运行，不新建记录或初始 State，具体执行边界见 [Runtime](runtime-architecture.md#workflowrunner-恢复)。
-
-`waiting` 是等待人工审核、外部 API、子流程或批量结果等执行事实的业务投影，不能凭状态字符串驱动另一套暂停 / 恢复流程。人工介入使用 LangGraph interrupt / Command.resume；WorkflowRun.threadId 映射 thread_id，等待原因及业务审计与 checkpoint 分离，见 [WorkflowState 边界](workflow-state.md) 与 [技术职责](runtime-architecture.md)。
-
-恢复继续使用原 Run、thread_id 及其不可变版本，不重新选择最新版。Checkpoint 保存执行 State，不保存平台 DSL；应用必须按 Run 绑定的版本重新编译图，不能恢复最新草稿。人工确认、生成和继续下游仍须遵守明确操作边界；恢复与用户主动重生成分离，供应商受理不明时不能借恢复盲目重试。
-
-## Workflow 组合与 SubWorkflow 边界
-
-Workflow 的显式输入输出使它可以被其他 Workflow 作为完整单元调用，为后续 SubWorkflowNode 奠定契约基础：
-
-```text
-小说漫剧 Workflow 的固定版本
-    └── Episode Batch
-            └── Episode Workflow 的固定版本 × N
-                    输入 Episode → 内部生产流程 → 输出 EpisodeVideo
-```
-
-在“每项目一张画布、一个逻辑 Workflow”的现有约束下，被调用 Workflow 归属它自己的项目；主流程引用另一个项目的明确 WorkflowVersion，不在当前项目下新增多工作流编辑层级。当前权限仍按项目所有者隔离，组合不能隐式获得其他项目的访问权限，也不因此引入工作空间成员实现。
-
-调用关系随调用方版本固定，被调用流程后来发布的新版本不能改变既有运行。不能只保存一个在运行时会变化的“最新版”别名。父子 Run 的关系、输入映射、等待、取消、并行与结果收集在第 ⑪ 步设计，SubWorkflowNode 的结构随 Node 模型展开；本步不实现调用器或批量引擎。
-
-首期保持 DAG，不允许以子流程直接或间接递归绕过无环约束。显式批量表示对明确集合的处理，不等于任意循环。
-
-## 图拓扑与执行职责
-
-WorkflowDefinition.edges 是节点间连接的权威来源。WorkflowEdge 使用 kind 区分 Data Edge 和 Control Edge：前者声明输入值来自哪个输出，后者声明显式执行先后约束。创建 Data Edge 不自动补 Control Edge，控制关系也不提供输入值。
-
-```ts
-interface DataEdgeDefinition {
-  id: string;
-  kind: 'data';
-  source: { nodeId: string; portKey: string };
-  target: { nodeId: string; portKey: string };
-}
-
-interface ControlEdgeDefinition {
-  id: string;
-  kind: 'control';
-  source: { nodeId: string; portKey?: string };
-  target: { nodeId: string; portKey?: string };
-}
-
-type WorkflowEdge = DataEdgeDefinition | ControlEdgeDefinition;
-```
-
-Data Edge 的 `source.nodeId / portKey` 表示上游节点及输出端口，`target.nodeId / portKey` 表示下游节点及输入端口。Node.inputs 是按输入端口组织的 StaticInputBinding record，只包含 constant、workflow_input、asset；不接受 ConnectionBinding。同一个目标数据输入端口不能同时存在 Data Edge 和静态 Binding。asset 显式保存 assetId 与 versionId，尚无资产读取或授权解析。
-
-Control Edge 两端的 portKey 均可省略，普通节点间的先后关系无需命名控制端口。它不占用 Node.inputs，也不受数据输入端口单连接规则限制，允许多个控制上游。当前 Data / Control Edge 均产生确定性执行依赖，相同 source / target 节点对只计一个上游，普通多上游采用 ALL Join，见 [Runtime](runtime-architecture.md#普通确定性依赖的-all-join)。可选命名端口仅有结构与往返支持，不代表已有条件路由、分支语义或命名控制端口 Manifest。
-
-React Flow Edge 通过 edge.data.kind 区分两类边，并保留边 ID 和两端节点。Data Edge 的 sourceHandle / targetHandle 直接映射领域 portKey，数据 Handle.id 必须等于对应 InputPortDefinition.key 或 OutputPortDefinition.key。控制 Handle 使用独立保留命名空间：普通出入口为 `control:source` / `control:target`，命名控制端口例如 `control:source:approved`。普通控制 Handle 不写入领域 portKey；带名 Handle 映射回实际名称。连线只允许 Data → Data 或 Control → Control，拒绝跨类连接，连接关系始终只保存在 edges。
-
-正式 workflowDefinitionSchema 检查顶层唯一性、输出引用节点、两类边全局 ID 唯一与端点节点、workflow_input 名称、自连接及两类关系合并后的无环约束；目标数据端口单连接与静态 Binding 冲突只适用于 Data Edge。它没有 Manifest，不能判断端口是否声明、端口类型兼容或资源权限，也不解析运行值。显式数据连线需再对照节点精确类型版本的 Manifest 检查源输出、目标输入及共享 isTypeAssignable；一个目标数据端口至多一条 Data Edge，数组类型表示输入值是数组，不表示多条连接自动聚合。
-
-联合 DAG 只验证图结构无环。执行依赖收集独立读取两类边的节点 ID，按目标聚合、按来源去重，不增加 parallelNodes / sequentialNodes 等列表；多上游映射为一条 LangGraph 数组 Join Edge。原始 Data Edge 的两端 portKey 保留给 BindingResolver 读取上游输出，依赖编译不读取端口或构造输入。条件候选分支不能直接放入 ALL 等待集合。图调度、Checkpoint 和暂停恢复由 LangGraph 提供。
-
-WorkflowState.outputs 使用携带 DataType 的 RuntimeValue。BindingResolver 定位或包装输入，Codec 解码输入并按统一存储策略编码输出，引用访问及写入委托独立服务；Action NodeExecutor 校验输入 / 配置 / 输出并返回 `{ output: Record<string, RuntimeValue> }`，不修改 State。Action 编译包装返回当前节点的 outputs 增量，LangGraph reducer 按节点键合并并拒绝重复写入，规则见 [State 边界](workflow-state.md#并行与历史) 与 [数据模型](data-model.md)。普通 Action 整图 Compiler 和 Runner 已有实现，Run HTTP 通过事务 Outbox / BullMQ 接入，Graph 由独立 Worker 执行，能力与引用服务限制见 [架构](architecture.md#数据与-node-基础库)。
-
-项目保存协议仍未接入 WorkflowDefinition，阶段与下一步统一见 [实施方案](implementation-plan.md)。
+后续可以把另一个项目的固定 WorkflowVersion 当作子流程调用。调用关系随调用方版本固定，不允许用子流程递归绕过无环约束，也不能隐式访问其他项目。父子运行、等待和取消尚未实现。
