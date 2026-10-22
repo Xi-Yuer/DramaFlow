@@ -138,6 +138,16 @@
   white-space: nowrap;
 }
 
+.selector {
+  display: grid;
+  gap: 6px;
+}
+
+.selector dd {
+  max-width: none;
+  overflow: visible;
+}
+
 .unavailable {
   margin: 0;
   padding: 4px 16px 16px;

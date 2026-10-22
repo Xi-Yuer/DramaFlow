@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from 'antd';
 import type { Project, WorkflowDefinition } from '@dramaflow/contracts';
 import { nodeTypeApi, nodeTypeKeys } from './node-type-api';
+import { WorkflowModelActionsContext } from './model-selector';
 import { WorkflowManifestProvider, workflowNodeTypes } from './workflow-node';
 import { areWorkflowHandlesCompatible } from './workflow-handles';
 import {
@@ -19,15 +20,19 @@ import {
 } from './react-flow-adapter';
 
 export function WorkflowCanvas({
+  projectId,
   workflow,
   onEdit,
+  onOpenProvider,
   reloading,
   interactionLocked = false,
   defaultViewport,
   onMoveEnd,
 }: {
+  projectId: string;
   workflow: WorkflowDefinition;
   onEdit: (apply: (current: WorkflowDefinition) => WorkflowDefinition) => void;
+  onOpenProvider: (providerDefinitionId: string, mode: 'configure' | 'manage') => void;
   reloading: boolean;
   interactionLocked?: boolean;
   defaultViewport: Project['viewport'];
@@ -59,6 +64,22 @@ export function WorkflowCanvas({
 
   return (
     <div className="canvas-stage">
+      <WorkflowModelActionsContext.Provider
+        value={{
+          projectId,
+          disabled: locked,
+          onOpenProvider,
+          onSelectModel: (nodeId, modelConfigurationId) =>
+            onEdit((current) => ({
+              ...current,
+              nodes: current.nodes.map((node) =>
+                node.id === nodeId
+                  ? { ...node, config: { ...node.config, modelConfigurationId } }
+                  : node,
+              ),
+            })),
+        }}
+      >
       <WorkflowManifestProvider manifests={nodeTypes.data ?? []}>
         <ReactFlow<WorkflowNode, WorkflowEdge>
           nodeTypes={workflowNodeTypes}
@@ -125,6 +146,7 @@ export function WorkflowCanvas({
           <Controls showInteractive={false} position="bottom-left" />
         </ReactFlow>
       </WorkflowManifestProvider>
+      </WorkflowModelActionsContext.Provider>
       {workflow.nodes.length === 0 ? (
         <div className="canvas-empty">
           <p>空白画布</p>

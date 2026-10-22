@@ -4,13 +4,13 @@
 
 ## 当前阶段
 
-截至 2026-10-22，已完成项目画布与模型管理基础（A3 / A4）、C2.1 文本能力接入、C2.2 生产残留清理、C2.3 架构文档校正，以及后端 Provider Catalog。正式文本链由 `text_generation@1` 在内部通过 Vercel AI SDK 调用 OpenAI 与 Anthropic。OpenAI / Anthropic 的 Provider Definition 在代码目录中，实例复用 ModelProvider。Web 模型供应商页按该目录配置凭证。Model Catalog 用代码声明 OpenAI `gpt-4o` 与 Anthropic `claude-sonnet-4-20250514`，均可按 `text.generate` 查询。调用厂商 API 的模型发现、其他厂商和新媒体能力尚未实现。
+截至 2026-10-22，已完成项目画布与模型管理基础（A3 / A4）、C2.1 文本能力接入、C2.2 生产残留清理、C2.3 架构文档校正，以及后端 Provider Catalog。正式文本链由 `text_generation@1` 在内部通过 Vercel AI SDK 调用 OpenAI 与 Anthropic。OpenAI / Anthropic 的 Provider Definition 在代码目录中，实例复用 ModelProvider。Web 模型供应商页按该目录配置凭证。Model Catalog 用代码声明 OpenAI `gpt-4o` 与 Anthropic `claude-sonnet-4-20250514`，均可按 `text.generate` 查询。`ai.text_generate` 节点可按该目录选择模型，草稿仍只保存 `modelConfigurationId`。调用厂商 API 的模型发现、其他厂商和新媒体能力尚未实现。
 
-下一步等待明确任务，不自动推进 A6、节点模型选择器、其他厂商或新生成能力。
+下一步等待明确任务，不自动推进 A6、图片或视频模型选择器、其他厂商或新生成能力。
 
 ## 待决策与后续边界
 
-- 编辑器后续入口：节点添加、配置、模型选择、发布与运行交互。实施前需明确本轮页面和操作边界。
+- 编辑器后续入口：节点添加、其余节点配置、发布与运行交互。文本节点的模型选择已落地。实施前需明确本轮页面和操作边界。
 - Runtime：recovery_required 的核查与人工处理、业务记录与 checkpoint 的对账、运行删除及 checkpoint 保留策略。
 - Human Review：interaction 节点的 waiting / resume，以及复用 NodeRun 与 attempt 的关联。继续采用 LangGraph 原生机制。
 - Tool / Agent、Asset / Promote、控制结构、Batch / SubWorkflow、媒体节点与漫剧模板按各自任务设计。协议或测试节点不是已交付功能。

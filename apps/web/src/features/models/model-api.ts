@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   providerPluginCatalogSchema,
   providerCatalogSchema,
+  modelCatalogSchema,
   createProjectCatalogProviderRequestSchema,
   modelProviderListSchema,
   modelConfigurationListSchema,
@@ -17,6 +18,7 @@ import { ApiError, jsonBody, request } from '../../lib/http';
 export const modelKeys = {
   catalog: ['provider-plugins'] as const,
   providerCatalog: ['provider-catalog'] as const,
+  modelCatalog: (capability: string) => ['model-catalog', capability] as const,
   providers: (projectId: string) => ['model-settings', projectId, 'providers'] as const,
   models: (projectId: string) => ['model-settings', projectId, 'models'] as const,
 };
@@ -72,6 +74,14 @@ export const modelApi = {
     safe(() => request('/provider-plugins', providerPluginCatalogSchema, { signal })),
   providerCatalog: (signal?: AbortSignal) =>
     safe(() => request('/provider-catalog', providerCatalogSchema, { signal })),
+  modelCatalog: (capability: string, signal?: AbortSignal) =>
+    safe(() =>
+      request(
+        `/model-catalog?capability=${encodeURIComponent(capability)}`,
+        modelCatalogSchema,
+        { signal },
+      ),
+    ),
   providers: (projectId: string, signal?: AbortSignal) =>
     safe(() =>
       allPages((cursor) =>

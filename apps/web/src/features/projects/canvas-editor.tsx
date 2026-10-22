@@ -34,6 +34,10 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
   const { getViewport, setViewport: setCanvasViewport } = useReactFlow();
   const draft = useWorkflowDraft(workflow);
   const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
+  const [setupRequest, setSetupRequest] = useState<{
+    definitionId: string;
+    mode: 'configure' | 'manage';
+  } | null>(null);
   const [name, setName] = useState(project.name);
   const [viewport, setViewport] = useState(project.viewport);
   const [saving, setSaving] = useState(false);
@@ -245,7 +249,10 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
           <Button
             size="small"
             icon={<Settings2 size={15} />}
-            onClick={() => setModelSettingsOpen(true)}
+            onClick={() => {
+              setSetupRequest(null);
+              setModelSettingsOpen(true);
+            }}
           >
             模型设置
           </Button>
@@ -302,12 +309,21 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
         open={modelSettingsOpen}
         projectId={project.id}
         projectName={name}
-        onClose={() => setModelSettingsOpen(false)}
+        setupRequest={setupRequest}
+        onClose={() => {
+          setModelSettingsOpen(false);
+          setSetupRequest(null);
+        }}
       />
       <WorkflowCanvas
         key={draft.workflowId}
+        projectId={project.id}
         workflow={draft.definition}
         onEdit={draft.edit}
+        onOpenProvider={(definitionId, mode) => {
+          setSetupRequest({ definitionId, mode });
+          setModelSettingsOpen(true);
+        }}
         reloading={draft.operation === 'reloading'}
         interactionLocked={modelSettingsOpen}
         defaultViewport={project.viewport}

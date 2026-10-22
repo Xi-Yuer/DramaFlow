@@ -38,11 +38,13 @@ export function ModelSettings({
   open,
   projectId,
   projectName,
+  setupRequest = null,
   onClose,
 }: {
   open: boolean;
   projectId: string;
   projectName: string;
+  setupRequest?: { definitionId: string; mode: 'configure' | 'manage' } | null;
   onClose: () => void;
 }) {
   return (
@@ -56,7 +58,12 @@ export function ModelSettings({
       destroyOnHidden
       className="model-settings-drawer"
     >
-      <ModelSettingsContent key={projectId} projectId={projectId} projectName={projectName} />
+      <ModelSettingsContent
+        key={projectId}
+        projectId={projectId}
+        projectName={projectName}
+        setupRequest={setupRequest}
+      />
     </Drawer>
   );
 }
@@ -74,9 +81,11 @@ type FormState =
 function ModelSettingsContent({
   projectId,
   projectName,
+  setupRequest,
 }: {
   projectId: string;
   projectName: string;
+  setupRequest: { definitionId: string; mode: 'configure' | 'manage' } | null;
 }) {
   const cache = useQueryClient(),
     { message } = App.useApp();
@@ -102,6 +111,22 @@ function ModelSettingsContent({
     queryKey: modelKeys.providerCatalog,
     queryFn: ({ signal }) => modelApi.providerCatalog(signal),
   });
+  const setupToken = setupRequest ? `${setupRequest.mode}:${setupRequest.definitionId}` : null;
+  const [appliedSetup, setAppliedSetup] = useState<string | null>(null);
+  if (definitions.data && setupToken !== appliedSetup) {
+    setAppliedSetup(setupToken);
+    if (
+      setupRequest &&
+      definitions.data.items.some((item) => item.id === setupRequest.definitionId)
+    ) {
+      setTab('providers');
+      setForm(
+        setupRequest.mode === 'configure'
+          ? { kind: 'configure', definitionId: setupRequest.definitionId }
+          : { kind: 'manage', definitionId: setupRequest.definitionId },
+      );
+    }
+  }
   const providers = useQuery({
     ...options,
     queryKey: modelKeys.providers(projectId),

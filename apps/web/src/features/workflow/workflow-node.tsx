@@ -14,6 +14,7 @@ import {
   Video,
 } from 'lucide-react';
 import type { DataType, NodeTypeManifest } from '@dramaflow/contracts';
+import { ModelSelector } from './model-selector';
 import type { WorkflowNode } from './react-flow-adapter';
 import { controlHandleId } from './workflow-handles';
 import styles from './workflow-node.module.css';
@@ -83,7 +84,12 @@ function configSummary(value: unknown) {
   return '已配置';
 }
 
-export function GenericWorkflowNode({ data, selected, isConnectable }: NodeProps<WorkflowNode>) {
+export function GenericWorkflowNode({
+  id,
+  data,
+  selected,
+  isConnectable,
+}: NodeProps<WorkflowNode>) {
   const manifests = useContext(ManifestContext);
   const manifest = findNodeManifest(manifests, data.nodeType, data.typeVersion);
   const icon = manifest ? (
@@ -172,9 +178,22 @@ export function GenericWorkflowNode({ data, selected, isConnectable }: NodeProps
           {manifest.config.length ? (
             <dl className={styles.config}>
               {manifest.config.slice(0, 3).map((field) => (
-                <div key={field.key}>
+                <div
+                  key={field.key}
+                  className={field.ui?.component === 'model-selector' ? styles.selector : undefined}
+                >
                   <dt>{field.name}</dt>
-                  <dd>{configSummary(data.config[field.key])}</dd>
+                  <dd>
+                    {field.ui?.component === 'model-selector' ? (
+                      <ModelSelector
+                        nodeId={id}
+                        capabilityTypes={(manifest.capabilities ?? []).map((item) => item.type)}
+                        value={data.config[field.key]}
+                      />
+                    ) : (
+                      configSummary(data.config[field.key])
+                    )}
+                  </dd>
                 </div>
               ))}
             </dl>
