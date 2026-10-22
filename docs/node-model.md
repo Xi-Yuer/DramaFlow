@@ -8,7 +8,7 @@ NodeDefinition 是实例，NodeTypeManifest 是可传输说明书，NodeType 是
 
 React Flow 的 type 选择通用 renderer，真实节点身份保存在 data.nodeType / typeVersion；selected、dragging、measured 不持久化。两类边保留 ID、种类、节点及可选端口；断连 / 重连必须核对完整旧边快照，防止过期事件修改现有连接。
 
-Data Edge 提供输入值来源，Control Edge 提供先后关系，不自动相互创建。数据输入单连接，且不能与静态绑定并存；数组不隐含多连接聚合。template 的 node_output 也是确定性依赖，但不另存为 Data Edge。控制边不占输入，边与模板引用按节点对去重，普通 fan-in 采用 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join)。
+Data Edge 提供输入值来源，Control Edge 提供先后关系，不自动相互创建。数据输入单连接，且不能与静态绑定并存；编辑器在替换已有绑定前要求确认。数组不隐含多连接聚合。template 的 node_output 也是确定性依赖，但不另存为 Data Edge。控制边不占输入，边与模板引用按节点对去重，普通 fan-in 采用 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join)。
 
 ## Manifest 与端口
 

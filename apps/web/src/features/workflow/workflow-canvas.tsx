@@ -1,8 +1,15 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { Background, BackgroundVariant, Controls, ReactFlow, type OnMove } from '@xyflow/react';
+import {
+  Background,
+  BackgroundVariant,
+  Controls,
+  ReactFlow,
+  type Connection,
+  type OnMove,
+} from '@xyflow/react';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from 'antd';
+import { App, Button } from 'antd';
 import type { Project, WorkflowDefinition } from '@dramaflow/contracts';
 import { nodeTypeApi, nodeTypeKeys } from './node-type-api';
 import { WorkflowModelActionsContext } from './model-selector';
@@ -15,6 +22,7 @@ import {
   connectWorkflowNodes,
   disconnectWorkflowEdge,
   reconnectWorkflowEdge,
+  staticBindingForDataConnection,
   toReactFlowEdges,
   toReactFlowNodes,
   type WorkflowEdge,
@@ -41,6 +49,7 @@ export function WorkflowCanvas({
   onMoveEnd: OnMove;
 }) {
   const locked = reloading || interactionLocked;
+  const { modal } = App.useApp();
   const nodeTypes = useQuery({ queryKey: nodeTypeKeys.list, queryFn: nodeTypeApi.list });
   const [nodeView, setNodeView] = useState<
     ReadonlyMap<string, Pick<WorkflowNode, 'selected' | 'measured'>>
@@ -63,6 +72,24 @@ export function WorkflowCanvas({
       })),
     [workflow, selectedEdgeIds],
   );
+
+  function commitDataConnection(
+    connection: Connection,
+    apply: (current: WorkflowDefinition, replaceBinding: boolean) => WorkflowDefinition,
+  ) {
+    if (!staticBindingForDataConnection(workflow, connection)) {
+      onEdit((current) => apply(current, false));
+      return;
+    }
+    modal.confirm({
+      title: '该输入已有内容。连接后将改为使用上游节点输出，当前内容将被替换。',
+      okText: '确认替换',
+      cancelText: '取消',
+      okButtonProps: { autoInsertSpace: false },
+      cancelButtonProps: { autoInsertSpace: false },
+      onOk: () => onEdit((current) => apply(current, true)),
+    });
+  }
 
   return (
     <div className="canvas-stage">
@@ -123,11 +150,17 @@ export function WorkflowCanvas({
                   onEdit((current) => applyWorkflowNodePositions(current, changes));
               }}
               onConnect={(connection) =>
-                onEdit((current) => connectWorkflowNodes(current, connection, nodeTypes.data ?? []))
+                commitDataConnection(connection, (current, replaceBinding) =>
+                  connectWorkflowNodes(current, connection, nodeTypes.data ?? [], {
+                    replaceBinding,
+                  }),
+                )
               }
               onReconnect={(edge, connection) =>
-                onEdit((current) =>
-                  reconnectWorkflowEdge(current, edge, connection, nodeTypes.data ?? []),
+                commitDataConnection(connection, (current, replaceBinding) =>
+                  reconnectWorkflowEdge(current, edge, connection, nodeTypes.data ?? [], {
+                    replaceBinding,
+                  }),
                 )
               }
               onEdgesDelete={(deleted) => {

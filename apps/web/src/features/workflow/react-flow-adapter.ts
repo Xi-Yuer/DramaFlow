@@ -10,6 +10,7 @@ import {
   type WorkflowEdge as WorkflowEdgeDefinition,
   type NodeDefinition,
   type NodeTypeManifest,
+  type StaticInputBinding,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
 import type { Edge, Node, NodeChange } from '@xyflow/react';
@@ -178,12 +179,35 @@ function manifestFor(manifests: readonly NodeTypeManifest[], type: string, versi
   return manifests.find((manifest) => manifest.type === type && manifest.version === version);
 }
 
+export type ConnectWorkflowOptions = { replaceBinding?: boolean };
+
+// 只识别会落到数据输入端口的连接。控制连线不读取 inputs。
+export function staticBindingForDataConnection(
+  definition: WorkflowDefinition,
+  connection: {
+    target?: string | null;
+    sourceHandle?: string | null;
+    targetHandle?: string | null;
+  },
+): StaticInputBinding | undefined {
+  try {
+    const source = parseWorkflowHandle(connection.sourceHandle, 'source');
+    const target = parseWorkflowHandle(connection.targetHandle, 'target');
+    if (source.kind !== 'data' || target.kind !== 'data' || !connection.target) return undefined;
+    return definition.nodes.find((node) => node.id === connection.target)?.inputs[target.portKey];
+  } catch (error) {
+    if (error instanceof z.ZodError) return undefined;
+    throw error;
+  }
+}
+
 function addWorkflowEdge(
   workflow: WorkflowDefinition,
   connection: WorkflowConnection,
   manifests: readonly NodeTypeManifest[],
   id: string,
   expectedKind?: WorkflowEdgeDefinition['kind'],
+  options?: ConnectWorkflowOptions,
 ): WorkflowDefinition {
   const sourceHandle = parseWorkflowHandle(connection.sourceHandle, 'source');
   const targetHandle = parseWorkflowHandle(connection.targetHandle, 'target');
@@ -231,8 +255,12 @@ function addWorkflowEdge(
   ) {
     throw new Error('目标输入端口已经存在连接');
   }
-  // 显式连线替换该端口的静态来源，不在 inputs 重复保存连接。
-  delete target.inputs[connection.targetHandle];
+  // 一个数据输入只有一个来源。已有静态绑定时必须由调用方明确确认，才能改由 Data Edge 提供。
+  const binding = target.inputs[connection.targetHandle];
+  if (binding && !options?.replaceBinding) {
+    throw new Error('目标输入已有内容，连接前需要确认替换');
+  }
+  if (binding) delete target.inputs[connection.targetHandle];
   workflow.edges.push({
     id,
     kind: 'data',
@@ -246,12 +274,15 @@ export function connectWorkflowNodes(
   input: unknown,
   connectionInput: unknown,
   manifestsInput: unknown,
+  options?: ConnectWorkflowOptions,
 ): WorkflowDefinition {
   return addWorkflowEdge(
     workflowDefinitionSchema.parse(input),
     connectionSchema.parse(connectionInput),
     nodeTypeManifestListSchema.parse(manifestsInput),
     `edge_${globalThis.crypto.randomUUID()}`,
+    undefined,
+    options,
   );
 }
 
@@ -280,6 +311,7 @@ export function reconnectWorkflowEdge(
   edgeInput: unknown,
   connectionInput: unknown,
   manifestsInput: unknown,
+  options?: ConnectWorkflowOptions,
 ): WorkflowDefinition {
   const workflow = workflowDefinitionSchema.parse(input);
   const snapshot = fromReactFlowEdge(edgeInput);
@@ -292,5 +324,6 @@ export function reconnectWorkflowEdge(
     nodeTypeManifestListSchema.parse(manifestsInput),
     snapshot.id,
     snapshot.kind,
+    options,
   );
 }

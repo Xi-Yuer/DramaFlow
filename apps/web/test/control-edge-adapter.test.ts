@@ -113,6 +113,7 @@ describe('Data / Control Handle 硬边界', () => {
         targetHandle: 'control',
       },
       catalog(),
+      { replaceBinding: true },
     );
     expect(result.edges).toEqual([
       {

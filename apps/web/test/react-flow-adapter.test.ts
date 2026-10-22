@@ -6,6 +6,7 @@ import {
   fromReactFlowEdge,
   fromReactFlowNode,
   reconnectWorkflowEdge,
+  staticBindingForDataConnection,
   toReactFlowEdge,
   toReactFlowEdges,
   toReactFlowNode,
@@ -93,6 +94,7 @@ const connection = {
   target: 'storyboard',
   targetHandle: 'style',
 };
+const confirmed = { replaceBinding: true };
 
 function styleEdge(input: WorkflowDefinition) {
   return toReactFlowEdges(input).find((edge) => edge.targetHandle === 'style')!;
@@ -262,7 +264,7 @@ describe('React Flow 与一等 Data Edge 无损适配', () => {
 describe('Data Edge 连线校验', () => {
   it('显式连线写入 edges 并替换该端口静态来源，不修改原对象或其他输入', () => {
     const input = workflow();
-    const result = connectWorkflowNodes(input, connection, manifests());
+    const result = connectWorkflowNodes(input, connection, manifests(), confirmed);
     expect(result.nodes[1].inputs).not.toHaveProperty('style');
     expect(result.nodes[1].inputs.novel).toEqual(input.nodes[1].inputs.novel);
     expect(input.nodes[1].inputs.style).toEqual({ type: 'constant', value: '黑白' });
@@ -274,6 +276,63 @@ describe('Data Edge 连线校验', () => {
     });
     expect(new Set(result.edges.map((edge) => edge.id)).size).toBe(2);
     expect(() => connectWorkflowNodes(result, connection, manifests())).toThrow('已经存在连接');
+  });
+
+  it('空端口可以直接连接；已有 constant、template、workflow_input 或 asset 时必须确认后才替换', () => {
+    const occupied = workflow();
+    const snapshot = structuredClone(occupied);
+    expect(staticBindingForDataConnection(occupied, connection)).toEqual({
+      type: 'constant',
+      value: '黑白',
+    });
+    expect(() => connectWorkflowNodes(occupied, connection, manifests())).toThrow('确认替换');
+    expect(() =>
+      reconnectWorkflowEdge(occupied, toReactFlowEdges(occupied)[0], connection, manifests()),
+    ).toThrow('确认替换');
+    expect(occupied).toEqual(snapshot);
+
+    const template = structuredClone(occupied);
+    template.nodes[1].inputs.style = {
+      type: 'template',
+      value: '风格 {{text}}',
+      variables: { text: { type: 'node_output', nodeId: 'script', portKey: 'text' } },
+    };
+    const templateSnapshot = structuredClone(template);
+    expect(staticBindingForDataConnection(template, connection)?.type).toBe('template');
+    expect(() => connectWorkflowNodes(template, connection, manifests())).toThrow('确认替换');
+    expect(template).toEqual(templateSnapshot);
+
+    expect(() =>
+      connectWorkflowNodes(occupied, { ...connection, targetHandle: 'novel' }, manifests()),
+    ).toThrow('确认替换');
+    expect(() =>
+      connectWorkflowNodes(
+        occupied,
+        { ...connection, sourceHandle: 'picture', targetHandle: 'reference' },
+        manifests(),
+      ),
+    ).toThrow('确认替换');
+    expect(occupied.nodes[1].inputs.novel).toEqual({ type: 'workflow_input', key: 'novel' });
+    expect(occupied.nodes[1].inputs.reference).toEqual({
+      type: 'asset',
+      assetId: 'image-v1',
+      versionId: 'asset-version-1',
+    });
+
+    const empty = workflow();
+    delete empty.nodes[1].inputs.style;
+    expect(staticBindingForDataConnection(empty, connection)).toBeUndefined();
+    const connected = connectWorkflowNodes(empty, connection, manifests());
+    expect(connected.nodes[1].inputs).not.toHaveProperty('style');
+    expect(connected.edges).toHaveLength(2);
+    expect(connected.nodes[1].inputs.novel).toEqual(empty.nodes[1].inputs.novel);
+    expect(
+      staticBindingForDataConnection(occupied, {
+        sourceHandle: 'control:source',
+        target: 'storyboard',
+        targetHandle: 'control:target',
+      }),
+    ).toBeUndefined();
   });
 
   it.each([undefined, null, '', 'bad-handle'])('连接拒绝缺失或非法端口 %s', (handle) => {
@@ -345,8 +404,12 @@ describe('Data Edge 连线校验', () => {
     };
     expect(() => connectWorkflowNodes(input, connection, [older, newer])).toThrow('端口类型不兼容');
     expect(
-      connectWorkflowNodes(input, { ...connection, sourceHandle: 'picture' }, [older, newer])
-        .edges[1],
+      connectWorkflowNodes(
+        input,
+        { ...connection, sourceHandle: 'picture' },
+        [older, newer],
+        confirmed,
+      ).edges[1],
     ).toMatchObject({ source: { nodeId: 'script', portKey: 'picture' } });
   });
 
@@ -355,7 +418,7 @@ describe('Data Edge 连线校验', () => {
     catalog[0].outputs[0].dataType = { kind: 'any' };
     expect(() => connectWorkflowNodes(workflow(), connection, catalog)).toThrow('端口类型不兼容');
     catalog[0].inputs[1].dataType = { kind: 'any' };
-    expect(connectWorkflowNodes(workflow(), connection, catalog).edges).toHaveLength(2);
+    expect(connectWorkflowNodes(workflow(), connection, catalog, confirmed).edges).toHaveLength(2);
     catalog[0].outputs[0].dataType = { kind: 'array', itemType: { kind: 'any' } };
     catalog[0].inputs[1].dataType = {
       kind: 'array',
@@ -367,7 +430,7 @@ describe('Data Edge 连线校验', () => {
       itemType: { kind: 'named', name: 'media.image' },
     };
     catalog[0].inputs[1].dataType = { kind: 'array', itemType: { kind: 'any' } };
-    const result = connectWorkflowNodes(workflow(), connection, catalog);
+    const result = connectWorkflowNodes(workflow(), connection, catalog, confirmed);
     expect(result.edges).toHaveLength(2);
     catalog[0].outputs[1].dataType = catalog[0].outputs[0].dataType;
     expect(() =>
@@ -394,7 +457,7 @@ describe('Data Edge 连线校验', () => {
 
 describe('Data Edge 删除与重连', () => {
   it('断连只删除对应 edges 关系，不改变节点静态输入', () => {
-    const input = connectWorkflowNodes(workflow(), connection, manifests());
+    const input = connectWorkflowNodes(workflow(), connection, manifests(), confirmed);
     const result = disconnectWorkflowEdge(input, styleEdge(input));
     expect(result.edges).toEqual(workflow().edges);
     expect(result.nodes).toEqual(input.nodes);
@@ -444,6 +507,7 @@ describe('Data Edge 删除与重连', () => {
       toReactFlowEdges(input)[0],
       connection,
       manifests(),
+      confirmed,
     );
     expect(result.edges[0].id).toBe(input.edges[0].id);
     expect(result.edges[0].target.portKey).toBe('style');
@@ -454,7 +518,7 @@ describe('Data Edge 删除与重连', () => {
   });
 
   it('重连失败保留旧边及静态输入，不因先断连而丢失数据', () => {
-    const input = connectWorkflowNodes(workflow(), connection, manifests());
+    const input = connectWorkflowNodes(workflow(), connection, manifests(), confirmed);
     const snapshot = structuredClone(input);
     const edge = toReactFlowEdges(input)[0];
     expect(() => reconnectWorkflowEdge(input, edge, connection, manifests())).toThrow(
