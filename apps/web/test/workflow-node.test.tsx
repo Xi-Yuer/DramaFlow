@@ -6,10 +6,13 @@ import {
   findNodeManifest,
   GenericWorkflowNode,
   WorkflowManifestProvider,
-} from '../src/features/workflow/workflow-node';
-import { WorkflowInputContext } from '../src/features/workflow/workflow-input-context';
-import { toReactFlowNode, type WorkflowNode } from '../src/features/workflow/react-flow-adapter';
-import { controlHandleId } from '../src/features/workflow/workflow-handles';
+} from '../src/features/workflow/canvas/workflow-node';
+import { WorkflowInputContext } from '../src/features/workflow/inputs/workflow-input-context';
+import {
+  toReactFlowNode,
+  type WorkflowNode,
+} from '../src/features/workflow/canvas/react-flow-adapter';
+import { controlHandleId } from '../src/features/workflow/canvas/workflow-handles';
 
 const manifest = nodeTypeManifestSchema.parse({
   type: 'video.image_to_video',

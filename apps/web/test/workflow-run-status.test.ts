@@ -4,7 +4,7 @@ import { workflowApi } from '../src/features/workflow/workflow-api';
 import {
   WorkflowRunStatusController,
   workflowRunTrackingId,
-} from '../src/features/workflow/workflow-run-status';
+} from '../src/features/workflow/run/status/workflow-run-status';
 
 function run(
   id: string,

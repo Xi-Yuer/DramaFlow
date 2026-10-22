@@ -2,6 +2,8 @@ import {
   resumeWorkflowRunRequestSchema,
   startWorkflowRunRequestSchema,
   workflowIdentifierSchema,
+  workflowInvocationKeySchema,
+  workflowInvocationLookupResponseSchema,
   workflowRunResponseSchema,
   type WorkflowRunResponse,
 } from '@dramaflow/contracts';
@@ -14,7 +16,11 @@ import type {
   ResumeWorkflowRunInput,
   StartWorkflowRunInput,
 } from '@dramaflow/workflow';
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import {
   workflowResourceNotFound,
   workflowRuntimeHttpError,
@@ -93,6 +99,33 @@ export class WorkflowRuntimeService {
           ? { completedAt: run.completedAt.toISOString() }
           : {}),
       });
+    });
+  }
+
+  async lookupInvocation(
+    ownerId: string,
+    rawWorkflowId: string,
+    rawKey: string,
+  ) {
+    const workflowId = workflowIdentifierSchema.parse(rawWorkflowId);
+    const invocationKey = workflowInvocationKeySchema.parse(rawKey);
+    const workflow = await this.database.client.workflow.findFirst({
+      where: { id: workflowId, project: { ownerId } },
+      select: { projectId: true },
+    });
+    if (!workflow) throw new NotFoundException('工作流不存在或无权访问');
+    const run = await this.database.client.workflowRun.findFirst({
+      where: {
+        workflowId,
+        invocationKey,
+        projectId: workflow.projectId,
+        project: { ownerId },
+      },
+      select: { id: true },
+    });
+    // 复用既有授权查询及安全投影；lookup 不进入 Submission / Dispatcher。
+    return workflowInvocationLookupResponseSchema.parse({
+      run: run ? await this.getRun(ownerId, run.id) : null,
     });
   }
 

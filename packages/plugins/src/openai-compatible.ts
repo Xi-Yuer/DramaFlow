@@ -5,6 +5,7 @@ import { RunTree } from 'langsmith';
 import { withRunTree } from 'langsmith/traceable';
 import { z } from 'zod';
 import { CapabilityError } from './capability-error.js';
+import { assertTextDoesNotEchoCredential } from './text-output.js';
 import type { ProviderPlugin } from './provider-plugin.js';
 
 export const openAICompatibleConfigurationSchema = z
@@ -132,6 +133,7 @@ export class OpenAICompatiblePlugin implements ProviderPlugin {
           output.additional_kwargs.refusal
         )
           throw new CapabilityError('CAPABILITY_OUTPUT_INVALID');
+        assertTextDoesNotEchoCredential(output.content, credentials.apiKey);
         return { text: output.content };
       },
     },

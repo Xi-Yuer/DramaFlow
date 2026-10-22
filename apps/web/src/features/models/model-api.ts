@@ -76,11 +76,9 @@ export const modelApi = {
     safe(() => request('/provider-catalog', providerCatalogSchema, { signal })),
   modelCatalog: (capability: string, signal?: AbortSignal) =>
     safe(() =>
-      request(
-        `/model-catalog?capability=${encodeURIComponent(capability)}`,
-        modelCatalogSchema,
-        { signal },
-      ),
+      request(`/model-catalog?capability=${encodeURIComponent(capability)}`, modelCatalogSchema, {
+        signal,
+      }),
     ),
   providers: (projectId: string, signal?: AbortSignal) =>
     safe(() =>

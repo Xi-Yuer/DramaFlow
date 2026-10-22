@@ -2,6 +2,7 @@ import {
   publishWorkflowRequestSchema,
   startWorkflowRunRequestSchema,
   workflowRunResponseSchema,
+  workflowInvocationLookupResponseSchema,
   workflowVersionResponseSchema,
   workflowVersionListResponseSchema,
   saveWorkflowDraftRequestSchema,
@@ -10,7 +11,7 @@ import {
   type SaveWorkflowDraftRequest,
   type StartWorkflowRunRequest,
 } from '@dramaflow/contracts';
-import type { WorkflowPublicationStatus } from './workflow-publish';
+import type { WorkflowPublicationStatus } from './publish/workflow-publish';
 import { ApiError, jsonBody, request } from '../../lib/http';
 
 export const workflowKeys = {
@@ -22,6 +23,11 @@ export const workflowKeys = {
 };
 
 export const workflowApi = {
+  lookupInvocation: (workflowId: string, invocationKey: string) =>
+    request(
+      `/workflow-runs/by-invocation/${encodeURIComponent(workflowId)}/${encodeURIComponent(invocationKey)}`,
+      workflowInvocationLookupResponseSchema,
+    ),
   getRun: (runId: string, signal?: AbortSignal) =>
     request(`/workflow-runs/${encodeURIComponent(runId)}`, workflowRunResponseSchema, {
       signal,

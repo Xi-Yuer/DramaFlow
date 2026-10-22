@@ -5,7 +5,11 @@ import { LogOut, UserRound } from 'lucide-react';
 import { useIdentity } from './use-identity';
 import { useSignOut } from './use-sign-out';
 
-export function AccountMenuButton() {
+export function AccountMenuButton({
+  requestLeave = (action) => void action(),
+}: {
+  requestLeave?: (action: () => void | Promise<void>) => void;
+}) {
   const router = useRouter();
   const identity = useIdentity();
   const { signOut, signingOut } = useSignOut();
@@ -18,8 +22,8 @@ export function AccountMenuButton() {
           { key: 'logout', icon: <LogOut size={15} />, label: '退出登录', disabled: signingOut },
         ],
         onClick: ({ key }) => {
-          if (key === 'account') router.push('/account');
-          if (key === 'logout') void signOut();
+          if (key === 'account') requestLeave(() => router.push('/account'));
+          if (key === 'logout') requestLeave(signOut);
         },
       }}
       trigger={['click']}

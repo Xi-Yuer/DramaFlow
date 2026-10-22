@@ -29,6 +29,16 @@ Data / Control Edge 和 template 的 node_output 都产生确定性执行依赖�
 
 单上游使用 `addEdge(source, target)`，多上游必须使用一次 `addEdge([sources], target)`，等待全部完成后执行一次；不拆成独立触发边，不增加 joinMode 或 ready 计数。条件候选分支、Send / Batch 不套用静态 ALL，需独立结构策略。
 
+### Action DAG 技术执行预算
+
+当前 Action DAG 的 execution depth 是联合依赖图中最长 Action 节点路径的节点数 D：根节点 level = 1，下游 level = 1 + max(上游 level)，D = max(level)；空图 D = 0。Compiler 内的纯函数 `analyzeActionDagExecution` 复用 `collectNodeDependencies`，因此 Data Edge、Control Edge 和 template node_output 均参与分析，同一节点对去重，workflow_input 不增加深度。宽并行图按最长路径计算，不按总节点数计算。
+
+Compiler 先冻结定义、确认所有节点的精确版本均可作为普通 Action 执行，再完成分析，之后才创建 Executor 和图节点。通过 LangGraph 官方 `withConfig` 将 `recursionLimit = D + 1` 绑定到编译图：空图为 1，100 个独立节点为 2，100 层串行为 101。该预算覆盖当前编译策略的首次正常执行及结束判定，避免合法图运行到默认 25 的边界后失败。
+
+Publish 与 Compiler 使用同一 Definition Schema 验证 Data / Control / Template 联合 DAG，发布另做 Registry / 端口 / 配置等静态校验；Runtime 从本次运行绑定的不可变 WorkflowVersion 分析同一依赖语义并连接执行边。这里不增加 Publish 最大节点数或深度限制。
+
+这是当前 Action DAG 编译策略的技术执行预算，不是费用预算、节点数量限制或 thread 累计业务额度。Runner 仍只提供 thread 和 invoke / resume，不做拓扑分析；本次不改变 interrupt / resume 语义。Iteration、Batch、SubWorkflow、HumanReview 和 conditional 必须各自明确 execution semantics，不能直接套用此公式。
+
 ### Data Edge 与节点输入
 
 BindingResolver 按 Manifest 读取 Data Edge 的上游端口或包装静态输入，并在这里把 template 渲染成内联字符串。NodeExecutor 不解释模板。Control Edge 不提供输入值。依赖编译保持原始端口信息，取值、decode 与真实 Schema 校验依次独立。

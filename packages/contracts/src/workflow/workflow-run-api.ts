@@ -21,6 +21,10 @@ export const workflowRunResponseSchema = workflowRunSchema.omit({
   threadId: true,
 });
 
+export const workflowInvocationLookupResponseSchema = z
+  .object({ run: workflowRunResponseSchema.nullable() })
+  .strict();
+
 export type StartWorkflowRunRequest = z.infer<typeof startWorkflowRunRequestSchema>;
 export type ResumeWorkflowRunRequest = z.infer<typeof resumeWorkflowRunRequestSchema>;
 export type WorkflowRunResponse = z.infer<typeof workflowRunResponseSchema>;

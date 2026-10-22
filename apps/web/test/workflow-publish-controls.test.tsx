@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { WorkflowPublishControls } from '../src/features/workflow/workflow-publish-controls';
-import type { PublishedWorkflowVersion } from '../src/features/workflow/workflow-publish';
+import { WorkflowPublishControls } from '../src/features/workflow/publish/workflow-publish-controls';
+import type { PublishedWorkflowVersion } from '../src/features/workflow/publish/workflow-publish';
 
 const identity: PublishedWorkflowVersion = {
   id: 'version-explicit-id',

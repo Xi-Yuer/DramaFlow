@@ -20,7 +20,7 @@ import { createWorkflowRunConfig } from './config.js';
 import type { WorkflowOutputResolver } from './workflow-output-resolver.js';
 import type { WorkflowRunRepository } from './workflow-run-repository.js';
 import { WorkflowRunNotPendingError, WorkflowRunNotWaitingError } from './workflow-run-error.js';
-import type { ResumeWorkflowRunInput } from './workflow-run-submission.js';
+import type { ResumeWorkflowRunInput } from './submission/workflow-run-submission.js';
 import {
   loadWorkflowVersion,
   type WorkflowVersionRecord,

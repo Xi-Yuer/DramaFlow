@@ -14,6 +14,7 @@ import type { NodeExecutor } from '../runtime/node-executor.js';
 import { WorkflowStateAnnotation, type WorkflowState } from '../runtime/state.js';
 import { collectNodeDependencies, DependencyCompiler } from './dependency.compiler.js';
 import { ActionNodeCompilationStrategy } from './strategy.js';
+import { analyzeActionDagExecution } from './action-dag-execution-analysis.js';
 
 // Runner 仅发送 resume，不开放 Command.update / goto 的状态写入或路由能力。
 export type WorkflowResumeCommand = Command<unknown, never, never>;
@@ -39,6 +40,12 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
   async compile(input: WorkflowDefinition, run: WorkflowRun): Promise<CompiledWorkflow> {
     const definition = createWorkflowDefinitionSnapshot(input);
     if (!this.checkpointer) throw new Error('WorkflowCompiler 必须显式注入 Checkpointer');
+    // 先确认整张图均属于当前策略，再分析预算；不为其他 execution kinds 套用 D + 1。
+    const actions = definition.nodes.map((node) => ({
+      node,
+      nodeType: this.registry.getAction(node.type, node.typeVersion),
+    }));
+    const { recursionLimit } = analyzeActionDagExecution(definition);
     const executor = await this.createExecutor(run);
     // 动态节点名由已校验的领域定义提供；调度、barrier 与持久化继续由 LangGraph 承担。
     const graph = new StateGraph<
@@ -48,8 +55,7 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       string
     >(WorkflowStateAnnotation);
     const strategy = new ActionNodeCompilationStrategy();
-    for (const node of definition.nodes) {
-      const nodeType = this.registry.getAction(node.type, node.typeVersion);
+    for (const { node, nodeType } of actions) {
       strategy.compile({
         node,
         manifest: nodeType.manifest,
@@ -75,6 +81,6 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       if (!sources.has(node.id)) graph.addEdge(node.id, END);
     }
     if (definition.nodes.length === 0) graph.addEdge(START, END);
-    return graph.compile({ checkpointer: this.checkpointer });
+    return graph.compile({ checkpointer: this.checkpointer }).withConfig({ recursionLimit });
   }
 }

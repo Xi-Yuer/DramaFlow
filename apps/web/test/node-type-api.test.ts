@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { nodeTypeApi } from '../src/features/workflow/node-type-api';
+import { nodeTypeApi } from '../src/features/workflow/node-catalog/node-type-api';
 
 const manifest = {
   type: 'test.text',

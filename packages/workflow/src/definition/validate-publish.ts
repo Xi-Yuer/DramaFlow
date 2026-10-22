@@ -7,7 +7,7 @@ import {
 import { StateGraph } from '@langchain/langgraph';
 import { NodeRegistry } from '../node/registry.js';
 import type { NodeType } from '../node/type.js';
-import { DefaultDataStoragePolicyResolver } from '../runtime/data-storage-policy-resolver.js';
+import { DefaultDataStoragePolicyResolver } from '../runtime/values/data-storage-policy-resolver.js';
 import { WorkflowStateAnnotation } from '../runtime/state.js';
 
 export type WorkflowPublishIssueCode =

@@ -19,9 +19,7 @@ export const modelCatalogItemSchema = z
       .min(1),
   })
   .strict();
-export const modelCatalogSchema = z
-  .object({ items: z.array(modelCatalogItemSchema) })
-  .strict();
+export const modelCatalogSchema = z.object({ items: z.array(modelCatalogItemSchema) }).strict();
 export const modelCatalogQuerySchema = z
   .object({ capability: z.string().min(1).max(100).optional() })
   .strict();

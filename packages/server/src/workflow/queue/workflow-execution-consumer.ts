@@ -11,7 +11,7 @@ import { DatabaseService } from '../../database/database.service.js';
 import {
   WorkflowExecutionService,
   WorkflowExecutionTerminalError,
-} from '../workflow-execution.service.js';
+} from '../runtime/workflow-execution.service.js';
 import { createWorkflowExecutionWorker } from './workflow-execution-queue.js';
 
 export function isRetryableWorkflowInfrastructureError(error: unknown): boolean {

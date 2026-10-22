@@ -46,7 +46,9 @@ describe('官方 Model Catalog', () => {
   });
 
   it('模型必须属于已发布 Provider，且只能声明该 Provider 已有的能力', () => {
-    const providers = createOfficialProviderCatalog(new PluginRegistry([new TextGenerationPlugin()]));
+    const providers = createOfficialProviderCatalog(
+      new PluginRegistry([new TextGenerationPlugin()]),
+    );
     expect(
       () =>
         new ModelCatalog(providers, [

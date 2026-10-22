@@ -18,7 +18,7 @@ import {
   templateFromSegments,
   templateSegments,
   variableNameForPort,
-} from '../src/features/workflow/template-input';
+} from '../src/features/workflow/inputs/template-input';
 
 const textManifest = {
   type: 'ai.text_generate',

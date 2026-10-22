@@ -92,7 +92,9 @@ export class ModelManagementController {
   @Header('Cache-Control', 'no-store')
   modelCatalog(@Query() query: unknown) {
     return safe(() =>
-      this.models.listModelCatalog(parse(modelCatalogQuerySchema, query).capability),
+      this.models.listModelCatalog(
+        parse(modelCatalogQuerySchema, query).capability,
+      ),
     );
   }
 

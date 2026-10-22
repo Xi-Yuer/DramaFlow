@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StringType, type WorkflowRunResponse, type WorkflowRunStatus } from '@dramaflow/contracts';
 import { describe, expect, it } from 'vitest';
-import { WorkflowRunStatusView } from '../src/features/workflow/workflow-run-status-controls';
-import type { WorkflowRunStatusState } from '../src/features/workflow/workflow-run-status';
+import { WorkflowRunStatusView } from '../src/features/workflow/run/status/workflow-run-status-controls';
+import type { WorkflowRunStatusState } from '../src/features/workflow/run/status/workflow-run-status';
 
 function run(status: WorkflowRunStatus): WorkflowRunResponse {
   return {

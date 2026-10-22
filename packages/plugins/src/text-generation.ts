@@ -4,6 +4,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { APICallError, generateText, isStepCount, wrapLanguageModel } from 'ai';
 import { z } from 'zod';
 import { CapabilityError, externalCapabilityError } from './capability-error.js';
+import { assertTextDoesNotEchoCredential } from './text-output.js';
 import {
   openAICompatibleConfigurationSchema,
   openAICompatibleCredentialsSchema,
@@ -90,13 +91,9 @@ export class TextGenerationPlugin implements ProviderPlugin {
             telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
             include: { requestBody: false, requestMessages: false, responseBody: false },
           });
-          if (
-            result.finishReason !== 'stop' ||
-            result.toolCalls.length ||
-            !result.text.trim() ||
-            result.text.includes(credentials.apiKey)
-          )
+          if (result.finishReason !== 'stop' || result.toolCalls.length || !result.text.trim())
             throw new CapabilityError('CAPABILITY_OUTPUT_INVALID');
+          assertTextDoesNotEchoCredential(result.text, credentials.apiKey);
           return { text: result.text };
         } catch (error) {
           if (error instanceof CapabilityError) throw error;

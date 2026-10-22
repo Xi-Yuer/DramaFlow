@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ConfiguredModelGroup } from '../src/features/workflow/model-selector';
+import { ConfiguredModelGroup } from '../src/features/workflow/model-selection/model-selector';
 
 describe('Node Model Selector 已配置模型（静态组件测试）', () => {
   it('无 Catalog 的 custom configuration 按 Provider Instance 展示并保留选择 ID', () => {

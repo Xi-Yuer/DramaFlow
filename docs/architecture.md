@@ -6,13 +6,15 @@
 
 已有登录、账户中心、项目管理、React Flow 草稿编辑和项目模型管理。前端使用 Next.js App Router、Ant Design、TanStack Query；业务 API 默认认证，项目按当前所有者隔离。
 
-Web 可加载 / 保存真实草稿，从 Node Types 目录添加节点、移动节点、编辑 Data / Control Edge；文本节点支持模型选择和 prompt / system 上游变量编辑。已有独立 Publish 操作，尚无节点删除 / 重命名和运行操作。服务端已有正式发布与 Run HTTP。每项目一个逻辑 Workflow，Project 与 Draft 分别保存 revision，发布另有 version。
+Web 可加载 / 保存真实草稿，从 Node Types 目录添加节点、移动节点、编辑 Data / Control Edge；文本节点支持模型选择和 prompt / system 上游变量编辑。已有独立 Publish、已发布版本的 Run 提交与状态查询，尚无节点删除 / 重命名操作。服务端已有正式发布与 Run HTTP。每项目一个逻辑 Workflow，Project 与 Draft 分别保存 revision，发布另有 version。
 
 PostgreSQL / Prisma 保存业务记录，Redis / BullMQ 交付执行命令，RustFS 保存内容，官方 PostgreSQL Checkpointer 保存图快照。API 负责提交，独立 Worker 执行图。
 
 ## Workflow 基础库
 
 `packages/contracts` 定义中立 JSON 协议；`packages/workflow` 提供类型 / 节点 Registry、发布静态校验、Binding / Codec、Action Compiler、Submission 与 Runner。普通确定性 Action DAG 已可执行；其他 executionKind 只有声明边界。
+
+Action Compiler 根据 Data / Control / Template 联合依赖图的最长 Action 路径深度 D，将 LangGraph `recursionLimit = D + 1` 绑定到编译图，空图为 1；不依赖默认 25，也不新增静态产品规模限制。这是当前 Action DAG 的技术执行预算，具体边界见 [Runtime](runtime-architecture.md#action-dag-技术执行预算)。
 
 节点 Picker 使用 API 返回的 Manifest 展示名称、描述、图标和 category。通用创建 helper 精确保留 type / version，仅应用 Manifest 显式 defaultValue；Editor 生成实例 ID，并将可见区域的屏幕位置经 React Flow 转为画布坐标。新增节点写入 WorkflowDefinition.nodes，复用 Draft dirty / 保存链路；不创建连线、Workflow 输入输出或模型绑定，目录不可用时禁用创建。
 
@@ -56,17 +58,20 @@ Save 与 Publish 独立。Web 仅发布已加载、无 dirty、无保存 / 重�
 
 发布状态由当前 Editor 的 useWorkflowPublish / WorkflowPublisher 保存，与 Draft reducer 分离，只记录版本摘要身份和受控错误信息，不替换 definition、revision 或保存基线。版本状态按 workflowId / 当前保存 revision 查询，分别表示最新已发布版本与该修订对应版本，不产生未来 Run 的隐式版本选择。
 
-成功后取消旧版本查询并刷新目录；已确认版本在目录刷新失败时仍保留。WORKFLOW_REVISION_ALREADY_PUBLISHED 通过分页查询 sourceRevision 找回原版本，不拿 latest 猜测；WORKFLOW_REVISION_CONFLICT 进入既有 Draft conflict / reload 流程。错误保留 code、requestId、nodeId、portKey 和 path 等已提供的定位信息，不实现自动聚焦或字段高亮。版本历史管理与 Run UI 尚未实现。
+成功后取消旧版本查询并刷新目录；已确认版本在目录刷新失败时仍保留。WORKFLOW_REVISION_ALREADY_PUBLISHED 通过分页查询 sourceRevision 找回原版本，不拿 latest 猜测；WORKFLOW_REVISION_CONFLICT 进入既有 Draft conflict / reload 流程。错误保留 code、requestId、nodeId、portKey 和 path 等已提供的定位信息，不实现自动聚焦或字段高亮。版本历史管理尚未实现。
 
 ## Workflow Run HTTP API
 
-| 方法与路径                        | 行为                                                             |
-| --------------------------------- | ---------------------------------------------------------------- |
-| POST /workflow-runs               | `{ workflowVersionId, invocationKey, inputs }`，受理成功返回 202 |
-| GET /workflow-runs/:runId         | 状态、输入、最终输出和安全错误摘要                               |
-| POST /workflow-runs/:runId/resume | `{ value }`，受理成功返回 202                                    |
+| 方法与路径                                                  | 行为                                                               |
+| ----------------------------------------------------------- | ------------------------------------------------------------------ |
+| POST /workflow-runs                                         | `{ workflowVersionId, invocationKey, inputs }`，受理成功返回 202   |
+| GET /workflow-runs/:runId                                   | 状态、输入、最终输出和安全错误摘要                                 |
+| GET /workflow-runs/by-invocation/:workflowId/:invocationKey | 授权 Workflow 下只读查询，返回 `{ run }`；不存在为 `{ run: null }` |
+| POST /workflow-runs/:runId/resume                           | `{ value }`，受理成功返回 202                                      |
 
 身份由当前用户与固定版本派生，拒绝客户端提供 threadId、状态或项目归属。响应不公开 threadId / executionId；非 waiting 或重复恢复意图为 409。Start 的 invocationKey 必填（1—200 字符，不含首尾空白），由调用方在首次请求前生成并持有。HTTP 在 pending Run 事务提交后确认入队；确认失败返回 WORKFLOW_QUEUE_UNAVAILABLE（503），携带 workflowRunId / invocationKey。客户端重试必须复用原 key；明确再次运行使用新 key。非 pending 的幂等复用直接返回原 Run 当前状态，沿用 202 响应。
+
+invocation lookup 先校验 Workflow 的 Project 所有者，再按 workflow / project / invocationKey 查询并复用 GET Run 的授权与安全投影；Workflow 不存在或无权访问统一 404。接口 no-store，不创建 Run / Outbox，不提交队列或执行图。查无 Run 仅表示本次查询未找到，不证明原 Start 请求不会随后提交。
 
 ## Workflow Execution Queue
 
@@ -129,7 +134,7 @@ Registry 统一校验配置、凭证、输入输出及模型参数，精确绑�
 
 Provider 与模型绑定不可改写；凭证可轮换，enabled 可变。每次 invocation 检查 running Run、当前所有者 / 项目及 enabled，再经 SecretsService（AES-256-GCM，ownerId 作 AAD）解密当前凭证。SDK client / model 按调用创建，无全局 credential 缓存，无 SDK / Gateway 领域 ID。
 
-`text_generation@1` 显式 maxRetries=0、isStepCount(1)，custom fetch 使用 manual redirect；关闭 telemetry 和原始请求 / 响应收集。内部检查 OpenAI refusal，在自动日志前拒绝 SDK warnings，将 statusCode 映射至既有安全错误。`openai_compatible@1` 保留原重试 / tracing / 日志隔离与 LANGCHAIN_VERBOSE 拒绝机制。拒绝空白、截断、过滤、工具调用等无效文本，成功仅返回 `{text}`。
+`text_generation@1` 显式 maxRetries=0、isStepCount(1)，custom fetch 使用 manual redirect；关闭 telemetry 和原始请求 / 响应收集。内部检查 OpenAI refusal，在自动日志前拒绝 SDK warnings，将 statusCode 映射至既有安全错误。`openai_compatible@1` 保留原重试 / tracing / 日志隔离与 LANGCHAIN_VERBOSE 拒绝机制。拒绝空白、截断、过滤、工具调用等无效文本，成功仅返回 `{text}`。两个插件在返回业务文本前共用内部纯函数，精确检查正文是否包含本次调用实际使用的 API Key；命中时仅抛出 `CAPABILITY_OUTPUT_INVALID`，不返回正文、不记录凭证，也不重发请求。不含实际 API Key 的普通 `api_key`、`token` 等字样不触发该检查。
 
 原始 SDK / Provider 错误、headers、凭证不进入 NodeRun / API 错误投影；正常 NodeRun.inputs 仍记录显式 prompt。超时或 5xx 按受理结果不明处理，不自动重发。既有 CapabilityInvoker 尚未透传取消信号，生产调用依赖插件 deadline。
 
@@ -169,7 +174,33 @@ React Flow 只管理视图，平台 WorkflowDefinition 是持久内容。rendere
 
 真实草稿可加载、保存并刷新恢复；旧项目缺失 Workflow 时显式初始化，不用本地空图兜底。Project（名称 / 视口）与 Draft 各自维护 revision、脏状态和冲突处理。保存失败保留编辑，409 后经明确操作重读对应资源，不覆盖另一类未保存内容。
 
+### Editor session 离开保护
+
+`features/workflow/editor` 统一计算离开安全性并提供 `useEditorLeaveGuard`。Draft dirty、项目名称 / 视口 dirty、保存 / 重读 / 发布中的操作以及 Start request submitting 均触发保护；已保存但未发布的 Draft、已受理后的 pending / running 不触发保护。返回项目、账户页和 Logout 使用同一个确认入口；Logout 只有确认后才调用原退出逻辑。模型设置在当前页打开，不构成离开。加载 / 错误页面的返回链接没有挂载 Editor，也没有本地 Editor 状态；明确授权失效后的自动隐藏 / 跳转保留原安全边界。
+
+Start 沿用现有 Controller 状态：明确的 4xx 拒绝允许离开，但 408、网络异常、5xx、成功响应的格式 / 身份异常，以及携带 workflowRunId 或 `WORKFLOW_QUEUE_UNAVAILABLE` 的错误继续保护。队列持久化不代表客户端已确认此次提交；这些身份仍只保留在当前页面内存。此处只询问是否离开，不保存、发布、重试或恢复请求。
+
+unsafe 时注册标准 `beforeunload`（preventDefault / returnValue），恢复 safe 或卸载组件时移除；浏览器决定是否展示通用确认文案，刷新、关闭 Tab、地址栏跳转的真实交互待人工验收。它不能保证拦截崩溃、进程终止、移动端强制关闭，也不覆盖不卸载文档的 App Router 浏览器历史切换；当前页面主动导航入口由显式 guard 保护，不改写 Next Router 或浏览器 history。
+
+离开保护仍覆盖恢复后尚未确认的 invocation；lookup 找到当前错误请求对应的 Run 后转为已确认身份，不继续仅因旧 uncertainty 阻止离开。
+
+### Web invocation identity recovery
+
+Run 提交、Status 与 recovery 归属 `features/workflow/run`。Start Controller 保留页面内冻结 request 的同 key retry；恢复只持久化严格 Schema 的 metadata receipt，不持久化 inputs、request snapshot、prompt、Definition、凭证、临时 URL、异常或 outputs。每个 receipt 的 localStorage key 按格式版本 / userId / projectId / workflowId / invocationKey 隔离，值只含项目、Workflow、固定版本、key、创建时间及可选 Run ID。
+
+生成并冻结合法 request 后同步保存 receipt，成功才 POST；存储不可用或写入失败明确提示尚未发送，不回退 memory-only。accepted 或匹配身份的 queue uncertainty 补写 Run ID；补写失败仅提示，不重发或换 key。全新请求明确拒绝可清理；既有 receipt 或曾有不确定请求的后续 4xx 不消除先前 uncertainty。
+
+进入页面后先读取当前用户作用域并只读 lookup，再允许普通新 Run。找到时核对 workflow / version / key / 已知 Run ID，复用现有 Status tracking；未找到、冲突或查询失败保留 receipt，显示未确认状态并允许重新查询，不自动 POST。存在未确认 receipt 时，发起独立新 Run 先确认其可能与原请求同时执行，再生成新 key。多个 Run 独立保存，可选择其中一个跟踪，不覆盖其他未确认身份。
+
+lookup 或 Status 确认 completed / failed / cancelled 后，先让当前页面持有身份和状态再自动清理 receipt；waiting 保留。刷新查询清空 receipt 集合不会清空已加载的页面身份，不建立已读状态或浏览器 Run History。多 Tab 通过 storage event 同步 create / update / remove；不选 leader、不跨 Tab 自动 POST，服务端唯一约束仍是幂等边界。
+
+Logout 成功后失效本用户的旧 Store / 异步写回，写入用户作用域的退出标记并清理 receipts；退出失败保留，其他用户 namespace 不受影响。清理失败明确提示，用户 namespace 不代替服务端授权。localStorage 可由同 origin JavaScript 读取，只保存恢复 metadata，不能保证在清除站点数据、存储被禁用或设备故障后仍可恢复。request snapshot 丢失后不支持自动重放；Run History / Result UI 尚未实现。
+
 ## 目录与依赖
+
+Web Workflow 按领域职责组织：`editor` 装配页面、Draft 与离开保护，`canvas` 负责 React Flow 适配和节点渲染，`node-catalog` 负责节点目录与创建，`inputs` 负责输入绑定和模板编辑，`model-selection` 负责节点模型选择，`publish` 负责发布，`run` 负责提交并在内部区分 `status` 与 `recovery`。Project 列表与项目 HTTP 留在 `features/projects`；Workflow 根目录只保留跨职责使用的 `workflow-api.ts`，不增加重复转发入口。
+
+后端同样按职责归拢：`packages/workflow/src/runtime/values` 集中运行值编解码、引用解析与内容存储协议，`run/submission` 集中调用等价性与提交协议；`packages/server/src/workflow/runtime` 集中运行装配与执行，既有 `queue` 负责持久投递。Registry、共享 Repository 与包级导出保留原有公共边界。目录较小且职责单一的 Auth、模型管理与 Contracts 不按文件类型继续拆分。
 
 | 目录               | 职责                                                     |
 | ------------------ | -------------------------------------------------------- |

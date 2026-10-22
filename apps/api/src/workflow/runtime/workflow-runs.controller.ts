@@ -28,6 +28,20 @@ export class WorkflowRunsController {
     return this.runtime.getRun(actor.user.id, runId);
   }
 
+  @Get('by-invocation/:workflowId/:invocationKey')
+  @Header('Cache-Control', 'no-store')
+  lookup(
+    @Actor() actor: AuthActor,
+    @Param('workflowId') workflowId: string,
+    @Param('invocationKey') invocationKey: string,
+  ) {
+    return this.runtime.lookupInvocation(
+      actor.user.id,
+      workflowId,
+      invocationKey,
+    );
+  }
+
   @Post(':runId/resume')
   @HttpCode(202)
   @Header('Cache-Control', 'no-store')

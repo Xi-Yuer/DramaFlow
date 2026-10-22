@@ -10,8 +10,8 @@ import {
   type NodeExecutionStage,
 } from './node-execution-error.js';
 import type { NodeRunRepository } from '../run/node-run-repository.js';
-import type { RuntimeValueCodec } from './runtime-value-codec.js';
-import type { RuntimeValueContext } from './value-codec.js';
+import type { RuntimeValueCodec } from './values/runtime-value-codec.js';
+import type { RuntimeValueContext } from './values/value-codec.js';
 import type { WorkflowState } from './state.js';
 
 export interface CapabilityInvoker {

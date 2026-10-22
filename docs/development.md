@@ -54,6 +54,8 @@
 
 基础 Publish 的浏览器人工验收：确认空白 clean Draft 可发布；新增或修改节点后禁用并提示先保存；保存后显式发布，核对 revision 不变且仍可编辑；发布期间无法重复操作或保存；刷新后能看到当前修订与最新版本；校验失败、修订冲突及版本列表读取失败均有明确反馈。该流程不触发 Run。
 
+Invocation recovery 的浏览器行为待人工验收：已受理 / 响应丢失后刷新恢复、关闭浏览器再打开、多 Tab storage event，以及 Logout 后重新登录的用户隔离。自动测试使用本地替身，不调用真实 Provider；这些人工场景也应使用本地受控测试能力，避免重复收费。receipt 不包含请求输入，查无结果不会自动重放。
+
 ## 模型管理验证
 
 contracts / plugins / server 单元测试覆盖 Provider Catalog、Model Catalog 的 Schema、能力筛选与安全边界；model-management.e2e-spec 验证管理 HTTP，ai-text.e2e-spec 验证发布到独立 Worker 的正式链。后者保留旧兼容插件，并检查 OpenAI Chat Completions / Anthropic Messages 的实际本机请求、凭证轮换、权限和不重试行为。

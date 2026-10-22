@@ -4,7 +4,7 @@ import {
   createWorkflowDraftState,
   workflowDraftReducer as reduce,
   workflowDraftSignature as signature,
-} from '../src/features/workflow/workflow-draft-state';
+} from '../src/features/workflow/editor/workflow-draft-state';
 
 const workflow: WorkflowResponse = {
   id: 'workflow-1',

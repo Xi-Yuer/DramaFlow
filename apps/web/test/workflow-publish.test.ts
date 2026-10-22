@@ -6,12 +6,12 @@ import {
   WorkflowPublisher,
   workflowPublishError,
   workflowPublicationForRevision,
-} from '../src/features/workflow/workflow-publish';
+} from '../src/features/workflow/publish/workflow-publish';
 import {
   createWorkflowDraftState,
   workflowDraftReducer,
   workflowPublishDisabledReason,
-} from '../src/features/workflow/workflow-draft-state';
+} from '../src/features/workflow/editor/workflow-draft-state';
 
 const workflow: WorkflowResponse = {
   id: 'workflow-1',

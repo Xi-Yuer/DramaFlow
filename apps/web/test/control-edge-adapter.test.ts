@@ -13,12 +13,12 @@ import {
   fromReactFlowEdge,
   reconnectWorkflowEdge,
   toReactFlowEdges,
-} from '../src/features/workflow/react-flow-adapter';
+} from '../src/features/workflow/canvas/react-flow-adapter';
 import {
   areWorkflowHandlesCompatible,
   controlHandleId,
   parseWorkflowHandle,
-} from '../src/features/workflow/workflow-handles';
+} from '../src/features/workflow/canvas/workflow-handles';
 
 const controlConnection = {
   source: 'A',

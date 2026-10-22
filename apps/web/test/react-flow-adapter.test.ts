@@ -11,7 +11,7 @@ import {
   toReactFlowEdges,
   toReactFlowNode,
   toReactFlowNodes,
-} from '../src/features/workflow/react-flow-adapter';
+} from '../src/features/workflow/canvas/react-flow-adapter';
 import {
   nodeDefinitionSchema,
   workflowDefinitionSchema,

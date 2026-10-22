@@ -13,7 +13,7 @@ import {
   WorkflowRunController,
   buildWorkflowRunInputs,
   workflowInputEditor,
-} from '../src/features/workflow/workflow-run';
+} from '../src/features/workflow/run/workflow-run';
 
 const input = (name: string, type: DataType, required = true): WorkflowInputDefinition => ({
   name,

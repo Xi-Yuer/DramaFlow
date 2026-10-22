@@ -49,7 +49,11 @@ async function createProject(api: APIRequestContext) {
   return project;
 }
 
-async function createProvider(api: APIRequestContext, projectId: string, providerDefinitionId: string) {
+async function createProvider(
+  api: APIRequestContext,
+  projectId: string,
+  providerDefinitionId: string,
+) {
   const response = await api.post(`/api/v1/projects/${projectId}/providers/catalog`, {
     headers: { Origin: origin },
     data: {
@@ -62,7 +66,12 @@ async function createProvider(api: APIRequestContext, projectId: string, provide
   return modelProviderSchema.parse(await response.json());
 }
 
-async function createTextModel(api: APIRequestContext, projectId: string, providerId: string, model: string) {
+async function createTextModel(
+  api: APIRequestContext,
+  projectId: string,
+  providerId: string,
+  model: string,
+) {
   const response = await api.post(`/api/v1/projects/${projectId}/model-configurations`, {
     headers: { Origin: origin },
     data: {
@@ -95,8 +104,12 @@ test('文本节点只列出 text.generate 模型，选择后保存并在刷新�
   await page.goto(`/projects/${project.id}`);
   await page.getByRole('button', { name: '选择模型', exact: true }).click();
   const panel = selector(page);
-  await expect(panel.getByRole('group', { name: 'OpenAI' }).getByRole('option', { name: 'GPT-4o' })).toBeVisible();
-  await expect(panel.getByRole('group', { name: 'Anthropic' }).getByText('Claude Sonnet 4', { exact: true })).toBeVisible();
+  await expect(
+    panel.getByRole('group', { name: 'OpenAI' }).getByRole('option', { name: 'GPT-4o' }),
+  ).toBeVisible();
+  await expect(
+    panel.getByRole('group', { name: 'Anthropic' }).getByText('Claude Sonnet 4', { exact: true }),
+  ).toBeVisible();
   await expect(panel.getByText('未配置', { exact: true })).toBeVisible();
   await expect(panel.getByRole('option')).toHaveCount(1);
   expect(catalogUrls.length).toBeGreaterThan(0);
@@ -119,7 +132,9 @@ test('文本节点只列出 text.generate 模型，选择后保存并在刷新�
 
   await page.getByRole('button', { name: '选择模型', exact: true }).click();
   await selector(page).getByRole('option', { name: 'GPT-4o' }).click();
-  await expect(page.getByRole('button', { name: '已选 GPT-4o，最大输出 128', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: '已选 GPT-4o，最大输出 128', exact: true }),
+  ).toBeVisible();
   const saved = page.waitForResponse(
     (response) => response.request().method() === 'PUT' && response.url().endsWith('/draft'),
   );
@@ -129,7 +144,9 @@ test('文本节点只列出 text.generate 模型，选择后保存并在刷新�
     definition: { nodes: [{ config: { modelConfigurationId: model.id } }] },
   });
   await page.reload();
-  await expect(page.getByRole('button', { name: '已选 GPT-4o，最大输出 128', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: '已选 GPT-4o，最大输出 128', exact: true }),
+  ).toBeVisible();
   expect((await readWorkflow(request, project.id)).draft.nodes[0]?.config).toEqual({
     modelConfigurationId: model.id,
   });
@@ -147,7 +164,9 @@ test('供应商已配置但目录模型尚无配置时，用现有创建接口�
   const dialog = page.getByRole('dialog', { name: '添加 GPT-4o', exact: true });
   await dialog.getByRole('spinbutton', { name: '最大输出 Token 数' }).fill('256');
   await dialog.getByRole('button', { name: '添加并选择', exact: true }).click();
-  await expect(page.getByRole('button', { name: '已选 GPT-4o，最大输出 256', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: '已选 GPT-4o，最大输出 256', exact: true }),
+  ).toBeVisible();
   const saved = page.waitForResponse(
     (response) => response.request().method() === 'PUT' && response.url().endsWith('/draft'),
   );
@@ -168,7 +187,9 @@ test('供应商已配置但目录模型尚无配置时，用现有创建接口�
     }),
   ]);
   await page.reload();
-  await expect(page.getByRole('button', { name: '已选 GPT-4o，最大输出 256', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: '已选 GPT-4o，最大输出 256', exact: true }),
+  ).toBeVisible();
 });
 
 async function saveDraft(page: Page) {
@@ -181,7 +202,9 @@ async function saveDraft(page: Page) {
 
 async function configureProvider(page: Page, name: string) {
   await page.getByRole('button', { name: '选择模型', exact: true }).click();
-  await selector(page).getByRole('button', { name: `配置 ${name}`, exact: true }).click();
+  await selector(page)
+    .getByRole('button', { name: `配置 ${name}`, exact: true })
+    .click();
   const setup = page.getByRole('dialog', { name: `配置 ${name}`, exact: true });
   await setup.getByLabel('API Key', { exact: true }).fill(`test-only-${randomUUID()}`);
   const response = page.waitForResponse(
@@ -247,7 +270,9 @@ test('供应商配置完成时目录模型已有可用配置，直接选中且�
   });
   await page.goto(`/projects/${project.id}`);
   await configureProvider(page, 'Anthropic');
-  await expect(page.getByRole('dialog', { name: '添加 Claude Sonnet 4', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: '添加 Claude Sonnet 4', exact: true })).toHaveCount(
+    0,
+  );
   const selected = page.getByRole('button', {
     name: '已选 Claude Sonnet 4，最大输出 64 · 随机度 0.4',
     exact: true,
@@ -267,9 +292,14 @@ test('取消供应商配置或取消添加模型后，节点保持未选择', as
   await page.goto(`/projects/${project.id}`);
   await page.getByRole('button', { name: '选择模型', exact: true }).click();
   await selector(page).getByRole('button', { name: '配置 Anthropic', exact: true }).click();
-  await page.getByRole('dialog', { name: '配置 Anthropic', exact: true }).getByRole('button', { name: '返回列表', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: '配置 Anthropic', exact: true })
+    .getByRole('button', { name: '返回列表', exact: true })
+    .click();
   await page.getByRole('button', { name: '关闭模型设置', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: '添加 Claude Sonnet 4', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: '添加 Claude Sonnet 4', exact: true })).toHaveCount(
+    0,
+  );
   await expect(page.getByRole('button', { name: '选择模型', exact: true })).toBeVisible();
   await expect(page.getByRole('status', { name: '工作流草稿状态' })).not.toContainText('未保存');
 
@@ -295,7 +325,11 @@ test('从设置页配置供应商不会继续节点上的模型选择', async ({
   await form.getByLabel('API Key', { exact: true }).fill(`test-only-${randomUUID()}`);
   await form.getByRole('button', { name: '保存 API Key', exact: true }).click();
   await expect(form).toHaveCount(0);
-  await expect(drawer.getByRole('article', { name: '供应商 OpenAI', exact: true }).getByText('已配置', { exact: true })).toBeVisible();
+  await expect(
+    drawer
+      .getByRole('article', { name: '供应商 OpenAI', exact: true })
+      .getByText('已配置', { exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole('dialog', { name: '添加 GPT-4o', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '选择模型', exact: true })).toBeVisible();
   expect((await readWorkflow(request, project.id)).draft.nodes[0]?.config).toEqual({});

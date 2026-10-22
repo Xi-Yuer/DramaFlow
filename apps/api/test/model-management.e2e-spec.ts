@@ -201,7 +201,9 @@ describe('项目模型管理 HTTP', () => {
   });
 
   it('Model Catalog 按能力返回所属 Provider 的模型，不含凭证', async () => {
-    expect((await http('/model-catalog', 'GET', undefined, -1)).status).toBe(401);
+    expect((await http('/model-catalog', 'GET', undefined, -1)).status).toBe(
+      401,
+    );
     expect((await http('/model-catalog?capability=')).status).toBe(400);
     const catalog = modelCatalogSchema.parse(
       await json(await http('/model-catalog?capability=text.generate')),
@@ -220,7 +222,9 @@ describe('项目模型管理 HTTP', () => {
         capabilities: [{ type: 'text.generate', name: '文本生成' }],
       },
     ]);
-    expect(JSON.stringify(catalog)).not.toMatch(/apiKey|credential|baseURL|pluginId|secret/i);
+    expect(JSON.stringify(catalog)).not.toMatch(
+      /apiKey|credential|baseURL|pluginId|secret/i,
+    );
     expect(
       modelCatalogSchema.parse(
         await json(await http('/model-catalog?capability=image.generate')),

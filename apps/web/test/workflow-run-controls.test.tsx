@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StringType, type WorkflowVersionResponse } from '@dramaflow/contracts';
 import { describe, expect, it } from 'vitest';
-import { WorkflowRunControls } from '../src/features/workflow/workflow-run-controls';
+import { WorkflowRunControls } from '../src/features/workflow/run/workflow-run-controls';
 
 const version: WorkflowVersionResponse = {
   id: 'version-explicit',
