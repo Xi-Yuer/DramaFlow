@@ -96,12 +96,13 @@ Node 输入为 prompt / 可选 system，输出为 text，config 只保存 modelC
 ```text
 Provider Catalog
 → Provider Definition
+→ Model Catalog
 → Provider Instance
 → Credential
 → Model Configuration
 ```
 
-平台可以预设 OpenAI、Anthropic、DeepSeek、Gemini、Qwen、Kimi、智谱、豆包等 Provider。普通用户选择 Provider，填写该 Provider 要求的凭证，再选择或配置模型。自定义 endpoint、协议或厂商身份只属于高级 Custom OpenAI-Compatible。
+平台可以预设 OpenAI、Anthropic、DeepSeek、Gemini、Qwen、Kimi、智谱、豆包等 Provider。普通用户选择 Provider，填写该 Provider 要求的凭证，再从 Model Catalog 选择该 Provider 下具备所需 Capability 的模型。自定义 endpoint、协议或厂商身份只属于高级 Custom OpenAI-Compatible。Model Catalog 是代码中的模型与能力目录，不是项目里保存的 ModelConfiguration；节点仍只保存 modelConfigurationId。
 
 | 插件                | 定位                                                                                                                            |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -128,6 +129,7 @@ Provider 与模型绑定不可改写；凭证可轮换，enabled 可变。每次
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | GET /provider-plugins                                          | 受信任且允许配置的插件精确版本、JSON Schema 和凭证字段约束                                          |
 | GET /provider-catalog                                          | 官方 Provider 的安全目录：id、名称、能力、凭证字段和用户配置 Schema                                 |
+| GET /model-catalog                                             | 官方模型目录。可选 `capability` 精确筛选；项含稳定模型 id、显示名、providerDefinitionId 和能力       |
 | GET / POST /projects/:projectId/providers                      | Provider 列表 / 按插件 Schema 创建                                                                  |
 | POST /projects/:projectId/providers/catalog                    | 按 Provider Definition 创建实例。请求为定义 id、名称和凭证；官方 Provider 不接受用户填写的 endpoint |
 | GET / PATCH /projects/:projectId/providers/:providerId         | 安全详情 / 修改 enabled                                                                             |
@@ -135,11 +137,11 @@ Provider 与模型绑定不可改写；凭证可轮换，enabled 可变。每次
 | GET / POST /projects/:projectId/model-configurations           | 模型配置列表 / 创建                                                                                 |
 | GET / PATCH /projects/:projectId/model-configurations/:modelId | 模型详情 / 修改 enabled                                                                             |
 
-所有业务读写按项目所有者授权。列表为有界游标分页；读取投影排除凭证明文和密文。无效参数 / Schema 为安全 400，停用绑定为 409，密钥或服务不可用为安全 503。没有删除、原地改绑、自动模型发现或远程插件安装。Catalog 目前只有 OpenAI 与 Anthropic，没有模型发现。
+所有业务读写按项目所有者授权。列表为有界游标分页；读取投影排除凭证明文和密文。无效参数 / Schema 为安全 400，停用绑定为 409，密钥或服务不可用为安全 503。没有删除、原地改绑、调用厂商 API 的模型发现或远程插件安装。Provider Catalog 与 Model Catalog 目前只有 OpenAI 与 Anthropic：前者是服务定义，后者是 `gpt-4o` 与 `claude-sonnet-4-20250514` 两个 `text.generate` 模型。目录不含用户 API Key。ModelConfiguration 仍是项目内的模型实例，执行链不读取 Catalog。
 
 ## Web 项目模型设置
 
-项目画布内提供模型设置抽屉，支持 Provider / 模型创建、列表、详情、启停和独立凭证轮换。普通添加读取 Provider Catalog：选择服务后只填写目录声明的凭证，并调用目录创建接口。自定义接入仍提交插件 Schema。未知结构禁止提交。Secret 不进入 Form store、Query / Mutation 缓存、URL 或浏览器存储；请求发出及退出组件时清空，不回填已保存值。创建 / 轮换不触发模型生成，设置操作不丢失未保存画布。
+项目画布内提供模型设置抽屉，支持 Provider / 模型创建、列表、详情、启停和独立凭证轮换。普通添加读取 Provider Catalog：选择服务后只填写目录声明的凭证，并调用目录创建接口。自定义接入仍提交插件 Schema。模型创建仍手写模型 id，尚未按 Model Catalog 的 Capability 筛选；节点上的模型选择器也未实现。未知结构禁止提交。Secret 不进入 Form store、Query / Mutation 缓存、URL 或浏览器存储；请求发出及退出组件时清空，不回填已保存值。创建 / 轮换不触发模型生成，设置操作不丢失未保存画布。
 
 ## Artifact 生产数据通道
 

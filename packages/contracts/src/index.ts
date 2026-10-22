@@ -22,3 +22,4 @@ export * from './ai/text-generation.js';
 export * from './ai/model-provider.js';
 export * from './ai/model-management.js';
 export * from './ai/provider-catalog.js';
+export * from './ai/model-catalog.js';

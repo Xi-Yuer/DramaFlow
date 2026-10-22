@@ -5,6 +5,7 @@ import {
   replaceProviderCredentialsRequestSchema,
   setModelResourceEnabledRequestSchema,
   modelManagementListQuerySchema,
+  modelCatalogQuerySchema,
 } from '@dramaflow/contracts';
 import {
   ModelProviderService,
@@ -85,6 +86,14 @@ export class ModelManagementController {
   @Header('Cache-Control', 'no-store')
   providerCatalog() {
     return safe(() => this.models.listProviderCatalog());
+  }
+
+  @Get('model-catalog')
+  @Header('Cache-Control', 'no-store')
+  modelCatalog(@Query() query: unknown) {
+    return safe(() =>
+      this.models.listModelCatalog(parse(modelCatalogQuerySchema, query).capability),
+    );
   }
 
   @Get('projects/:projectId/providers')

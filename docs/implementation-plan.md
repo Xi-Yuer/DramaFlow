@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-截至 2026-10-22，已完成项目画布与模型管理基础（A3 / A4）、C2.1 文本能力接入、C2.2 生产残留清理、C2.3 架构文档校正，以及后端 Provider Catalog。正式文本链由 `text_generation@1` 在内部通过 Vercel AI SDK 调用 OpenAI 与 Anthropic。OpenAI / Anthropic 的 Provider Definition 在代码目录中，实例复用 ModelProvider。添加官方 Provider 已使用 Catalog；模型发现、其他厂商和新媒体能力尚未实现。
+截至 2026-10-22，已完成项目画布与模型管理基础（A3 / A4）、C2.1 文本能力接入、C2.2 生产残留清理、C2.3 架构文档校正，以及后端 Provider Catalog。正式文本链由 `text_generation@1` 在内部通过 Vercel AI SDK 调用 OpenAI 与 Anthropic。OpenAI / Anthropic 的 Provider Definition 在代码目录中，实例复用 ModelProvider。添加官方 Provider 已使用 Catalog。Model Catalog 用代码声明 OpenAI `gpt-4o` 与 Anthropic `claude-sonnet-4-20250514`，均可按 `text.generate` 查询。调用厂商 API 的模型发现、其他厂商和新媒体能力尚未实现。
 
 下一步等待明确任务，不自动推进 A6、Provider Catalog 界面、其他厂商或新生成能力。
 

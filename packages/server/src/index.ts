@@ -7,6 +7,7 @@ export { ModelProviderService, ModelConfigurationError } from './models/model-pr
 export { ModelProviderModule } from './models/model-provider.module.js';
 export {
   ProviderPluginModule,
+  createModelCatalog,
   createProviderCatalog,
   createProviderPluginRegistry,
 } from './models/provider-plugin.module.js';

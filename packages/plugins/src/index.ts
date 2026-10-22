@@ -4,3 +4,4 @@ export * from './plugin-registry.js';
 export * from './openai-compatible.js';
 export * from './text-generation.js';
 export * from './provider-catalog.js';
+export * from './model-catalog.js';

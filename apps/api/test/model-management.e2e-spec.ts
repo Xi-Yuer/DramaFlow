@@ -6,6 +6,7 @@ import {
   managedModelConfigurationSchema,
   providerPluginCatalogSchema,
   providerCatalogSchema,
+  modelCatalogSchema,
   modelProviderListSchema,
   modelConfigurationListSchema,
   workflowResponseSchema,
@@ -197,6 +198,36 @@ describe('项目模型管理 HTTP', () => {
     expect(JSON.stringify(result)).not.toMatch(
       /invoke|credentialsSchema|encryptedCredentials/,
     );
+  });
+
+  it('Model Catalog 按能力返回所属 Provider 的模型，不含凭证', async () => {
+    expect((await http('/model-catalog', 'GET', undefined, -1)).status).toBe(401);
+    expect((await http('/model-catalog?capability=')).status).toBe(400);
+    const catalog = modelCatalogSchema.parse(
+      await json(await http('/model-catalog?capability=text.generate')),
+    );
+    expect(catalog.items).toEqual([
+      {
+        id: 'claude-sonnet-4-20250514',
+        displayName: 'Claude Sonnet 4',
+        providerDefinitionId: 'anthropic',
+        capabilities: [{ type: 'text.generate', name: '文本生成' }],
+      },
+      {
+        id: 'gpt-4o',
+        displayName: 'GPT-4o',
+        providerDefinitionId: 'openai',
+        capabilities: [{ type: 'text.generate', name: '文本生成' }],
+      },
+    ]);
+    expect(JSON.stringify(catalog)).not.toMatch(/apiKey|credential|baseURL|pluginId|secret/i);
+    expect(
+      modelCatalogSchema.parse(
+        await json(await http('/model-catalog?capability=image.generate')),
+      ),
+    ).toEqual({
+      items: [],
+    });
   });
 
   it('Provider Catalog 发布 OpenAI / Anthropic，实例绑定定义并物化官方调用配置', async () => {

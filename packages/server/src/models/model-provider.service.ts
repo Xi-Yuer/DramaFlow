@@ -16,8 +16,10 @@ import {
   providerPluginCatalogSchema,
   providerCatalogSchema,
   createCatalogProviderSchema,
+  modelCatalogSchema,
+  type ModelCatalogItem,
 } from '@dramaflow/contracts';
-import { PluginRegistry, ProviderCatalog } from '@dramaflow/plugins';
+import { ModelCatalog, PluginRegistry, ProviderCatalog } from '@dramaflow/plugins';
 import type { Prisma } from '@dramaflow/database';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
@@ -95,6 +97,7 @@ export class ModelProviderService {
     private readonly secrets: SecretsService,
     private readonly plugins: PluginRegistry,
     private readonly catalog: ProviderCatalog,
+    private readonly modelCatalog: ModelCatalog,
   ) {}
 
   private async authorize(ownerId: string, projectId: string): Promise<void> {
@@ -167,6 +170,10 @@ export class ModelProviderService {
 
   listProviderCatalog() {
     return providerCatalogSchema.parse({ items: this.catalog.list() });
+  }
+
+  listModelCatalog(capability?: string): { items: ModelCatalogItem[] } {
+    return modelCatalogSchema.parse({ items: this.modelCatalog.list(capability) });
   }
 
   async createModelConfiguration(

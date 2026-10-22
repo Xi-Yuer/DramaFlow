@@ -49,7 +49,7 @@
 
 ## 模型管理验证
 
-contracts / plugins / server 单元测试覆盖目录 Schema 与安全边界；model-management.e2e-spec 验证管理 HTTP，ai-text.e2e-spec 验证发布到独立 Worker 的正式链。后者保留旧兼容插件，并检查 OpenAI Chat Completions / Anthropic Messages 的实际本机请求、凭证轮换、权限和不重试行为。
+contracts / plugins / server 单元测试覆盖 Provider Catalog、Model Catalog 的 Schema、能力筛选与安全边界；model-management.e2e-spec 验证管理 HTTP，ai-text.e2e-spec 验证发布到独立 Worker 的正式链。后者保留旧兼容插件，并检查 OpenAI Chat Completions / Anthropic Messages 的实际本机请求、凭证轮换、权限和不重试行为。
 
 ## Web 模型管理验证
 
