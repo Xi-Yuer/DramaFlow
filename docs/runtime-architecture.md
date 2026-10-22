@@ -4,7 +4,7 @@
 
 ## 技术边界
 
-React Flow 只负责编辑。受信任文本 Capability 在插件内部使用 Vercel AI SDK，旧兼容插件保留 LangChain；Tool / Agent 等抽象按实际需要使用 LangChain。SDK 对象不是领域身份，contracts 不依赖这些框架，不自建第二套调度或恢复机制。
+React Flow 只负责编辑。`text_generation@1` 在内部使用 Vercel AI SDK 调用 OpenAI / Anthropic；`openai_compatible@1` 在内部使用 LangChain。Tool / Agent 等抽象按实际需要再使用 LangChain。这些 SDK 留在插件实现里，contracts 不依赖它们，也不自建第二套调度或恢复机制。
 
 ## 编译与执行分离
 

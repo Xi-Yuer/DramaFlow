@@ -74,18 +74,49 @@ NodeExecutor 统一执行绑定、输入记录、decode、三组 Schema、业务
 
 ## 文本 AI 与 Provider Plugin
 
-正式链路为 `ai.text_generate → text.generate → ModelConfiguration → Provider Instance → ProviderCapability.invoke`。Node 输入为 prompt / 可选 system，输出为 text，config 仅保存 modelConfigurationId。
+NodeType、Capability、Provider、Plugin 彼此独立。`ai.text_generate` 是工作流中的业务节点；`text.generate` 是它请求的能力；OpenAI、Anthropic 是用户使用的模型服务；`text_generation@1` 是执行该能力的受信任插件。Vercel AI SDK 只出现在这个插件内部，用来完成 OpenAI / Anthropic 文本协议。
 
-| 插件 | 实现与配置 |
+已落地的正式文本链：
+
+```text
+Workflow Node
+→ text.generate
+→ ModelConfiguration
+→ Provider Instance
+→ ProviderCapability
+→ text_generation@1
+→ Vercel AI SDK
+→ Provider API
+```
+
+Node 输入为 prompt / 可选 system，输出为 text，config 只保存 modelConfigurationId。当前正式支持 OpenAI 与 Anthropic。
+
+已确定的产品模型是：
+
+```text
+Provider Catalog
+→ Provider Definition
+→ Provider Instance
+→ Credential
+→ Model Configuration
+```
+
+平台可以预设 OpenAI、Anthropic、DeepSeek、Gemini、Qwen、Kimi、智谱、豆包等 Provider。普通用户选择 Provider，填写该 Provider 要求的凭证，再选择或配置模型。自定义 endpoint、协议或厂商身份只属于高级 Custom OpenAI-Compatible。
+
+| 插件 | 定位 |
 | --- | --- |
-| text_generation@1 | packages/plugins 内部使用 ai 7.0.148、OpenAI 4.0.99、Anthropic 4.0.85；configuration 显式 provider（openai / anthropic）与 baseURL，分别调用 Chat Completions / Messages |
-| openai_compatible@1 | 保留 LangChain ChatOpenAICompletions，调用明确配置的兼容地址、模型和 apiKey |
+| text_generation@1 | 正式文本实现。内部使用 ai 7.0.148、OpenAI 4.0.99、Anthropic 4.0.85，按 configuration.provider 调用 Chat Completions 或 Messages |
+| openai_compatible@1 | 高级 Custom OpenAI-Compatible。保留 LangChain ChatOpenAICompletions，配置兼容地址、模型和 apiKey |
 
-Registry 统一校验配置、凭证、输入输出及模型参数，精确绑定插件版本，不自动切换。新插件 maxOutputTokens 必填（1—65536），temperature 可选（0—1）；旧插件两项可选、temperature 0—2。timeoutMs 默认 60000，范围 100—180000。HTTP(S) endpoint 拒绝 userinfo、query、fragment。
+图片、视频、音频按各自 Provider 使用对应插件，例如视频原生适配、ComfyUI 图像或语音插件。文本插件和 Vercel AI SDK 只覆盖当前的 `text.generate`。LiteLLM 与 Bifrost 已评估并否决，证据在 experiments，不进入生产依赖。
+
+当前库和接口还没有 Catalog / Provider Definition。`text_generation@1` 的 configuration 仍保存 `provider` 与 `baseURL`。这是尚未补上的实现缺口；管理操作仍按插件 Schema 提交。
+
+Registry 统一校验配置、凭证、输入输出及模型参数，精确绑定插件版本，不自动切换。`text_generation@1` 的 maxOutputTokens 必填（1—65536），temperature 可选（0—1）。`openai_compatible@1` 两项可选，temperature 为 0—2。timeoutMs 默认 60000，范围 100—180000。HTTP(S) endpoint 拒绝 userinfo、query、fragment。
 
 Provider 与模型绑定不可改写；凭证可轮换，enabled 可变。每次 invocation 检查 running Run、当前所有者 / 项目及 enabled，再经 SecretsService（AES-256-GCM，ownerId 作 AAD）解密当前凭证。SDK client / model 按调用创建，无全局 credential 缓存，无 SDK / Gateway 领域 ID。
 
-新插件显式 maxRetries=0、isStepCount(1)，custom fetch 使用 manual redirect；关闭 telemetry 和原始请求 / 响应收集。内部检查 OpenAI refusal，在自动日志前拒绝 SDK warnings，将 statusCode 映射至既有安全错误。旧插件保留原重试 / tracing / 日志隔离与 LANGCHAIN_VERBOSE 拒绝机制。拒绝空白、截断、过滤、工具调用等无效文本，成功仅返回 `{text}`。
+`text_generation@1` 显式 maxRetries=0、isStepCount(1)，custom fetch 使用 manual redirect；关闭 telemetry 和原始请求 / 响应收集。内部检查 OpenAI refusal，在自动日志前拒绝 SDK warnings，将 statusCode 映射至既有安全错误。`openai_compatible@1` 保留原重试 / tracing / 日志隔离与 LANGCHAIN_VERBOSE 拒绝机制。拒绝空白、截断、过滤、工具调用等无效文本，成功仅返回 `{text}`。
 
 原始 SDK / Provider 错误、headers、凭证不进入 NodeRun / API 错误投影；正常 NodeRun.inputs 仍记录显式 prompt。超时或 5xx 按受理结果不明处理，不自动重发。既有 CapabilityInvoker 尚未透传取消信号，生产调用依赖插件 deadline。
 
@@ -102,11 +133,11 @@ Provider 与模型绑定不可改写；凭证可轮换，enabled 可变。每次
 | GET / POST /projects/:projectId/model-configurations | 模型配置列表 / 创建 |
 | GET / PATCH /projects/:projectId/model-configurations/:modelId | 模型详情 / 修改 enabled |
 
-所有业务读写按项目所有者授权。列表为有界游标分页；读取投影排除凭证明文和密文。无效参数 / Schema 为安全 400，停用绑定为 409，密钥或服务不可用为安全 503。没有删除、原地改绑、自动模型发现、远程插件安装或 Provider Catalog 预设系统。
+所有业务读写按项目所有者授权。列表为有界游标分页；读取投影排除凭证明文和密文。无效参数 / Schema 为安全 400，停用绑定为 409，密钥或服务不可用为安全 503。没有删除、原地改绑、自动模型发现或远程插件安装。Provider Catalog 预设也尚未提供。
 
 ## Web 项目模型设置
 
-项目画布内提供模型设置抽屉，支持 Provider / 模型创建、列表、详情、启停和独立凭证轮换。表单读取正式安全目录，只支持能完整呈现的 Schema，未知结构禁止提交。
+项目画布内提供模型设置抽屉，支持 Provider / 模型创建、列表、详情、启停和独立凭证轮换。表单读取当前插件安全 Schema，只支持能完整呈现的结构，未知结构禁止提交。该抽屉还不是 Provider Catalog；普通产品路径是选择预设 Provider 并填写凭证。
 
 Secret 不进入 Form store、Query / Mutation 缓存、URL 或浏览器存储；请求发出及退出组件时清空，不回填已保存值。创建 / 轮换不触发模型生成，设置操作不丢失未保存画布。
 

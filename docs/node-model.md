@@ -46,8 +46,8 @@ State 只保留当前有效值，Artifact 保存内容，Checkpoint 负责恢复
 
 `ai.text_generate@1` 为普通 Action：必填 prompt、可选 system，输出 text，均为 string。config 只有必填 UUID modelConfigurationId，不保存插件、endpoint、模型名或 key；model-selector 只是 UI 提示。
 
-execute 通过 CapabilityInvoker 调用 text.generate，Provider 插件承担外部协议。新增厂商无需新增 NodeType / Compiler / Executor。保存草稿允许未完成选择，但拒绝额外配置字段；发布要求完整严格 Schema 及同项目可用模型绑定，执行时重新授权并解密，见[架构](architecture.md#文本-ai-与-provider-plugin)。
+execute 通过 CapabilityInvoker 调用 text.generate。节点只保存 modelConfigurationId，不保存插件、厂商或 SDK。正式执行由 `text_generation@1` 完成；新增文本厂商不因此新增 NodeType、Compiler 或 Executor。保存草稿允许未完成选择，但拒绝额外配置字段；发布要求完整严格 Schema 及同项目可用模型绑定，执行时重新授权并解密，见[架构](architecture.md#文本-ai-与-provider-plugin)。
 
 ## 视频领域能力与厂商边界
 
-领域类型可以专业化，供应商通过明确选择的受信任插件接入。图片 / 视频 / 语音及 Asset 业务、控制 / 交互结构与节点配置 UI 尚未交付，范围见[实施方案](implementation-plan.md)。
+领域类型可以专业化。用户选择 Provider，对应的受信任插件执行能力。图片、视频、语音可以使用各自插件，文本插件和 Vercel AI SDK 只负责当前的 `text.generate`。这些媒体能力、Asset、控制 / 交互结构与节点配置 UI 尚未交付，范围见[实施方案](implementation-plan.md)。

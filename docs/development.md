@@ -39,7 +39,7 @@
 - DRAMAFLOW_LIVE_AI_MODEL
 - DRAMAFLOW_LIVE_AI_CREDENTIAL_ENV，以及该变量指向的凭证变量
 
-构建应用并准备本机基础设施后运行 `pnpm test:ai:live`。当前 live 入口使用 `openai_compatible@1`，仅接受本项目本机数据库，改用隔离测试库与队列，经正式发布 / Worker 执行一次真实请求并清理自建记录。不会因本机存在 key 自动启用，也不自动重试；再次执行会产生新请求。凭证不得出现在命令行或断言输出。
+构建应用并准备本机基础设施后运行 `pnpm test:ai:live`。当前 live 入口使用高级兼容插件 `openai_compatible@1`，用来验收明确指定的兼容地址；它不是普通 Provider 的产品路径。仅接受本项目本机数据库，改用隔离测试库与队列，经正式发布 / Worker 执行一次真实请求并清理自建记录。不会因本机存在 key 自动启用，也不自动重试；再次执行会产生新请求。凭证不得出现在命令行或断言输出。
 
 ## Web Workflow 浏览器验证
 

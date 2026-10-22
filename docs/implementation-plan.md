@@ -4,9 +4,9 @@
 
 ## 当前阶段
 
-截至 2026-10-22，已完成项目画布与模型管理基础（A3 / A4），以及 C2.1 文本能力接入、C2.2 生产残留清理。文本能力沿用现有 ProviderCapability / Provider Instance / ModelConfiguration，通过 Vercel AI SDK 支持 OpenAI 与 Anthropic。历史实验不进入生产镜像。
+截至 2026-10-22，已完成项目画布与模型管理基础（A3 / A4）、C2.1 文本能力接入、C2.2 生产残留清理，以及 C2.3 架构文档校正。正式文本链由 `text_generation@1` 在内部通过 Vercel AI SDK 调用 OpenAI 与 Anthropic。已确定的产品模型是 Provider Catalog → Provider Definition → Provider Instance → Credential → Model Configuration。Catalog、其他厂商和新媒体能力尚未实现。
 
-默认文档只保留现状和仍有效的约束。下一步等待明确任务，不自动推进 A6、Provider Catalog UI、其他厂商或新生成能力。
+下一步等待明确任务，不自动推进 A6、Provider Catalog 界面、其他厂商或新生成能力。
 
 ## 待决策与后续边界
 
@@ -21,8 +21,8 @@
 
 | 路线 | 结论与证据 |
 | --- | --- |
-| Vercel AI SDK | C1 为 GO；C2.1 已正式接入。原始证据见 [C1](../experiments/ai-sdk-c1/README.md) |
-| LiteLLM | REJECTED / NO-GO。证据见 [L1](../experiments/litellm-l1/README.md)、[L2](../experiments/litellm-l2/README.md)、[L2.1](../experiments/litellm-l2-1/README.md)，评估全文在 experiments，停止后续集成 |
-| Bifrost | REJECTED / NO-GO。证据见 [B1](../experiments/bifrost-b1/README.md)、[B1.1](../experiments/bifrost-b1-1/README.md) |
+| Vercel AI SDK | C1 为 GO。C2.1 起由 `text_generation@1` 在内部使用，覆盖 OpenAI / Anthropic 文本。其他能力各自选择插件。证据见 [C1](../experiments/ai-sdk-c1/README.md) |
+| LiteLLM | 已评估，REJECTED / NO-GO。证据见 [L1](../experiments/litellm-l1/README.md)、[L2](../experiments/litellm-l2/README.md)、[L2.1](../experiments/litellm-l2-1/README.md) |
+| Bifrost | 已评估，REJECTED / NO-GO。证据见 [B1](../experiments/bifrost-b1/README.md)、[B1.1](../experiments/bifrost-b1-1/README.md) |
 
-不恢复独立 Gateway 路线，不迁移或删除 `openai_compatible@1`。历史评估只用于解释决策，需要复核时才读取。
+LiteLLM 与 Bifrost 不是当前或计划中的生产依赖。保留 `openai_compatible@1` 作为高级 Custom OpenAI-Compatible。历史评估只在复核决策时读取。

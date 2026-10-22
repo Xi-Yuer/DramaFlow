@@ -38,7 +38,7 @@ Provider 凭证由服务端用 AES-256-GCM 加密，当前项目 ownerId 作为 
 
 Workflow / Version 只引用模型配置 UUID。NodeRun、Outbox、checkpoint 和自动 tracing 不保存 Provider 凭证。读取接口不回填明文或密文；Web 不把 Secret 放入表单存储、Query 缓存、URL 或浏览器存储。模型管理、轮换和调用时的授权见 [架构](architecture.md#plugin--provider--模型配置管理-http)。
 
-Plugin Registry 只加载随部署注册的代码，没有远程安装或沙箱。允许明确配置的本地 HTTP endpoint；对外调用应使用 HTTPS。endpoint 不允许 userinfo、query 或 fragment。外部错误只保留安全摘要。受理结果不明时禁止盲目重试。
+Plugin Registry 只加载随部署注册的代码，没有远程安装或沙箱。已经配置的出站地址可以是明确的本地 HTTP；对外调用应使用 HTTPS。endpoint 不允许 userinfo、query 或 fragment。普通 Provider 的地址来自预设，自定义 baseURL 只属于 Custom OpenAI-Compatible。外部错误只保留安全摘要。受理结果不明时禁止盲目重试。
 
 ## 开通账号
 
