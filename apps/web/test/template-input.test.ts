@@ -10,10 +10,13 @@ import {
 } from '@dramaflow/contracts';
 import {
   availableStringOutputs,
+  displayTemplateSegments,
   draftBinding,
   insertVariable,
   removeVariable,
   replaceNodeInput,
+  templateFromSegments,
+  templateSegments,
   variableNameForPort,
 } from '../src/features/workflow/template-input';
 
@@ -160,6 +163,31 @@ describe('文本编辑与 TemplateBinding', () => {
       binding: { type: 'constant', value: '请根据 {{outline}}' },
     });
     expect(draftBinding('请根据 {{text}} {{', variables)).toEqual({ status: 'invalid' });
+  });
+
+  it('已绑定 alias 切成变量段，未绑定标记和展示名都不进入保存文本', () => {
+    const names = new Set(['text', 'text2']);
+    const text = '请根据 {{text}} 和 {{text2}} 生成剧本';
+    expect(templateSegments(text, names)).toEqual([
+      { kind: 'text', text: '请根据 ' },
+      { kind: 'variable', name: 'text' },
+      { kind: 'text', text: ' 和 ' },
+      { kind: 'variable', name: 'text2' },
+      { kind: 'text', text: ' 生成剧本' },
+    ]);
+    expect(templateFromSegments(templateSegments(text, names))).toBe(text);
+    expect(templateSegments('请根据 {{outline}} 写', names)).toEqual([
+      { kind: 'text', text: '请根据 {{outline}} 写' },
+    ]);
+    const displayed = displayTemplateSegments('{{text}}{{text2}}', names);
+    expect(templateFromSegments(displayed)).toBe('{{text}}{{text2}}');
+    expect(displayed.map((segment) => segment.kind)).toEqual([
+      'text',
+      'variable',
+      'text',
+      'variable',
+      'text',
+    ]);
   });
 
   it('同一来源复用变量名，不同来源的相同端口名递增', () => {

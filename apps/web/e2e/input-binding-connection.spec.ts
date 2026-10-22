@@ -119,7 +119,7 @@ async function save(page: Page) {
 }
 
 function prompt(nodeLocator: Locator) {
-  return nodeLocator.getByRole('textbox', { name: '提示词', exact: true });
+  return nodeLocator.getByRole('group', { name: '提示词', exact: true });
 }
 
 test('已有输入内容时连接前确认，取消保持原图，确认后才改为 Data Edge', async ({
@@ -135,8 +135,10 @@ test('已有输入内容时连接前确认，取消保持原图，确认后才�
   const template = node(page, 'template');
   const reference = node(page, 'reference');
   const asset = node(page, 'asset');
-  await expect(prompt(constant)).toHaveValue('保持这段提示词');
-  await expect(prompt(template)).toHaveValue('请根据 {{text}} 写剧本');
+  await expect(prompt(constant).getByRole('textbox')).toHaveValue('保持这段提示词');
+  await expect(prompt(template)).toContainText('模板来源 · 生成文本');
+  await expect(prompt(template)).toContainText('请根据');
+  await expect(prompt(template)).toContainText('写剧本');
   await expect(reference.getByText('该输入来自工作流输入')).toBeVisible();
   await expect(asset.getByText('该输入来自资产')).toBeVisible();
 
@@ -149,7 +151,7 @@ test('已有输入内容时连接前确认，取消保持原图，确认后才�
   await expect(replaceDialog(page)).toBeVisible();
   await replaceDialog(page).getByRole('button', { name: '取消', exact: true }).click();
   await expect(replaceDialog(page)).toHaveCount(0);
-  await expect(prompt(constant)).toHaveValue('保持这段提示词');
+  await expect(prompt(constant).getByRole('textbox')).toHaveValue('保持这段提示词');
   await expect(page.locator('.react-flow__edge')).toHaveCount(1);
 
   await connectPrompt(page, 'src-constant', 'constant');
@@ -161,7 +163,8 @@ test('已有输入内容时连接前确认，取消保持原图，确认后才�
   await connectPrompt(page, 'src-template', 'template');
   await expect(replaceDialog(page)).toBeVisible();
   await replaceDialog(page).getByRole('button', { name: '取消', exact: true }).click();
-  await expect(prompt(template)).toHaveValue('请根据 {{text}} 写剧本');
+  await expect(prompt(template)).toContainText('模板来源 · 生成文本');
+  await expect(prompt(template)).toContainText('写剧本');
   await expect(page.locator('.react-flow__edge')).toHaveCount(2);
 
   await connectPrompt(page, 'src-template', 'template');

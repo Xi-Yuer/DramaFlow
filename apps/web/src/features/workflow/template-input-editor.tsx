@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button, Popover } from 'antd';
 import { Braces } from 'lucide-react';
 import type {
@@ -10,13 +10,16 @@ import type {
 } from '@dramaflow/contracts';
 import {
   describeNodeOutput,
+  displayTemplateSegments,
   draftBinding,
-  insertVariable,
   nodeOutputVariables,
   removeVariable,
+  sourceLabel,
+  templateFromSegments,
   textFromBinding,
   variableNameForPort,
   type AvailableOutput,
+  type TemplateSegment,
 } from './template-input';
 import styles from './template-input-editor.module.css';
 
@@ -62,14 +65,27 @@ export function TemplateInputEditor({
   onChange: (binding: StaticInputBinding | null) => void;
 }) {
   const fieldId = useId();
-  const highlight = useRef<HTMLPreElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const runs = useRef(new Map<number, HTMLTextAreaElement>());
+  const appliedFocus = useRef<{ index: number; offset: number } | null>(null);
   const bindingSignature = JSON.stringify(binding ?? null);
   const [draft, setDraft] = useState(() => draftFrom(binding));
-  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [caret, setCaret] = useState({ index: 0, start: 0, end: 0 });
+  const [pendingFocus, setPendingFocus] = useState<{ index: number; offset: number } | null>(null);
   const [focused, setFocused] = useState(false);
   const [open, setOpen] = useState(false);
   if (!focused && draft.signature !== bindingSignature) setDraft(draftFrom(binding));
   if (disabled && open) setOpen(false);
+
+  useLayoutEffect(() => {
+    if (!pendingFocus || appliedFocus.current === pendingFocus) return;
+    appliedFocus.current = pendingFocus;
+    const element = runs.current.get(pendingFocus.index);
+    if (!element) return;
+    element.focus();
+    const offset = Math.min(pendingFocus.offset, element.value.length);
+    element.setSelectionRange(offset, offset);
+  }, [pendingFocus]);
 
   const reason = readOnlyReason(binding, connected);
   if (reason) {
@@ -84,15 +100,19 @@ export function TemplateInputEditor({
   }
 
   const names = new Set(Object.keys(draft.variables));
+  const segments = displayTemplateSegments(draft.text, names);
   const groups = new Map<string, AvailableOutput[]>();
   for (const output of outputs) {
     const group = groups.get(output.nodeId) ?? [];
     group.push(output);
     groups.set(output.nodeId, group);
   }
+  const showPlaceholder = draft.text.length === 0;
 
-  function remember(target: HTMLTextAreaElement) {
-    setSelection({ start: target.selectionStart ?? 0, end: target.selectionEnd ?? 0 });
+  function focusAt(index: number, offset: number) {
+    setPendingFocus({ index, offset });
+    setCaret({ index, start: offset, end: offset });
+    setFocused(true);
   }
 
   function apply(text: string, variables: ReturnType<typeof nodeOutputVariables>) {
@@ -108,93 +128,163 @@ export function TemplateInputEditor({
     if (signature !== bindingSignature) onChange(next);
   }
 
+  function replaceSegments(next: TemplateSegment[], variables: ReturnType<typeof nodeOutputVariables>) {
+    apply(templateFromSegments(next), variables);
+  }
+
+  function updateSegment(index: number, value: string, start: number, end: number) {
+    setCaret({ index, start, end });
+    replaceSegments(
+      segments.map((segment, segmentIndex) =>
+        segmentIndex === index && segment.kind === 'text' ? { kind: 'text', text: value } : segment,
+      ),
+      draft.variables,
+    );
+  }
+
+  function deleteSource(name: string, segmentIndex: number) {
+    const before = segments[segmentIndex - 1];
+    const variables = { ...draft.variables };
+    delete variables[name];
+    focusAt(Math.max(0, segmentIndex - 1), before?.kind === 'text' ? before.text.length : 0);
+    apply(removeVariable(draft.text, name), variables);
+  }
+
+  function selectionInField() {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLTextAreaElement) || active.dataset.field !== fieldId) return null;
+    const index = Number(active.dataset.segment);
+    if (!Number.isInteger(index)) return null;
+    return {
+      index,
+      start: active.selectionStart ?? 0,
+      end: active.selectionEnd ?? 0,
+    };
+  }
+
   function insert(output: AvailableOutput) {
     const name = variableNameForPort(output.portKey, draft.variables, output);
-    if (!name) return null;
-    const inserted = insertVariable(draft.text, selection.start, selection.end, name);
-    apply(inserted.text, {
-      ...draft.variables,
-      [name]: { type: 'node_output', nodeId: output.nodeId, portKey: output.portKey },
-    });
-    setSelection({ start: inserted.cursor, end: inserted.cursor });
+    if (!name) return;
+    const place = selectionInField() ?? caret;
+    const index = Math.min(place.index, Math.max(0, segments.length - 1));
+    const segment = segments[index];
+    if (!segment || segment.kind !== 'text') return;
+    const start = Math.min(place.start, segment.text.length);
+    const end = Math.min(Math.max(place.end, start), segment.text.length);
+    focusAt(index + 2, 0);
+    setCaret({ index: index + 2, start: 0, end: 0 });
+    replaceSegments(
+      [
+        ...segments.slice(0, index),
+        { kind: 'text', text: segment.text.slice(0, start) },
+        { kind: 'variable', name },
+        { kind: 'text', text: segment.text.slice(end) },
+        ...segments.slice(index + 1),
+      ],
+      {
+        ...draft.variables,
+        [name]: { type: 'node_output', nodeId: output.nodeId, portKey: output.portKey },
+      },
+    );
     setOpen(false);
-    return inserted.cursor;
   }
 
   return (
-    <div className={`nodrag nopan nowheel ${styles.editor}`}>
-      <label className={styles.label} htmlFor={fieldId}>
-        {portName}
-      </label>
-      <div className={styles.shell}>
-        <pre ref={highlight} className={styles.highlight} aria-hidden="true">
-          {draft.text.split(/(\{\{[A-Za-z][A-Za-z0-9_]*\}\})/g).map((part, index) => {
-            const name = /^\{\{([A-Za-z][A-Za-z0-9_]*)\}\}$/.exec(part)?.[1];
-            if (name && names.has(name))
-              return (
-                <mark key={index} className={styles.token}>
-                  {part}
-                </mark>
-              );
-            return <span key={index}>{part}</span>;
-          })}
-          {'\u200b'}
-        </pre>
-        <textarea
-          id={fieldId}
-          className={styles.field}
-          rows={rows}
-          value={draft.text}
-          disabled={disabled}
-          placeholder="输入文本，或插入上游输出"
-          onFocus={() => setFocused(true)}
-          onBlur={() => {
-            setFocused(false);
-            if (draftBinding(draft.text, draft.variables).status === 'invalid')
-              setDraft(draftFrom(binding));
-          }}
-          onSelect={(event) => remember(event.currentTarget)}
-          onKeyUp={(event) => remember(event.currentTarget)}
-          onClick={(event) => remember(event.currentTarget)}
-          onScroll={(event) => {
-            if (!highlight.current) return;
-            highlight.current.scrollTop = event.currentTarget.scrollTop;
-            highlight.current.scrollLeft = event.currentTarget.scrollLeft;
-          }}
-          onChange={(event) => {
-            remember(event.currentTarget);
-            apply(event.currentTarget.value, draft.variables);
-          }}
-        />
-      </div>
-      {Object.keys(draft.variables).length > 0 ? (
-        <div className={styles.chips}>
-          {Object.entries(draft.variables).map(([name, source]) => {
-            const described = describeNodeOutput(definition, manifests, source);
+    <div ref={root} className={`nodrag nopan nowheel ${styles.editor}`}>
+      <span className={styles.label}>{portName}</span>
+      <div
+        className={styles.composer}
+        role="group"
+        aria-label={portName}
+        style={{ minHeight: `${rows * 1.6}em` }}
+      >
+        {segments.map((segment, index) => {
+          if (segment.kind === 'variable') {
+            const source = draft.variables[segment.name];
+            const described = source
+              ? describeNodeOutput(definition, manifests, source)
+              : { nodeName: segment.name, portName: segment.name };
+            const label = sourceLabel(described.nodeName, described.portName);
             return (
-              <span key={name} className={styles.chip}>
-                <span>
-                  {described.nodeName} / {described.portName}
-                </span>
-                <code>{`{{${name}}}`}</code>
+              <span key={`${segment.name}:${index}`} className={styles.chip} data-alias={segment.name}>
+                <span>{label}</span>
                 <button
                   type="button"
                   aria-label={`删除变量 ${described.nodeName} ${described.portName}`}
                   disabled={disabled}
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    const variables = { ...draft.variables };
-                    delete variables[name];
-                    apply(removeVariable(draft.text, name), variables);
-                  }}
+                  onClick={() => deleteSource(segment.name, index)}
                 >
                   ×
                 </button>
               </span>
             );
-          })}
-        </div>
-      ) : null}
+          }
+          return (
+            <span key={`text:${index}`} className={styles.run}>
+              <span className={styles.mirror} aria-hidden="true">
+                {segment.text || (showPlaceholder ? '输入文本，或插入上游输出' : '\u00a0')}
+              </span>
+              <textarea
+                ref={(element) => {
+                  if (element) runs.current.set(index, element);
+                  else runs.current.delete(index);
+                }}
+                data-field={fieldId}
+                data-segment={index}
+                rows={1}
+                value={segment.text}
+                disabled={disabled}
+                spellCheck={false}
+                aria-label={`${portName}文本`}
+                placeholder={showPlaceholder ? '输入文本，或插入上游输出' : undefined}
+                onFocus={() => {
+                  setFocused(true);
+                  setCaret((current) => ({ ...current, index }));
+                }}
+                onBlur={(event) => {
+                  const next = event.relatedTarget;
+                  if (next instanceof Node && root.current?.contains(next)) return;
+                  setFocused(false);
+                  if (draftBinding(draft.text, draft.variables).status === 'invalid')
+                    setDraft(draftFrom(binding));
+                }}
+                onSelect={(event) =>
+                  setCaret({
+                    index,
+                    start: event.currentTarget.selectionStart ?? 0,
+                    end: event.currentTarget.selectionEnd ?? 0,
+                  })
+                }
+                onKeyDown={(event) => {
+                  const element = event.currentTarget;
+                  if (element.selectionStart !== element.selectionEnd) return;
+                  if (event.key === 'Backspace' && element.selectionStart === 0) {
+                    const previous = segments[index - 1];
+                    if (previous?.kind !== 'variable') return;
+                    event.preventDefault();
+                    deleteSource(previous.name, index - 1);
+                  }
+                  if (event.key === 'Delete' && element.selectionStart === element.value.length) {
+                    const next = segments[index + 1];
+                    if (next?.kind !== 'variable') return;
+                    event.preventDefault();
+                    deleteSource(next.name, index + 1);
+                  }
+                }}
+                onChange={(event) =>
+                  updateSegment(
+                    index,
+                    event.currentTarget.value,
+                    event.currentTarget.selectionStart ?? event.currentTarget.value.length,
+                    event.currentTarget.selectionEnd ?? event.currentTarget.value.length,
+                  )
+                }
+              />
+            </span>
+          );
+        })}
+      </div>
       <Popover
         key={open ? 'open' : 'closed'}
         open={open}
@@ -209,37 +299,23 @@ export function TemplateInputEditor({
               <p className={styles.empty}>没有可引用的上游文本输出</p>
             ) : (
               [...groups.values()].map((group) => (
-                <section
-                  key={group[0]?.nodeId}
-                  className={styles.group}
-                  aria-label={group[0]?.nodeName}
-                >
+                <section key={group[0]?.nodeId} className={styles.group} aria-label={group[0]?.nodeName}>
                   <h3>{group[0]?.nodeName}</h3>
-                  {group.map((output) => {
-                    const name = variableNameForPort(output.portKey, draft.variables, output);
-                    return (
-                      <button
-                        key={`${output.nodeId}:${output.portKey}`}
-                        type="button"
-                        className={styles.option}
-                        role="option"
-                        aria-label={`${output.nodeName} ${output.portName}`}
-                        aria-selected={false}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => {
-                          const cursor = insert(output);
-                          if (cursor === null) return;
-                          const element = document.getElementById(fieldId);
-                          if (!(element instanceof HTMLTextAreaElement)) return;
-                          element.focus();
-                          element.setSelectionRange(cursor, cursor);
-                        }}
-                      >
-                        <span>{output.portName}</span>
-                        <code>{name ? `{{${name}}}` : '无法命名'}</code>
-                      </button>
-                    );
-                  })}
+                  {group.map((output) => (
+                    <button
+                      key={`${output.nodeId}:${output.portKey}`}
+                      type="button"
+                      className={styles.option}
+                      role="option"
+                      aria-label={`${output.nodeName} ${output.portName}`}
+                      aria-selected={false}
+                      disabled={variableNameForPort(output.portKey, draft.variables, output) === null}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => insert(output)}
+                    >
+                      {output.portName}
+                    </button>
+                  ))}
                 </section>
               ))
             )}

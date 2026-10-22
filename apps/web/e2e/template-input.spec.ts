@@ -106,8 +106,9 @@ test('文本节点插入多个上游变量，保存刷新后恢复，并过滤�
   });
   await page.goto(`/projects/${project.id}`);
   const script = page.locator('.react-flow__node[data-id="script"]');
-  const prompt = script.getByRole('textbox', { name: '提示词', exact: true });
-  await prompt.fill('请根据 ');
+  const prompt = script.getByRole('group', { name: '提示词', exact: true });
+  await prompt.getByRole('textbox').fill('请根据 ');
+  await prompt.getByRole('textbox').press('End');
   await script.getByRole('button', { name: '向提示词插入变量' }).click();
   const menu = page.getByRole('listbox', { name: '提示词的可用上游输出' });
   await expect(menu.getByRole('option', { name: '生成大纲 生成文本' })).toBeVisible();
@@ -117,25 +118,30 @@ test('文本节点插入多个上游变量，保存刷新后恢复，并过滤�
   await expect(menu.getByRole('option', { name: '润色 生成文本' })).toHaveCount(0);
   await expect(menu.getByRole('option', { name: '剧本 生成文本' })).toHaveCount(0);
   await menu.getByRole('option', { name: '生成大纲 生成文本' }).click();
-  await prompt.pressSequentially(' 和 ');
+  await prompt.getByRole('textbox').last().pressSequentially(' 和 ');
   await script.getByRole('button', { name: '向提示词插入变量' }).click();
   await page
     .getByRole('listbox', { name: '提示词的可用上游输出', exact: true })
     .getByRole('option', { name: '人物 生成文本' })
     .click();
-  await prompt.pressSequentially(' 生成剧本');
-  await expect(prompt).toHaveValue('请根据 {{text}} 和 {{text2}} 生成剧本');
+  await prompt.getByRole('textbox').last().pressSequentially(' 生成剧本');
+  await expect(prompt).toContainText('生成大纲 · 生成文本');
+  await expect(prompt).toContainText('人物 · 生成文本');
+  await expect(prompt).toContainText('请根据');
+  await expect(prompt).toContainText('生成剧本');
+  await expect(prompt).not.toContainText('{{');
   await expect(script.getByRole('button', { name: '删除变量 生成大纲 生成文本' })).toBeVisible();
   await expect(script.getByRole('button', { name: '删除变量 人物 生成文本' })).toBeVisible();
 
-  const system = script.getByRole('textbox', { name: '系统提示词', exact: true });
+  const system = script.getByRole('group', { name: '系统提示词', exact: true });
   await system.scrollIntoViewIfNeeded();
   await script.getByRole('button', { name: '向系统提示词插入变量' }).click();
   await page
     .getByRole('listbox', { name: '系统提示词的可用上游输出', exact: true })
     .getByRole('option', { name: '场景图 说明' })
     .click();
-  await expect(system).toHaveValue('{{caption}}');
+  await expect(system).toContainText('场景图 · 说明');
+  await expect(system).not.toContainText('{{');
 
   const saved = await save(page);
   expect(saved.ok()).toBeTruthy();
@@ -159,10 +165,12 @@ test('文本节点插入多个上游变量，保存刷新后恢复，并过滤�
   expect(stored.draft.edges).toEqual(definition().edges);
 
   await page.reload();
-  await expect(prompt).toHaveValue('请根据 {{text}} 和 {{text2}} 生成剧本');
-  await expect(system).toHaveValue('{{caption}}');
+  await expect(prompt).toContainText('生成大纲 · 生成文本');
+  await expect(prompt).toContainText('人物 · 生成文本');
+  await expect(system).toContainText('场景图 · 说明');
   await script.getByRole('button', { name: '删除变量 生成大纲 生成文本' }).click();
-  await expect(prompt).toHaveValue('请根据  和 {{text2}} 生成剧本');
+  await expect(prompt).toContainText('人物 · 生成文本');
+  await expect(prompt).not.toContainText('生成大纲 · 生成文本');
   await expect(script.getByRole('button', { name: '删除变量 生成大纲 生成文本' })).toHaveCount(0);
   expect((await save(page)).ok()).toBeTruthy();
   const removed = await readWorkflow(request, project.id);

@@ -191,7 +191,7 @@ describe('通用 WorkflowNode', () => {
                   id: 'outline',
                   type: 'ai.text_generate',
                   typeVersion: 1,
-                  name: '生成大纲',
+                  name: '故事大纲',
                   inputs: {},
                   config: {},
                   ui: { position: { x: 0, y: 0 } },
@@ -219,8 +219,11 @@ describe('通用 WorkflowNode', () => {
         </WorkflowInputContext.Provider>
       </ReactFlowProvider>,
     );
-    expect(markup).toContain('请根据 {{text}} 生成剧本');
-    expect(markup).toContain('生成大纲 / 生成文本');
+    expect(markup).toContain('请根据');
+    expect(markup).toContain('生成剧本');
+    expect(markup).toContain('故事大纲 · 生成文本');
+    expect(markup).toContain('data-alias="text"');
+    expect(markup).not.toContain('{{text}}');
     expect(markup).toContain('aria-label="向提示词插入变量"');
     expect(markup).toContain('aria-label="向系统提示词插入变量"');
   });
