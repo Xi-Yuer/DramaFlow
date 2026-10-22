@@ -1,5 +1,10 @@
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
-import type { ControlEdgeDefinition, DataEdgeDefinition, WorkflowEdge } from '@dramaflow/contracts';
+import type {
+  ControlEdgeDefinition,
+  DataEdgeDefinition,
+  NodeDefinition,
+  WorkflowEdge,
+} from '@dramaflow/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { collectNodeDependencies, DependencyCompiler } from '../src/index.js';
 
@@ -220,6 +225,114 @@ describe('普通确定性依赖编译', () => {
     const result = await graph.compile().invoke({ completed: [] });
     expect(executeC).toHaveBeenCalledTimes(1);
     expect(result.completed).toEqual(['A', 'prepareB', 'B', 'C']);
+  });
+
+  it('template 的 node_output 按变量顺序加入依赖，workflow input 不产生节点依赖', () => {
+    const nodes: Pick<NodeDefinition, 'id' | 'inputs'>[] = [
+      {
+        id: 'script',
+        inputs: {
+          prompt: {
+            type: 'template',
+            value: '{{outline}} {{characters}} {{style}}',
+            variables: {
+              outline: { type: 'node_output', nodeId: 'outline', portKey: 'text' },
+              characters: {
+                type: 'node_output',
+                nodeId: 'characters',
+                get portKey(): string {
+                  throw new Error('依赖编译不得读取模板端口');
+                },
+              },
+              style: { type: 'workflow_input', key: 'style' },
+            },
+          },
+        },
+      },
+    ];
+    expect(collectNodeDependencies([], nodes)).toEqual([
+      { targetNodeId: 'script', sourceNodeIds: ['outline', 'characters'] },
+    ]);
+    const addEdge = vi.fn();
+    compiler.compile({ edges: [], nodes, addEdge });
+    expect(addEdge.mock.calls).toEqual([[['outline', 'characters'], 'script']]);
+  });
+
+  it('已有边先于模板来源，重复节点对只保留第一次', () => {
+    const nodes: Pick<NodeDefinition, 'id' | 'inputs'>[] = [
+      {
+        id: 'script',
+        inputs: {
+          prompt: {
+            type: 'template',
+            value: '{{outline}} {{characters}}',
+            variables: {
+              outline: { type: 'node_output', nodeId: 'outline', portKey: 'text' },
+              characters: { type: 'node_output', nodeId: 'characters', portKey: 'text' },
+            },
+          },
+        },
+      },
+    ];
+    expect(collectNodeDependencies([controlEdge('outline', 'script')], nodes)).toEqual([
+      { targetNodeId: 'script', sourceNodeIds: ['outline', 'characters'] },
+    ]);
+  });
+
+  it('真实 LangGraph：模板引用的多个上游全部完成后才执行一次', async () => {
+    const gates = { outline: deferred(), characters: deferred() };
+    const started = { outline: deferred(), characters: deferred() };
+    const upstream = (id: 'outline' | 'characters') => async () => {
+      started[id].resolve();
+      await gates[id].promise;
+      return { completed: [id] };
+    };
+    const executeScript = vi.fn(() => ({ completed: ['script'] }));
+    const graph = new StateGraph(TestState)
+      .addNode<string>('outline', upstream('outline'))
+      .addNode('characters', upstream('characters'))
+      .addNode('script', executeScript)
+      .addEdge(START, 'outline')
+      .addEdge(START, 'characters')
+      .addEdge('script', END);
+    compiler.compile({
+      edges: [],
+      nodes: [
+        {
+          id: 'script',
+          inputs: {
+            prompt: {
+              type: 'template',
+              value: '{{outline}} {{characters}}',
+              variables: {
+                outline: { type: 'node_output', nodeId: 'outline', portKey: 'text' },
+                characters: { type: 'node_output', nodeId: 'characters', portKey: 'text' },
+              },
+            },
+          },
+        },
+      ],
+      addEdge: (source, target) => {
+        graph.addEdge(source, target);
+      },
+    });
+    const invocation = graph.compile().invoke({ completed: [] });
+    try {
+      await Promise.all([started.outline.promise, started.characters.promise]);
+      expect(executeScript).not.toHaveBeenCalled();
+      gates.outline.resolve();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(executeScript).not.toHaveBeenCalled();
+      gates.characters.resolve();
+      const result = await invocation;
+      expect(executeScript).toHaveBeenCalledTimes(1);
+      expect(result.completed).toEqual(expect.arrayContaining(['outline', 'characters', 'script']));
+      expect(result.completed.at(-1)).toBe('script');
+    } finally {
+      gates.outline.resolve();
+      gates.characters.resolve();
+      await invocation;
+    }
   });
 
   it('真实 LangGraph：任一确定性上游失败时不执行 C，并传播失败', async () => {

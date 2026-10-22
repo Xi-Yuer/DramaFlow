@@ -70,7 +70,7 @@ function definition(): WorkflowDefinition {
 }
 
 describe('正式 WorkflowDefinition 静态校验', () => {
-  it('保留三种静态绑定、数据边及完整输入输出，不解析资产或运行值', () => {
+  it('保留静态绑定、数据边及完整输入输出，不解析资产或运行值', () => {
     const source = definition();
     expect(workflowDefinitionSchema.parse(JSON.parse(JSON.stringify(source)))).toEqual(source);
     expect(
@@ -183,6 +183,81 @@ describe('正式 WorkflowDefinition 静态校验', () => {
     ).toBe(false);
   });
 
+  it('模板引用多个上游和 workflow input，并保持可往返', () => {
+    const prompt = {
+      type: 'template' as const,
+      value: '请根据 {{outline}} 和 {{characters}} 生成内容，风格：{{style}}',
+      variables: {
+        outline: { type: 'node_output' as const, nodeId: 'outline', portKey: 'text' },
+        characters: { type: 'node_output' as const, nodeId: 'characters', portKey: 'text' },
+        style: { type: 'workflow_input' as const, key: 'novel' },
+      },
+    };
+    const source: WorkflowDefinition = {
+      inputs: [{ name: 'novel', type: { kind: 'primitive', name: 'string' } }],
+      nodes: [node('outline'), node('characters'), node('script', { prompt })],
+      edges: [],
+      outputs: [],
+    };
+    expect(workflowDefinitionSchema.parse(JSON.parse(JSON.stringify(source)))).toEqual(source);
+  });
+
+  it('模板引用缺失节点、缺失工作流输入或自身时失败', () => {
+    const source = (nodeId: string, sourceType: 'node_output' | 'workflow_input') => ({
+      inputs: [] as WorkflowDefinition['inputs'],
+      nodes: [
+        node('script', {
+          prompt: {
+            type: 'template' as const,
+            value: '{{outline}}',
+            variables:
+              sourceType === 'node_output'
+                ? { outline: { type: 'node_output' as const, nodeId, portKey: 'text' } }
+                : { outline: { type: 'workflow_input' as const, key: 'missing' } },
+          },
+        }),
+      ],
+      edges: [],
+      outputs: [],
+    });
+    expect(
+      workflowDefinitionSchema.safeParse(source('missing', 'node_output')).error?.issues,
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ message: '模板变量引用了不存在的节点' })]),
+    );
+    expect(
+      workflowDefinitionSchema.safeParse(source('script', 'workflow_input')).error?.issues,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: '模板变量引用了不存在的工作流输入' }),
+      ]),
+    );
+    expect(
+      workflowDefinitionSchema.safeParse(source('script', 'node_output')).error?.issues,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: '模板变量不能引用自身' }),
+        expect.objectContaining({ message: '控制关系与数据依赖联合必须无环' }),
+      ]),
+    );
+  });
+
+  it('仅由模板引用形成的环会被发现', () => {
+    const reference = (nodeId: string) => ({
+      type: 'template' as const,
+      value: '{{upstream}}',
+      variables: { upstream: { type: 'node_output' as const, nodeId, portKey: 'text' } },
+    });
+    expect(() =>
+      workflowDefinitionSchema.parse({
+        inputs: [],
+        nodes: [node('a', { prompt: reference('b') }), node('b', { prompt: reference('a') })],
+        edges: [],
+        outputs: [],
+      }),
+    ).toThrow('控制关系与数据依赖联合必须无环');
+  });
+
   it('拒绝数据或控制自连、纯数据环、纯控制环与混合环', () => {
     const source = definition();
     for (const self of [edge('self', 'a', 'a'), controlEdge('self', 'a', 'a')])
@@ -220,6 +295,11 @@ describe('正式 WorkflowDefinition 静态校验', () => {
       { type: 'constant', value: [] },
       { type: 'workflow_input', key: 'novel' },
       { type: 'asset', assetId: 'asset', versionId: 'v1' },
+      {
+        type: 'template',
+        value: '{{novel}}',
+        variables: { novel: { type: 'workflow_input', key: 'novel' } },
+      },
     ];
     for (const binding of bindings) {
       const result = workflowDefinitionSchema.safeParse({

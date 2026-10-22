@@ -200,6 +200,50 @@ describe('正式文本 AI Node 的 Runtime 连接', () => {
     );
   });
 
+  it('模板在输入解析后把渲染字符串交给文本节点', async () => {
+    const f = fixture();
+    f.node.inputs = {
+      prompt: {
+        type: 'template',
+        value: '请根据 {{outline}} 和 {{characters}} 生成剧本',
+        variables: {
+          outline: { type: 'node_output', nodeId: 'outline', portKey: 'text' },
+          characters: { type: 'node_output', nodeId: 'characters', portKey: 'text' },
+        },
+      },
+      system: {
+        type: 'template',
+        value: '风格：{{style}}',
+        variables: { style: { type: 'workflow_input', key: 'style' } },
+      },
+    };
+    await f.makeExecutor({ invoke: f.invoke }).execute(f.node, {
+      ...f.context,
+      state: {
+        ...f.context.state,
+        inputs: { style: { storage: 'inline', type: StringType, value: '简洁' } },
+        outputs: {
+          outline: { text: { storage: 'inline', type: StringType, value: '第一幕' } },
+          characters: { text: { storage: 'inline', type: StringType, value: '阿青' } },
+        },
+      },
+    });
+    expect(f.invoke).toHaveBeenCalledExactlyOnceWith('text.generate', {
+      modelConfigurationId,
+      input: { prompt: '请根据 第一幕 和 阿青 生成剧本', system: '风格：简洁' },
+    });
+    expect(f.nodeRuns.updateInputs).toHaveBeenCalledExactlyOnceWith('node-run-1', {
+      prompt: {
+        storage: 'inline',
+        type: StringType,
+        value: '请根据 第一幕 和 阿青 生成剧本',
+      },
+      system: { storage: 'inline', type: StringType, value: '风格：简洁' },
+    });
+    expect(f.references.resolve).not.toHaveBeenCalled();
+    expect(f.artifacts.write).not.toHaveBeenCalled();
+  });
+
   it('能力返回非法业务输出时由 Executor 的 outputSchema 拒绝，不记录成功或部分输出', async () => {
     const f = fixture();
     f.invoke.mockResolvedValue({ text: 42 });

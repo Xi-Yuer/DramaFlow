@@ -39,6 +39,35 @@ export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
             message: '绑定引用了不存在的工作流输入',
           });
         }
+        if (binding.type !== 'template') continue;
+        for (const [name, source] of Object.entries(binding.variables)) {
+          if (source.type === 'workflow_input') {
+            if (!inputs.has(source.key)) {
+              context.addIssue({
+                code: 'custom',
+                path: ['nodes', index, 'inputs', key, 'variables', name, 'key'],
+                message: '模板变量引用了不存在的工作流输入',
+              });
+            }
+            continue;
+          }
+          if (!nodes.has(source.nodeId)) {
+            context.addIssue({
+              code: 'custom',
+              path: ['nodes', index, 'inputs', key, 'variables', name, 'nodeId'],
+              message: '模板变量引用了不存在的节点',
+            });
+            continue;
+          }
+          if (source.nodeId === node.id) {
+            context.addIssue({
+              code: 'custom',
+              path: ['nodes', index, 'inputs', key, 'variables', name, 'nodeId'],
+              message: '模板变量不能引用自身',
+            });
+          }
+          addDependency(source.nodeId, node.id);
+        }
       }
     });
 

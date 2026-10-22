@@ -12,7 +12,7 @@ import { createWorkflowDefinitionSnapshot } from '../definition/version.js';
 import { NodeRegistry } from '../node/registry.js';
 import type { NodeExecutor } from '../runtime/node-executor.js';
 import { WorkflowStateAnnotation, type WorkflowState } from '../runtime/state.js';
-import { DependencyCompiler } from './dependency.compiler.js';
+import { collectNodeDependencies, DependencyCompiler } from './dependency.compiler.js';
 import { ActionNodeCompilationStrategy } from './strategy.js';
 
 // Runner 仅发送 resume，不开放 Command.update / goto 的状态写入或路由能力。
@@ -60,14 +60,16 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
         },
       });
     }
+    const dependencies = collectNodeDependencies(definition.edges, definition.nodes);
     new DependencyCompiler().compile({
       edges: definition.edges,
+      nodes: definition.nodes,
       addEdge: (sources, target) => {
         graph.addEdge(sources, target);
       },
     });
-    const targets = new Set(definition.edges.map((edge) => edge.target.nodeId));
-    const sources = new Set(definition.edges.map((edge) => edge.source.nodeId));
+    const targets = new Set(dependencies.map((dependency) => dependency.targetNodeId));
+    const sources = new Set(dependencies.flatMap((dependency) => dependency.sourceNodeIds));
     for (const node of definition.nodes) {
       if (!targets.has(node.id)) graph.addEdge(START, node.id);
       if (!sources.has(node.id)) graph.addEdge(node.id, END);

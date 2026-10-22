@@ -3,6 +3,7 @@ import {
   ImageType,
   DocumentType,
   JsonType,
+  NumberType,
   StringType,
   type ConstantBinding,
   type DataEdgeDefinition,
@@ -302,6 +303,11 @@ describe('BindingResolver 完整输入组装', () => {
     { type: 'constant', value: '静态值' },
     { type: 'workflow_input', key: 'novel' },
     { type: 'asset', assetId: 'asset-1', versionId: 'version-1' },
+    {
+      type: 'template',
+      value: '{{novel}}',
+      variables: { novel: { type: 'workflow_input', key: 'novel' } },
+    },
   ])(
     '任意静态绑定与 Data Edge 冲突时，在取值前抛 INPUT_SOURCE_CONFLICT：$type',
     async (binding) => {
@@ -348,6 +354,11 @@ describe('BindingResolver 完整输入组装', () => {
     { type: 'constant', value: '常量' },
     { type: 'workflow_input', key: 'novel' },
     { type: 'asset', assetId: 'asset-1', versionId: 'version-3' },
+    {
+      type: 'template',
+      value: '{{novel}}',
+      variables: { novel: { type: 'workflow_input', key: 'novel' } },
+    },
   ])('未声明的静态输入端口抛 INPUT_PORT_NOT_FOUND：$type', async (binding) => {
     await expect(
       bindingResolver.resolveInputs({
@@ -388,5 +399,166 @@ describe('BindingResolver 完整输入组装', () => {
       state: state({}),
     });
     expect(inputs).toEqual({ prompt });
+  });
+
+  it('一个模板引用多个上游输出，并按原文替换为内联字符串', async () => {
+    const bindingResolver = createBindingResolver();
+    const inputs = await bindingResolver.resolveInputs({
+      node: {
+        ...node,
+        inputs: {
+          prompt: {
+            type: 'template',
+            value: '请根据 {{outline}} 和 {{characters}} 生成剧本。原文 {{outline}} $&',
+            variables: {
+              outline: { type: 'node_output', nodeId: 'outline', portKey: 'text' },
+              characters: { type: 'node_output', nodeId: 'characters', portKey: 'text' },
+            },
+          },
+        },
+      },
+      nodeType,
+      edges: [],
+      state: state({
+        outline: { text: { storage: 'inline', type: StringType, value: '第一幕 {{characters}}' } },
+        characters: { text: { storage: 'inline', type: StringType, value: '阿青' } },
+      }),
+    });
+    expect(inputs.prompt).toEqual({
+      storage: 'inline',
+      type: StringType,
+      value: '请根据 第一幕 {{characters}} 和 阿青 生成剧本。原文 第一幕 {{characters}} $&',
+    });
+  });
+
+  it('模板中的 workflow input 渲染为字符串，不读取引用', async () => {
+    const bindingResolver = createBindingResolver();
+    const inputs = await bindingResolver.resolveInputs({
+      node: {
+        ...node,
+        inputs: {
+          prompt: {
+            type: 'template',
+            value: '风格：{{style}}',
+            variables: { style: { type: 'workflow_input', key: 'style' } },
+          },
+        },
+      },
+      nodeType,
+      edges: [],
+      state: {
+        ...state(),
+        inputs: { style: { storage: 'inline', type: StringType, value: '简洁' } },
+      },
+    });
+    expect(inputs.prompt).toEqual({ storage: 'inline', type: StringType, value: '风格：简洁' });
+  });
+
+  it('模板来源缺失时报告变量名称', async () => {
+    const bindingResolver = createBindingResolver();
+    const prompt = {
+      type: 'template' as const,
+      value: '请根据 {{outline}} 生成剧本',
+      variables: {
+        outline: { type: 'node_output' as const, nodeId: 'outline', portKey: 'text' },
+      },
+    };
+    await expect(
+      bindingResolver.resolveInputs({
+        node: { ...node, inputs: { prompt } },
+        nodeType,
+        edges: [],
+        state: state({}),
+      }),
+    ).rejects.toMatchObject({
+      code: 'SOURCE_NODE_OUTPUT_MISSING',
+      details: {
+        nodeId: 'B',
+        inputKey: 'prompt',
+        sourceNodeId: 'outline',
+        sourcePortKey: 'text',
+        variableName: 'outline',
+      },
+    });
+    await expect(
+      bindingResolver.resolveInputs({
+        node: {
+          ...node,
+          inputs: {
+            prompt: {
+              type: 'template',
+              value: '风格：{{style}}',
+              variables: { style: { type: 'workflow_input', key: 'style' } },
+            },
+          },
+        },
+        nodeType,
+        edges: [],
+        state: state(),
+      }),
+    ).rejects.toMatchObject({
+      code: 'WORKFLOW_INPUT_MISSING',
+      details: {
+        nodeId: 'B',
+        inputKey: 'prompt',
+        workflowInputKey: 'style',
+        variableName: 'style',
+      },
+    });
+  });
+
+  it('非字符串或引用值不能进入模板，且不读取引用', async () => {
+    const bindingResolver = createBindingResolver();
+    const referenced = {
+      storage: 'reference' as const,
+      type: StringType,
+      get reference(): never {
+        throw new Error('模板解析不得读取引用');
+      },
+    };
+    await expect(
+      bindingResolver.resolveInputs({
+        node: {
+          ...node,
+          inputs: {
+            prompt: {
+              type: 'template',
+              value: '{{outline}}',
+              variables: {
+                outline: { type: 'node_output', nodeId: 'outline', portKey: 'text' },
+              },
+            },
+          },
+        },
+        nodeType,
+        edges: [],
+        state: state({ outline: { text: referenced } }),
+      }),
+    ).rejects.toMatchObject({
+      code: 'TEMPLATE_VARIABLE_INVALID',
+      details: { variableName: 'outline' },
+    });
+    await expect(
+      bindingResolver.resolveInputs({
+        node: {
+          ...node,
+          inputs: {
+            prompt: {
+              type: 'template',
+              value: '{{count}}',
+              variables: { count: { type: 'node_output', nodeId: 'counter', portKey: 'count' } },
+            },
+          },
+        },
+        nodeType,
+        edges: [],
+        state: state({
+          counter: { count: { storage: 'inline', type: NumberType, value: 3 } },
+        }),
+      }),
+    ).rejects.toMatchObject({
+      code: 'TEMPLATE_VARIABLE_INVALID',
+      details: { variableName: 'count' },
+    });
   });
 });

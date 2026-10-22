@@ -1,5 +1,6 @@
 import {
   isTypeAssignable,
+  StringType,
   type NodeDefinition,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
@@ -120,10 +121,30 @@ export function validateWorkflowForPublish(
       const port = ports.get(key);
       if (!port) invalid('INPUT_PORT_NOT_FOUND', node.id, key);
       if (binding.type === 'asset') invalid('ASSET_BINDING_UNSUPPORTED', node.id, key);
-      if (binding.type === 'workflow_input') {
+      else if (binding.type === 'workflow_input') {
         dynamic = true;
         const source = workflowInputs.get(binding.key)!;
         if (!isTypeAssignable(source, port.dataType)) invalid('INPUT_TYPE_MISMATCH', node.id, key);
+      } else if (binding.type === 'template') {
+        dynamic = true;
+        if (!isTypeAssignable(StringType, port.dataType))
+          invalid('INPUT_TYPE_MISMATCH', node.id, key);
+        for (const source of Object.values(binding.variables)) {
+          if (source.type === 'workflow_input') {
+            const sourceType = workflowInputs.get(source.key);
+            if (!sourceType || !isTypeAssignable(sourceType, StringType))
+              invalid('INPUT_TYPE_MISMATCH', node.id, key);
+            continue;
+          }
+          const sourceNode = nodes.get(source.nodeId);
+          if (!sourceNode) invalid('NODE_TYPE_UNAVAILABLE', source.nodeId);
+          const output = sourceNode.nodeType.manifest.outputs.find(
+            (outputPort) => outputPort.key === source.portKey,
+          );
+          if (!output) invalid('OUTPUT_PORT_NOT_FOUND', sourceNode.node.id, source.portKey);
+          if (!isTypeAssignable(output.dataType, StringType))
+            invalid('INPUT_TYPE_MISMATCH', node.id, key);
+        }
       } else {
         if (!nodeType.inputSchema.shape[key]!.safeParse(binding.value).success)
           invalid('INPUT_VALUE_INVALID', node.id, key);

@@ -25,13 +25,13 @@ Repository 故障是基础设施错误；完成记录失败不能反向 markFail
 
 ### 普通确定性依赖的 ALL Join
 
-Data / Control Edge 都产生确定性执行依赖。collectNodeDependencies 只读 nodeId，按 target 聚合、source 去重，同一节点对的多端口 / 混合边只计一次；不读取端口或构造输入。
+Data / Control Edge 和 template 的 node_output 都产生确定性执行依赖。collectNodeDependencies 只读 nodeId，先记录边再追加模板来源，按 target 聚合、source 去重，同一节点对只计一次；不读取端口或构造输入。workflow_input 变量不产生节点依赖。START / END 使用同一份依赖结果。
 
 单上游使用 `addEdge(source, target)`，多上游必须使用一次 `addEdge([sources], target)`，等待全部完成后执行一次；不拆成独立触发边，不增加 joinMode 或 ready 计数。条件候选分支、Send / Batch 不套用静态 ALL，需独立结构策略。
 
 ### Data Edge 与节点输入
 
-BindingResolver 按 Manifest 读取 Data Edge 的上游端口或包装静态输入。Control Edge 不提供输入值。依赖编译保持原始端口信息，取值、decode 与真实 Schema 校验依次独立。
+BindingResolver 按 Manifest 读取 Data Edge 的上游端口或包装静态输入，并在这里把 template 渲染成内联字符串。NodeExecutor 不解释模板。Control Edge 不提供输入值。依赖编译保持原始端口信息，取值、decode 与真实 Schema 校验依次独立。
 
 ### RuntimeValue Decode 边界
 

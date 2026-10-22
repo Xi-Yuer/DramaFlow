@@ -90,8 +90,66 @@ describe('Node 定义与绑定协议', () => {
       { type: 'asset', assetId: '', versionId: 'asset-version-1' },
       { type: 'asset', assetId: 'a1', versionId: 'asset-version-1', url: 'local://asset' },
       { type: 'expression', expression: 'state.x' },
+      { type: 'template', value: '', variables: {} },
+      {
+        type: 'template',
+        value: '{{outline}}',
+        variables: { outline: { type: 'context', key: 'outline' } },
+      },
     ])
       expect(staticInputBindingSchema.safeParse(binding).success).toBe(false);
+  });
+
+  it('模板绑定持久化正文和显式变量来源', () => {
+    const prompt = {
+      type: 'template',
+      value: '请根据 {{outline}} 生成内容',
+      variables: {
+        outline: { type: 'node_output', nodeId: 'upstream', portKey: 'text' },
+      },
+    };
+    const parsed = nodeDefinitionSchema.parse({
+      ...node(),
+      inputs: {
+        ...node().inputs,
+        prompt,
+        system: {
+          type: 'template',
+          value: '风格：{{style}}',
+          variables: { style: { type: 'workflow_input', key: 'style' } },
+        },
+      },
+    });
+    expect(parsed.inputs.prompt).toEqual(prompt);
+    expect(parsed.inputs.system).toEqual({
+      type: 'template',
+      value: '风格：{{style}}',
+      variables: { style: { type: 'workflow_input', key: 'style' } },
+    });
+  });
+
+  it('模板中的名称必须与变量来源一一对应', () => {
+    const base = {
+      type: 'template' as const,
+      value: '请根据 {{outline}} 生成内容',
+      variables: {
+        outline: { type: 'node_output' as const, nodeId: 'upstream', portKey: 'text' },
+      },
+    };
+    for (const prompt of [
+      { ...base, value: '请根据 {{ outline }} 生成内容' },
+      { ...base, value: '没有变量' },
+      { ...base, variables: {} },
+      {
+        ...base,
+        variables: {
+          ...base.variables,
+          extra: { type: 'node_output' as const, nodeId: 'upstream', portKey: 'text' },
+        },
+      },
+      { ...base, value: '请根据 {{outline}} 和 {{missing}} 生成内容' },
+    ])
+      expect(nodeDefinitionSchema.safeParse({ ...node(), inputs: { prompt } }).success).toBe(false);
   });
 
   it('拒绝运行状态、旧式不明确的来源字段及非 JSON 配置', () => {

@@ -4,11 +4,11 @@ NodeDefinition 是实例，NodeTypeManifest 是可传输说明书，NodeType 是
 
 ## 实例与编辑视图
 
-实例固定 id、type、typeVersion、name、config、inputs 和 ui.position。inputs 只保存 constant / workflow_input / asset 三类静态绑定；asset 固定 assetId + versionId。上游连接只保存在 Workflow.edges，不重复放入 inputs。
+实例固定 id、type、typeVersion、name、config、inputs 和 ui.position。inputs 保存 constant、workflow_input、asset 和 template；asset 固定 assetId + versionId。整段上游连接仍只保存在 Workflow.edges，一个目标端口一条数据边。template 是该端口的唯一来源，正文用 `{{名称}}` 引用 node_output 或 workflow_input。
 
 React Flow 的 type 选择通用 renderer，真实节点身份保存在 data.nodeType / typeVersion；selected、dragging、measured 不持久化。两类边保留 ID、种类、节点及可选端口；断连 / 重连必须核对完整旧边快照，防止过期事件修改现有连接。
 
-Data Edge 提供输入值来源，Control Edge 提供先后关系，不自动相互创建。数据输入单连接，且不能与静态绑定并存；数组不隐含多连接聚合。控制边不占输入，两类边的执行依赖按节点对去重，普通 fan-in 采用 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join)。
+Data Edge 提供输入值来源，Control Edge 提供先后关系，不自动相互创建。数据输入单连接，且不能与静态绑定并存；数组不隐含多连接聚合。template 的 node_output 也是确定性依赖，但不另存为 Data Edge。控制边不占输入，边与模板引用按节点对去重，普通 fan-in 采用 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join)。
 
 ## Manifest 与端口
 

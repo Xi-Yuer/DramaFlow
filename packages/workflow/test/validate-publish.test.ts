@@ -1,4 +1,5 @@
 import {
+  ImageType,
   NumberType,
   StringType,
   workflowDefinitionSchema,
@@ -260,5 +261,115 @@ describe('正式 Registry 的静态发布校验', () => {
       modelConfigurationId: modelConfigurationId.toUpperCase(),
     });
     expect(graph).toEqual(before);
+  });
+
+  it('字符串模板引用可以发布，原始模板不当作最终 prompt', () => {
+    const type = createTextGenerationNodeType();
+    const registry = new NodeRegistry([
+      {
+        ...type,
+        inputSchema: z.object({
+          prompt: z.string().refine((value) => !value.includes('{{')),
+          system: z.string().optional(),
+        }),
+      },
+    ]);
+    const graph = definition();
+    graph.edges = [];
+    graph.inputs.push({ name: 'style', type: StringType });
+    graph.nodes.push({
+      id: 'C',
+      type: 'ai.text_generate',
+      typeVersion: 1,
+      name: '人物',
+      inputs: { prompt: { type: 'constant', value: '阿青' } },
+      config: { modelConfigurationId },
+      ui: { position: { x: 0, y: 0 } },
+    });
+    graph.nodes[1]!.inputs = {
+      prompt: {
+        type: 'template',
+        value: '请根据 {{outline}} 和 {{characters}} 生成剧本',
+        variables: {
+          outline: { type: 'node_output', nodeId: 'A', portKey: 'text' },
+          characters: { type: 'node_output', nodeId: 'C', portKey: 'text' },
+        },
+      },
+      system: {
+        type: 'template',
+        value: '风格：{{style}}',
+        variables: { style: { type: 'workflow_input', key: 'style' } },
+      },
+    };
+    expect(check(graph, registry)).toHaveLength(3);
+    graph.inputs[1]!.type = NumberType;
+    expect(() => check(graph, registry)).toThrow(
+      expect.objectContaining({ code: 'INPUT_TYPE_MISMATCH' }),
+    );
+  });
+
+  it('模板引用非字符串输出或缺失端口时不能发布', () => {
+    const text = createTextGenerationNodeType();
+    const registry = new NodeRegistry([
+      text,
+      {
+        manifest: {
+          type: 'test.image',
+          version: 1,
+          executionKind: 'action',
+          metadata: { name: '图片', category: 'image' },
+          inputs: [],
+          outputs: [{ key: 'image', name: '图片', dataType: ImageType }],
+          config: [],
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ image: z.string() }),
+        configSchema: z.object({}).strict(),
+        execute: async () => ({ image: 'unused' }),
+      },
+    ]);
+    const graph = (portKey: string): WorkflowDefinition => ({
+      inputs: [],
+      nodes: [
+        {
+          id: 'picture',
+          type: 'test.image',
+          typeVersion: 1,
+          name: '图片',
+          inputs: {},
+          config: {},
+          ui: { position: { x: 0, y: 0 } },
+        },
+        {
+          id: 'writer',
+          type: 'ai.text_generate',
+          typeVersion: 1,
+          name: '文本',
+          inputs: {
+            prompt: {
+              type: 'template',
+              value: '看 {{picture}}',
+              variables: {
+                picture: { type: 'node_output', nodeId: 'picture', portKey },
+              },
+            },
+          },
+          config: { modelConfigurationId },
+          ui: { position: { x: 0, y: 0 } },
+        },
+      ],
+      edges: [],
+      outputs: [],
+    });
+    expect(() => check(graph('image'), registry)).toThrow(
+      expect.objectContaining({ code: 'INPUT_TYPE_MISMATCH', nodeId: 'writer', portKey: 'prompt' }),
+    );
+    expect(() => check(graph('missing'), registry)).toThrow(
+      expect.objectContaining({
+        code: 'OUTPUT_PORT_NOT_FOUND',
+        nodeId: 'picture',
+        portKey: 'missing',
+      }),
+    );
   });
 });

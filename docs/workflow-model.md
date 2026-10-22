@@ -39,6 +39,6 @@ threadId 必填，独立于 Run.id，不能在缺失时推断为相等。同一�
 
 ## 图与组合
 
-Data Edge 声明值来源，Control Edge 声明显式先后；创建前者不自动补后者。目标数据端口至多一条 Data Edge，且不能与静态绑定并存。数组不表示多连接聚合。控制边不占输入，可以有多个控制上游。两类边合并后必须无环。普通确定性上游按节点对去重后 ALL Join，见 [Runtime](runtime-architecture.md#普通确定性依赖的-all-join)。命名控制端口、条件和分支尚未实现。
+Data Edge 声明值来源，Control Edge 声明显式先后；创建前者不自动补后者。目标数据端口至多一条 Data Edge，且不能与静态绑定并存。数组不表示多连接聚合。控制边不占输入，可以有多个控制上游。两类边与 template 的 node_output 引用合并后必须无环。普通确定性上游按节点对去重后 ALL Join，见 [Runtime](runtime-architecture.md#普通确定性依赖的-all-join)。命名控制端口、条件和分支尚未实现。
 
 后续可以把另一个项目的固定 WorkflowVersion 当作子流程调用。调用关系随调用方版本固定，不允许用子流程递归绕过无环约束，也不能隐式访问其他项目。父子运行、等待和取消尚未实现。

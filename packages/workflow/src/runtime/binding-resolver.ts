@@ -1,12 +1,14 @@
-import type {
-  DataEdgeDefinition,
-  InputPortDefinition,
-  NodeDefinition,
-  NodeOutputMap,
-  NodeTypeManifest,
-  RuntimeValue,
-  StaticInputBinding,
-  WorkflowEdge,
+import {
+  templateBindingMatches,
+  type DataEdgeDefinition,
+  type InputPortDefinition,
+  type NodeDefinition,
+  type NodeOutputMap,
+  type NodeTypeManifest,
+  type RuntimeValue,
+  type StaticInputBinding,
+  type TemplateBinding,
+  type WorkflowEdge,
 } from '@dramaflow/contracts';
 import {
   BindingResolutionError,
@@ -91,6 +93,91 @@ function requireInputPort(
   return port;
 }
 
+function resolveTemplateBinding(
+  binding: TemplateBinding,
+  input: WorkflowState['inputs'],
+  nodeOutputs: NodeOutputMap,
+  key: string,
+  nodeId: string,
+  port: InputPortDefinition,
+): RuntimeValue {
+  if (!templateBindingMatches(binding.value, binding.variables)) {
+    throw new BindingResolutionError('TEMPLATE_VARIABLE_INVALID', `模板变量与正文不一致：${key}`, {
+      nodeId,
+      inputKey: key,
+    });
+  }
+  const values = new Map<string, string>();
+  for (const [name, source] of Object.entries(binding.variables)) {
+    if (source.type === 'workflow_input') {
+      if (!Object.hasOwn(input, source.key)) {
+        throw new BindingResolutionError(
+          'WORKFLOW_INPUT_MISSING',
+          `模板变量缺少工作流输入：${source.key}`,
+          { nodeId, inputKey: key, workflowInputKey: source.key, variableName: name },
+        );
+      }
+      values.set(name, inlineString(input[source.key]!, key, nodeId, name));
+      continue;
+    }
+    const output = nodeOutput(nodeOutputs, source.nodeId, source.portKey);
+    if (!output) {
+      throw new BindingResolutionError(
+        'SOURCE_NODE_OUTPUT_MISSING',
+        `模板变量缺少来源输出：${source.nodeId}.${source.portKey}`,
+        {
+          nodeId,
+          inputKey: key,
+          sourceNodeId: source.nodeId,
+          sourcePortKey: source.portKey,
+          variableName: name,
+        },
+      );
+    }
+    values.set(name, inlineString(output, key, nodeId, name));
+  }
+  return {
+    storage: 'inline',
+    type: port.dataType,
+    value: binding.value.replace(/\{\{([A-Za-z][A-Za-z0-9_]*)\}\}/g, (_token, name: string) => {
+      const value = values.get(name);
+      if (value === undefined) {
+        throw new BindingResolutionError('TEMPLATE_VARIABLE_INVALID', `模板变量未解析：${name}`, {
+          nodeId,
+          inputKey: key,
+          variableName: name,
+        });
+      }
+      return value;
+    }),
+  };
+}
+
+function nodeOutput(nodeOutputs: NodeOutputMap, sourceNodeId: string, sourcePortKey: string) {
+  if (!Object.hasOwn(nodeOutputs, sourceNodeId)) return undefined;
+  const ports = nodeOutputs[sourceNodeId];
+  if (!ports || !Object.hasOwn(ports, sourcePortKey)) return undefined;
+  return ports[sourcePortKey];
+}
+
+function inlineString(value: RuntimeValue, key: string, nodeId: string, variableName: string) {
+  if (value.storage !== 'inline') {
+    throw new BindingResolutionError(
+      'TEMPLATE_VARIABLE_INVALID',
+      `模板变量必须是已内联的字符串：${variableName}`,
+      { nodeId, inputKey: key, variableName },
+    );
+  }
+  if (typeof value.value !== 'string') {
+    throw new BindingResolutionError(
+      'TEMPLATE_VARIABLE_INVALID',
+      `模板变量必须是已内联的字符串：${variableName}`,
+      { nodeId, inputKey: key, variableName },
+    );
+  }
+  return value.value;
+}
+
 function resolveStaticBinding(
   binding: StaticInputBinding,
   port: InputPortDefinition,
@@ -119,6 +206,15 @@ function resolveStaticBinding(
         type: port.dataType,
         reference: { kind: 'asset', id: binding.assetId, versionId: binding.versionId },
       };
+    case 'template':
+      return resolveTemplateBinding(
+        binding,
+        context.state.inputs,
+        context.state.outputs,
+        port.key,
+        context.node.id,
+        port,
+      );
   }
 }
 

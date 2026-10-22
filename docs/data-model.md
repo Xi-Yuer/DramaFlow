@@ -27,7 +27,7 @@ isTypeAssignable 前后端共用：
 - object 按结构兼容：来源须具备目标的全部字段，允许额外字段。
 - 任意类型可赋给 any；any 不能直接赋给具体类型。
 
-可空用 union。required:false 表示可省略，与值可为 null 不同。一个输入端口至多一条 Data Edge 或一条静态绑定。数组不表示多连接聚合。
+可空用 union。required:false 表示可省略，与值可为 null 不同。一个输入端口至多一条 Data Edge 或一条静态绑定。数组不表示多连接聚合。template 在这一条绑定内用 `{{名称}}` 引用多个 node_output 或 workflow_input。
 
 DataTypeManifest 只有 name、displayName、category、storage。服务端把 Manifest 和 Zod 组成 DataTypeDefinition。Registry 拒绝重复或未知名称。结构对象的字段均为必填；可选由节点输入契约表达。没有生产目录 API，也不自动安装插件。未注册的媒体 Schema 不能进入 Registry。
 
@@ -58,4 +58,4 @@ decode 把 RuntimeValue 变成业务值。inline 直接返回，无 I/O；refere
 
 encode 处理已经过业务校验的单个输出。inline 只包装可持久化 JSON，不创建 Artifact。reference 只调用 ArtifactWriter，成功后包装 ArtifactReference，不把业务内容或临时 URL 写入 State。编码失败标记 encode_output，不返回部分结果，不回滚已写入的前序 Artifact。
 
-BindingResolver 按 Manifest 合并 Data Edge 和静态绑定，返回 RuntimeValue，不 decode、不做 I/O。Control Edge 不取值。constant 按目标端口类型内联包装；workflow_input 复用 State.inputs 中的 RuntimeValue；asset 包装为带 assetId 和 versionId 的引用。来源冲突报 INPUT_SOURCE_CONFLICT，上游输出缺失报 SOURCE_NODE_OUTPUT_MISSING，工作流输入缺失报 WORKFLOW_INPUT_MISSING，端口未声明报 INPUT_PORT_NOT_FOUND。必填和业务校验留在执行层。
+BindingResolver 按 Manifest 合并 Data Edge 和静态绑定，返回 RuntimeValue，不 decode、不做 I/O。Control Edge 不取值。constant 按目标端口类型内联包装；workflow_input 复用 State.inputs 中的 RuntimeValue；asset 包装为带 assetId 和 versionId 的引用。template 只按绑定中的变量查找已有 RuntimeValue，变量必须已是内联字符串，渲染结果是一条内联字符串；不扫描未声明输出，也不读取引用。来源冲突报 INPUT_SOURCE_CONFLICT，上游输出缺失报 SOURCE_NODE_OUTPUT_MISSING，工作流输入缺失报 WORKFLOW_INPUT_MISSING，端口未声明报 INPUT_PORT_NOT_FOUND，模板变量不是内联字符串时报 TEMPLATE_VARIABLE_INVALID。必填和业务校验留在执行层。

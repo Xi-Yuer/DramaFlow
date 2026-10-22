@@ -1,5 +1,21 @@
+import { MemorySaver } from '@langchain/langgraph';
 import { describe, expect, it, vi } from 'vitest';
-import { NumberType, type NodeDefinition } from '@dramaflow/contracts';
+import { z } from 'zod';
+import {
+  NumberType,
+  StringType,
+  type NodeDefinition,
+  type WorkflowRun,
+} from '@dramaflow/contracts';
+import {
+  createBindingResolver,
+  DefaultDataStoragePolicyResolver,
+  DefaultNodeExecutor,
+  DefaultRuntimeValueCodec,
+  DefaultWorkflowCompiler,
+  NodeRegistry,
+} from '../src/index.js';
+import { nodeRunRepositoryFixture } from './node-run-fixture.js';
 import { workflowRunnerFixture } from './workflow-runner-fixture.js';
 
 describe('普通 Action 整图编译', () => {
@@ -97,5 +113,147 @@ describe('普通 Action 整图编译', () => {
       expect.objectContaining({ stage: 'compile' }),
     );
     expect(f.nodeRuns.createRunning).not.toHaveBeenCalled();
+  });
+
+  it('仅由模板引用连接的下游等待上游，并收到渲染后的字符串', async () => {
+    let releaseOutline!: () => void;
+    let releaseCharacters!: () => void;
+    const outlineGate = new Promise<void>((resolve) => {
+      releaseOutline = resolve;
+    });
+    const characterGate = new Promise<void>((resolve) => {
+      releaseCharacters = resolve;
+    });
+    const executeSource = vi.fn(async (input: { text: string }) => {
+      await (input.text === '第一幕' ? outlineGate : characterGate);
+      return { text: input.text };
+    });
+    const executeScript = vi.fn(async (input: { prompt: string }) => ({ text: input.prompt }));
+    const sourceManifest = {
+      type: 'test.source',
+      version: 1,
+      executionKind: 'action' as const,
+      metadata: { name: '来源', category: 'data' as const },
+      inputs: [{ key: 'text', name: '文本', dataType: StringType, required: true }],
+      outputs: [{ key: 'text', name: '文本', dataType: StringType }],
+      config: [],
+    };
+    const registry = new NodeRegistry([
+      {
+        manifest: sourceManifest,
+        inputSchema: z.object({ text: z.string() }),
+        outputSchema: z.object({ text: z.string() }),
+        configSchema: z.object({}).strict(),
+        execute: executeSource,
+      },
+      {
+        manifest: {
+          type: 'test.script',
+          version: 1,
+          executionKind: 'action',
+          metadata: { name: '剧本', category: 'ai' },
+          inputs: [{ key: 'prompt', name: '提示词', dataType: StringType, required: true }],
+          outputs: [{ key: 'text', name: '文本', dataType: StringType }],
+          config: [],
+        },
+        inputSchema: z.object({ prompt: z.string() }),
+        outputSchema: z.object({ text: z.string() }),
+        configSchema: z.object({}).strict(),
+        execute: executeScript,
+      },
+    ]);
+    const node = (id: string, type: string, inputs: NodeDefinition['inputs']): NodeDefinition => ({
+      id,
+      type,
+      typeVersion: 1,
+      name: id,
+      inputs,
+      config: {},
+      ui: { position: { x: 0, y: 0 } },
+    });
+    const definition = {
+      inputs: [],
+      nodes: [
+        node('outline', 'test.source', { text: { type: 'constant', value: '第一幕' } }),
+        node('characters', 'test.source', { text: { type: 'constant', value: '阿青' } }),
+        node('script', 'test.script', {
+          prompt: {
+            type: 'template',
+            value: '请根据 {{outline}} 和 {{characters}} 生成剧本',
+            variables: {
+              outline: { type: 'node_output', nodeId: 'outline', portKey: 'text' },
+              characters: { type: 'node_output', nodeId: 'characters', portKey: 'text' },
+            },
+          },
+        }),
+      ],
+      edges: [],
+      outputs: [],
+    };
+    const run: WorkflowRun = {
+      id: 'run-template',
+      projectId: 'project-1',
+      workflowId: 'workflow-1',
+      workflowVersionId: 'version-1',
+      threadId: 'thread-template',
+      status: 'running',
+      inputs: {},
+      createdAt: '2026-10-22T00:00:00.000Z',
+    };
+    const executor = new DefaultNodeExecutor(
+      registry,
+      createBindingResolver(),
+      new DefaultRuntimeValueCodec(
+        { resolve: vi.fn() },
+        { write: vi.fn() },
+        new DefaultDataStoragePolicyResolver(),
+      ),
+      nodeRunRepositoryFixture(),
+    );
+    const graph = await new DefaultWorkflowCompiler(
+      registry,
+      async () => executor,
+      new MemorySaver(),
+    ).compile(definition, run);
+    const invocation = graph.invoke(
+      {
+        run: {
+          workflowId: run.workflowId,
+          workflowVersionId: run.workflowVersionId,
+          workflowRunId: run.id,
+          projectId: run.projectId,
+        },
+        inputs: {},
+        outputs: {},
+        variables: {},
+        execution: {},
+      },
+      { configurable: { thread_id: run.threadId } },
+    );
+    try {
+      await vi.waitFor(() => expect(executeSource).toHaveBeenCalledTimes(2));
+      expect(executeScript).not.toHaveBeenCalled();
+      releaseOutline();
+      releaseCharacters();
+      const result = await invocation;
+      expect(executeScript.mock.calls[0]?.[0]).toEqual({
+        prompt: '请根据 第一幕 和 阿青 生成剧本',
+      });
+      expect(result).toMatchObject({
+        outputs: {
+          script: {
+            text: {
+              storage: 'inline',
+              type: StringType,
+              value: '请根据 第一幕 和 阿青 生成剧本',
+            },
+          },
+        },
+      });
+    } finally {
+      releaseOutline();
+      releaseCharacters();
+      await invocation.catch(() => undefined);
+    }
   });
 });
