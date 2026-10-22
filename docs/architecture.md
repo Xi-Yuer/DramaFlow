@@ -4,15 +4,15 @@
 
 ## 已实现的基础工程
 
-| 领域       | 当前能力与边界                                                                                |
-| ---------- | --------------------------------------------------------------------------------------------- |
-| 身份与项目 | 登录、账户中心、项目所有者隔离；每项目一张画布、一个逻辑 Workflow                             |
-| Editor     | 草稿加载 / 保存、节点创建和移动、Data / Control Edge、文本变量与模型选择；无节点删除 / 重命名 |
-| Publish    | 静态语义、同项目模型绑定校验、不可变版本；保存和发布独立                                      |
-| Run        | 已发布版本提交、幂等身份、状态查询、离开保护和 invocation identity recovery                   |
-| Result     | declared outputs 已解析、落库并返回 Web；尚无 Result presentation 或 Artifact 内容 HTTP API   |
-| 执行       | 普通 Action DAG；API 提交，独立 Worker 执行；其他 executionKind 只有声明边界                  |
-| 基础设施   | PostgreSQL / Prisma、Redis / BullMQ、RustFS、官方 PostgreSQL Checkpointer                     |
+| 领域       | 当前能力与边界                                                                                  |
+| ---------- | ----------------------------------------------------------------------------------------------- |
+| 身份与项目 | 登录、账户中心、项目所有者隔离；每项目一张画布、一个逻辑 Workflow                               |
+| Editor     | 草稿加载 / 保存、节点创建和移动、Data / Control Edge、文本变量与模型选择；无节点删除 / 重命名   |
+| Publish    | 静态语义、同项目模型绑定校验、不可变版本；保存和发布独立                                        |
+| Run        | 已发布版本提交、幂等身份、状态查询、离开保护和 invocation identity recovery                     |
+| Result     | completed Run 展示 declared outputs；支持 inline 与 reference 身份，尚无 Artifact 内容 HTTP API |
+| 执行       | 普通 Action DAG；API 提交，独立 Worker 执行；其他 executionKind 只有声明边界                    |
+| 基础设施   | PostgreSQL / Prisma、Redis / BullMQ、RustFS、官方 PostgreSQL Checkpointer                       |
 
 ## Workflow 基础库
 
@@ -104,6 +104,12 @@ unsafe 注册标准 beforeunload，safe / 卸载时解除。不改写 Router / h
 
 确认 completed / failed / cancelled 后先由页面持有 Run，再自动清理 receipt；waiting 保留。清理不清空当前页面，但下次重进不依赖已删除的终态 receipt 自动发现历史。多 Run 不覆盖，storage event 只同步集合，不当锁或跨 Tab 自动提交。Logout 成功清本用户并失效晚到写回，失败保留；存储清理失败明确提示。离开保护仍保留，找到当前错误请求的 Run 后解除旧 uncertainty。
 
+### Web Workflow Run Result
+
+现有状态面板仅在 completed 时从 `runStatus.run.outputs` 逐项展示结果；不读取 Draft、Node 中间输出或另发 Result 请求。字符串保留换行并按普通文本显示，number / boolean / null 原值展示，array / object 使用格式化 JSON。空字符串有独立提示；`{}` 显示「此运行没有工作流输出」，缺失 outputs 显示「运行结果不可用」。
+
+reference 只展示类型、kind 与 ID（Asset 包含版本），提示暂不支持预览，不生成 URL 或读取内容。Recovery 复用同一状态与 Result 展示；终态 receipt 清理不清空当前页面结果。其他 Run 状态不展示最终结果，failed 保留安全错误。
+
 ## 目录与依赖
 
 | 目录                                 | 职责                                                                                                                 |
@@ -115,4 +121,4 @@ unsafe 注册标准 beforeunload，safe / 卸载时解除。不改写 Router / h
 | packages/server                      | 授权 Repository、基础设施和生产装配；workflow/runtime 与 queue 分工                                                  |
 | packages/plugins / packages/database | 受信任插件与目录 / Prisma 模型与迁移                                                                                 |
 
-run 内部区分 status 与 recovery，跨职责 API 留在 Workflow 根目录。已实现模块按领域归类，不按技术类型机械拆分，不保留重复入口。`packages/context` 仍为空入口。
+run 内部区分 status、result 与 recovery，跨职责 API 留在 Workflow 根目录。已实现模块按领域归类，不按技术类型机械拆分，不保留重复入口。`packages/context` 仍为空入口。

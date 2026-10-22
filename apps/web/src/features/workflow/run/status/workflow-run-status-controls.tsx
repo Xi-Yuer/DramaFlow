@@ -1,6 +1,7 @@
 import { Alert, Button, Descriptions, Space, Tag, Typography } from 'antd';
 import type { WorkflowRunStatus } from '@dramaflow/contracts';
 import type { WorkflowRunStatusState } from './workflow-run-status';
+import { WorkflowRunResult } from '../result/workflow-run-result';
 import styles from '../workflow-run.module.css';
 
 const statusDisplay: Record<WorkflowRunStatus, { label: string; color: string }> = {
@@ -99,6 +100,8 @@ export function WorkflowRunStatusView({
           }
         />
       ) : null}
+
+      {run ? <WorkflowRunResult run={run} /> : null}
 
       {state.phase === 'error' && state.error ? (
         <Alert

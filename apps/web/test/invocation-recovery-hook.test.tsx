@@ -1,7 +1,15 @@
 // @vitest-environment happy-dom
 import { App, ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import type {
@@ -10,6 +18,7 @@ import type {
   WorkflowVersionResponse,
 } from '@dramaflow/contracts';
 import { useWorkflowRun } from '../src/features/workflow/run/use-workflow-run';
+import { WorkflowRunStatusView } from '../src/features/workflow/run/status/workflow-run-status-controls';
 import { useSignOut } from '../src/features/auth/use-sign-out';
 import {
   InvocationReceiptStore,
@@ -137,6 +146,44 @@ describe('Run recovery 的真实 Hook / 组件行为', () => {
     });
     await waitFor(() => expect(hook.result.current.runStatus.run?.id).toBe('run-a'));
     expect(hook.result.current.uncertainInvocation).toBe(false);
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
+  it('恢复 completed Run 复用 Result，终态 receipt 清理和再次检查不清除当前结果', async () => {
+    store().save(metadata);
+    const completed: WorkflowRunResponse = {
+      ...resultRun(),
+      status: 'completed',
+      outputs: {
+        recovered: {
+          storage: 'inline',
+          type: { kind: 'primitive', name: 'string' },
+          value: '恢复的最终结果',
+        },
+      },
+    };
+    mocks.lookup.mockResolvedValue({ run: completed });
+    mocks.get.mockResolvedValue(completed);
+    function RecoveredRun() {
+      const workflow = useWorkflowRun('project-a', 'workflow-a', null);
+      return (
+        <WorkflowRunStatusView state={workflow.runStatus} onRefresh={workflow.refreshRunStatus} />
+      );
+    }
+    render(<RecoveredRun />, { wrapper: wrapper() });
+    expect(await screen.findByText('恢复的最终结果')).toBeTruthy();
+    await waitFor(() => expect(store().list().receipts).toEqual([]));
+    await act(async () => {
+      fireEvent(
+        window,
+        new StorageEvent('storage', {
+          key: receiptStorageKey(scope, 'key-a'),
+          storageArea: window.localStorage,
+        }),
+      );
+    });
+    expect(mocks.lookup).toHaveBeenCalledOnce();
+    expect(screen.getByText('恢复的最终结果')).toBeTruthy();
+    expect(mocks.get).toHaveBeenCalledOnce();
     expect(mocks.start).not.toHaveBeenCalled();
   });
   it('storage event 同步其他 Tab 的 create/update/remove，不自动 POST', async () => {

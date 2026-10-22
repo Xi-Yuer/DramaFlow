@@ -42,7 +42,7 @@ resume 只传不透明 value；单 interrupt 的 false / 0 / null 使用原生 i
 
 `DefaultWorkflowOutputResolver` 只按 Definition.outputs 的声明名称收集 RuntimeValue；inline / reference 原样保留，不返回整份 State、不 materialize Artifact、不生成临时 URL。来源缺失或实际类型不兼容使 Run 在 resolve_output 阶段失败；空声明得到 `{}`。
 
-生产 Runner 调用 `markCompleted`，同一次数据库更新写 completed、outputs 与 completedAt；Graph checkpoint、Run、Outbox 不承诺跨存储原子完成。Run 查询与 invocation lookup 已返回该安全输出投影，Web Status 保留完整 Run，但尚无 Result 展示或引用内容接口。
+生产 Runner 调用 `markCompleted`，同一次数据库更新写 completed、outputs 与 completedAt；Graph checkpoint、Run、Outbox 不承诺跨存储原子完成。Run 查询与 invocation lookup 返回同一安全输出投影；Web 展示边界见[当前架构](architecture.md#web-workflow-run-result)，尚无引用内容接口。
 
 ## State 与持久化
 

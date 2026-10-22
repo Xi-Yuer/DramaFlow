@@ -15,7 +15,7 @@ function run(status: WorkflowRunStatus): WorkflowRunResponse {
       secretPrompt: { storage: 'inline', type: StringType, value: '不得展示' },
     },
     outputs: {
-      secretResult: { storage: 'inline', type: StringType, value: '本阶段不得展示' },
+      result: { storage: 'inline', type: StringType, value: '最终业务文本' },
     },
     createdAt: '2026-10-22T01:00:00.000Z',
     startedAt: '2026-10-22T01:00:02.000Z',
@@ -71,11 +71,11 @@ describe('Workflow Run Status 基础界面（静态组件测试）', () => {
     expect(html).toContain('结束时间');
     expect(html).not.toContain('完成时间');
     expect(html).not.toContain('不得展示');
-    expect(html).not.toContain('本阶段不得展示');
+    expect(html).not.toContain('最终业务文本');
     expect(html).not.toContain('threadId');
   });
 
-  it('completed 仅展示状态与时间，不解析 outputs', () => {
+  it('completed 展示最终结果与时间，仍不展示 inputs', () => {
     const html = renderToStaticMarkup(
       <WorkflowRunStatusView state={state('completed')} onRefresh={() => undefined} />,
     );
@@ -83,8 +83,10 @@ describe('Workflow Run Status 基础界面（静态组件测试）', () => {
     expect(html).toContain('创建时间');
     expect(html).toContain('开始时间');
     expect(html).toContain('结束时间');
-    expect(html).not.toContain('secretResult');
-    expect(html).not.toContain('本阶段不得展示');
+    expect(html).toContain('运行结果');
+    expect(html).toContain('最终业务文本');
+    expect(html).not.toContain('secretPrompt');
+    expect(html).not.toContain('不得展示');
   });
 
   it('查询错误提供手动刷新入口', () => {
