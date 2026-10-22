@@ -8,10 +8,11 @@ Compose 先迁移并幂等创建初始管理员、初始化存储桶，再启动
 
 ## 当前库约束
 
-Prisma 迁移保存身份、资料、会话、项目、Workflow / WorkflowVersion、Run、NodeRun、Outbox、Artifact 元数据和模型 Provider / 配置。不含工作空间。完整 DSL 在发布和读取边界校验，不在数据库里拼接。
+Prisma 迁移保存身份、资料、会话、项目、Workflow / WorkflowVersion、Run、NodeRun、Outbox、Artifact 元数据和模型 Provider / 配置。当前模型不含工作空间。完整 DSL 在发布和读取边界校验，不在数据库里拼接。
 
 需要遵守的约束：
 
+- 表名使用 lowercase snake_case。不使用 PascalCase、camelCase，也不靠双引号保留大小写。Prisma `@@map` 同样遵守。`20261022120000_rename_legacy_pascal_tables` 先把遗留 PascalCase 表改成小写；`20261022130000_drop_unused_legacy_tables` 再删除这些已不在当前模型中的表，以及 public 里不再使用的 checkpoint、project_asset、asset_version。现行业务表和 langgraph schema 不删除。
 - 每项目一个 Workflow。版本不可更新，workflowId / version 与 workflowId / sourceRevision 唯一。
 - Run 的身份、版本和输入不可改写；状态转换由数据库约束保护。threadId 唯一。
 - NodeRun 的 workflowRunId、nodeId、attempt 唯一，attempt 为正数，终态字段一致。

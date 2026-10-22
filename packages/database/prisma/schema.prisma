@@ -8,6 +8,8 @@ datasource db {
   provider = "postgresql"
 }
 
+// 表名必须用 @@map 写成 lowercase snake_case，不依赖 PostgreSQL 双引号保留大小写。
+
 // 业务模型由用户逐步指导后添加。
 
 model User {
