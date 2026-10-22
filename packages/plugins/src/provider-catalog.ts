@@ -19,8 +19,7 @@ export const ANTHROPIC_API_BASE_URL = 'https://api.anthropic.com/v1';
 export class ProviderCatalogError extends Error {
   constructor(
     readonly code:
-      | 'PROVIDER_DEFINITION_NOT_AVAILABLE'
-      | 'PROVIDER_DEFINITION_CONFIGURATION_INVALID',
+      'PROVIDER_DEFINITION_NOT_AVAILABLE' | 'PROVIDER_DEFINITION_CONFIGURATION_INVALID',
   ) {
     super('Provider 定义不可用或配置无效');
     this.name = 'ProviderCatalogError';

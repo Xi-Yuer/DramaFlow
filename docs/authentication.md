@@ -16,17 +16,17 @@
 
 业务 API 默认由 AuthGuard 保护。会话无效返回 401，停用或角色不足返回 403。前端不把登录凭证写入 localStorage。
 
-| 接口 | 行为 |
-| --- | --- |
-| GET /api/v1/health | 公开。检查 PostgreSQL、Checkpointer、Redis、RustFS |
-| POST /api/auth/sign-in/email | 同源登录。每 IP 每 60 秒最多 10 次 |
-| POST /api/auth/sign-out | 退出当前会话 |
-| GET /api/auth/get-session | 停用账号不能绕过 |
-| POST /api/auth/change-password | 当前会话和旧密码。每 60 秒最多 5 次，并强制撤销其他会话 |
-| GET / PATCH /api/v1/users/me | 安全资料。只允许修改 name、bio、timeZone |
-| GET /api/v1/users/me/sessions | 最近 100 条未过期会话摘要，不含 token |
-| POST /api/v1/users/me/revoke-other-sessions | 保留当前设备 |
-| GET /api/v1/users | 仅平台管理员，最近 100 个账号；没有管理 UI |
+| 接口                                        | 行为                                                    |
+| ------------------------------------------- | ------------------------------------------------------- |
+| GET /api/v1/health                          | 公开。检查 PostgreSQL、Checkpointer、Redis、RustFS      |
+| POST /api/auth/sign-in/email                | 同源登录。每 IP 每 60 秒最多 10 次                      |
+| POST /api/auth/sign-out                     | 退出当前会话                                            |
+| GET /api/auth/get-session                   | 停用账号不能绕过                                        |
+| POST /api/auth/change-password              | 当前会话和旧密码。每 60 秒最多 5 次，并强制撤销其他会话 |
+| GET / PATCH /api/v1/users/me                | 安全资料。只允许修改 name、bio、timeZone                |
+| GET /api/v1/users/me/sessions               | 最近 100 条未过期会话摘要，不含 token                   |
+| POST /api/v1/users/me/revoke-other-sessions | 保留当前设备                                            |
+| GET /api/v1/users                           | 仅平台管理员，最近 100 个账号；没有管理 UI              |
 
 注册、管理插件、模拟登录和删除账号的认证端点不公开。不另建 JWT。Workflow、发布、Run 和模型接口的权限与 404 边界见架构说明，不在这里重复。
 

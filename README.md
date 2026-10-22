@@ -22,15 +22,15 @@ pnpm dev
 
 ## 常用入口
 
-| 任务 | 入口 |
-| --- | --- |
-| 了解产品边界 | [平台模型](docs/platform-model.md) |
-| 查当前能力、接口和目录 | [当前架构](docs/architecture.md) |
-| 修改工作流、节点或数据 | [Workflow](docs/workflow-model.md)、[Node](docs/node-model.md)、[数据模型](docs/data-model.md) |
-| 修改执行和恢复 | [Runtime](docs/runtime-architecture.md) |
-| 开发检查与文档维护 | [开发指南](docs/development.md) |
+| 任务                     | 入口                                                                                           |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| 了解产品边界             | [平台模型](docs/platform-model.md)                                                             |
+| 查当前能力、接口和目录   | [当前架构](docs/architecture.md)                                                               |
+| 修改工作流、节点或数据   | [Workflow](docs/workflow-model.md)、[Node](docs/node-model.md)、[数据模型](docs/data-model.md) |
+| 修改执行和恢复           | [Runtime](docs/runtime-architecture.md)                                                        |
+| 开发检查与文档维护       | [开发指南](docs/development.md)                                                                |
 | 部署、模型配置与数据操作 | [部署](docs/deployment.md)、[认证](docs/authentication.md)、[对象存储](docs/object-storage.md) |
-| 界面实现 | [前端规范](docs/frontend-ui.md) |
+| 界面实现                 | [前端规范](docs/frontend-ui.md)                                                                |
 
 `pnpm check` 执行 lint、typecheck、单元测试和 build；真实基础设施测试使用 `pnpm test:integration` / `pnpm test:storage`。`pnpm stack:up` 构建并启动完整容器环境。验证范围与安全边界见开发指南。
 

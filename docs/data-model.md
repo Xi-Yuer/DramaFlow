@@ -4,11 +4,11 @@
 
 ## 四个维度
 
-| 概念 | 职责 |
-| --- | --- |
-| DataType | 端口的语义类型 |
-| RuntimeValue | 本次运行的值：inline 或 reference，都带实际 DataType |
-| DataReference | 持久内容身份：Artifact ID，或 Asset ID + versionId |
+| 概念          | 职责                                                 |
+| ------------- | ---------------------------------------------------- |
+| DataType      | 端口的语义类型                                       |
+| RuntimeValue  | 本次运行的值：inline 或 reference，都带实际 DataType |
+| DataReference | 持久内容身份：Artifact ID，或 Asset ID + versionId   |
 | Domain Object | 业务结构本身，可内联，也可作为 Artifact / Asset 内容 |
 
 Image 不等于 Asset，Character 不等于 Asset。签名 URL、供应商 URL 和本地路径不能充当长期身份。

@@ -37,8 +37,15 @@
   line-height: 1.8;
 }
 .model-settings-heading > .ant-btn,
-.model-section-heading > .ant-btn {
+.model-section-heading > .ant-btn,
+.model-heading-actions {
   flex-shrink: 0;
+}
+.model-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .model-settings-content .ant-tabs-nav {
   margin-bottom: 18px;

@@ -17,6 +17,11 @@ import { WorkflowCapabilitiesFactory } from './workflow-capabilities.factory.js'
     ModelProviderService,
     WorkflowCapabilitiesFactory,
   ],
-  exports: [ModelProviderService, WorkflowCapabilitiesFactory, ProviderPluginModule, ProviderCatalog],
+  exports: [
+    ModelProviderService,
+    WorkflowCapabilitiesFactory,
+    ProviderPluginModule,
+    ProviderCatalog,
+  ],
 })
 export class ModelProviderModule {}

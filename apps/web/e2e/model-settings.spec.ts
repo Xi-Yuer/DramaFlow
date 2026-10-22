@@ -28,20 +28,18 @@ async function choose(page: Page, select: Locator, option: string | RegExp) {
   await select.click();
   await page.getByRole('option', { name: option }).click();
 }
-async function fillSupplier(page: Page, name: string, secret: string) {
+async function fillSupplier(page: Page, name: string, secret: string, service = 'OpenAI') {
   const form = dialog(page, '添加模型供应商');
   await form.getByRole('textbox', { name: '供应商名称' }).fill(name);
-  await choose(page, form.getByRole('combobox', { name: '接入方式' }), /OpenAI 兼容协议/);
-  await form
-    .getByRole('textbox', { name: '服务地址', exact: true })
-    .fill('http://127.0.0.1:1/custom/v1');
+  await choose(page, form.getByRole('combobox', { name: '模型服务' }), service);
+  await expect(form.getByRole('textbox', { name: '服务地址', exact: true })).toHaveCount(0);
   await form.getByLabel('API Key', { exact: true }).fill(secret);
 }
-async function addSupplier(page: Page, name: string, secret: string) {
+async function addSupplier(page: Page, name: string, secret: string, service = 'OpenAI') {
   await drawer(page).getByRole('button', { name: '添加供应商', exact: true }).click();
-  await fillSupplier(page, name, secret);
+  await fillSupplier(page, name, secret, service);
   const response = page.waitForResponse(
-    (r) => r.request().method() === 'POST' && r.url().endsWith('/providers'),
+    (r) => r.request().method() === 'POST' && r.url().endsWith('/providers/catalog'),
   );
   await dialog(page, '添加模型供应商')
     .getByRole('button', { name: '添加供应商', exact: true })
@@ -55,10 +53,8 @@ async function addModel(page: Page, name: string, withSettings = true) {
   const form = dialog(page, '添加模型');
   await choose(page, form.getByRole('combobox', { name: '模型能力' }), /文本生成/);
   await form.getByRole('textbox', { name: '模型名称', exact: true }).fill(name);
-  if (withSettings) {
-    await form.getByRole('spinbutton', { name: '随机度（temperature）' }).fill('0');
-    await form.getByRole('spinbutton', { name: '最大输出 Token 数' }).fill('64');
-  }
+  await form.getByRole('spinbutton', { name: '最大输出 Token 数' }).fill('64');
+  if (withSettings) await form.getByRole('spinbutton', { name: '随机度（temperature）' }).fill('0');
   const response = page.waitForResponse(
     (r) => r.request().method() === 'POST' && r.url().endsWith('/model-configurations'),
   );
@@ -145,9 +141,12 @@ test('项目到模型设置：创建供应商、配置凭证和文本模型，�
     secret = `test-only-${randomUUID()}`;
   await open(page, p.id);
   await expect(drawer(page).getByText('先接入一个模型供应商', { exact: true })).toBeVisible();
-  await drawer(page).getByText('可用接入方式（1）', { exact: true }).click();
-  await expect(drawer(page).getByText('OpenAI 兼容协议', { exact: false })).toBeVisible();
-  await addSupplier(page, '自选兼容服务', secret);
+  await drawer(page)
+    .getByText(/可用模型服务（2）/, { exact: true })
+    .click();
+  await expect(drawer(page).getByRole('heading', { name: 'OpenAI', exact: true })).toBeVisible();
+  await expect(drawer(page).getByRole('heading', { name: 'Anthropic', exact: true })).toBeVisible();
+  await addSupplier(page, '自选兼容服务', secret, 'Anthropic');
   await expectNoSecret(page, secret);
   await addModel(page, 'custom-text-model');
   const card = drawer(page).getByRole('article', { name: '模型 custom-text-model', exact: true });
@@ -157,7 +156,13 @@ test('项目到模型设置：创建供应商、配置凭证和文本模型，�
     settings: { temperature: 0, maxOutputTokens: 64 },
   });
   expect((await readProviders(request, p.id)).items[0]).toMatchObject({
-    configuration: { baseURL: 'http://127.0.0.1:1/custom/v1', timeoutMs: 60000 },
+    providerDefinitionId: 'anthropic',
+    pluginId: 'text_generation',
+    configuration: {
+      provider: 'anthropic',
+      baseURL: 'https://api.anthropic.com/v1',
+      timeoutMs: 60000,
+    },
   });
   await expectNoSecret(page, secret);
   await page.reload();
@@ -168,9 +173,10 @@ test('项目到模型设置：创建供应商、配置凭证和文本模型，�
       .getByText('可供工作流选择', { exact: true }),
   ).toBeVisible();
   await suppliersTab(page).click();
-  await expect(
-    drawer(page).getByText('http://127.0.0.1:1/custom/v1', { exact: true }),
-  ).toBeVisible();
+  await expect(drawer(page).getByText('Anthropic · 文本生成', { exact: true })).toBeVisible();
+  await expect(drawer(page).getByText('https://api.anthropic.com/v1', { exact: true })).toHaveCount(
+    0,
+  );
   await drawer(page).getByRole('button', { name: '轮换凭证' }).click();
   await expect(dialog(page, '轮换访问凭证').getByLabel('API Key', { exact: true })).toHaveValue('');
   await expectNoSecret(page, secret);
@@ -247,7 +253,7 @@ test('供应商创建失败保留非 Secret 表单，凭证清空且不进入错
   await open(page, p.id);
   await drawer(page).getByRole('button', { name: '添加供应商', exact: true }).click();
   await fillSupplier(page, '失败后重试', secret);
-  await page.route('**/api/v1/projects/*/providers', async (route) => {
+  await page.route('**/api/v1/projects/*/providers/catalog', async (route) => {
     if (route.request().method() === 'POST')
       await route.fulfill({
         status: 500,
@@ -269,7 +275,7 @@ test('供应商创建失败保留非 Secret 表单，凭证清空且不进入错
   );
   await expectNoSecret(page, secret);
   expect((await readProviders(request, p.id)).items).toHaveLength(0);
-  await page.unroute('**/api/v1/projects/*/providers');
+  await page.unroute('**/api/v1/projects/*/providers/catalog');
   await dialog(page, '添加模型供应商').getByLabel('API Key', { exact: true }).fill(secret);
   await dialog(page, '添加模型供应商')
     .getByRole('button', { name: '添加供应商', exact: true })
@@ -289,6 +295,7 @@ test('模型创建及启停失败不误报成功；读取错误有明确重试',
   await dialog(page, '添加模型')
     .getByRole('textbox', { name: '模型名称', exact: true })
     .fill('recover-model');
+  await dialog(page, '添加模型').getByRole('spinbutton', { name: '最大输出 Token 数' }).fill('64');
   await page.route('**/api/v1/projects/*/model-configurations', async (route) => {
     if (route.request().method() === 'POST') await route.abort('failed');
     else await route.continue();
@@ -307,13 +314,17 @@ test('模型创建及启停失败不误报成功；读取错误有明确重试',
   await expect(drawer(page).getByText('操作未确认', { exact: true })).toBeVisible();
   await expect(card.getByText('可供工作流选择', { exact: true })).toBeVisible();
   await page.unroute('**/api/v1/projects/*/model-configurations/*');
-  await page.route('**/api/v1/provider-plugins', (route) =>
-    route.fulfill({ status: 500, json: {} }),
-  );
+  let pluginReads = 0;
+  await page.route('**/api/v1/provider-plugins', async (route) => {
+    pluginReads += 1;
+    if (pluginReads === 1) await route.fulfill({ status: 500, json: {} });
+    else await route.fallback();
+  });
   await drawer(page).getByRole('button', { name: '刷新列表' }).click();
   await expect(drawer(page).getByText('模型设置读取失败', { exact: true })).toBeVisible();
-  await page.unroute('**/api/v1/provider-plugins');
-  await drawer(page).getByRole('button', { name: '重新读取模型设置' }).click();
+  const retry = drawer(page).getByRole('button', { name: '重新读取模型设置' });
+  await expect(retry).toBeEnabled();
+  await retry.click();
   await expect(card.getByText('可供工作流选择', { exact: true })).toBeVisible();
 });
 
@@ -371,7 +382,7 @@ test('供应商保存请求期间凭证已清空，不进入 Query 缓存，也�
     received = resolve;
   });
   let writes = 0;
-  await page.route('**/api/v1/projects/*/providers', async (route) => {
+  await page.route('**/api/v1/projects/*/providers/catalog', async (route) => {
     if (route.request().method() === 'POST') {
       writes++;
       received();
@@ -399,24 +410,22 @@ test('供应商保存请求期间凭证已清空，不进入 Query 缓存，也�
   expect((await readProviders(request, p.id)).items).toHaveLength(1);
 });
 
-test('空接入目录及无法呈现的 Schema 明确阻止创建，不发送部分配置', async ({ page, request }) => {
+test('空目录阻止普通创建；无法呈现的自定义 Schema 不发送部分配置', async ({ page, request }) => {
   const p = await project(request);
-  const catalog = (await (await request.get('/api/v1/provider-plugins')).json()) as {
+  const plugins = (await (await request.get('/api/v1/provider-plugins')).json()) as {
     items: Record<string, unknown>[];
   };
-  await page.route('**/api/v1/provider-plugins', (route) => route.fulfill({ json: { items: [] } }));
+  await page.route('**/api/v1/provider-catalog', (route) => route.fulfill({ json: { items: [] } }));
   await open(page, p.id);
-  await expect(
-    drawer(page).getByText('当前没有可配置的接入方式，请联系部署管理员', { exact: true }).first(),
-  ).toBeVisible();
   await expect(
     drawer(page).getByRole('button', { name: '添加供应商', exact: true }),
   ).toBeDisabled();
-  await page.unroute('**/api/v1/provider-plugins');
+  await expect(drawer(page).getByRole('button', { name: '自定义接入', exact: true })).toBeEnabled();
+  await page.unroute('**/api/v1/provider-catalog');
   await page.route('**/api/v1/provider-plugins', (route) =>
     route.fulfill({
       json: {
-        items: catalog.items.map((plugin) => ({
+        items: plugins.items.map((plugin) => ({
           ...plugin,
           configurationSchema: {
             type: 'object',
@@ -428,22 +437,60 @@ test('空接入目录及无法呈现的 Schema 明确阻止创建，不发送部
     }),
   );
   await drawer(page).getByRole('button', { name: '刷新列表' }).click();
-  await expect(drawer(page).getByRole('button', { name: '添加供应商', exact: true })).toBeEnabled();
-  await drawer(page).getByRole('button', { name: '添加供应商', exact: true }).click();
+  await drawer(page).getByRole('button', { name: '自定义接入', exact: true }).click();
   await choose(
     page,
-    dialog(page, '添加模型供应商').getByRole('combobox', { name: '接入方式' }),
+    dialog(page, '自定义接入').getByRole('combobox', { name: '接入方式' }),
     /OpenAI 兼容协议/,
   );
   await expect(
-    dialog(page, '添加模型供应商').getByText('此接入方式的表单格式暂不受支持，请联系部署管理员', {
+    dialog(page, '自定义接入').getByText('此接入方式的表单格式暂不受支持，请联系部署管理员', {
       exact: true,
     }),
   ).toBeVisible();
   await expect(
-    dialog(page, '添加模型供应商').getByRole('button', { name: '添加供应商', exact: true }),
+    dialog(page, '自定义接入').getByRole('button', { name: '添加供应商', exact: true }),
   ).toBeDisabled();
   expect((await readProviders(request, p.id)).items).toHaveLength(0);
+});
+
+test('自定义接入仍可配置兼容地址，刷新后保留', async ({ page, request }) => {
+  const p = await project(request),
+    secret = `custom-${randomUUID()}`;
+  await open(page, p.id);
+  await drawer(page).getByRole('button', { name: '自定义接入', exact: true }).click();
+  const form = dialog(page, '自定义接入');
+  await form.getByRole('textbox', { name: '供应商名称' }).fill('自建兼容服务');
+  await choose(page, form.getByRole('combobox', { name: '接入方式' }), /OpenAI 兼容协议/);
+  await form
+    .getByRole('textbox', { name: '服务地址', exact: true })
+    .fill('http://127.0.0.1:1/custom/v1');
+  await form.getByLabel('API Key', { exact: true }).fill(secret);
+  const response = page.waitForResponse(
+    (r) => r.request().method() === 'POST' && r.url().endsWith('/providers'),
+  );
+  await form.getByRole('button', { name: '添加供应商', exact: true }).click();
+  const created = await response;
+  expect(created.status()).toBe(201);
+  expect(created.url()).not.toContain('/catalog');
+  expect(await created.text()).not.toContain(secret);
+  await dialog(page, '添加模型').getByRole('button', { name: '返回列表' }).click();
+  await suppliersTab(page).click();
+  await expect(
+    drawer(page).getByText('http://127.0.0.1:1/custom/v1', { exact: true }),
+  ).toBeVisible();
+  expect((await readProviders(request, p.id)).items[0]).toMatchObject({
+    providerDefinitionId: null,
+    pluginId: 'openai_compatible',
+    configuration: { baseURL: 'http://127.0.0.1:1/custom/v1', timeoutMs: 60000 },
+  });
+  await page.reload();
+  await page.getByRole('button', { name: '模型设置', exact: true }).click();
+  await suppliersTab(page).click();
+  await expect(
+    drawer(page).getByText('http://127.0.0.1:1/custom/v1', { exact: true }),
+  ).toBeVisible();
+  await expectNoSecret(page, secret);
 });
 
 test('模型设置保留画布内未保存的项目信息，管理操作不推进图和项目 revision', async ({

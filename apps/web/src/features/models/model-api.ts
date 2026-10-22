@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import {
   providerPluginCatalogSchema,
+  providerCatalogSchema,
+  createProjectCatalogProviderRequestSchema,
   modelProviderListSchema,
   modelConfigurationListSchema,
   modelProviderSchema,
@@ -14,10 +16,12 @@ import { ApiError, jsonBody, request } from '../../lib/http';
 
 export const modelKeys = {
   catalog: ['provider-plugins'] as const,
+  providerCatalog: ['provider-catalog'] as const,
   providers: (projectId: string) => ['model-settings', projectId, 'providers'] as const,
   models: (projectId: string) => ['model-settings', projectId, 'models'] as const,
 };
 export type CreateProviderInput = z.infer<typeof createProjectProviderRequestSchema>;
+export type CreateCatalogProviderInput = z.infer<typeof createProjectCatalogProviderRequestSchema>;
 export type CreateModelInput = z.infer<typeof createProjectModelRequestSchema>;
 
 // 不保留服务器原始错误、details 或 cause，防止异常响应回显凭证后进入组件 / Query 缓存。
@@ -66,6 +70,8 @@ const cursorQuery = (cursor?: string) => (cursor ? `?cursor=${encodeURIComponent
 export const modelApi = {
   catalog: (signal?: AbortSignal) =>
     safe(() => request('/provider-plugins', providerPluginCatalogSchema, { signal })),
+  providerCatalog: (signal?: AbortSignal) =>
+    safe(() => request('/provider-catalog', providerCatalogSchema, { signal })),
   providers: (projectId: string, signal?: AbortSignal) =>
     safe(() =>
       allPages((cursor) =>
@@ -87,6 +93,13 @@ export const modelApi = {
       request(providersPath(projectId), modelProviderSchema, {
         method: 'POST',
         body: jsonBody(createProjectProviderRequestSchema.parse(input)),
+      }),
+    ),
+  createCatalogProvider: (projectId: string, input: CreateCatalogProviderInput) =>
+    safe(() =>
+      request(`${providersPath(projectId)}/catalog`, modelProviderSchema, {
+        method: 'POST',
+        body: jsonBody(createProjectCatalogProviderRequestSchema.parse(input)),
       }),
     ),
   createModel: (projectId: string, input: CreateModelInput) =>

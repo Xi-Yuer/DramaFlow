@@ -67,13 +67,13 @@ Definition / Version 保存静态流程，Run 保存运行身份，State 保存�
 
 ### 五个分区
 
-| 分区 | 内容与写入边界 |
-| --- | --- |
-| run | workflowId / workflowVersionId / workflowRunId / projectId，不可变 |
-| inputs | 本次 Workflow RuntimeValue 输入，不可变 |
-| outputs | nodeId → outputKey → RuntimeValue，当前有效结果 |
-| variables | 显式工作流变量，不开放节点任意读写 |
-| execution | 图控制状态，目前保留为空 |
+| 分区      | 内容与写入边界                                                     |
+| --------- | ------------------------------------------------------------------ |
+| run       | workflowId / workflowVersionId / workflowRunId / projectId，不可变 |
+| inputs    | 本次 Workflow RuntimeValue 输入，不可变                            |
+| outputs   | nodeId → outputKey → RuntimeValue，当前有效结果                    |
+| variables | 显式工作流变量，不开放节点任意读写                                 |
+| execution | 图控制状态，目前保留为空                                           |
 
 State 类型与 Annotation 共处 runtime/state.ts。run / inputs / variables / execution 为单值通道，Action wrapper 只写 outputs。不增加 isInterrupted。通道定义不代表 checkpoint 已经持久化。
 

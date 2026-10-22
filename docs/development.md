@@ -4,15 +4,15 @@
 
 ## 检查入口
 
-| 命令 | 用途 |
-| --- | --- |
-| pnpm lint / typecheck / test / build | 静态检查、类型、单元测试与构建，可传 Turbo --filter |
-| pnpm check | 上述四项完整检查 |
-| pnpm test:integration | PostgreSQL / Redis / RustFS 与正式 HTTP、队列、独立 Worker 集成 |
-| pnpm test:storage | 真实 RustFS 基础操作与签名访问 |
-| pnpm test:web:workflow | Chrome 中验证草稿与模型管理 |
-| pnpm test:web:models | 只验证模型管理浏览器流程 |
-| node --test scripts/configure-model-provider.test.mjs | 模型配置 CLI 输入与失败脱敏 |
+| 命令                                                  | 用途                                                            |
+| ----------------------------------------------------- | --------------------------------------------------------------- |
+| pnpm lint / typecheck / test / build                  | 静态检查、类型、单元测试与构建，可传 Turbo --filter             |
+| pnpm check                                            | 上述四项完整检查                                                |
+| pnpm test:integration                                 | PostgreSQL / Redis / RustFS 与正式 HTTP、队列、独立 Worker 集成 |
+| pnpm test:storage                                     | 真实 RustFS 基础操作与签名访问                                  |
+| pnpm test:web:workflow                                | Chrome 中验证草稿与模型管理                                     |
+| pnpm test:web:models                                  | 只验证模型管理浏览器流程                                        |
+| node --test scripts/configure-model-provider.test.mjs | 模型配置 CLI 输入与失败脱敏                                     |
 
 按改动选择检查：协议 / Registry 使用相关包单元测试；执行 / 持久化使用定向集成；界面改动使用相关 Web 检查。仅改文档时检查格式、链接和现状一致性，无需例行重跑业务测试。失败边界应验证真实行为，测试替身不能成为生产兜底。
 
@@ -20,14 +20,14 @@
 
 `pnpm test:integration` 先构建，再使用独立 `dramaflow_test` 与随机 `dramaflow-test-*` 队列前缀，部署已有迁移。只清理自建账号、项目、对象和 thread，不清空开发库或共享队列。手动运行单个 e2e 时也必须满足测试文件的环境保护，不能直接指向业务库。
 
-| 用例文件（apps/api/test） | 验证重点 |
-| --- | --- |
-| auth、workflows、workflow-versions、workflow-editor-api | 权限、字段、修订与发布并发、严格静态语义 |
-| workflow-runs、workflow-runner、node-runs | 真实 Repository、状态转换、attempt 和并发 claim |
-| persistent-checkpoint、workflow-runtime、workflow-run-api | 跨进程持久恢复、API / Worker 装配和 HTTP |
-| workflow-queue | Outbox 事务、SIGKILL / stalled 重投、结果不明不重跑 |
-| artifacts | 真正 PostgreSQL / RustFS 内容写入、引用读取与故障补偿 |
-| model-management、ai-text | 管理 HTTP、安全凭证链、两种文本协议与正式 Worker 执行 |
+| 用例文件（apps/api/test）                                 | 验证重点                                              |
+| --------------------------------------------------------- | ----------------------------------------------------- |
+| auth、workflows、workflow-versions、workflow-editor-api   | 权限、字段、修订与发布并发、严格静态语义              |
+| workflow-runs、workflow-runner、node-runs                 | 真实 Repository、状态转换、attempt 和并发 claim       |
+| persistent-checkpoint、workflow-runtime、workflow-run-api | 跨进程持久恢复、API / Worker 装配和 HTTP              |
+| workflow-queue                                            | Outbox 事务、SIGKILL / stalled 重投、结果不明不重跑   |
+| artifacts                                                 | 真正 PostgreSQL / RustFS 内容写入、引用读取与故障补偿 |
+| model-management、ai-text                                 | 管理 HTTP、安全凭证链、两种文本协议与正式 Worker 执行 |
 
 原生 interrupt / 控制节点夹具只验证 LangGraph 适配，不能证明 Human Review 产品已实现；MemorySaver 只用于单元测试。文本本机协议服务使用真实 SDK，但不能替代真实收费模型验收。详细断言以测试代码为准，文档不复制每个用例的执行流水。
 

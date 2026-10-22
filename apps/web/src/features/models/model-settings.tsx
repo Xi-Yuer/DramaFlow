@@ -11,6 +11,7 @@ import type {
 } from '@dramaflow/contracts';
 import { modelApi, modelKeys } from './model-api';
 import {
+  CatalogProviderCreateForm,
   CredentialRotationForm,
   findPlugin,
   ModelCreateForm,
@@ -60,6 +61,7 @@ export function ModelSettings({
 
 type FormState =
   | { kind: 'provider' }
+  | { kind: 'advanced' }
   | { kind: 'model'; providerId?: string }
   | { kind: 'rotate'; provider: ModelProvider; plugin: ProviderPluginDescription };
 function ModelSettingsContent({
@@ -88,6 +90,11 @@ function ModelSettingsContent({
     queryKey: modelKeys.catalog,
     queryFn: ({ signal }) => modelApi.catalog(signal),
   });
+  const definitions = useQuery({
+    ...options,
+    queryKey: modelKeys.providerCatalog,
+    queryFn: ({ signal }) => modelApi.providerCatalog(signal),
+  });
   const providers = useQuery({
     ...options,
     queryKey: modelKeys.providers(projectId),
@@ -98,11 +105,17 @@ function ModelSettingsContent({
     queryKey: modelKeys.models(projectId),
     queryFn: ({ signal }) => modelApi.models(projectId, signal),
   });
-  const reading = catalog.isFetching || providers.isFetching || models.isFetching;
-  const readError = catalog.error || providers.error || models.error;
+  const reading =
+    catalog.isFetching || definitions.isFetching || providers.isFetching || models.isFetching;
+  const readError = catalog.error || definitions.error || providers.error || models.error;
   async function refresh() {
     setError(null);
-    await Promise.all([catalog.refetch(), providers.refetch(), models.refetch()]);
+    await Promise.all([
+      cache.invalidateQueries({ queryKey: modelKeys.catalog }),
+      cache.invalidateQueries({ queryKey: modelKeys.providerCatalog }),
+      cache.invalidateQueries({ queryKey: modelKeys.providers(projectId) }),
+      cache.invalidateQueries({ queryKey: modelKeys.models(projectId) }),
+    ]);
   }
   async function reloadResources() {
     await Promise.all([
@@ -126,14 +139,14 @@ function ModelSettingsContent({
       setBusy(new Set(locks.current));
     }
   }
-  if (catalog.isPending || providers.isPending || models.isPending)
+  if (catalog.isPending || definitions.isPending || providers.isPending || models.isPending)
     return (
       <div className="model-loading" role="status">
         <Spin />
         <span>正在读取模型设置…</span>
       </div>
     );
-  if (readError || !catalog.data || !providers.data || !models.data)
+  if (readError || !catalog.data || !definitions.data || !providers.data || !models.data)
     return (
       <div className="model-read-error">
         <Alert
@@ -142,12 +155,14 @@ function ModelSettingsContent({
           title="模型设置读取失败"
           description={readError?.message ?? '无法读取项目配置'}
         />
-        <Button loading={reading} onClick={() => void refresh()}>
+        <Button htmlType="button" onClick={() => void refresh()}>
           重新读取模型设置
         </Button>
       </div>
     );
   const plugins = catalog.data.items;
+  const services = definitions.data.items;
+  const availableServices = services.filter((item) => item.available);
   const supplierItems = providers.data;
   const modelItems = models.data;
   const enabledSuppliers = supplierItems.filter(
@@ -166,14 +181,14 @@ function ModelSettingsContent({
         <div>
           <span className="model-project-name">{projectName}</span>
           <h2>为这个项目接入模型</h2>
-          <p>先添加模型供应商，再在同一个服务地址下添加一个或多个模型。</p>
+          <p>先选择平台提供的模型服务并填写访问凭证，再添加一个或多个模型。</p>
         </div>
         <Button icon={<RefreshCw size={15} />} loading={reading} onClick={() => void refresh()}>
           刷新列表
         </Button>
       </div>
-      {!plugins.length ? (
-        <Alert showIcon type="info" title="当前没有可配置的接入方式，请联系部署管理员" />
+      {!availableServices.length && !plugins.length ? (
+        <Alert showIcon type="info" title="当前没有可配置的模型服务，请联系部署管理员" />
       ) : null}
       {error ? (
         <Alert
@@ -218,13 +233,13 @@ function ModelSettingsContent({
                     }
                   >
                     {!supplierItems.length ? (
-                      <Button
-                        type="primary"
-                        disabled={!plugins.length}
-                        onClick={() => setForm({ kind: 'provider' })}
-                      >
-                        添加供应商
-                      </Button>
+                      <AddProviderActions
+                        reading={reading}
+                        catalogReady={availableServices.length > 0}
+                        pluginsReady={plugins.length > 0}
+                        onCatalog={() => setForm({ kind: 'provider' })}
+                        onAdvanced={() => setForm({ kind: 'advanced' })}
+                      />
                     ) : !enabledSuppliers.length ? (
                       <Button onClick={() => setTab('providers')}>查看供应商状态</Button>
                     ) : null}
@@ -290,15 +305,14 @@ function ModelSettingsContent({
             children: (
               <div className="model-tab-content">
                 <div className="model-section-heading">
-                  <p>供应商保存服务地址和凭证；一个供应商可以配置多个模型。</p>
-                  <Button
-                    type="primary"
-                    icon={<Plus size={15} />}
-                    disabled={!plugins.length || reading}
-                    onClick={() => setForm({ kind: 'provider' })}
-                  >
-                    添加供应商
-                  </Button>
+                  <p>一个模型服务可以配置多个模型。需要自建地址时使用自定义接入。</p>
+                  <AddProviderActions
+                    reading={reading}
+                    catalogReady={availableServices.length > 0}
+                    pluginsReady={plugins.length > 0}
+                    onCatalog={() => setForm({ kind: 'provider' })}
+                    onAdvanced={() => setForm({ kind: 'advanced' })}
+                  />
                 </div>
                 {!supplierItems.length ? (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未接入模型供应商" />
@@ -306,6 +320,9 @@ function ModelSettingsContent({
                   <div className="model-card-list">
                     {supplierItems.map((provider) => {
                       const plugin = findPlugin(plugins, provider);
+                      const service = services.find(
+                        (item) => item.id === provider.providerDefinitionId,
+                      );
                       return (
                         <article
                           className="model-config-card"
@@ -316,14 +333,20 @@ function ModelSettingsContent({
                             <div>
                               <h3>{provider.name}</h3>
                               <p>
-                                {plugin?.name ?? provider.pluginId} · v{provider.pluginVersion}
+                                {service
+                                  ? `${service.displayName} · ${service.capabilities
+                                      .map((capability) => capability.name)
+                                      .join('、')}`
+                                  : plugin
+                                    ? `${plugin.name} · v${plugin.version}`
+                                    : '当前接入方式不可用'}
                               </p>
                             </div>
                             <Tag color={provider.enabled ? 'success' : 'default'}>
                               {provider.enabled ? '已启用' : '已停用'}
                             </Tag>
                           </div>
-                          <ConfigSummary values={provider.configuration} />
+                          {service ? null : <ConfigSummary values={provider.configuration} />}
                           {!plugin ? (
                             <p className="model-unavailable-copy">
                               此接入方式当前不在可配置目录中，暂不能添加模型或轮换凭证。已有配置保留。
@@ -385,12 +408,35 @@ function ModelSettingsContent({
         className="model-catalog"
         items={[
           {
-            key: 'catalog',
-            label: `可用接入方式（${plugins.length}）`,
+            key: 'services',
+            label: `可用模型服务（${services.length}）`,
+            children: !services.length ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="当前没有可选择的模型服务，请联系部署管理员"
+              />
+            ) : (
+              <div className="model-catalog-items">
+                {services.map((service) => (
+                  <article key={service.id}>
+                    <h3>{service.displayName}</h3>
+                    <div>
+                      {service.capabilities.map((capability) => (
+                        <Tag key={capability.type}>{capability.name}</Tag>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ),
+          },
+          {
+            key: 'plugins',
+            label: `自定义接入（${plugins.length}）`,
             children: !plugins.length ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="当前没有可配置的接入方式，请联系部署管理员"
+                description="当前没有可配置的自定义接入方式"
               />
             ) : (
               <div className="model-catalog-items">
@@ -402,9 +448,7 @@ function ModelSettingsContent({
                     <p>{plugin.description}</p>
                     <div>
                       {plugin.capabilities.map((capability) => (
-                        <Tag key={capability.type}>
-                          {capability.name} · {capability.type}
-                        </Tag>
+                        <Tag key={capability.type}>{capability.name}</Tag>
                       ))}
                     </div>
                   </article>
@@ -415,6 +459,23 @@ function ModelSettingsContent({
         ]}
       />
       {form?.kind === 'provider' ? (
+        <CatalogProviderCreateForm
+          projectId={projectId}
+          providers={services}
+          onClose={() => setForm(null)}
+          onCreated={(provider) => {
+            cache.setQueryData<ModelProvider[]>(modelKeys.providers(projectId), (current) => [
+              provider,
+              ...(current ?? []),
+            ]);
+            setTab('models');
+            setForm({ kind: 'model', providerId: provider.id });
+            void message.success('供应商已添加，接下来添加模型');
+            void reloadResources();
+          }}
+        />
+      ) : null}
+      {form?.kind === 'advanced' ? (
         <ProviderCreateForm
           projectId={projectId}
           plugins={plugins}
@@ -463,6 +524,35 @@ function ModelSettingsContent({
         />
       ) : null}
     </section>
+  );
+}
+function AddProviderActions({
+  reading,
+  catalogReady,
+  pluginsReady,
+  onCatalog,
+  onAdvanced,
+}: {
+  reading: boolean;
+  catalogReady: boolean;
+  pluginsReady: boolean;
+  onCatalog: () => void;
+  onAdvanced: () => void;
+}) {
+  return (
+    <div className="model-heading-actions">
+      <Button disabled={!pluginsReady || reading} onClick={onAdvanced}>
+        自定义接入
+      </Button>
+      <Button
+        type="primary"
+        icon={<Plus size={15} />}
+        disabled={!catalogReady || reading}
+        onClick={onCatalog}
+      >
+        添加供应商
+      </Button>
+    </div>
   );
 }
 function ConfigSummary({ values, empty }: { values: Record<string, unknown>; empty?: string }) {

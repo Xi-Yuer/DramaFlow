@@ -20,23 +20,23 @@ PostgreSQL / Prisma 保存业务记录，Redis / BullMQ 交付执行命令，Rus
 
 以下接口均以 `/api/v1` 为前缀，默认认证、no-store；写入检查 Origin。资源不存在或无权访问统一 404。
 
-| 方法与路径 | 行为 |
-| --- | --- |
-| GET / POST /projects | 项目列表 / 创建；新建时原子创建默认 Workflow |
-| GET / PUT /projects/:id | 读取 / 按 revision 保存名称与视口 |
-| GET /projects/:projectId/workflow | 读取完整草稿；缺失时不隐式创建 |
-| POST /projects/:projectId/workflow | 空请求或 `{}` 幂等初始化；保留已有草稿 |
-| PUT /workflows/:workflowId/draft | `{ expectedRevision, definition }` 保存完整草稿 |
+| 方法与路径                         | 行为                                            |
+| ---------------------------------- | ----------------------------------------------- |
+| GET / POST /projects               | 项目列表 / 创建；新建时原子创建默认 Workflow    |
+| GET / PUT /projects/:id            | 读取 / 按 revision 保存名称与视口               |
+| GET /projects/:projectId/workflow  | 读取完整草稿；缺失时不隐式创建                  |
+| POST /projects/:projectId/workflow | 空请求或 `{}` 幂等初始化；保留已有草稿          |
+| PUT /workflows/:workflowId/draft   | `{ expectedRevision, definition }` 保存完整草稿 |
 
 Project 不嵌入图内容。草稿保存与项目保存独立，冲突返回 409；保存不发布、不调用模型、不创建 Run。初始化按项目行锁和唯一约束落实幂等。
 
 ## Workflow 发布与版本 HTTP API
 
-| 方法与路径 | 行为 |
-| --- | --- |
-| POST /workflows/:workflowId/publish | `{ expectedRevision }`，返回 201 与完整快照 |
+| 方法与路径                          | 行为                                              |
+| ----------------------------------- | ------------------------------------------------- |
+| POST /workflows/:workflowId/publish | `{ expectedRevision }`，返回 201 与完整快照       |
 | GET /workflows/:workflowId/versions | 版本倒序摘要，最多 20 条，使用 beforeVersion 分页 |
-| GET /workflow-versions/:versionId | 读取指定完整快照 |
+| GET /workflow-versions/:versionId   | 读取指定完整快照                                  |
 
 发布事务锁定 Workflow，校验来源修订并分配版本号；过期 / 重复修订返回 409，失败不写版本、不消耗版本号。当前拒绝 Asset 绑定、命名控制端口和非 Action 结构。文本模型归属、enabled、插件能力及参数在同一事务中验证并持有共享行锁；不读取密文、不解密或探活。
 
@@ -48,11 +48,11 @@ Node 目录与执行共用 `WorkflowNodeRegistryModule`。`ArtifactRuntimeFactor
 
 ## Workflow Run HTTP API
 
-| 方法与路径 | 行为 |
-| --- | --- |
-| POST /workflow-runs | `{ workflowVersionId, inputs }`，受理成功返回 202 |
-| GET /workflow-runs/:runId | 状态、输入、最终输出和安全错误摘要 |
-| POST /workflow-runs/:runId/resume | `{ value }`，受理成功返回 202 |
+| 方法与路径                        | 行为                                              |
+| --------------------------------- | ------------------------------------------------- |
+| POST /workflow-runs               | `{ workflowVersionId, inputs }`，受理成功返回 202 |
+| GET /workflow-runs/:runId         | 状态、输入、最终输出和安全错误摘要                |
+| POST /workflow-runs/:runId/resume | `{ value }`，受理成功返回 202                     |
 
 身份由当前用户与固定版本派生，拒绝客户端提供 threadId、状态或项目归属。响应不公开 threadId / executionId；非 waiting 或重复恢复意图为 409。HTTP 在事务提交后确认入队；503 仍可能已保存可执行意图，不能据此盲目重提。
 
@@ -103,10 +103,10 @@ Provider Catalog
 
 平台可以预设 OpenAI、Anthropic、DeepSeek、Gemini、Qwen、Kimi、智谱、豆包等 Provider。普通用户选择 Provider，填写该 Provider 要求的凭证，再选择或配置模型。自定义 endpoint、协议或厂商身份只属于高级 Custom OpenAI-Compatible。
 
-| 插件 | 定位 |
-| --- | --- |
-| text_generation@1 | 正式文本实现。内部使用 ai 7.0.148、OpenAI 4.0.99、Anthropic 4.0.85，按 configuration.provider 调用 Chat Completions 或 Messages |
-| openai_compatible@1 | 高级 Custom OpenAI-Compatible。保留 LangChain ChatOpenAICompletions，配置兼容地址、模型和 apiKey |
+| 插件                | 定位                                                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| text_generation@1   | 正式文本实现。内部使用 ai 7.0.148、OpenAI 4.0.99、Anthropic 4.0.85，按 configuration.provider 调用 Chat Completions 或 Messages |
+| openai_compatible@1 | 高级 Custom OpenAI-Compatible。保留 LangChain ChatOpenAICompletions，配置兼容地址、模型和 apiKey                                |
 
 图片、视频、音频按各自 Provider 使用对应插件，例如视频原生适配、ComfyUI 图像或语音插件。文本插件和 Vercel AI SDK 只覆盖当前的 `text.generate`。LiteLLM 与 Bifrost 已评估并否决，证据在 experiments，不进入生产依赖。
 
@@ -124,24 +124,22 @@ Provider 与模型绑定不可改写；凭证可轮换，enabled 可变。每次
 
 ## Plugin / Provider / 模型配置管理 HTTP
 
-| 方法与路径 | 行为 |
-| --- | --- |
-| GET /provider-plugins | 受信任且允许配置的插件精确版本、JSON Schema 和凭证字段约束 |
-| GET /provider-catalog | 官方 Provider 的安全目录：id、名称、能力、凭证字段和用户配置 Schema |
-| GET / POST /projects/:projectId/providers | Provider 列表 / 按插件 Schema 创建 |
-| POST /projects/:projectId/providers/catalog | 按 Provider Definition 创建实例。请求为定义 id、名称和凭证；官方 Provider 不接受用户填写的 endpoint |
-| GET / PATCH /projects/:projectId/providers/:providerId | 安全详情 / 修改 enabled |
-| PUT /projects/:projectId/providers/:providerId/credentials | 完整替换凭证 |
-| GET / POST /projects/:projectId/model-configurations | 模型配置列表 / 创建 |
-| GET / PATCH /projects/:projectId/model-configurations/:modelId | 模型详情 / 修改 enabled |
+| 方法与路径                                                     | 行为                                                                                                |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| GET /provider-plugins                                          | 受信任且允许配置的插件精确版本、JSON Schema 和凭证字段约束                                          |
+| GET /provider-catalog                                          | 官方 Provider 的安全目录：id、名称、能力、凭证字段和用户配置 Schema                                 |
+| GET / POST /projects/:projectId/providers                      | Provider 列表 / 按插件 Schema 创建                                                                  |
+| POST /projects/:projectId/providers/catalog                    | 按 Provider Definition 创建实例。请求为定义 id、名称和凭证；官方 Provider 不接受用户填写的 endpoint |
+| GET / PATCH /projects/:projectId/providers/:providerId         | 安全详情 / 修改 enabled                                                                             |
+| PUT /projects/:projectId/providers/:providerId/credentials     | 完整替换凭证                                                                                        |
+| GET / POST /projects/:projectId/model-configurations           | 模型配置列表 / 创建                                                                                 |
+| GET / PATCH /projects/:projectId/model-configurations/:modelId | 模型详情 / 修改 enabled                                                                             |
 
 所有业务读写按项目所有者授权。列表为有界游标分页；读取投影排除凭证明文和密文。无效参数 / Schema 为安全 400，停用绑定为 409，密钥或服务不可用为安全 503。没有删除、原地改绑、自动模型发现或远程插件安装。Catalog 目前只有 OpenAI 与 Anthropic，没有模型发现。
 
 ## Web 项目模型设置
 
-项目画布内提供模型设置抽屉，支持 Provider / 模型创建、列表、详情、启停和独立凭证轮换。表单读取当前插件安全 Schema，只支持能完整呈现的结构，未知结构禁止提交。该抽屉还不是 Provider Catalog；普通产品路径是选择预设 Provider 并填写凭证。
-
-Secret 不进入 Form store、Query / Mutation 缓存、URL 或浏览器存储；请求发出及退出组件时清空，不回填已保存值。创建 / 轮换不触发模型生成，设置操作不丢失未保存画布。
+项目画布内提供模型设置抽屉，支持 Provider / 模型创建、列表、详情、启停和独立凭证轮换。普通添加读取 Provider Catalog：选择服务后只填写目录声明的凭证，并调用目录创建接口。自定义接入仍提交插件 Schema。未知结构禁止提交。Secret 不进入 Form store、Query / Mutation 缓存、URL 或浏览器存储；请求发出及退出组件时清空，不回填已保存值。创建 / 轮换不触发模型生成，设置操作不丢失未保存画布。
 
 ## Artifact 生产数据通道
 
@@ -159,16 +157,16 @@ React Flow 只管理视图，平台 WorkflowDefinition 是持久内容。rendere
 
 ## 目录与依赖
 
-| 目录 | 职责 |
-| --- | --- |
-| apps/web | 编辑器、账户 / 项目 / 模型管理与前端适配 |
-| apps/api | 身份与业务 HTTP，提交运行 |
-| apps/worker | Outbox Pump、队列消费与图执行 |
-| packages/contracts | 无框架依赖的 JSON 协议和 Schema |
-| packages/workflow | 领域校验、Registry、Compiler、Codec、Submission / Runner |
-| packages/server | 共享基础设施、授权 Repository、凭证与 Runtime 装配 |
-| packages/plugins | 受信任 ProviderCapability 实现与 PluginRegistry |
-| packages/database | Prisma 模型与业务迁移；pgvector |
-| packages/context | 空入口，尚未实现上下文构建 |
+| 目录               | 职责                                                     |
+| ------------------ | -------------------------------------------------------- |
+| apps/web           | 编辑器、账户 / 项目 / 模型管理与前端适配                 |
+| apps/api           | 身份与业务 HTTP，提交运行                                |
+| apps/worker        | Outbox Pump、队列消费与图执行                            |
+| packages/contracts | 无框架依赖的 JSON 协议和 Schema                          |
+| packages/workflow  | 领域校验、Registry、Compiler、Codec、Submission / Runner |
+| packages/server    | 共享基础设施、授权 Repository、凭证与 Runtime 装配       |
+| packages/plugins   | 受信任 ProviderCapability 实现与 PluginRegistry          |
+| packages/database  | Prisma 模型与业务迁移；pgvector                          |
+| packages/context   | 空入口，尚未实现上下文构建                               |
 
 历史技术证据在 experiments，默认不读、不进入生产镜像；路线结论见实施方案。

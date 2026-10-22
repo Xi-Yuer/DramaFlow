@@ -57,6 +57,23 @@ describe('模型管理 HTTP 安全边界', () => {
     expect(fetch.mock.calls[0][1]).toMatchObject({ method: 'POST' });
     expect(fetch.mock.calls[0][1].body).toContain(marker);
   });
+  it('目录创建只提交服务标识和凭证，不提交插件或地址', async () => {
+    const fetch = fetchResponse({ ...provider, providerDefinitionId: 'openai' });
+    const result = await modelApi.createCatalogProvider(projectId, {
+      name: 'OpenAI',
+      providerDefinitionId: 'openai',
+      credentials: { apiKey: marker },
+    });
+    expect(result.providerDefinitionId).toBe('openai');
+    expect(JSON.stringify(result)).not.toContain(marker);
+    expect(fetch.mock.calls[0][0]).toBe(`/api/v1/projects/${projectId}/providers/catalog`);
+    expect(fetch.mock.calls[0][1]).toMatchObject({ method: 'POST' });
+    const body = String(fetch.mock.calls[0][1].body);
+    expect(body).toContain(marker);
+    expect(body).toContain('"providerDefinitionId":"openai"');
+    expect(body).not.toContain('pluginId');
+    expect(body).not.toContain('baseURL');
+  });
   it('轮换仅接受 204，无响应体或 Secret 读取操作', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetch);

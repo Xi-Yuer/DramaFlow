@@ -4,8 +4,10 @@ import { z } from 'zod';
 import { Alert, Button, Form, Input, Modal, Select } from 'antd';
 import {
   createModelProviderSchema,
+  createProjectCatalogProviderRequestSchema,
   createModelConfigurationSchema,
   type ModelProvider,
+  type ProviderCatalogItem,
   type ProviderPluginDescription,
   type ManagedModelConfiguration,
 } from '@dramaflow/contracts';
@@ -22,6 +24,189 @@ const pluginKey = (plugin: ProviderPluginDescription) =>
   JSON.stringify([plugin.id, plugin.version]);
 const failure = (error: unknown) =>
   error instanceof Error ? error.message : '请求未完成，请刷新列表核对';
+
+function blankConfiguration(schema: unknown) {
+  if (!schema || typeof schema !== 'object' || !('properties' in schema)) return true;
+  const properties = schema.properties;
+  return !properties || (typeof properties === 'object' && Object.keys(properties).length === 0);
+}
+
+export function CatalogProviderCreateForm({
+  projectId,
+  providers,
+  onClose,
+  onCreated,
+}: {
+  projectId: string;
+  providers: ProviderCatalogItem[];
+  onClose: () => void;
+  onCreated: (provider: ModelProvider) => void;
+}) {
+  const [form] = Form.useForm();
+  const [selected, setSelected] = useState<string>();
+  const provider = providers.find((item) => item.id === selected);
+  const compiled = provider ? trySchemaFields(provider.configurationSchema) : null;
+  const configurationError =
+    provider && !compiled?.form && !blankConfiguration(provider.configurationSchema)
+      ? compiled?.error
+      : null;
+  const [credentials, setCredentials] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState<string | null>(null);
+  const lock = useRef(false);
+  const ready = Boolean(
+    provider?.available && provider.credentialFields.length && !configurationError,
+  );
+  async function submit() {
+    if (lock.current || !provider || !ready) return;
+    lock.current = true;
+    setBusy(true);
+    setError(null);
+    let sent = false;
+    try {
+      const values: unknown = await form.validateFields();
+      const name = createProjectCatalogProviderRequestSchema.shape.name.parse(
+        z.object({ name: z.unknown() }).parse(values).name,
+      );
+      const userConfiguration = compiled?.form?.fields.length
+        ? compiled.form.validate(
+            z.object({ configuration: z.unknown() }).parse(values).configuration,
+          )
+        : undefined;
+      const invalid = validateCredentials(provider.credentialFields, credentials);
+      if (invalid) {
+        setError(invalid);
+        return;
+      }
+      const submitted = { ...credentials };
+      setCredentials({});
+      sent = true;
+      onCreated(
+        await modelApi.createCatalogProvider(projectId, {
+          name,
+          providerDefinitionId: provider.id,
+          credentials: submitted,
+          ...(userConfiguration ? { configuration: userConfiguration } : {}),
+        }),
+      );
+    } catch (error) {
+      setError(
+        sent ? `${failure(error)}。凭证已清空，请刷新列表核对后再提交。` : '请检查名称和访问凭证',
+      );
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal
+      open
+      title="添加模型供应商"
+      onCancel={onClose}
+      closable={!busy}
+      maskClosable={false}
+      keyboard={!busy}
+      destroyOnHidden
+      footer={[
+        <Button key="cancel" disabled={busy} onClick={onClose}>
+          返回列表
+        </Button>,
+        <Button
+          key="submit"
+          aria-label="添加供应商"
+          type="primary"
+          loading={busy}
+          disabled={busy || !ready}
+          onClick={() => void submit()}
+        >
+          添加供应商
+        </Button>,
+      ]}
+    >
+      <p className="model-form-copy">
+        选择平台提供的模型服务，并填写它要求的访问凭证。服务地址由平台预设，名称和服务保存后固定。
+      </p>
+      <Form form={form} layout="vertical" requiredMark="optional" disabled={busy} preserve={false}>
+        <Form.Item
+          name="name"
+          label="供应商名称"
+          required
+          rules={[
+            {
+              validator: async (_, value: unknown) => {
+                if (!createProjectCatalogProviderRequestSchema.shape.name.safeParse(value).success)
+                  throw new Error('请填写 1～80 个字符的名称');
+              },
+            },
+          ]}
+        >
+          <Input maxLength={80} placeholder="为这个服务起一个容易辨认的名称" />
+        </Form.Item>
+        <Form.Item label="模型服务" required>
+          <Select
+            virtual={false}
+            aria-label="模型服务"
+            placeholder="选择模型服务"
+            value={selected}
+            options={providers.map((item) => ({
+              value: item.id,
+              label: item.displayName,
+              disabled: !item.available,
+            }))}
+            onChange={(value) => {
+              setSelected(value);
+              setCredentials({});
+              setError(null);
+              const next = providers.find((item) => item.id === value);
+              form.setFieldValue(
+                'configuration',
+                next ? (trySchemaFields(next.configurationSchema).form?.defaults ?? {}) : {},
+              );
+            }}
+          />
+        </Form.Item>
+        {provider ? (
+          <p className="model-form-copy">
+            {provider.displayName} 支持：
+            {provider.capabilities.map((capability) => capability.name).join('、')}
+          </p>
+        ) : null}
+        {configurationError ? <Alert showIcon type="error" title={configurationError} /> : null}
+        {compiled?.form?.fields.length ? (
+          <SchemaFormFields
+            key={selected}
+            schema={compiled.form}
+            group="configuration"
+            disabled={busy}
+          />
+        ) : null}
+      </Form>
+      {provider && ready ? (
+        <div className="model-secret-section">
+          <h3>访问凭证</h3>
+          <p className="model-form-copy">
+            凭证不会回显。发送保存请求或关闭后清空，保存请求失败也需要重新输入。
+          </p>
+          <CredentialInputs
+            fields={provider.credentialFields}
+            values={credentials}
+            onChange={setCredentials}
+            disabled={busy}
+          />
+        </div>
+      ) : null}
+      {error ? (
+        <Alert
+          className="model-form-error"
+          showIcon
+          type="error"
+          title="供应商未确认保存"
+          description={error}
+        />
+      ) : null}
+    </Modal>
+  );
+}
 
 export function ProviderCreateForm({
   projectId,
@@ -84,7 +269,7 @@ export function ProviderCreateForm({
   return (
     <Modal
       open
-      title="添加模型供应商"
+      title="自定义接入"
       onCancel={onClose}
       closable={!busy}
       maskClosable={false}
@@ -107,7 +292,7 @@ export function ProviderCreateForm({
       ]}
     >
       <p className="model-form-copy">
-        接入一个服务地址后，可以在它下面添加多个模型。名称、接入方式和地址保存后固定，调整时请添加新供应商。
+        自定义接入用于自行指定兼容服务地址。名称、接入方式和地址保存后固定，调整时请添加新供应商。
       </p>
       <Form form={form} layout="vertical" requiredMark="optional" disabled={busy} preserve={false}>
         <Form.Item

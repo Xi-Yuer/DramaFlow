@@ -102,9 +102,9 @@ describe('官方 Provider Catalog', () => {
         credentials: { apiKey: 'test-only' },
       }),
     ).toThrow(expect.objectContaining({ code: 'PROVIDER_DEFINITION_CONFIGURATION_INVALID' }));
-    expect(() =>
-      catalog.materialize('deepseek', { credentials: { apiKey: 'test-only' } }),
-    ).toThrow(expect.objectContaining({ code: 'PROVIDER_DEFINITION_NOT_AVAILABLE' }));
+    expect(() => catalog.materialize('deepseek', { credentials: { apiKey: 'test-only' } })).toThrow(
+      expect.objectContaining({ code: 'PROVIDER_DEFINITION_NOT_AVAILABLE' }),
+    );
   });
 
   it('物化后的配置可以直接驱动现有 OpenAI / Anthropic 插件调用', async () => {
@@ -124,7 +124,9 @@ describe('官方 Provider Catalog', () => {
           response.end(JSON.stringify(completion(provider)));
         });
       });
-      const materialized = catalog.materialize(provider, { credentials: { apiKey: 'catalog-key' } });
+      const materialized = catalog.materialize(provider, {
+        credentials: { apiKey: 'catalog-key' },
+      });
       await expect(
         plugins.invoke({
           pluginId: materialized.pluginId,
