@@ -1,0 +1,14 @@
+{
+  "gpt-b1-listed-only": {
+    "provider": "openai",
+    "mode": "chat",
+    "input_cost_per_token": 0,
+    "output_cost_per_token": 0
+  },
+  "claude-b1-listed-only": {
+    "provider": "anthropic",
+    "mode": "chat",
+    "input_cost_per_token": 0,
+    "output_cost_per_token": 0
+  }
+}

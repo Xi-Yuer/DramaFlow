@@ -1,5 +1,7 @@
 # LiteLLM 集成架构评估
 
+> 历史候选方案：LiteLLM 已在 L2.1 被否决，L3～L9 停止。下文保留原评估与证据，不能作为当前实施授权；工作方向与最新方案确认统一见[实施方案](implementation-plan.md#当前阶段)。不再为 LiteLLM 增加安全关键 L7 代理。
+
 本文记录拟议的集成边界，不表示 Runtime 集成已交付。代码评估基线为 `19ba4f4`；资料核对日期为 2026-10-21，读取了用户提供的[中文文档](https://docs.litellm.com.cn/docs/)、[上游文档](https://docs.litellm.ai/docs/)与 BerriAI 官方源码。固定 `1.104.5` 镜像的请求级凭证、双协议及无 DB 实测见[隔离验证](../experiments/litellm-l1/README.md)。在线文档和 `main` 不能替代固定发行版验收。当前阶段、下一步和任务依赖统一维护在[实施方案](implementation-plan.md#litellm-集成任务拆解)；已实现能力仍以[当前架构](architecture.md#文本-ai-与-provider-plugin)为准。
 
 ## 推荐结论

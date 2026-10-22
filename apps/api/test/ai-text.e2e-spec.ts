@@ -40,16 +40,22 @@ if (
 )
   throw new Error('文本 AI 集成测试仅允许独立测试库与队列');
 
-// 该本机服务只证明 OpenAI-compatible HTTP 协议适配，不能证明真实外部模型质量或可用性。
+// 本机服务验证 Chat Completions / Anthropic Messages 两种真实协议，不代表收费模型可用性。
 // 不读取任何真实 Provider 凭证，也不发起收费模型请求。
 const credential = `test-only-ai-key-${randomUUID()}`;
 const requestSchema = z.object({
   model: z.string(),
   messages: z.array(z.object({ role: z.string(), content: z.unknown() })),
+  system: z.unknown().optional(),
+  max_tokens: z.number().optional(),
+  temperature: z.number().optional(),
+  stream: z.boolean().optional(),
 });
 const calls: Array<{
   path: string;
   authorization: string | undefined;
+  apiKey: string | string[] | undefined;
+  anthropicVersion: string | string[] | undefined;
   body: z.infer<typeof requestSchema>;
 }> = [];
 const protocolServer = createServer(async (request, response) => {
@@ -63,18 +69,42 @@ const protocolServer = createServer(async (request, response) => {
     calls.push({
       path: request.url ?? '',
       authorization: request.headers.authorization,
+      apiKey: request.headers['x-api-key'],
+      anthropicVersion: request.headers['anthropic-version'],
       body,
     });
     response.setHeader('Content-Type', 'application/json');
-    if (body.model.startsWith('failure-')) {
-      response.writeHead(503);
+    const failureStatus = /^sdk-failure-(307|308|401|429|503)-/.exec(
+      body.model,
+    )?.[1];
+    if (body.model.startsWith('failure-') || failureStatus) {
+      response.writeHead(failureStatus ? Number(failureStatus) : 503, {
+        Location: `${providerBase}/redirect-target`,
+        'x-sensitive-header': 'sdk-response-header-marker',
+      });
       response.end(
         JSON.stringify({
+          type: 'error',
           error: {
-            message: `upstream-error-must-not-leak-${credential}`,
+            message: `upstream-error-must-not-leak-${credential} ${JSON.stringify(body.messages)}`,
             type: 'server_error',
             code: 'unavailable',
           },
+        }),
+      );
+      return;
+    }
+    if (request.url === '/v1/messages') {
+      response.end(
+        JSON.stringify({
+          id: `msg-${randomUUID()}`,
+          type: 'message',
+          role: 'assistant',
+          model: body.model,
+          content: [{ type: 'text', text: '人物走入雨中的场景。' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 12, output_tokens: 10 },
         }),
       );
       return;
@@ -246,7 +276,11 @@ async function project(owner = ownerId) {
     data: { ownerId: owner, name: '文本 AI', viewport: {} },
   });
 }
-async function configured(projectId: string, model = `model-${randomUUID()}`) {
+async function configured(
+  projectId: string,
+  model = `model-${randomUUID()}`,
+  providerType?: 'openai' | 'anthropic',
+) {
   const headers = {
     Cookie: cookies.get(ownerId) ?? '',
     Origin: origin,
@@ -259,9 +293,12 @@ async function configured(projectId: string, model = `model-${randomUUID()}`) {
       headers,
       body: JSON.stringify({
         name: '显式选择的兼容协议实例',
-        pluginId: 'openai_compatible',
+        pluginId: providerType ? 'text_generation' : 'openai_compatible',
         pluginVersion: 1,
-        configuration: { baseURL: providerBase },
+        configuration: {
+          baseURL: providerBase,
+          ...(providerType ? { provider: providerType } : {}),
+        },
         credentials: { apiKey: credential },
       }),
     },
@@ -380,7 +417,10 @@ async function terminal(workflowRunId: string, status: 'completed' | 'failed') {
   );
   return db.workflowRun.findUniqueOrThrow({ where: { id: workflowRunId } });
 }
-async function assertSafePersistence(runId: string) {
+async function assertSafePersistence(
+  runId: string,
+  extraSecrets: string[] = [],
+) {
   const run = await db.workflowRun.findUniqueOrThrow({ where: { id: runId } });
   const version = await db.workflowVersion.findUniqueOrThrow({
     where: { id: run.workflowVersionId },
@@ -396,7 +436,8 @@ async function assertSafePersistence(runId: string) {
   });
   for (const value of [run, version, workflow, nodeRuns, intents]) {
     const serialized = JSON.stringify(value);
-    expect(serialized).not.toContain(credential);
+    for (const secret of [credential, ...extraSecrets])
+      expect(serialized).not.toContain(secret);
     expect(serialized).not.toContain(providerBase);
     expect(serialized).not.toContain('upstream-error-must-not-leak');
     expect(serialized).not.toContain('encryptedCredentials');
@@ -406,14 +447,16 @@ async function assertSafePersistence(runId: string) {
     .get(WorkflowCheckpointerService)
     .saver.list({ configurable: { thread_id: run.threadId } })) {
     const serialized = JSON.stringify(tuple);
-    expect(serialized).not.toContain(credential);
+    for (const secret of [credential, ...extraSecrets])
+      expect(serialized).not.toContain(secret);
     expect(serialized).not.toContain(providerBase);
     expect(serialized).not.toContain('upstream-error-must-not-leak');
     expect(serialized).not.toContain('encryptedCredentials');
     checkpointCount++;
   }
   expect(checkpointCount).toBeGreaterThan(0);
-  expect(workerLog).not.toContain(credential);
+  for (const secret of [credential, ...extraSecrets])
+    expect(workerLog).not.toContain(secret);
   expect(workerLog).not.toContain('upstream-error-must-not-leak');
   return nodeRuns;
 }
@@ -745,4 +788,162 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
       expect(response.status).toBe(404);
     }
   });
+  describe.each(['openai', 'anthropic'] as const)(
+    'AI SDK 正式链 / %s',
+    (providerType) => {
+      it('正式管理 HTTP 配置、发布与 Worker 请求实际厂商协议；同版本下次运行使用轮换凭证', async () => {
+        const p = await project();
+        const f = await configured(
+          p.id,
+          `sdk-${providerType}-${randomUUID()}`,
+          providerType,
+        );
+        const version = await published(p.id, f.configuration.id);
+        const rotated = `sdk-rotated-${providerType}-${randomUUID()}`;
+        for (const key of [credential, rotated]) {
+          if (key === rotated)
+            await providers.replaceCredentials(ownerId, p.id, f.provider.id, {
+              apiKey: key,
+            });
+          const before = calls.length;
+          const run = await terminal(
+            (await submit(version.id)).id,
+            'completed',
+          );
+          const requests = calls.slice(before);
+          expect(requests).toHaveLength(1);
+          expect(requests[0]).toMatchObject({
+            path:
+              providerType === 'openai'
+                ? '/v1/chat/completions'
+                : '/v1/messages',
+            body: { model: f.model, max_tokens: 64, temperature: 0 },
+            ...(providerType === 'openai'
+              ? { authorization: `Bearer ${key}`, apiKey: undefined }
+              : {
+                  apiKey: key,
+                  authorization: undefined,
+                  anthropicVersion: '2023-06-01',
+                }),
+          });
+          expect(requests[0]?.body.stream).not.toBe(true);
+          expect(requests[0]?.body.messages).toEqual(
+            providerType === 'openai'
+              ? [
+                  { role: 'system', content: '用一句话描写场景。' },
+                  { role: 'user', content: '雨夜中的人物' },
+                ]
+              : [
+                  {
+                    role: 'user',
+                    content: [{ type: 'text', text: '雨夜中的人物' }],
+                  },
+                ],
+          );
+          if (providerType === 'anthropic')
+            expect(requests[0]?.body.system).toEqual([
+              { type: 'text', text: '用一句话描写场景。' },
+            ]);
+          expect(run.outputs).toEqual({
+            text: {
+              storage: 'inline',
+              type: StringType,
+              value: '人物走入雨中的场景。',
+            },
+          });
+          expect(await assertSafePersistence(run.id, [rotated])).toMatchObject([
+            {
+              nodeId: 'text',
+              attempt: 1,
+              status: 'completed',
+              outputs: run.outputs,
+            },
+          ]);
+          const response = await fetch(
+            `${apiBase}/api/v1/workflow-runs/${run.id}`,
+            { headers: { Cookie: cookies.get(ownerId) ?? '' } },
+          );
+          expect(response.status).toBe(200);
+          expect(
+            workflowRunResponseSchema.parse(await response.json()),
+          ).toMatchObject({ status: 'completed', outputs: run.outputs });
+        }
+        const stored = await db.modelProvider.findUniqueOrThrow({
+          where: { id: f.provider.id },
+        });
+        expect(stored.encryptedCredentials).not.toContain(rotated);
+        expect(stored).toMatchObject({
+          pluginId: 'text_generation',
+          pluginVersion: 1,
+          configuration: { provider: providerType },
+        });
+        const snapshot = await db.workflowVersion.findUniqueOrThrow({
+          where: { id: version.id },
+        });
+        expect(snapshot.definition).toMatchObject({
+          nodes: [{ config: { modelConfigurationId: f.configuration.id } }],
+        });
+      });
+
+      it.each([307, 308, 401, 429, 503])(
+        'HTTP %i 失败仅一次实际请求，NodeRun/API/日志无原始 SDK 错误',
+        async (status) => {
+          const p = await project();
+          const f = await configured(
+            p.id,
+            `sdk-failure-${status}-${providerType}-${randomUUID()}`,
+            providerType,
+          );
+          const version = await published(p.id, f.configuration.id);
+          const run = await terminal((await submit(version.id)).id, 'failed');
+          const nodes = await assertSafePersistence(run.id);
+          expect(nodes).toMatchObject([
+            {
+              attempt: 1,
+              status: 'failed',
+              error: { code: 'NODE_EXECUTION_FAILED', stage: 'execute' },
+            },
+          ]);
+          const requests = calls.filter((call) => call.body.model === f.model);
+          expect(requests).toHaveLength(1);
+          expect(requests[0]?.path).toBe(
+            providerType === 'openai' ? '/v1/chat/completions' : '/v1/messages',
+          );
+          const job = await app
+            .get(WorkflowExecutionQueue)
+            .queue.getJob(
+              workflowExecutionJobId({ kind: 'start', workflowRunId: run.id }),
+            );
+          await vi.waitFor(async () =>
+            expect(await job?.getState()).toBe('failed'),
+          );
+          expect(job?.attemptsMade).toBe(1);
+          const response = await fetch(
+            `${apiBase}/api/v1/workflow-runs/${run.id}`,
+            { headers: { Cookie: cookies.get(ownerId) ?? '' } },
+          );
+          expect(response.status).toBe(200);
+          const dto = workflowRunResponseSchema.parse(await response.json());
+          expect(dto.status).toBe('failed');
+          // 正常 NodeRun.inputs 本来就记录用户输入；这里验证错误投影绝不携带 prompt 或协议内容。
+          const errors = JSON.stringify({
+            error: run.error,
+            nodeErrors: nodes.map((node) => node.error),
+            apiError: dto.error,
+            workerLog,
+          });
+          for (const forbidden of [
+            credential,
+            '雨夜中的人物',
+            '用一句话描写场景。',
+            'upstream-error-must-not-leak',
+            'sdk-response-header-marker',
+            'APICallError',
+            'requestBodyValues',
+          ])
+            expect(errors).not.toContain(forbidden);
+        },
+      );
+    },
+  );
 });

@@ -1,0 +1,109 @@
+{
+  "verifiedAt": "2026-10-21T10:06:17.139Z",
+  "registry": "https://registry.npmjs.org",
+  "packages": [
+    {
+      "name": "ai",
+      "version": "7.0.148",
+      "publishedAt": "2026-10-21T02:22:48.836Z",
+      "engines": {
+        "node": ">=22"
+      },
+      "integrity": "sha512-FPgfIAhz/FrlzcvqTN7pGGibahR5rD19NXZWX9WQ1tskTic+CN+jxvubpreyq8uN1maIEHPwvZmil/3IYN8FIw==",
+      "tarball": "https://registry.npmjs.org/ai/-/ai-7.0.148.tgz",
+      "dependencies": {
+        "@ai-sdk/gateway": "4.0.121",
+        "@ai-sdk/provider": "4.0.31",
+        "@ai-sdk/provider-utils": "5.0.65"
+      },
+      "peerDependencies": {
+        "zod": "^3.25.76 || ^4.1.8"
+      }
+    },
+    {
+      "name": "@ai-sdk/openai",
+      "version": "4.0.99",
+      "publishedAt": "2026-10-21T02:37:27.104Z",
+      "engines": {
+        "node": ">=22"
+      },
+      "integrity": "sha512-XRHUiXgxhVEe0smSp537lzCqMsOVg6jvGTWDbTZeGMTc+iHeOwgHgZMFBvOiNWXZ8n125Jta72m+64PtU1WNJA==",
+      "tarball": "https://registry.npmjs.org/@ai-sdk/openai/-/openai-4.0.99.tgz",
+      "dependencies": {
+        "@ai-sdk/provider": "4.0.31",
+        "@ai-sdk/provider-utils": "5.0.65"
+      },
+      "peerDependencies": {
+        "zod": "^3.25.76 || ^4.1.8"
+      }
+    },
+    {
+      "name": "@ai-sdk/anthropic",
+      "version": "4.0.85",
+      "publishedAt": "2026-10-21T02:19:43.129Z",
+      "engines": {
+        "node": ">=22"
+      },
+      "integrity": "sha512-nfv/vtR4HuNUZyCzdK37d2CaW1mzeZJlzSmC+4Jn8Dn8ces8R9HOAgF9d+8iwx+SedmzurKQQmNvJ7xYGBcPMQ==",
+      "tarball": "https://registry.npmjs.org/@ai-sdk/anthropic/-/anthropic-4.0.85.tgz",
+      "dependencies": {
+        "@ai-sdk/provider": "4.0.31",
+        "@ai-sdk/provider-utils": "5.0.65"
+      },
+      "peerDependencies": {
+        "zod": "^3.25.76 || ^4.1.8"
+      }
+    },
+    {
+      "name": "@ai-sdk/openai-compatible",
+      "version": "3.0.75",
+      "publishedAt": "2026-10-21T02:20:15.248Z",
+      "engines": {
+        "node": ">=22"
+      },
+      "integrity": "sha512-Zs+EWsK1XprpCR6+VIva50W2YuD3TNSymd5DKFh8XSrroK0copxm2BlSDRKWVdx3SZEh1XqD+1cgYzGR7huL4A==",
+      "tarball": "https://registry.npmjs.org/@ai-sdk/openai-compatible/-/openai-compatible-3.0.75.tgz",
+      "dependencies": {
+        "@ai-sdk/provider": "4.0.31",
+        "@ai-sdk/provider-utils": "5.0.65"
+      },
+      "peerDependencies": {
+        "zod": "^3.25.76 || ^4.1.8"
+      }
+    },
+    {
+      "name": "@ai-sdk/deepseek",
+      "version": "3.0.70",
+      "publishedAt": "2026-10-21T02:22:51.878Z",
+      "engines": {
+        "node": ">=22"
+      },
+      "integrity": "sha512-smmwv3BVWiu5y71F6gxOOOVptjFbmKNlbLnBzwTADSPa0EQG3fJ5PYilJ65NsWbduNSsziMBB9UITHvAuoOsTA==",
+      "tarball": "https://registry.npmjs.org/@ai-sdk/deepseek/-/deepseek-3.0.70.tgz",
+      "dependencies": {
+        "@ai-sdk/provider": "4.0.31",
+        "@ai-sdk/provider-utils": "5.0.65"
+      },
+      "peerDependencies": {
+        "zod": "^3.25.76 || ^4.1.8"
+      }
+    },
+    {
+      "name": "@ai-sdk/google",
+      "version": "4.0.102",
+      "publishedAt": "2026-10-21T02:19:07.675Z",
+      "engines": {
+        "node": ">=22"
+      },
+      "integrity": "sha512-xbiBNOPcHDnxIGPhPAdHAhf1EAw7KuwMAP4/urT7mYBEwoIfEfFr7hVm2c0HQwrtL0hokw6WtpkolBec92vt1A==",
+      "tarball": "https://registry.npmjs.org/@ai-sdk/google/-/google-4.0.102.tgz",
+      "dependencies": {
+        "@ai-sdk/provider": "4.0.31",
+        "@ai-sdk/provider-utils": "5.0.65"
+      },
+      "peerDependencies": {
+        "zod": "^3.25.76 || ^4.1.8"
+      }
+    }
+  ]
+}

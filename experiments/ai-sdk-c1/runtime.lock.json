@@ -1,0 +1,6 @@
+{
+  "version": "24.22.0",
+  "platform": "darwin-arm64",
+  "source": "https://nodejs.org/dist/v24.22.0/node-v24.22.0-darwin-arm64.tar.xz",
+  "sha256": "75ddfb875bbd868ebe57536f4442225f54dd10f6d2178dd439de869a5c648dc3"
+}

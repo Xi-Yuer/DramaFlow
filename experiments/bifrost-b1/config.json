@@ -1,0 +1,94 @@
+{
+  "$schema": "https://www.getbifrost.ai/schema",
+  "framework": {
+    "pricing": {
+      "pricing_url": "file:///experiment/catalog-pricing.json",
+      "model_parameters_url": "file:///experiment/catalog-params.json",
+      "live_models_sync_interval": 0,
+      "mcp_library_sync_interval": 0
+    }
+  },
+  "client": {
+    "initial_pool_size": 8,
+    "allow_direct_keys": true,
+    "enforce_auth_on_inference": true,
+    "enable_logging": false,
+    "disable_content_logging": true,
+    "retain_content_in_object_storage": false,
+    "allow_per_request_content_storage_override": false,
+    "logging_headers": [],
+    "header_filter_config": {
+      "allowlist": ["x-bf-eh-x-b1-probe"],
+      "denylist": []
+    },
+    "compat": {
+      "should_drop_params": false,
+      "should_convert_params": false
+    },
+    "required_headers": ["x-bf-vk"]
+  },
+  "source_of_truth": "config.json",
+  "config_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "/app/data/platform.db"
+    }
+  },
+  "logs_store": {
+    "enabled": false
+  },
+  "providers": {
+    "openai": {
+      "keys": [],
+      "network_config": {
+        "max_retries": 0,
+        "default_request_timeout_in_seconds": 3,
+        "allow_private_network": true,
+        "max_conns_per_host": 1
+      },
+      "concurrency_and_buffer_size": {
+        "concurrency": 8,
+        "buffer_size": 32
+      }
+    },
+    "anthropic": {
+      "keys": [],
+      "network_config": {
+        "max_retries": 0,
+        "default_request_timeout_in_seconds": 3,
+        "allow_private_network": true,
+        "max_conns_per_host": 1
+      },
+      "concurrency_and_buffer_size": {
+        "concurrency": 8,
+        "buffer_size": 32
+      }
+    }
+  },
+  "governance": {
+    "virtual_keys": [
+      {
+        "id": "b1-platform",
+        "name": "b1-platform",
+        "value": "env.B1_GATEWAY_KEY",
+        "is_active": true,
+        "provider_configs": [
+          {
+            "provider": "openai",
+            "allowed_models": ["regex:.*"],
+            "key_ids": ["*"],
+            "weight": 1
+          },
+          {
+            "provider": "anthropic",
+            "allowed_models": ["regex:.*"],
+            "key_ids": ["*"],
+            "weight": 1
+          }
+        ]
+      }
+    ]
+  },
+  "setup_token": "env.B1_GATEWAY_KEY"
+}

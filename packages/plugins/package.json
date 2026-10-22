@@ -20,9 +20,12 @@
     "test": "vitest run test"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.85",
+    "@ai-sdk/openai": "4.0.99",
     "@dramaflow/contracts": "workspace:^",
     "@langchain/core": "^1.2.18",
     "@langchain/openai": "^1.6.2",
+    "ai": "7.0.148",
     "langsmith": "0.11.0",
     "openai": "^7.34.0",
     "zod": "^4.6.7"

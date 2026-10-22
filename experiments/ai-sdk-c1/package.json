@@ -1,0 +1,18 @@
+{
+  "name": "dramaflow-ai-sdk-c1-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "test": "node run.ts"
+  },
+  "dependencies": {
+    "ai": "7.0.148",
+    "@ai-sdk/openai": "4.0.99",
+    "@ai-sdk/anthropic": "4.0.85",
+    "zod": "4.6.7"
+  }
+}

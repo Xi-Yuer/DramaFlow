@@ -2,6 +2,8 @@
 
 开发环境运行 pnpm infra:up 启动 PostgreSQL/pgvector、Redis 和 RustFS，并初始化存储桶；pnpm dev 启动前后端及基础 worker。完整容器部署使用 pnpm stack:up。
 
+`experiments/` 保留历史准入证据，由 `.dockerignore` 排除出生产构建上下文和镜像。
+
 向量检索继续使用 PostgreSQL pgvector，不增加独立向量数据库。PostgreSQL 与 Redis 由 Docker Compose 管理；对象存储使用 RustFS 官方固定版本镜像及持久化卷，具体配置见 [RustFS 存储](object-storage.md)。
 
 端口使用默认 5432、6379、9000、9001，应用前端 3000。宿主仅监听 127.0.0.1，对外访问需要 HTTPS 反向代理。Docker 内部通过 postgres、redis、rustfs 服务名访问，不使用宿主 localhost。

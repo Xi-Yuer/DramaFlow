@@ -1,43 +1,53 @@
 # Node 模型
 
-NodeDefinition 是流程实例，NodeTypeManifest 是可传输说明书，服务端 NodeType 是业务执行实现。React Flow 视图、平台定义、LangGraph 执行与 NodeRun 记录各有边界，数据语义见 [数据模型](data-model.md)。
+NodeDefinition 是实例，NodeTypeManifest 是可传输说明书，NodeType 是服务端业务实现。数据承载见[数据模型](data-model.md)，执行与记录见[Runtime](runtime-architecture.md)。
 
 ## 实例与编辑视图
 
-NodeDefinition 固定 id、type、typeVersion、name、config、inputs 及 ui.position；preset 仅是配置模板元数据。Node.inputs record 只保存 StaticInputBinding：constant / workflow_input / asset。上游节点输入只由 WorkflowDefinition.edges 中的 DataEdgeDefinition 表达，不在 inputs 重复保存。asset 明确 assetId + versionId，不选择最新版本。
+实例固定 id、type、typeVersion、name、config、inputs 和 ui.position。inputs 只保存 constant / workflow_input / asset 三类静态绑定；asset 固定 assetId + versionId。上游连接只保存在 Workflow.edges，不重复放入 inputs。
 
-React Flow type 选择 workflowNode renderer，实际运行类型在 data.nodeType / data.typeVersion。selected、dragging、measured 等临时字段不进入定义。Data / Control Edge 的种类、ID、节点与可选端口可往返 React Flow Edge；显式数据连接对照唯一目录检查精确版本、端口与共享类型兼容规则，控制连接使用独立 Handle。断连和重连检查种类及完整旧边快照，防止过期事件误改现有连接。
+React Flow 的 type 选择通用 renderer，真实节点身份保存在 data.nodeType / typeVersion；selected、dragging、measured 不持久化。两类边保留 ID、种类、节点及可选端口；断连 / 重连必须核对完整旧边快照，防止过期事件修改现有连接。
 
-Data Edge 声明输入值来源，Control Edge 声明显式执行先后，两者都只保存在 WorkflowDefinition.edges，不自动相互补齐。Control Edge 不占用 Node.inputs；当前两类边均产生确定性执行依赖，相同节点对去重。Dependency Compiler 只读两端 nodeId，数据端口与取值保留给 BindingResolver / NodeExecutor。普通节点对已确定的多个执行上游固定采用 ALL Join，不增加 NodeDefinition.joinMode；ANY / N_OF_M 留给专门控制节点，边界见 [Runtime](runtime-architecture.md#普通确定性依赖的-all-join)。
+Data Edge 提供输入值来源，Control Edge 提供先后关系，不自动相互创建。数据输入单连接，且不能与静态绑定并存；数组不隐含多连接聚合。控制边不占输入，两类边的执行依赖按节点对去重，普通 fan-in 采用 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join)。
 
 ## Manifest 与端口
 
-Manifest 的 type / version 固定节点类型身份，executionKind 必填，支持 action、control、composite、interaction。metadata 分类仍是 input / ai / image / video / audio / flow / data / output。说明书只含 JSON，不包含 Zod、execute、编译器或私有服务依赖。
+Manifest 固定 type / version 与 executionKind（action / control / composite / interaction）；category 是独立的 UI 分类。只公开 JSON，不携带 Zod、execute、编译器或服务实例。
 
-数据端口使用正式 DataType，数据 Handle.id 必须等于对应端口 key，同方向唯一。required 表示是否可以不提供输入；null 由 union 描述。一个数据输入端口至多一条 Data Edge，且不能同时保留静态 Binding。集合用 array.itemType；数组值不隐含多连接聚合，不声明 multiple。
+数据端口使用正式 DataType，Handle.id 等于端口 key，同方向唯一。required 表示可省略，null 用 union 表达；集合用 array.itemType，没有 multiple。输出 storagePolicy 为 inline / reference / auto，缺省 auto，不改变端口类型。
 
-普通控制 Handle 使用 `control:source` / `control:target`，与数据端口 key 隔离，默认控制 Handle 不进入领域 portKey。Control Edge 的可选 portKey 支持命名端口往返，但当前 Manifest 不声明命名控制端口，通用节点只提供普通控制出入口，不渲染分支路由。
+普通控制 Handle 为 `control:source` / `control:target`，与数据 key 隔离，默认 Handle 不写入领域 portKey。命名控制端口仅有结构与转换支持，当前没有对应 Manifest / 路由交互。
 
-config 为 string / number / boolean / select 字段数组；默认值按字段类型、范围与选项校验。配置控件提示在 config[].ui，输入提示在 ui.inputs；Zod 与 UI 编辑提示不混用，默认值不自动注入定义或 State。
+config 用 string / number / boolean / select 字段数组；默认值按类型、范围与选项校验。配置编辑提示在 config[].ui，输入提示在 ui.inputs，必须引用现有输入。Zod transform / 默认值不回写定义或 State。
 
 ## 服务端执行与编译
 
-NodeType 持 manifest、inputSchema、configSchema、outputSchema 和 execute(input, config, context)，不再提供 compile。NodeRegistry 按 type / version 精确查找，拒绝重复或缺失版本，listManifests 只返回副本；普通 action 必须提供 execute，其他 executionKind 仅声明契约，由独立结构策略处理。
+NodeType 持 manifest、三组 Zod Schema 和 execute(input, config, context)，不取得 Graph builder、BindingResolver、内容 Store 或 Checkpoint。普通业务只接收已校验输入与配置并返回结果，不自行调度、解析绑定或持久化输出。
 
-assertNodeSchemas 核对公开输入、输出、配置字段集合和默认值，不声称已经证明 Manifest 与任意 Zod Schema 完全等价。真实运行须经过数据类型 Registry 与节点完整 Zod 校验。
+NodeRegistry 按 type / version 精确注册，拒绝重复 / 缺失版本，固定 Manifest 并保留实现的 this；getAction 拒绝非 action。assertNodeSchemas 检查公开字段及默认值，不承诺证明任意 Zod 与 Manifest 完全等价。
 
-ActionNodeCompilationStrategy 只包装统一 NodeExecutor，传入当前 State 并将结果映射为当前 nodeId 的 outputs 增量，不展开旧 State；合并与冲突检查由 LangGraph 通道负责。编译不执行业务、不解析 Binding、不自行 addEdge，拒绝不匹配版本或非 action。整图 Compiler 与结构策略保持独立，不为每个业务类型复制编译策略，详见 [State 边界](workflow-state.md#并行与历史)。
+Action 编译策略只调用统一 Executor，返回当前 nodeId 的 outputs 增量；不展开旧 State、不接管边或存储。其他 executionKind 使用独立结构策略，不能在 Executor 内按业务 type 写分支。详细管线与失败规则见 Runtime。
 
-普通 Action NodeExecutor 串联精确 Registry、绑定、decode、输入 / 配置校验、业务调用、输出校验和逐端口编码，返回 RuntimeValue map，不按 node.type 分支。NodeExecutionContext 包含领域 workflow / state 与项目运行定位，不含 React Flow 对象；普通节点接收已校验的业务输入和配置，不自行调度或解析绑定。输出存储策略由 Runtime 统一处理，Artifact 写入与内容服务使用独立端口，NodeRun 由注入的 Repository 记录，能力见 [架构](architecture.md#数据与-node-基础库)，错误规则见 [Runtime](runtime-architecture.md#action-执行错误阶段)。
+## 节点类型开发
+
+1. 声明纯 JSON Manifest、三组严格 Zod 和业务 execute；可使用 createOperationNodeType 组合。invokeNodeOperation 只是独立值校验工具，不是另一套 Runtime。
+2. 在受信任 Registry 注册精确版本；GET /api/v1/workflow/node-types 默认认证、no-store，只返回 Manifest。缺少版本时界面显示不可用，不按目录顺序猜测。
+3. 通过静态发布校验和运行时三组 Schema 验证真实行为。能力 / 资源绑定须补齐相应发布授权检查，不能仅靠 UI 控件推断。
 
 ## Preset 与 NodeRun
 
-Preset 是所属 type / typeVersion 的配置模板，不是 Runtime 身份。applyNodePreset 检查归属、合并模板与实例覆盖，不执行节点。剧本、广告、口播等可复用机制，不按业务名称复制 Executor。
+Preset 只是所属 type / typeVersion 的配置模板，applyNodePreset 验证归属并合并实例覆盖，不构成新的运行身份或执行器。
 
-NodeRun 的共享定义归 contracts/workflow/node-run.ts，记录每次普通 Action 的业务历史，只有 running / completed / failed 三种状态。startedAt 必填，completedAt 随终态记录；共享协议沿用 ISO 时间，数据库为 DateTime。inputs / outputs 仅保存 RuntimeValue map，不使用 unknown 或原始业务对象快照；error 保存字符串 stage、可选 code 和安全的阶段说明；领域协议不要求使用 Runtime 的固定阶段枚举。attempt 由 Repository / 数据库按 workflowRunId + nodeId 原子分配，新执行创建新记录，不改写已结束历史。
+NodeRun 保存 running / completed / failed 业务历史，inputs / outputs 为 RuntimeValue map，error 为安全 stage / 可选 code / message。Repository 按 workflowRunId + nodeId 原子分配正整数 attempt，新执行新建记录，终态不可覆盖。共享协议的 stage 可扩展，不要求使用 Runtime 的固定枚举。
 
-NodeRun 不驱动调度，也不从 Checkpoint 临时推导。State 只保存当前有效 RuntimeValue，Artifact 保存实际内容，Checkpoint 负责图恢复。普通 Action 不得主动 interrupt；原生控制异常的记录边界见 [Runtime](runtime-architecture.md#节点业务记录与-checkpoint)。恢复复用同一 NodeRun 和不增加 attempt 的语义由 Human Review 独立处理。
+State 只保留当前有效值，Artifact 保存内容，Checkpoint 负责恢复，NodeRun 不驱动调度。普通 Action 不主动 interrupt；Human Review 的恢复复用与 attempt 关联仍需单独设计。
+
+## 正式文本节点
+
+`ai.text_generate@1` 为普通 Action：必填 prompt、可选 system，输出 text，均为 string。config 只有必填 UUID modelConfigurationId，不保存插件、endpoint、模型名或 key；model-selector 只是 UI 提示。
+
+execute 通过 CapabilityInvoker 调用 text.generate，Provider 插件承担外部协议。新增厂商无需新增 NodeType / Compiler / Executor。保存草稿允许未完成选择，但拒绝额外配置字段；发布要求完整严格 Schema 及同项目可用模型绑定，执行时重新授权并解密，见[架构](architecture.md#文本-ai-与-provider-plugin)。
 
 ## 视频领域能力与厂商边界
 
-视频领域类型可以专业化，外部能力通过用户明确选择的受信任插件接入，不将节点与单一供应商绑定。已有正式文本生成节点 `ai.text_generate@1`，只引用模型配置并请求 text.generate；Provider 插件承担外部协议。图片 / 视频 / 语音尚未实现，模型选择 UI 也未交付，详见 [Provider Plugin](architecture.md#文本-ai-与-provider-plugin)。
+领域类型可以专业化，供应商通过明确选择的受信任插件接入。图片 / 视频 / 语音及 Asset 业务、控制 / 交互结构与节点配置 UI 尚未交付，范围见[实施方案](implementation-plan.md)。

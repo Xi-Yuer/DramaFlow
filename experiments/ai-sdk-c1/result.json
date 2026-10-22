@@ -1,0 +1,211 @@
+{
+  "executedAt": "2026-10-21T10:13:11.123Z",
+  "node": "v24.22.0",
+  "decision": "GO",
+  "matrix": [
+    {
+      "protocol": "openai",
+      "status": 200,
+      "id": "973f1818-3df9-46eb-b0aa-95db3dec315c",
+      "fetchCalls": 1,
+      "generationPosts": 1,
+      "targetRequests": 0,
+      "result": {
+        "text": "C1-output-973f1818-3df9-46eb-b0aa-95db3dec315c"
+      },
+      "records": [
+        {
+          "id": "973f1818-3df9-46eb-b0aa-95db3dec315c",
+          "target": false,
+          "method": "POST",
+          "path": "/case/973f1818-3df9-46eb-b0aa-95db3dec315c/v1/chat/completions",
+          "credentialFingerprint": "99b72e7e8cb3ba76",
+          "authorizationPresent": true,
+          "apiKeyPresent": false,
+          "model": "gpt-4.1-mini",
+          "maxOutputTokens": 16,
+          "temperature": 0.2,
+          "bodyKeys": ["max_tokens", "messages", "model", "temperature"],
+          "bodySha256": "619e9e158694379b696ea6fcb7c24b15e3fe8e813dc35b80901018015977cbf8",
+          "promptMatches": true,
+          "systemMatches": true,
+          "streaming": false
+        }
+      ]
+    },
+    {
+      "protocol": "openai",
+      "status": 307,
+      "id": "0fa1e67e-351d-4b08-830e-4f64e0bf836e",
+      "fetchCalls": 1,
+      "generationPosts": 1,
+      "targetRequests": 0,
+      "error": {
+        "name": "APICallError",
+        "status": 307
+      },
+      "records": [
+        {
+          "id": "0fa1e67e-351d-4b08-830e-4f64e0bf836e",
+          "target": false,
+          "method": "POST",
+          "path": "/case/0fa1e67e-351d-4b08-830e-4f64e0bf836e/v1/chat/completions",
+          "credentialFingerprint": "a8e5cfa6524a4a25",
+          "authorizationPresent": true,
+          "apiKeyPresent": false,
+          "model": "gpt-4.1-mini",
+          "maxOutputTokens": 16,
+          "temperature": 0.2,
+          "bodyKeys": ["max_tokens", "messages", "model", "temperature"],
+          "bodySha256": "9e9cfcfd87ee74be2899cea2f08b572b3da5fdd4ab113ffe62de17ac92458cda",
+          "promptMatches": true,
+          "systemMatches": true,
+          "streaming": false
+        }
+      ]
+    },
+    {
+      "protocol": "openai",
+      "status": 308,
+      "id": "bf35a171-8cc5-432b-8e4b-7f24a40c108a",
+      "fetchCalls": 1,
+      "generationPosts": 1,
+      "targetRequests": 0,
+      "error": {
+        "name": "APICallError",
+        "status": 308
+      },
+      "records": [
+        {
+          "id": "bf35a171-8cc5-432b-8e4b-7f24a40c108a",
+          "target": false,
+          "method": "POST",
+          "path": "/case/bf35a171-8cc5-432b-8e4b-7f24a40c108a/v1/chat/completions",
+          "credentialFingerprint": "4f7c520acab164d5",
+          "authorizationPresent": true,
+          "apiKeyPresent": false,
+          "model": "gpt-4.1-mini",
+          "maxOutputTokens": 16,
+          "temperature": 0.2,
+          "bodyKeys": ["max_tokens", "messages", "model", "temperature"],
+          "bodySha256": "b5dd49b712c10f3abf7ff0e94da69d05929cad6cfa95c617b7e21758ecc686cd",
+          "promptMatches": true,
+          "systemMatches": true,
+          "streaming": false
+        }
+      ]
+    },
+    {
+      "protocol": "anthropic",
+      "status": 200,
+      "id": "1f28470f-77ec-4968-b85a-c75e84f74c47",
+      "fetchCalls": 1,
+      "generationPosts": 1,
+      "targetRequests": 0,
+      "result": {
+        "text": "C1-output-1f28470f-77ec-4968-b85a-c75e84f74c47"
+      },
+      "records": [
+        {
+          "id": "1f28470f-77ec-4968-b85a-c75e84f74c47",
+          "target": false,
+          "method": "POST",
+          "path": "/case/1f28470f-77ec-4968-b85a-c75e84f74c47/v1/messages",
+          "credentialFingerprint": "46addc0ab44c1606",
+          "authorizationPresent": false,
+          "apiKeyPresent": true,
+          "anthropicVersion": "2023-06-01",
+          "model": "claude-sonnet-4-6",
+          "maxOutputTokens": 16,
+          "temperature": 0.2,
+          "bodyKeys": ["max_tokens", "messages", "model", "system", "temperature"],
+          "bodySha256": "5d4e39db9b315467b674658831d09ea42b5f6701d696f07b0b347b09ae67bb2e",
+          "promptMatches": true,
+          "systemMatches": true,
+          "streaming": false
+        }
+      ]
+    },
+    {
+      "protocol": "anthropic",
+      "status": 307,
+      "id": "095a2f68-cfcd-41d0-b8cb-de9437feb182",
+      "fetchCalls": 1,
+      "generationPosts": 1,
+      "targetRequests": 0,
+      "error": {
+        "name": "APICallError",
+        "status": 307
+      },
+      "records": [
+        {
+          "id": "095a2f68-cfcd-41d0-b8cb-de9437feb182",
+          "target": false,
+          "method": "POST",
+          "path": "/case/095a2f68-cfcd-41d0-b8cb-de9437feb182/v1/messages",
+          "credentialFingerprint": "094c3070ec3802a7",
+          "authorizationPresent": false,
+          "apiKeyPresent": true,
+          "anthropicVersion": "2023-06-01",
+          "model": "claude-sonnet-4-6",
+          "maxOutputTokens": 16,
+          "temperature": 0.2,
+          "bodyKeys": ["max_tokens", "messages", "model", "system", "temperature"],
+          "bodySha256": "4d8238c207381bed3830beeffe6cfb1c6cb23515581b685cb77ebbce0929145f",
+          "promptMatches": true,
+          "systemMatches": true,
+          "streaming": false
+        }
+      ]
+    },
+    {
+      "protocol": "anthropic",
+      "status": 308,
+      "id": "0c3559da-f680-421b-b259-91b80e02a4af",
+      "fetchCalls": 1,
+      "generationPosts": 1,
+      "targetRequests": 0,
+      "error": {
+        "name": "APICallError",
+        "status": 308
+      },
+      "records": [
+        {
+          "id": "0c3559da-f680-421b-b259-91b80e02a4af",
+          "target": false,
+          "method": "POST",
+          "path": "/case/0c3559da-f680-421b-b259-91b80e02a4af/v1/messages",
+          "credentialFingerprint": "bf6eff3f10991014",
+          "authorizationPresent": false,
+          "apiKeyPresent": true,
+          "anthropicVersion": "2023-06-01",
+          "model": "claude-sonnet-4-6",
+          "maxOutputTokens": 16,
+          "temperature": 0.2,
+          "bodyKeys": ["max_tokens", "messages", "model", "system", "temperature"],
+          "bodySha256": "96dcb5155838990f57aca80726e15cbb10a0b9114babbf4094f07f6fc22fb8f5",
+          "promptMatches": true,
+          "systemMatches": true,
+          "streaming": false
+        }
+      ]
+    }
+  ],
+  "fixtureSha256": {
+    "adapter.ts": "5e03fd916df209a23ac03265af7c03cd427e8cf8968ed6ef0cf8b34b1dfbe655",
+    "run.ts": "527eb29ded6d1cf25edc891f5c62bab0619efbf92eb05cf10bfdc8b60b46a870",
+    "upstream.ts": "021cca696ecb4e2cc23d0839083d77580e090be0bb2b3b296cc266c4a817ee11",
+    "package.json": "3de5086dcfb7020909ebf75faf913ac2963ad6d8aa9aca2ed7457f50f93dc248",
+    "package-lock.json": "970d00a953c2a1d68171bf96a2f224035d0652afab4de8a0bff2f3d5f62d1776",
+    "versions.lock.json": "a19dc0165334a9b8490ae3ba9efa2d1a19f1cd8cd2e8796a663febf8d8489aa2",
+    "runtime.lock.json": "042abcaf21f8523db0f4b81cfc94eadfbf8dcf6d384531113020360473a905e0",
+    "tsconfig.json": "f5fb7bc8e0ea64d2ac5d0dd3f571aaf35f64983334373c0f9ffb1d8ca1f5c88e"
+  },
+  "packages": {
+    "ai": "7.0.148",
+    "@ai-sdk/openai": "4.0.99",
+    "@ai-sdk/anthropic": "4.0.85",
+    "@ai-sdk/provider": "4.0.31",
+    "@ai-sdk/provider-utils": "5.0.65"
+  }
+}

@@ -8,6 +8,8 @@
 !.env.example
 .local
 .data
+# 历史准入实验保留在仓库，不进入生产构建上下文或镜像。
+experiments
 **/*.tsbuildinfo
 coverage
 playwright-report

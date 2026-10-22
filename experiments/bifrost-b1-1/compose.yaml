@@ -1,0 +1,26 @@
+services:
+  gateway:
+    image: ${B11_IMAGE:?固定 Bifrost digest}
+    entrypoint: [/app/main]
+    command: [-host, 0.0.0.0, -port, '8080', -app-dir, /app/data, -log-level, warn]
+    environment:
+      B11_GATEWAY_KEY: ${B11_GATEWAY_KEY:?合成平台凭证}
+    volumes:
+      - '${B11_TEMP:?临时配置}/config.json:/app/data/config.json:ro'
+      - '../bifrost-b1:/b1:ro'
+    read_only: true
+    tmpfs: [/tmp, '/app/data:uid=1000,gid=0,mode=0700']
+    networks: [experiment]
+
+  upstream:
+    image: ${B11_FIXTURE_IMAGE:?固定 Python digest}
+    entrypoint: [python]
+    command: [/experiment/upstream.py]
+    volumes: [.:/experiment:ro]
+    read_only: true
+    tmpfs: [/tmp]
+    networks: [experiment]
+
+networks:
+  experiment:
+    internal: true

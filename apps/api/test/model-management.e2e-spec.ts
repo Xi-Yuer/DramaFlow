@@ -175,7 +175,10 @@ describe('项目模型管理 HTTP', () => {
     const result = providerPluginCatalogSchema.parse(
       await json(await http('/provider-plugins')),
     );
-    expect(result.items).toHaveLength(1);
+    expect(result.items.map(({ id, version }) => ({ id, version }))).toEqual([
+      { id: 'openai_compatible', version: 1 },
+      { id: 'text_generation', version: 1 },
+    ]);
     expect(result.items[0]).toMatchObject({
       id: 'openai_compatible',
       version: 1,

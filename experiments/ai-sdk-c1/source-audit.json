@@ -1,0 +1,161 @@
+{
+  "packages": {
+    "ai": "7.0.148",
+    "@ai-sdk/openai": "4.0.99",
+    "@ai-sdk/anthropic": "4.0.85",
+    "@ai-sdk/provider": "4.0.31",
+    "@ai-sdk/provider-utils": "5.0.65"
+  },
+  "sdkSourceFiles": [
+    {
+      "package": "ai",
+      "version": "7.0.148",
+      "file": "src/model/resolve-model.ts",
+      "line": 33,
+      "purpose": "model object bypasses default gateway string resolution",
+      "sha256": "13d6e8ff9813521538a74476e5229e25d30e3071e0255fc153d894ca7664f4fa",
+      "source": "https://github.com/vercel/ai/blob/ai%407.0.148/packages/ai/src/model/resolve-model.ts#L33"
+    },
+    {
+      "package": "ai",
+      "version": "7.0.148",
+      "file": "src/util/prepare-retries.ts",
+      "line": 9,
+      "purpose": "defaultMaxRetries=2 and 0 accepted",
+      "sha256": "98ea11887f69cbe7021edf3557471847fff9edabc9fb9f02ae3ee239da1b87f9",
+      "source": "https://github.com/vercel/ai/blob/ai%407.0.148/packages/ai/src/util/prepare-retries.ts#L9"
+    },
+    {
+      "package": "ai",
+      "version": "7.0.148",
+      "file": "src/generate-text/generate-text.ts",
+      "line": 248,
+      "purpose": "single step, explicit model and provider options",
+      "sha256": "755a918bac74722dae2eebf4b110b9f74e14719e8cee5455c787a9e388711b63",
+      "source": "https://github.com/vercel/ai/blob/ai%407.0.148/packages/ai/src/generate-text/generate-text.ts#L248"
+    },
+    {
+      "package": "ai",
+      "version": "7.0.148",
+      "file": "src/generate-text/output.ts",
+      "line": 87,
+      "purpose": "structured Output abstractions, not executed in C1",
+      "sha256": "6d33ad7ff9005a8d921fe12dca833d01730275b7773f08d89532f243b80a4114",
+      "source": "https://github.com/vercel/ai/blob/ai%407.0.148/packages/ai/src/generate-text/output.ts#L87"
+    },
+    {
+      "package": "@ai-sdk/provider-utils",
+      "version": "5.0.65",
+      "file": "src/post-to-api.ts",
+      "line": 93,
+      "purpose": "one injected fetch per helper execution",
+      "sha256": "6495b62e6cf430dcb08221cc2473ba9311d32080e2d1bab0a5c781e3d2180346",
+      "source": "https://github.com/vercel/ai/blob/%40ai-sdk%2Fprovider-utils%405.0.65/packages/provider-utils/src/post-to-api.ts#L93"
+    },
+    {
+      "package": "@ai-sdk/provider-utils",
+      "version": "5.0.65",
+      "file": "src/retry-with-exponential-backoff.ts",
+      "line": 88,
+      "purpose": "maxRetries===0 immediately throws original error",
+      "sha256": "b666c1dc9cff5ccfb01db3f564ebe5b6c692b1dcf706ca3d266985373659dd7a",
+      "source": "https://github.com/vercel/ai/blob/%40ai-sdk%2Fprovider-utils%405.0.65/packages/provider-utils/src/retry-with-exponential-backoff.ts#L88"
+    },
+    {
+      "package": "@ai-sdk/openai",
+      "version": "4.0.99",
+      "file": "src/openai-provider.ts",
+      "line": 221,
+      "purpose": "instance apiKey, baseURL, custom fetch; explicit chat model",
+      "sha256": "49701273cc13a1a5f854f4f5cabf75394c9b1d00d0286891b17b2e5936852694",
+      "source": "https://github.com/vercel/ai/blob/%40ai-sdk%2Fopenai%404.0.99/packages/openai/src/openai-provider.ts#L221"
+    },
+    {
+      "package": "@ai-sdk/openai",
+      "version": "4.0.99",
+      "file": "src/chat/openai-chat-language-model.ts",
+      "line": 374,
+      "purpose": "doGenerate calls postJsonToApi with injected fetch",
+      "sha256": "b87544d6d7ee37f006141dbca84d1f0e3bcc681ddca706c6cde9035e5cc6bb72",
+      "source": "https://github.com/vercel/ai/blob/%40ai-sdk%2Fopenai%404.0.99/packages/openai/src/chat/openai-chat-language-model.ts#L374"
+    },
+    {
+      "package": "@ai-sdk/anthropic",
+      "version": "4.0.85",
+      "file": "src/anthropic-provider.ts",
+      "line": 135,
+      "purpose": "instance apiKey/baseURL/fetch and native messages model",
+      "sha256": "ee77b6cfc62272c278cebeb8e73bfd2894dc0ea622dc65a67b2141535d10793d",
+      "source": "https://github.com/vercel/ai/blob/%40ai-sdk%2Fanthropic%404.0.85/packages/anthropic/src/anthropic-provider.ts#L135"
+    },
+    {
+      "package": "@ai-sdk/anthropic",
+      "version": "4.0.85",
+      "file": "src/anthropic-language-model.ts",
+      "line": 1173,
+      "purpose": "doGenerate native messages single postJsonToApi",
+      "sha256": "75a158df515d4da74ace3bf31597c1a1cd37bc9313488db2179f90994cd3be90",
+      "source": "https://github.com/vercel/ai/blob/%40ai-sdk%2Fanthropic%404.0.85/packages/anthropic/src/anthropic-language-model.ts#L1173"
+    }
+  ],
+  "runtimeEntrypoints": [
+    {
+      "package": "ai",
+      "file": "dist/index.js",
+      "sha256": "8c29951ffc77f4718a95faf19376caecafe655bac9b818166436fa8ce838aa5f"
+    },
+    {
+      "package": "@ai-sdk/openai",
+      "file": "dist/index.js",
+      "sha256": "20dd5c938371748d4a648bf30eab316f1c670faf27b2d469548e2defaae5808e"
+    },
+    {
+      "package": "@ai-sdk/anthropic",
+      "file": "dist/index.js",
+      "sha256": "6d32c7446d10705f7d895a84272c511268887e40c6e277638f2e6e14c65ec050"
+    },
+    {
+      "package": "@ai-sdk/provider-utils",
+      "file": "dist/index.js",
+      "sha256": "61cdeba5a3940111472ee49b04f629ccdf3cad81b06535405ed6a6f3d1ad5eaa"
+    }
+  ],
+  "architectureFiles": [
+    {
+      "file": "packages/plugins/src/provider-plugin.ts",
+      "sha256": "a3a3580a825974ea41c30064e968c4c50183fe0083548756c3feb9d2f4719c15"
+    },
+    {
+      "file": "packages/plugins/src/plugin-registry.ts",
+      "sha256": "e86fdaebc042a6bd6073125dab33cf90620c580703c3988128e87cb383cb029d"
+    },
+    {
+      "file": "packages/plugins/src/openai-compatible.ts",
+      "sha256": "1923ad5f33a8f64758eecc7a0fbaa3287a4489f8ab04da99652fda5f5984b79e"
+    },
+    {
+      "file": "packages/server/src/models/workflow-capabilities.factory.ts",
+      "sha256": "df50c4df18a0538a9be9c65ba6d4c8a3400d0ba7882b3cb443382b672c606832"
+    },
+    {
+      "file": "packages/server/src/models/provider-plugin.module.ts",
+      "sha256": "42e0db2b42022fd5bc2a69229ec092a6f39da32fe90b2484672bf59e386824cf"
+    },
+    {
+      "file": "packages/server/src/models/model-provider.service.ts",
+      "sha256": "6f01b95edf8be6990dfbe14bcff6adbccdefa6b0710f84dd2e4e35c74be848f0"
+    },
+    {
+      "file": "packages/workflow/src/node/text-generation.ts",
+      "sha256": "c78e703948b9fac70067232dff6d085f899ba891a651193b7e26af8b3584a275"
+    },
+    {
+      "file": "packages/database/prisma/schema.prisma",
+      "sha256": "da9b2e744899f1c31bb0937101470df278b7f1a72f0456cf31fa889611a229fc"
+    },
+    {
+      "file": "packages/plugins/src/capability-error.ts",
+      "sha256": "0bfa66e8b8faec0737b877ca16a0b911d04c3f89ca15a6598d5c8fd4f880ea8b"
+    }
+  ]
+}

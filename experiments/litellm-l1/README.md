@@ -1,5 +1,7 @@
 # LiteLLM Gateway 固定版本验证
 
+**REJECTED / NO-GO（路线最终结论）。** LiteLLM 已在后续 [L2.1](../litellm-l2-1/README.md) 被否决；本目录保留 L1 原始验证内容与结果，作为历史技术证据，不属于生产配置或待实施方案。
+
 本实验使用真实 LiteLLM Gateway 和本地 OpenAI / Anthropic 协议服务，验证请求级凭证、endpoint 覆盖、账户隔离及无数据库推理。它只验证 Gateway 边界，不连接 DramaFlow 数据库、Redis、Worker 或 Workflow Runtime；合成凭证直接模拟执行边界解密后的输入。
 
 ## 固定版本与复现

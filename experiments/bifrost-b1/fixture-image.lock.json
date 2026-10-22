@@ -1,0 +1,11 @@
+{
+  "version": "3.13.9",
+  "tag": "python:3.13.9-alpine3.22",
+  "image": "python@sha256:e5fa639e49b85986c4481e28faa2564b45aa8021413f31026c3856e5911618b1",
+  "platforms": {
+    "linux/arm64": "sha256:07e9547c0152615145df9d44c1e6ac36bc8c22240e717fa5944877775769d3da"
+  },
+  "configDigests": {
+    "linux/arm64": "sha256:052cb92092122a08c5f6bc22c9983b9bab843e9790a99e69e867e460d7346571"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "gpt-b1-listed-only": {
+    "supports_reasoning": false
+  },
+  "claude-b1-listed-only": {
+    "supports_reasoning": false
+  }
+}
