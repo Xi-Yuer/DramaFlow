@@ -15,7 +15,9 @@ import type {
   ModelSelectionResume,
 } from '@/features/workflow/model-selector';
 import { useWorkflowPublish } from '@/features/workflow/use-workflow-publish';
+import { useWorkflowRun } from '@/features/workflow/use-workflow-run';
 import { WorkflowPublishControls } from '@/features/workflow/workflow-publish-controls';
+import { WorkflowRunControls } from '@/features/workflow/workflow-run-controls';
 import { workflowPublishDisabledReason } from '@/features/workflow/workflow-draft-state';
 import { useWorkflowDraft } from '@/features/workflow/use-workflow-draft';
 import { projectApi } from './project-api';
@@ -41,6 +43,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
   const { getViewport, setViewport: setCanvasViewport } = useReactFlow();
   const draft = useWorkflowDraft(workflow);
   const publication = useWorkflowPublish(draft);
+  const workflowRun = useWorkflowRun(draft.workflowId, publication.latestPublishedVersion);
   const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
   const [setupRequest, setSetupRequest] = useState<{
     definitionId: string;
@@ -349,6 +352,27 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
           if (!publishDisabledReason) void publication.publish();
         }}
         onRetryVersions={() => void publication.versions.refetch()}
+      />
+      <WorkflowRunControls
+        versions={workflowRun.versions}
+        selectedVersionId={workflowRun.selectedVersionId}
+        version={workflowRun.version}
+        versionsLoading={workflowRun.versionsLoading}
+        versionLoading={workflowRun.versionLoading}
+        versionsError={workflowRun.versionsError}
+        versionError={workflowRun.versionError}
+        draftDirty={
+          draft.dirty ||
+          (publication.versions.isSuccess && !publication.currentSavedRevisionPublished)
+        }
+        values={workflowRun.values}
+        state={workflowRun.state}
+        onSelectVersion={workflowRun.selectVersion}
+        onChangeInput={workflowRun.changeInput}
+        onRun={() => void workflowRun.run()}
+        onRetry={() => void workflowRun.retry()}
+        onRetryVersions={() => void workflowRun.retryVersions()}
+        onRetryVersion={() => void workflowRun.retryVersion()}
       />
       <ModelSettings
         open={modelSettingsOpen}

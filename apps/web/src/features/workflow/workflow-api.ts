@@ -1,16 +1,20 @@
 import {
   publishWorkflowRequestSchema,
+  startWorkflowRunRequestSchema,
+  workflowRunResponseSchema,
   workflowVersionResponseSchema,
   workflowVersionListResponseSchema,
   saveWorkflowDraftRequestSchema,
   saveWorkflowDraftResponseSchema,
   workflowResponseSchema,
   type SaveWorkflowDraftRequest,
+  type StartWorkflowRunRequest,
 } from '@dramaflow/contracts';
 import type { WorkflowPublicationStatus } from './workflow-publish';
 import { ApiError, jsonBody, request } from '../../lib/http';
 
 export const workflowKeys = {
+  version: (versionId: string) => ['workflow-version', versionId] as const,
   versions: (workflowId: string) => ['workflow-versions', workflowId] as const,
   publication: (workflowId: string, revision: number) =>
     ['workflow-versions', workflowId, revision] as const,
@@ -18,6 +22,19 @@ export const workflowKeys = {
 };
 
 export const workflowApi = {
+  startRun: (input: StartWorkflowRunRequest) =>
+    request('/workflow-runs', workflowRunResponseSchema, {
+      method: 'POST',
+      body: jsonBody(startWorkflowRunRequestSchema.parse(input)),
+    }),
+  getVersion: (versionId: string) =>
+    request(`/workflow-versions/${encodeURIComponent(versionId)}`, workflowVersionResponseSchema),
+  listVersions: (workflowId: string, signal?: AbortSignal) =>
+    request(
+      `/workflows/${encodeURIComponent(workflowId)}/versions`,
+      workflowVersionListResponseSchema,
+      { signal },
+    ),
   publish: (workflowId: string, expectedRevision: number) =>
     request(`/workflows/${encodeURIComponent(workflowId)}/publish`, workflowVersionResponseSchema, {
       method: 'POST',
