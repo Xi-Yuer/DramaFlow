@@ -1,18 +1,25 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
   Controls,
   ReactFlow,
+  useReactFlow,
   type Connection,
   type OnMove,
 } from '@xyflow/react';
 import { useQuery } from '@tanstack/react-query';
 import { App, Button } from 'antd';
-import type { Project, WorkflowDefinition } from '@dramaflow/contracts';
+import type { NodeTypeManifest, Project, WorkflowDefinition } from '@dramaflow/contracts';
+import { createWorkflowNode } from './create-workflow-node';
+import { NodePicker } from './node-picker';
 import { nodeTypeApi, nodeTypeKeys } from './node-type-api';
-import { WorkflowModelActionsContext, type ModelSelectionIntent, type ModelSelectionResume } from './model-selector';
+import {
+  WorkflowModelActionsContext,
+  type ModelSelectionIntent,
+  type ModelSelectionResume,
+} from './model-selector';
 import { replaceNodeInput } from './template-input';
 import { WorkflowInputContext } from './workflow-input-context';
 import { WorkflowManifestProvider, workflowNodeTypes } from './workflow-node';
@@ -56,6 +63,8 @@ export function WorkflowCanvas({
   defaultViewport: Project['viewport'];
   onMoveEnd: OnMove;
 }) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition } = useReactFlow<WorkflowNode, WorkflowEdge>();
   const locked = reloading || interactionLocked;
   const { modal } = App.useApp();
   const nodeTypes = useQuery({ queryKey: nodeTypeKeys.list, queryFn: nodeTypeApi.list });
@@ -81,6 +90,29 @@ export function WorkflowCanvas({
     [workflow, selectedEdgeIds],
   );
 
+  function addNode(selection: NodeTypeManifest) {
+    if (locked || nodeTypes.isPending || nodeTypes.isError || !stageRef.current) return;
+    // 只接受当前目录中精确匹配的版本，目录失败时不使用兜底节点。
+    const manifest = nodeTypes.data.find(
+      (item) => item.type === selection.type && item.version === selection.version,
+    );
+    if (!manifest) return;
+    const bounds = stageRef.current.getBoundingClientRect();
+    // 连续新增稍微错开，避免多个新节点初始完全重叠。
+    const offset = (workflow.nodes.length % 5) * 24;
+    const position = screenToFlowPosition({
+      x: bounds.left + Math.max(24, (bounds.width - 300) / 2) + offset,
+      y: bounds.top + Math.min(120, bounds.height / 3) + offset,
+    });
+    const node = createWorkflowNode(
+      manifest,
+      `node_${crypto.randomUUID()}`,
+      manifest.metadata.name,
+      position,
+    );
+    onEdit((current) => ({ ...current, nodes: [...current.nodes, node] }));
+  }
+
   function commitDataConnection(
     connection: Connection,
     apply: (current: WorkflowDefinition, replaceBinding: boolean) => WorkflowDefinition,
@@ -100,7 +132,12 @@ export function WorkflowCanvas({
   }
 
   return (
-    <div className="canvas-stage">
+    <div className="canvas-stage" ref={stageRef}>
+      <NodePicker
+        manifests={nodeTypes.data ?? []}
+        disabled={locked || nodeTypes.isPending || nodeTypes.isError || !nodeTypes.data?.length}
+        onSelect={addNode}
+      />
       <WorkflowModelActionsContext.Provider
         value={{
           projectId,
@@ -212,14 +249,14 @@ export function WorkflowCanvas({
             {nodeTypes.isPending
               ? '正在加载节点目录…'
               : nodeTypes.isError
-                ? '节点目录加载失败，请重新加载项目。'
+                ? '节点目录加载失败，请重试加载目录。'
                 : nodeTypes.data.length === 0
                   ? '当前暂无可用节点。'
-                  : '当前草稿还没有节点。节点添加与配置尚未开放。'}
+                  : '点击左上角“添加节点”，开始编排工作流。'}
           </span>
         </div>
       ) : null}
-      {workflow.nodes.length > 0 && nodeTypes.isError ? (
+      {nodeTypes.isError ? (
         <div className="canvas-catalog-error" role="status">
           节点目录加载失败，已有草稿仍保留。
           <Button size="small" onClick={() => void nodeTypes.refetch()}>

@@ -43,7 +43,11 @@
 
 ## Web Workflow 浏览器验证
 
+浏览器验证默认人工执行，不自动运行浏览器测试。下列现有脚本保留，仅在用户明确要求自动化浏览器验证时使用。
+
 `pnpm test:web:workflow` / `pnpm test:web:models` 使用 Playwright 与系统 Google Chrome，不下载浏览器。需要 Node 24、根 `.env`、本机基础设施及已初始化的 dramaflow_test。
+
+覆盖目录驱动的通用节点创建、incomplete 草稿保存刷新、视口坐标转换及目录失败禁用入口；负向网络拦截仅用于测试。
 
 脚本构建 API / Web，在 3200 / 3201 启动服务，使用随机账号与隔离队列，结束清理本次测试数据。不要与其他占用同一测试库或端口的检查并行。失败截图在被忽略的 apps/web/test-results。测试代理构建结束后，常规开发可用 `pnpm build --filter=@dramaflow/web` 恢复代理配置。
 

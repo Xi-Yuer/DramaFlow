@@ -599,7 +599,7 @@ a {
 }
 .canvas-catalog-error {
   position: absolute;
-  top: 12px;
+  top: 56px;
   left: 12px;
   z-index: 5;
   display: flex;

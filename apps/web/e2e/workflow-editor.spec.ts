@@ -78,6 +78,11 @@ async function readWorkflow(api: APIRequestContext, projectId: string) {
 }
 const node = (page: Page) => page.locator('.react-flow__node[data-id="a"]');
 const status = (page: Page) => page.getByRole('status', { name: '工作流草稿状态' });
+// loading 图标会参与可访问名称，按工作流分组和文本后缀定位。
+const saveButton = (page: Page) =>
+  page
+    .getByRole('group', { name: '工作流草稿', exact: true })
+    .getByRole('button', { name: /保存草稿$/ });
 async function move(page: Page, dx = 80, dy = 60) {
   const header = node(page).locator('header');
   await expect(header).toBeVisible();
@@ -88,10 +93,12 @@ async function move(page: Page, dx = 80, dy = 60) {
   await page.mouse.up();
 }
 async function save(page: Page) {
+  const button = saveButton(page);
+  await expect(button).not.toHaveClass(/ant-btn-loading/);
   const response = page.waitForResponse(
     (r) => r.request().method() === 'PUT' && r.url().endsWith('/draft'),
   );
-  await page.getByRole('button', { name: '保存草稿', exact: true }).click();
+  await button.click();
   return response;
 }
 
@@ -106,12 +113,15 @@ test('用户新建项目直接加载真实空草稿，不触发初始化 POST', 
   const created = page.waitForResponse(
     (r) => r.request().method() === 'POST' && r.url().endsWith('/api/v1/projects'),
   );
-  await page.getByRole('button', { name: /创\s*建/, exact: true }).click();
+  await page
+    .getByRole('dialog', { name: '新建项目' })
+    .getByRole('button', { name: /^创\s*建$/ })
+    .click();
   const project = projectSchema.parse(await (await created).json());
   await expect(status(page)).toHaveText('草稿已保存 · 修订 1');
   const workflow = await readWorkflow(request, project.id);
   expect(workflow.draft).toEqual({ inputs: [], nodes: [], edges: [], outputs: [] });
-  await expect(page.getByText('当前草稿还没有节点。节点添加与配置尚未开放。')).toBeVisible();
+  await expect(page.getByText('点击左上角“添加节点”，开始编排工作流。')).toBeVisible();
   expect(initialized).toEqual([]);
 });
 
@@ -222,7 +232,7 @@ test('409 保留本地图并阻止覆盖；取消读取不丢修改，确认读�
   ).toBeTruthy();
   expect((await save(page)).status()).toBe(409);
   await expect(status(page)).toHaveText('草稿修订冲突');
-  await expect(page.getByRole('button', { name: '保存草稿', exact: true })).toBeDisabled();
+  await expect(saveButton(page)).toBeDisabled();
   const localPosition = await node(page).getAttribute('style');
   await page.getByRole('button', { name: '重新读取草稿' }).click();
   await page.getByRole('button', { name: '继续编辑', exact: true }).click();
@@ -247,7 +257,7 @@ test('服务端或网络保存失败保持未确认和原修订，重试可以�
   expect((await readWorkflow(request, project.id)).revision).toBe(workflow.revision);
   await page.unroute('**/api/v1/workflows/*/draft');
   await page.route('**/api/v1/workflows/*/draft', (route) => route.abort('failed'));
-  await page.getByRole('button', { name: '保存草稿', exact: true }).click();
+  await saveButton(page).click();
   await expect(
     page.getByText('草稿保存结果未确认，请检查网络后重试', { exact: true }),
   ).toBeVisible();
@@ -275,7 +285,7 @@ test('保存期间继续移动不会误报已全部保存，后一次保存使�
     await gate;
     await route.continue();
   });
-  await page.getByRole('button', { name: '保存草稿', exact: true }).click();
+  await saveButton(page).click();
   await waiting;
   await move(page, 60, 30);
   release();
@@ -344,7 +354,7 @@ test('窄屏仍显示两个独立保存状态和操作，不产生页面横向�
   await page.goto(`/projects/${project.id}`);
   await expect(status(page)).toBeVisible();
   await expect(page.getByRole('button', { name: '保存项目信息', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '保存草稿', exact: true })).toBeVisible();
+  await expect(saveButton(page)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 

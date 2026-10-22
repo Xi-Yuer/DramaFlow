@@ -2,18 +2,8 @@
 
 import { createContext, useContext, type ReactNode } from 'react';
 import { Handle, Position, type NodeProps, type NodeTypes } from '@xyflow/react';
-import {
-  ArrowLeftFromLine,
-  ArrowRightToLine,
-  AudioLines,
-  Box,
-  BrainCircuit,
-  Database,
-  GitBranch,
-  Image as ImageIcon,
-  Video,
-} from 'lucide-react';
 import type { DataType, NodeTypeManifest } from '@dramaflow/contracts';
+import { NodeTypeIcon } from './node-type-icon';
 import { ModelSelector } from './model-selector';
 import type { WorkflowNode } from './react-flow-adapter';
 import { TemplateInputEditor } from './template-input-editor';
@@ -41,23 +31,6 @@ export function findNodeManifest(
 ) {
   return manifests.find((manifest) => manifest.type === type && manifest.version === version);
 }
-
-const nodeIcons = {
-  input: <ArrowLeftFromLine size={16} />,
-  ai: <BrainCircuit size={16} />,
-  image: <ImageIcon size={16} />,
-  video: <Video size={16} />,
-  audio: <AudioLines size={16} />,
-  flow: <GitBranch size={16} />,
-  data: <Database size={16} />,
-  output: <ArrowRightToLine size={16} />,
-};
-
-const metadataIcons = new Map([
-  ['text', nodeIcons.ai],
-  ['brain', nodeIcons.ai],
-  ...Object.entries(nodeIcons),
-]);
 
 const dataTypeNames: Record<string, string> = {
   any: '任意',
@@ -96,11 +69,6 @@ export function GenericWorkflowNode({
   const manifests = useContext(ManifestContext);
   const inputActions = useContext(WorkflowInputContext);
   const manifest = findNodeManifest(manifests, data.nodeType, data.typeVersion);
-  const icon = manifest ? (
-    (metadataIcons.get(manifest.metadata.icon ?? '') ?? nodeIcons[manifest.metadata.category])
-  ) : (
-    <Box size={16} />
-  );
 
   return (
     <article
@@ -131,7 +99,7 @@ export function GenericWorkflowNode({
           </>
         ) : null}
         <span className={styles.icon} aria-hidden="true">
-          {icon}
+          <NodeTypeIcon metadata={manifest?.metadata} />
         </span>
         <div className={styles.title}>
           <strong>{data.name}</strong>

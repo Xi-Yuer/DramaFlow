@@ -6,13 +6,15 @@
 
 已有登录、账户中心、项目管理、React Flow 草稿编辑和项目模型管理。前端使用 Next.js App Router、Ant Design、TanStack Query；业务 API 默认认证，项目按当前所有者隔离。
 
-Web 可加载 / 保存真实草稿、移动节点、编辑 Data / Control Edge；尚无节点添加 / 配置、节点模型选择、发布和运行操作。服务端已有正式发布与 Run HTTP。每项目一个逻辑 Workflow，Project 与 Draft 分别保存 revision，发布另有 version。
+Web 可加载 / 保存真实草稿，从 Node Types 目录添加节点、移动节点、编辑 Data / Control Edge；文本节点支持模型选择和 prompt / system 上游变量编辑。尚无节点删除 / 重命名、发布和运行操作。服务端已有正式发布与 Run HTTP。每项目一个逻辑 Workflow，Project 与 Draft 分别保存 revision，发布另有 version。
 
 PostgreSQL / Prisma 保存业务记录，Redis / BullMQ 交付执行命令，RustFS 保存内容，官方 PostgreSQL Checkpointer 保存图快照。API 负责提交，独立 Worker 执行图。
 
 ## Workflow 基础库
 
 `packages/contracts` 定义中立 JSON 协议；`packages/workflow` 提供类型 / 节点 Registry、发布静态校验、Binding / Codec、Action Compiler、Submission 与 Runner。普通确定性 Action DAG 已可执行；其他 executionKind 只有声明边界。
+
+节点 Picker 使用 API 返回的 Manifest 展示名称、描述、图标和 category。通用创建 helper 精确保留 type / version，仅应用 Manifest 显式 defaultValue；Editor 生成实例 ID，并将可见区域的屏幕位置经 React Flow 转为画布坐标。新增节点写入 WorkflowDefinition.nodes，复用 Draft dirty / 保存链路；不创建连线、Workflow 输入输出或模型绑定，目录不可用时禁用创建。
 
 草稿可保留未完成配置；发布严格验证真实节点 / 端口、类型、必填来源及本地模型绑定。版本保存完整不可变定义，以 workflowId / version、workflowId / sourceRevision 唯一约束保护。执行只读取指定版本，不回退 draft / latest。
 
