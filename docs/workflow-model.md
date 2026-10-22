@@ -31,6 +31,14 @@ inline 内容同时检查运行值标签类型和 Workflow 声明类型，递归
 
 最后一个节点的输出不是 Workflow Output。输出显式声明 name、type，以及来源 nodeId 和 outputKey。来源必须存在且类型兼容。WorkflowRun.outputs 只按声明名称收集；缺失输出不能用空值或其他节点结果补齐。
 
+## Start invocation 身份
+
+invocationKey 标识调用方的一次逻辑 Workflow 调用，与 WorkflowRun 一同持久保存，并由数据库 UNIQUE(workflowId, invocationKey) 约束。不同 Workflow 可复用同名 key；版本不参与唯一作用域。同一次调用的网络重试复用 key，明确再次运行使用新 key。key 不自动生成、不设 TTL，Run 进入任何终态仍占用它。
+
+公共 Submission 先加载固定版本并校验 invocation contract，再调用 Repository 原子创建或读取唯一约束的胜者。新建时 Run 与 start Outbox 同事务提交；复用时不创建第二条记录。等价性由领域层比较 workflowId、workflowVersionId 和完整 RuntimeValue inputs：递归对象键顺序无关，数组顺序、缺失键与 null、type、inline value 及 reference 描述均参与比较；不读取引用内容。差异抛 WORKFLOW_INVOCATION_CONFLICT，HTTP 映射 409；等价则返回原 Run，不要求其仍为 pending，不重跑终态。
+
+Repository 只处理持久化与唯一竞争，不判断领域等价性。invocationKey 随 Run 身份不可改写；历史 Run 迁移时补独立 legacy key，不合并历史调用，也不为新请求保留数据库默认值。Agent、SubWorkflow、Batch 等未来调用方直接复用公共 Submission 的 key 语义。
+
 ## 版本
 
 发布校验并冻结完整定义，不修改草稿 revision，不调用模型。保存草稿和发布都携带 expectedRevision。过期保存返回 WORKFLOW_REVISION_CONFLICT。同一 workflowId 与 sourceRevision 只能发布一次，重复请求返回 WORKFLOW_REVISION_ALREADY_PUBLISHED。失败不写版本、不消耗版本号。

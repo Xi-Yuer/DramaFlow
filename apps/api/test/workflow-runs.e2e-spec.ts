@@ -71,6 +71,7 @@ function create() {
     projectId,
     workflowId: 'workflow-1',
     workflowVersionId: 'version-3',
+    invocationKey: randomUUID(),
     inputs: {},
   });
 }
@@ -94,6 +95,7 @@ describe('真实 PostgreSQL WorkflowRun', () => {
       projectId,
       workflowId: 'workflow-1',
       workflowVersionId: 'version-3',
+      invocationKey: randomUUID(),
       inputs,
     });
     inputs.count.value = 99;
@@ -118,6 +120,7 @@ describe('真实 PostgreSQL WorkflowRun', () => {
         projectId,
         workflowId: 'workflow-1',
         workflowVersionId: '',
+        invocationKey: randomUUID(),
         inputs: {},
       }),
     ).rejects.toThrow();
@@ -127,6 +130,7 @@ describe('真实 PostgreSQL WorkflowRun', () => {
           projectId,
           workflowId: 'workflow-1',
           workflowVersionId: 'version-4',
+          invocationKey: randomUUID(),
           threadId: run.threadId,
           inputs: {},
         },
@@ -267,6 +271,7 @@ describe('真实 PostgreSQL WorkflowRun', () => {
         projectId: otherProjectId,
         workflowId: 'w',
         workflowVersionId: 'v',
+        invocationKey: randomUUID(),
         inputs: {},
       }),
     ).rejects.toThrow('不匹配');

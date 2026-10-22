@@ -147,6 +147,7 @@ async function fixture(native = false, businessFailure = false) {
     projectId: project.id,
     workflowId: workflow.id,
     workflowVersionId: version.id,
+    invocationKey: randomUUID(),
     inputs: {},
   };
   const submission = await submissions.forProject(ownerId, project.id);
@@ -514,7 +515,7 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
     ).toMatchObject({ status: 'pending', startedAt: null });
   });
 
-  it('Outbox 写入失败会回滚 Run；投递故障保留 pending 意图和尝试次数，不 claim', async () => {
+  it('Outbox 写入失败回滚 Run 且不占用 key；投递故障保留 pending 意图', async () => {
     const f = await fixture();
     const submit = await runs.forProject(ownerId, f.input.projectId);
     // 真正让 Outbox INSERT 失败，证明已插入 Run 也随同一事务回滚。
@@ -538,6 +539,10 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
       await db.workflowRun.count({ where: { projectId: f.input.projectId } }),
     ).toBe(0);
     const run = await f.submission.start(f.input);
+    expect(run.invocationKey).toBe(f.input.invocationKey);
+    expect(
+      await db.workflowRun.count({ where: { workflowId: f.input.workflowId } }),
+    ).toBe(1);
     const failing = vi
       .spyOn(queue, 'publish')
       .mockRejectedValue(new Error('redis-secret-marker'));

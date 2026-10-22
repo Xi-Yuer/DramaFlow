@@ -21,3 +21,10 @@ export class WorkflowResumeAlreadySubmittedError extends Error {
     this.name = 'WorkflowResumeAlreadySubmittedError';
   }
 }
+export class WorkflowInvocationConflictError extends Error {
+  readonly code = 'WORKFLOW_INVOCATION_CONFLICT';
+  constructor(public readonly workflowRunId: string) {
+    super('invocationKey 已用于不同的工作流版本或输入');
+    this.name = 'WorkflowInvocationConflictError';
+  }
+}

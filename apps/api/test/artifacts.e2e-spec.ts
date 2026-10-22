@@ -110,6 +110,7 @@ async function fixture(owner = ownerId) {
     projectId: project.id,
     workflowId: workflow.id,
     workflowVersionId: version.id,
+    invocationKey: randomUUID(),
     inputs: {},
   });
   return { ownerId: owner, projectId: project.id, run };
@@ -313,6 +314,7 @@ describe('生产 Artifact：PostgreSQL + RustFS + Runtime + persistent checkpoin
       projectId: f.projectId,
       workflowId: f.run.workflowId,
       workflowVersionId: f.run.workflowVersionId,
+      invocationKey: randomUUID(),
       inputs: {},
     });
     const same = await app

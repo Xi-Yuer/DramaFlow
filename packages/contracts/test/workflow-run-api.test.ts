@@ -6,8 +6,8 @@ import {
 } from '../src/index.js';
 
 describe('Workflow Run HTTP 契约', () => {
-  it('start 只接受明确版本及 RuntimeValue inputs，拒绝调用方指定执行身份和状态', () => {
-    const request = { workflowVersionId: 'version-1', inputs: {} };
+  it('start 接收明确版本、调用 key 及 RuntimeValue inputs，拒绝指定执行身份和状态', () => {
+    const request = { workflowVersionId: 'version-1', invocationKey: 'invocation-1', inputs: {} };
     expect(startWorkflowRunRequestSchema.parse(request)).toEqual(request);
     for (const key of ['threadId', 'status', 'workflowId', 'projectId', 'definition', 'ownerId'])
       expect(
@@ -19,6 +19,17 @@ describe('Workflow Run HTTP 契约', () => {
     expect(
       startWorkflowRunRequestSchema.safeParse({ ...request, inputs: { prompt: 'raw' } }).success,
     ).toBe(false);
+  });
+
+  it('invocationKey 必填、非空、保留原值且有长度上限', () => {
+    const request = { workflowVersionId: 'version-1', inputs: {} };
+    for (const invocationKey of [undefined, '', ' leading', 'trailing ', 'x'.repeat(201)])
+      expect(startWorkflowRunRequestSchema.safeParse({ ...request, invocationKey }).success).toBe(
+        false,
+      );
+    expect(
+      startWorkflowRunRequestSchema.parse({ ...request, invocationKey: 'call-A_1' }).invocationKey,
+    ).toBe('call-A_1');
   });
 
   it('resume 必须显式提供 value，允许 falsy / null / 对象，不允许覆盖 thread 或版本', () => {
@@ -38,6 +49,7 @@ describe('Workflow Run HTTP 契约', () => {
       id: 'run',
       workflowId: 'workflow',
       workflowVersionId: 'version',
+      invocationKey: 'invocation-1',
       status: 'completed',
       inputs: {},
       outputs: {},

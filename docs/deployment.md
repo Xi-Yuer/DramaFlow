@@ -14,7 +14,7 @@ Prisma 迁移保存身份、资料、会话、项目、Workflow / WorkflowVersio
 
 - 表名使用 lowercase snake_case。不使用 PascalCase、camelCase，也不靠双引号保留大小写。Prisma `@@map` 同样遵守。`20261022120000_rename_legacy_pascal_tables` 先把遗留 PascalCase 表改成小写；`20261022130000_drop_unused_legacy_tables` 再删除这些已不在当前模型中的表，以及 public 里不再使用的 checkpoint、project_asset、asset_version。现行业务表和 langgraph schema 不删除。
 - 每项目一个 Workflow。版本不可更新，workflowId / version 与 workflowId / sourceRevision 唯一。
-- Run 的身份、版本和输入不可改写；状态转换由数据库约束保护。threadId 唯一。
+- Run 的身份、invocationKey、版本和输入不可改写；状态转换由数据库约束保护。threadId 唯一，workflowId / invocationKey 唯一。Start key 随 Run 生命周期保留；历史 Run 由增量迁移补独立 legacy key，新建无数据库默认 key。
 - NodeRun 的 workflowRunId、nodeId、attempt 唯一，attempt 为正数，终态字段一致。
 - Artifact 只有 writing / ready / failed；内容身份不可改，终态不可覆盖。对象本体不在数据库。
 - Provider 的插件版本、configuration，以及模型的 Provider、capability、model、settings 创建后不可改。enabled 和凭证密文可以按服务操作更新。删除配置不是已交付的产品入口。

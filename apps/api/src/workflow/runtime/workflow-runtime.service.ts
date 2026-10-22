@@ -14,7 +14,7 @@ import type {
   ResumeWorkflowRunInput,
   StartWorkflowRunInput,
 } from '@dramaflow/workflow';
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import {
   workflowResourceNotFound,
   workflowRuntimeHttpError,
@@ -49,10 +49,22 @@ export class WorkflowRuntimeService {
           projectId: version.workflow.projectId,
           workflowId: version.workflow.id,
           workflowVersionId: request.workflowVersionId,
+          invocationKey: request.invocationKey,
           inputs: request.inputs,
         });
         // 成功响应前确认 Redis 入队；故障时 PostgreSQL Outbox 仍可由 Worker 重投。
-        await this.dispatcher.publishStart(pending.id);
+        if (pending.status === 'pending') {
+          try {
+            await this.dispatcher.publishStart(pending.id);
+          } catch {
+            throw new ServiceUnavailableException({
+              code: 'WORKFLOW_QUEUE_UNAVAILABLE',
+              message: '执行命令已持久保存，入队结果尚未确认',
+              workflowRunId: pending.id,
+              invocationKey: pending.invocationKey,
+            });
+          }
+        }
         return pending;
       },
     );
@@ -68,6 +80,7 @@ export class WorkflowRuntimeService {
         id: run.id,
         workflowId: run.workflowId,
         workflowVersionId: run.workflowVersionId,
+        invocationKey: run.invocationKey,
         status: run.status,
         inputs: run.inputs,
         createdAt: run.createdAt.toISOString(),
@@ -110,6 +123,7 @@ export class WorkflowRuntimeService {
         projectId: true,
         workflowId: true,
         workflowVersionId: true,
+        invocationKey: true,
         status: true,
         inputs: true,
         outputs: true,

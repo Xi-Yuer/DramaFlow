@@ -4,13 +4,14 @@ import {
   workflowIdentifierSchema,
   workflowRunErrorSchema,
   workflowRunSchema,
+  workflowInvocationKeySchema,
   type RuntimeValue,
   type WorkflowRun,
   type WorkflowRunError,
   workflowExecutionJobSchema,
   type ResumeWorkflowExecutionJob,
 } from '@dramaflow/contracts';
-import type { Prisma } from '@dramaflow/database';
+import { Prisma } from '@dramaflow/database';
 import { DatabaseService } from '../database/database.service.js';
 import {
   WorkflowRunNotWaitingError,
@@ -27,6 +28,7 @@ const createInputSchema = z
     projectId: z.uuid(),
     workflowId: workflowIdentifierSchema,
     workflowVersionId: workflowIdentifierSchema,
+    invocationKey: workflowInvocationKeySchema,
     inputs: runtimeValueMapSchema,
   })
   .strict();
@@ -47,6 +49,7 @@ function toWorkflowRun(row: Prisma.WorkflowRunGetPayload<Record<string, never>>)
     projectId: row.projectId,
     workflowId: row.workflowId,
     workflowVersionId: row.workflowVersionId,
+    invocationKey: row.invocationKey,
     threadId: row.threadId,
     status: row.status,
     inputs: row.inputs,
@@ -93,19 +96,37 @@ class PrismaWorkflowRunRepository
     return this.db.client.$transaction((tx) => this.createRecord(tx, parsed));
   }
 
-  async createWithExecution(input: CreateWorkflowRunInput): Promise<WorkflowRun> {
+  async createWithExecution(
+    input: CreateWorkflowRunInput,
+  ): Promise<{ run: WorkflowRun; created: boolean }> {
     const parsed = createInputSchema.parse(input);
-    return this.db.client.$transaction(async (tx) => {
-      const run = await this.createRecord(tx, parsed);
-      await tx.workflowExecutionOutbox.create({
-        data: {
-          kind: 'start',
-          workflowRunId: run.id,
-          payload: { kind: 'start', workflowRunId: run.id },
+    try {
+      return await this.db.client.$transaction(async (tx) => {
+        const run = await this.createRecord(tx, parsed);
+        await tx.workflowExecutionOutbox.create({
+          data: {
+            kind: 'start',
+            workflowRunId: run.id,
+            payload: { kind: 'start', workflowRunId: run.id },
+          },
+        });
+        return { run, created: true };
+      });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
+        throw error;
+      // 唯一冲突结束并回滚本次事务后，再读取已提交的胜者；领域层判断调用是否等价。
+      const existing = await this.db.client.workflowRun.findFirst({
+        where: {
+          workflowId: parsed.workflowId,
+          invocationKey: parsed.invocationKey,
+          projectId: this.scope.projectId,
+          project: { ownerId: this.scope.ownerId },
         },
       });
-      return run;
-    });
+      if (!existing) throw error; // 其他唯一冲突不能伪装成幂等命中。
+      return { run: toWorkflowRun(existing), created: false };
+    }
   }
 
   async createResumeExecution(input: {

@@ -6,6 +6,7 @@ import {
   WorkflowResumeAlreadySubmittedError,
   WorkflowRunRecordingError,
   WorkflowInvocationValidationError,
+  WorkflowInvocationConflictError,
 } from '@dramaflow/workflow';
 import {
   ConflictException,
@@ -49,6 +50,12 @@ export function workflowRuntimeHttpError(
   error: unknown,
   notFoundCode: WorkflowResourceNotFoundCode,
 ): HttpException {
+  if (error instanceof WorkflowInvocationConflictError)
+    return new ConflictException({
+      code: error.code,
+      message: error.message,
+      workflowRunId: error.workflowRunId,
+    });
   if (error instanceof WorkflowInvocationValidationError) {
     const response = { code: error.code, message: error.message };
     if (error.code === 'WORKFLOW_INVOCATION_TYPE_SCHEMA_UNAVAILABLE')
@@ -80,11 +87,22 @@ export function workflowRuntimeHttpError(
     error instanceof HttpException &&
     error.getStatus() === 503 &&
     errorCode(error) === 'WORKFLOW_QUEUE_UNAVAILABLE'
-  )
+  ) {
+    const body = error.getResponse();
+    const accepted = typeof body === 'object' && body !== null ? body : {};
     return new ServiceUnavailableException({
       code: 'WORKFLOW_QUEUE_UNAVAILABLE',
-      message: '执行命令已持久保存，队列暂不可用',
+      message: '执行命令已持久保存，入队结果尚未确认',
+      ...('workflowRunId' in accepted &&
+      typeof accepted.workflowRunId === 'string'
+        ? { workflowRunId: accepted.workflowRunId }
+        : {}),
+      ...('invocationKey' in accepted &&
+      typeof accepted.invocationKey === 'string'
+        ? { invocationKey: accepted.invocationKey }
+        : {}),
     });
+  }
   if (error instanceof HttpException && error.getStatus() === 404)
     return workflowResourceNotFound(notFoundCode);
   if (

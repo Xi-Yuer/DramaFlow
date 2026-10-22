@@ -5,6 +5,7 @@ import {
   WorkflowRunNotPendingError,
   WorkflowRunRecordingError,
   WorkflowInvocationValidationError,
+  WorkflowInvocationConflictError,
 } from '@dramaflow/workflow';
 import { describe, expect, it } from 'vitest';
 import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
@@ -32,6 +33,34 @@ describe('Runtime HTTP 错误边界', () => {
     expect(JSON.stringify(mapped.getResponse())).not.toMatch(
       /private|cause|stack/,
     );
+  });
+
+  it('invocation 冲突为 409；入队确认错误只保留已受理身份和安全摘要', () => {
+    const conflict = workflowRuntimeHttpError(
+      new WorkflowInvocationConflictError('run-a'),
+      'WORKFLOW_VERSION_NOT_FOUND',
+    );
+    expect(conflict.getStatus()).toBe(409);
+    expect(conflict.getResponse()).toMatchObject({
+      code: 'WORKFLOW_INVOCATION_CONFLICT',
+      workflowRunId: 'run-a',
+    });
+    const queue = workflowRuntimeHttpError(
+      new ServiceUnavailableException({
+        code: 'WORKFLOW_QUEUE_UNAVAILABLE',
+        message: 'private-driver-error',
+        workflowRunId: 'run-a',
+        invocationKey: 'call-a',
+        driver: 'private-driver-data',
+      }),
+      'WORKFLOW_VERSION_NOT_FOUND',
+    );
+    expect(queue.getStatus()).toBe(503);
+    expect(queue.getResponse()).toMatchObject({
+      workflowRunId: 'run-a',
+      invocationKey: 'call-a',
+    });
+    expect(JSON.stringify(queue.getResponse())).not.toContain('private');
   });
 
   it('领域修订冲突保持 409，Checkpoint unavailable 保持 503，均只返回白名单说明', () => {

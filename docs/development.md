@@ -25,6 +25,7 @@
 | auth、workflows、workflow-versions、workflow-editor-api   | 权限、字段、修订与发布并发、严格静态语义              |
 | workflow-runs、workflow-runner、node-runs                 | 真实 Repository、状态转换、attempt 和并发 claim       |
 | persistent-checkpoint、workflow-runtime、workflow-run-api | 跨进程持久恢复、API / Worker 装配和 HTTP              |
+| workflow-invocation                                       | 调用 key 唯一竞争、六种状态复用、参数冲突和身份不可变 |
 | workflow-queue                                            | Outbox 事务、SIGKILL / stalled 重投、结果不明不重跑   |
 | artifacts                                                 | 真正 PostgreSQL / RustFS 内容写入、引用读取与故障补偿 |
 | model-management、ai-text                                 | 管理 HTTP、安全凭证链、两种文本协议与正式 Worker 执行 |

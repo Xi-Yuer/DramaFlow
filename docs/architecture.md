@@ -52,17 +52,17 @@ Node 目录与执行共用 `WorkflowNodeRegistryModule`。`ArtifactRuntimeFactor
 
 ## Workflow Run HTTP API
 
-| 方法与路径                        | 行为                                              |
-| --------------------------------- | ------------------------------------------------- |
-| POST /workflow-runs               | `{ workflowVersionId, inputs }`，受理成功返回 202 |
-| GET /workflow-runs/:runId         | 状态、输入、最终输出和安全错误摘要                |
-| POST /workflow-runs/:runId/resume | `{ value }`，受理成功返回 202                     |
+| 方法与路径                        | 行为                                                             |
+| --------------------------------- | ---------------------------------------------------------------- |
+| POST /workflow-runs               | `{ workflowVersionId, invocationKey, inputs }`，受理成功返回 202 |
+| GET /workflow-runs/:runId         | 状态、输入、最终输出和安全错误摘要                               |
+| POST /workflow-runs/:runId/resume | `{ value }`，受理成功返回 202                                    |
 
-身份由当前用户与固定版本派生，拒绝客户端提供 threadId、状态或项目归属。响应不公开 threadId / executionId；非 waiting 或重复恢复意图为 409。HTTP 在事务提交后确认入队；503 仍可能已保存可执行意图，不能据此盲目重提。
+身份由当前用户与固定版本派生，拒绝客户端提供 threadId、状态或项目归属。响应不公开 threadId / executionId；非 waiting 或重复恢复意图为 409。Start 的 invocationKey 必填（1—200 字符，不含首尾空白），由调用方在首次请求前生成并持有。HTTP 在 pending Run 事务提交后确认入队；确认失败返回 WORKFLOW_QUEUE_UNAVAILABLE（503），携带 workflowRunId / invocationKey。客户端重试必须复用原 key；明确再次运行使用新 key。非 pending 的幂等复用直接返回原 Run 当前状态，沿用 202 响应。
 
 ## Workflow Execution Queue
 
-Run 与 start Outbox 同事务写入；resume 在行锁下按 waitingRevision 创建唯一恢复意图。Job 只携带 kind、workflowRunId，resume 另含 executionId / value，不复制定义、State 或 thread。
+Start 按 (workflowId, invocationKey) 唯一受理，Run 与 start Outbox 同事务写入；resume 在行锁下按 waitingRevision 创建唯一恢复意图。Job 只携带 kind、workflowRunId，resume 另含 executionId / value，不复制定义、State 或 thread。
 
 Worker 在执行前核对意图并原子 claim。claim 前基础设施故障可以重投；业务失败不自动重跑。claim 后进程退出或结果不明进入 recovery_required，Run 保留真实状态；已有 completed / 下一 waiting 只补记意图终态。没有自动恢复或人工处理入口，详见 [Runtime](runtime-architecture.md)。
 

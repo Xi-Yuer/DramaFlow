@@ -202,6 +202,7 @@ async function fixture(
     projectId,
     workflowId: version.workflowId,
     workflowVersionId: version.id,
+    invocationKey: randomUUID(),
     inputs: { a: { storage: 'inline' as const, type: NumberType, value: 10 } },
   };
   const submission = new DefaultWorkflowRunSubmissionService(versions, runs);

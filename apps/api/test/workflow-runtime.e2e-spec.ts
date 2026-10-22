@@ -141,6 +141,7 @@ async function fixture(unknownNode = false) {
     projectId: project.id,
     workflowId: workflow.id,
     workflowVersionId: version.id,
+    invocationKey: randomUUID(),
     inputs: {},
   };
 }

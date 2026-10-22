@@ -83,6 +83,7 @@ async function createParentRun(
     projectId: project,
     workflowId: 'workflow',
     workflowVersionId: 'version',
+    invocationKey: randomUUID(),
     inputs: {},
   });
   await repository.markRunning(run.id);

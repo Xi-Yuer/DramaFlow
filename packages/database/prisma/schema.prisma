@@ -160,6 +160,7 @@ model WorkflowRun {
   projectId         String                    @db.Uuid
   workflowId        String
   workflowVersionId String
+  invocationKey     String
   threadId          String                    @unique
   status            String                    @default("pending")
   inputs            Json
@@ -175,6 +176,7 @@ model WorkflowRun {
   artifacts         Artifact[]
 
   @@unique([id, projectId])
+  @@unique([workflowId, invocationKey])
   @@index([projectId])
   @@index([workflowId])
   @@index([workflowVersionId])

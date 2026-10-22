@@ -57,6 +57,7 @@ export function workflowRunnerFixture() {
     projectId: version.projectId,
     workflowId: version.workflowId,
     workflowVersionId: version.id,
+    invocationKey: 'invocation-1',
     inputs: { a: { storage: 'inline' as const, type: NumberType, value: 10 } },
   };
   const getVersion = vi
@@ -191,9 +192,15 @@ export function workflowRunnerFixture() {
   const runner = new DefaultWorkflowRunner({ getVersion }, runs, { compile }, resolver);
   let intent = 0;
   const submissionRepository = {
-    createWithExecution: vi.fn((request: Parameters<typeof runs.create>[0]) =>
-      runs.create(request),
-    ),
+    createWithExecution: vi.fn(async (request: Parameters<typeof runs.create>[0]) => {
+      if (
+        stored &&
+        stored.workflowId === request.workflowId &&
+        stored.invocationKey === request.invocationKey
+      )
+        return { run: structuredClone(stored), created: false };
+      return { run: await runs.create(request), created: true };
+    }),
     async createResumeExecution(request: { workflowRunId: string; value: unknown }) {
       const run = await runs.getById(request.workflowRunId);
       if (!run || run.status !== 'waiting') throw new Error('运行不在 waiting');

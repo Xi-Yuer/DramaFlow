@@ -290,6 +290,7 @@ describe('显式启用：真实外部文本模型端到端验收', () => {
           },
           body: JSON.stringify({
             workflowVersionId: version.id,
+            invocationKey: randomUUID(),
             inputs: {
               prompt: {
                 storage: 'inline',

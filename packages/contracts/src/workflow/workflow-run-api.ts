@@ -1,11 +1,15 @@
 import { z } from 'zod';
 import { runtimeValueMapSchema } from '../data/runtime-value.js';
 import { workflowIdentifierSchema } from './metadata.js';
-import { workflowRunSchema } from './workflow-run.js';
+import { workflowInvocationKeySchema, workflowRunSchema } from './workflow-run.js';
 
 // HTTP 只选择不可变版本；执行身份、状态和 thread 由服务端确定。
 export const startWorkflowRunRequestSchema = z
-  .object({ workflowVersionId: workflowIdentifierSchema, inputs: runtimeValueMapSchema })
+  .object({
+    workflowVersionId: workflowIdentifierSchema,
+    invocationKey: workflowInvocationKeySchema,
+    inputs: runtimeValueMapSchema,
+  })
   .strict();
 
 export const resumeWorkflowRunRequestSchema = z

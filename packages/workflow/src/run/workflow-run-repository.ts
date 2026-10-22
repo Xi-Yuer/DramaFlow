@@ -4,6 +4,7 @@ export interface CreateWorkflowRunInput {
   readonly projectId: string;
   readonly workflowId: string;
   readonly workflowVersionId: string;
+  readonly invocationKey: string;
   readonly inputs: Record<string, RuntimeValue>;
 }
 

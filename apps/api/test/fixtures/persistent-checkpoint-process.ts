@@ -118,6 +118,7 @@ try {
             projectId: command.projectId,
             workflowId: command.workflowId,
             workflowVersionId: command.workflowVersionId,
+            invocationKey: `test-${command.workflowVersionId}`,
             inputs: {
               seed: {
                 storage: 'inline',

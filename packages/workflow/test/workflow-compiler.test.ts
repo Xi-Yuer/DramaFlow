@@ -197,6 +197,7 @@ describe('普通 Action 整图编译', () => {
       projectId: 'project-1',
       workflowId: 'workflow-1',
       workflowVersionId: 'version-1',
+      invocationKey: 'invocation-template',
       threadId: 'thread-template',
       status: 'running',
       inputs: {},

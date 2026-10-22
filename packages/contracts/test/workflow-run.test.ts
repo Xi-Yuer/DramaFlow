@@ -7,6 +7,7 @@ describe('WorkflowRun 完整运行协议', () => {
     projectId: 'project-1',
     workflowId: 'workflow-1',
     workflowVersionId: 'version-3',
+    invocationKey: 'invocation-1',
     threadId: 'root-thread-1',
     status: 'pending',
     inputs: {},

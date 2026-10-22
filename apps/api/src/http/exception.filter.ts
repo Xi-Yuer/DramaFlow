@@ -81,6 +81,15 @@ export class ApiExceptionFilter implements ExceptionFilter {
             : `HTTP_${error.getStatus()}`,
         message: typeof value.message === 'string' ? value.message : '请求失败',
         ...(value.issues ? { details: value.issues } : {}),
+        ...((value.code === 'WORKFLOW_QUEUE_UNAVAILABLE' ||
+          value.code === 'WORKFLOW_INVOCATION_CONFLICT') &&
+        typeof value.workflowRunId === 'string'
+          ? { workflowRunId: value.workflowRunId }
+          : {}),
+        ...(value.code === 'WORKFLOW_QUEUE_UNAVAILABLE' &&
+        typeof value.invocationKey === 'string'
+          ? { invocationKey: value.invocationKey }
+          : {}),
         requestId,
       });
       return;

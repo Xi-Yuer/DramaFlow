@@ -2,12 +2,15 @@ import {
   runtimeValueMapSchema,
   workflowIdentifierSchema,
   workflowRunSchema,
+  workflowInvocationKeySchema,
   type WorkflowRun,
   type ResumeWorkflowExecutionJob,
 } from '@dramaflow/contracts';
 import { z } from 'zod';
 import { WorkflowInvocationContractValidator } from '../definition/validate-invocation.js';
 import type { WorkflowRunSubmissionRepository } from './workflow-run-submission-repository.js';
+import { isWorkflowInvocationEquivalent } from './workflow-invocation-equivalence.js';
+import { WorkflowInvocationConflictError } from './workflow-run-error.js';
 import {
   loadWorkflowVersion,
   type WorkflowVersionRepository,
@@ -18,6 +21,7 @@ const startInputSchema = z
     projectId: workflowIdentifierSchema,
     workflowId: workflowIdentifierSchema,
     workflowVersionId: workflowIdentifierSchema,
+    invocationKey: workflowInvocationKeySchema,
     inputs: runtimeValueMapSchema,
   })
   .strict();
@@ -44,16 +48,18 @@ export class DefaultWorkflowRunSubmissionService implements WorkflowRunSubmissio
     const request = startInputSchema.parse(input);
     const version = await loadWorkflowVersion(this.versions, request);
     const inputs = this.invocationContract.validate(version.definition.inputs, request.inputs);
-    const run = workflowRunSchema.parse(
-      await this.runs.createWithExecution({ ...request, inputs }),
-    );
+    const invocation = { ...request, inputs };
+    const result = await this.runs.createWithExecution(invocation);
+    const run = workflowRunSchema.parse(result.run);
     if (
       run.projectId !== request.projectId ||
       run.workflowId !== request.workflowId ||
-      run.workflowVersionId !== request.workflowVersionId ||
-      run.status !== 'pending'
+      run.invocationKey !== request.invocationKey ||
+      (result.created && run.status !== 'pending')
     )
       throw new Error('新建运行与提交身份不匹配或不是 pending');
+    if (!isWorkflowInvocationEquivalent(run, invocation))
+      throw new WorkflowInvocationConflictError(run.id);
     return run;
   }
 

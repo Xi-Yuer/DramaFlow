@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
   NumberType,
+  AnyType,
   workflowRunResponseSchema,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
@@ -13,7 +14,6 @@ import {
   WorkflowExecutionQueue,
   WorkflowExecutionService,
   WorkflowRuntimeFactory,
-  WorkflowOutboxDispatcher,
   workflowExecutionJobId,
 } from '@dramaflow/server';
 import { DefaultWorkflowRunner, NodeRegistry } from '@dramaflow/workflow';
@@ -203,6 +203,8 @@ async function failure(response: Response, status: number, code: string) {
       message: z.string(),
       requestId: z.uuid(),
       details: z.unknown().optional(),
+      workflowRunId: z.string().optional(),
+      invocationKey: z.string().optional(),
     })
     .strict()
     .parse(body);
@@ -281,6 +283,7 @@ async function waiting() {
   const run = await result(
     await api(0, '', 'POST', {
       workflowVersionId: identity.workflowVersionId,
+      invocationKey: randomUUID(),
       inputs: {},
     }),
     202,
@@ -328,6 +331,7 @@ describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker'
       const error = await failure(
         await api(0, '', 'POST', {
           workflowVersionId: f.workflowVersionId,
+          invocationKey: randomUUID(),
           inputs,
         }),
         400,
@@ -375,6 +379,7 @@ describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker'
     const run = await result(
       await api(0, '', 'POST', {
         workflowVersionId: identity.workflowVersionId,
+        invocationKey: randomUUID(),
         inputs: {},
       }),
       202,
@@ -416,7 +421,11 @@ describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker'
         0,
         '',
         'POST',
-        { workflowVersionId: f.workflowVersionId, inputs: {} },
+        {
+          workflowVersionId: f.workflowVersionId,
+          invocationKey: randomUUID(),
+          inputs: {},
+        },
         cookieB,
       ),
       404,
@@ -519,6 +528,7 @@ describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker'
       await failure(
         await api(0, '', 'POST', {
           workflowVersionId: f.workflowVersionId,
+          invocationKey: randomUUID(),
           inputs: {},
           [key]: 'injected',
         }),
@@ -544,19 +554,25 @@ describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker'
     ).toBe(0);
   });
 
-  it('Redis enqueue 未确认时不返回 202；安全 503，Outbox 仍存在且后台能继续投递', async () => {
+  it('Redis 已接受但 confirmation 丢失：503 带受理身份，同 key 跨 API 重试复用 Run / Outbox', async () => {
     const identity = await version();
+    const request = {
+      workflowVersionId: identity.workflowVersionId,
+      invocationKey: randomUUID(),
+      inputs: {},
+    };
     const queue = applications[0]!.app.get(WorkflowExecutionQueue);
     await queue.queue.pause();
+    const original = queue.publish.bind(queue);
     const publish = vi
       .spyOn(queue, 'publish')
-      .mockRejectedValue(new Error('redis-secret-marker'));
+      .mockImplementationOnce(async (job) => {
+        await original(job);
+        throw new Error('redis-secret-marker');
+      });
     try {
       const error = await failure(
-        await api(0, '', 'POST', {
-          workflowVersionId: identity.workflowVersionId,
-          inputs: {},
-        }),
+        await api(0, '', 'POST', request),
         503,
         'WORKFLOW_QUEUE_UNAVAILABLE',
       );
@@ -564,21 +580,87 @@ describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker'
       const run = await db.workflowRun.findFirstOrThrow({
         where: { projectId: identity.projectId },
       });
-      expect(run.status).toBe('pending');
+      expect(error).toMatchObject({
+        workflowRunId: run.id,
+        invocationKey: request.invocationKey,
+      });
+      expect(
+        await queue.queue.getJob(
+          workflowExecutionJobId({ kind: 'start', workflowRunId: run.id }),
+        ),
+      ).toBeDefined();
+      publish.mockRestore();
+      const repeated = await result(await api(1, '', 'POST', request), 202);
+      expect(repeated).toMatchObject({
+        id: run.id,
+        invocationKey: request.invocationKey,
+        status: 'pending',
+      });
+      expect(
+        await db.workflowRun.count({
+          where: { projectId: identity.projectId },
+        }),
+      ).toBe(1);
       expect(
         await db.workflowExecutionOutbox.count({
           where: { workflowRunId: run.id },
         }),
       ).toBe(1);
-      publish.mockRestore();
-      await applications[0]!.app
-        .get(WorkflowOutboxDispatcher)
-        .publishStart(run.id);
       await queue.queue.resume();
       await waitRun(run.id, 'completed');
+      expect(
+        await result(await api(0, '', 'POST', request), 202),
+      ).toMatchObject({ id: run.id, status: 'completed' });
     } finally {
       publish.mockRestore();
       await queue.queue.resume();
     }
+  });
+
+  it('Start key 必填；等价对象输入可复用，差异返回 409 且不新增执行意图', async () => {
+    const identity = await version(false, [
+      { name: 'a', type: AnyType, required: false },
+    ]);
+    await failure(
+      await api(0, '', 'POST', {
+        workflowVersionId: identity.workflowVersionId,
+        inputs: {},
+      }),
+      400,
+      'VALIDATION_FAILED',
+    );
+    const key = randomUUID();
+    const request = {
+      workflowVersionId: identity.workflowVersionId,
+      invocationKey: key,
+      inputs: {
+        a: { storage: 'inline', type: AnyType, value: { x: 1, y: [2, 3] } },
+      },
+    };
+    const original = await result(await api(0, '', 'POST', request), 202);
+    const repeated = await result(
+      await api(1, '', 'POST', {
+        ...request,
+        inputs: {
+          a: { value: { y: [2, 3], x: 1 }, type: AnyType, storage: 'inline' },
+        },
+      }),
+      202,
+    );
+    expect(repeated.id).toBe(original.id);
+    const conflict = await failure(
+      await api(0, '', 'POST', { ...request, inputs: {} }),
+      409,
+      'WORKFLOW_INVOCATION_CONFLICT',
+    );
+    expect(conflict.workflowRunId).toBe(original.id);
+    expect(
+      await db.workflowRun.count({ where: { projectId: identity.projectId } }),
+    ).toBe(1);
+    expect(
+      await db.workflowExecutionOutbox.count({
+        where: { workflowRunId: original.id },
+      }),
+    ).toBe(1);
   });
 });

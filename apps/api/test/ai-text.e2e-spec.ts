@@ -390,6 +390,7 @@ async function submit(workflowVersionId: string, owner = ownerId) {
     },
     body: JSON.stringify({
       workflowVersionId,
+      invocationKey: randomUUID(),
       inputs: {
         prompt: { storage: 'inline', type: StringType, value: '雨夜中的人物' },
       },
