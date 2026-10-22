@@ -208,10 +208,8 @@ export function ModelSelector({
   );
   const configurationPending = providers.isPending || models.isPending;
   const configurationFailed = providers.error ?? models.error;
-  const discoveryPending =
-    catalogQueries.some((item) => item.isPending) || definitions.isPending;
-  const discoveryFailed =
-    catalogQueries.find((item) => item.isError)?.error ?? definitions.error;
+  const discoveryPending = catalogQueries.some((item) => item.isPending) || definitions.isPending;
+  const discoveryFailed = catalogQueries.find((item) => item.isError)?.error ?? definitions.error;
   const discoveryGroups =
     discoveryPending || discoveryFailed
       ? []
@@ -387,7 +385,7 @@ export function ModelSelector({
           aria-label={
             !hasValue
               ? '选择模型'
-                : hasValue && configurationPending
+              : hasValue && configurationPending
                 ? '已选 正在读取所选模型'
                 : described.detail
                   ? `已选 ${described.label}，${described.detail}`
