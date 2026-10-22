@@ -28,6 +28,7 @@ export function createWorkflowDraftState(workflow: WorkflowResponse): WorkflowDr
 }
 
 export type WorkflowDraftAction =
+  | { type: 'revision-conflict'; message: string }
   | { type: 'edit'; definition: WorkflowDefinition }
   | { type: 'edit-failed'; message: string }
   | { type: 'save-started' }
@@ -42,6 +43,8 @@ export function workflowDraftReducer(
   action: WorkflowDraftAction,
 ): WorkflowDraftState {
   switch (action.type) {
+    case 'revision-conflict':
+      return { ...state, conflict: true, error: action.message };
     case 'edit':
       return { ...state, definition: action.definition };
     case 'edit-failed':
@@ -67,4 +70,19 @@ export function workflowDraftReducer(
     case 'reload-failed':
       return { ...state, operation: 'idle', error: action.message };
   }
+}
+
+export function workflowPublishDisabledReason(
+  state: WorkflowDraftState,
+  operation: WorkflowDraftState['operation'] | 'publishing' = state.operation,
+): string | null {
+  if (operation === 'publishing') return '正在发布，请稍候';
+  if (operation === 'saving') return '正在保存草稿，请等待保存完成';
+  if (operation === 'reloading') return '正在读取服务器草稿';
+  if (state.conflict) return '草稿修订冲突，请重新读取服务器草稿';
+  if (state.error || !Number.isInteger(state.revision) || state.revision < 1)
+    return '草稿状态尚未确认，请重新读取草稿';
+  if (workflowDraftSignature(state.definition) !== state.savedSignature)
+    return '请先保存草稿，再发布';
+  return null;
 }

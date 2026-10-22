@@ -52,13 +52,15 @@
 
 脚本构建 API / Web，在 3200 / 3201 启动服务，使用随机账号与隔离队列，结束清理本次测试数据。不要与其他占用同一测试库或端口的检查并行。失败截图在被忽略的 apps/web/test-results。测试代理构建结束后，常规开发可用 `pnpm build --filter=@dramaflow/web` 恢复代理配置。
 
+基础 Publish 的浏览器人工验收：确认空白 clean Draft 可发布；新增或修改节点后禁用并提示先保存；保存后显式发布，核对 revision 不变且仍可编辑；发布期间无法重复操作或保存；刷新后能看到当前修订与最新版本；校验失败、修订冲突及版本列表读取失败均有明确反馈。该流程不触发 Run。
+
 ## 模型管理验证
 
 contracts / plugins / server 单元测试覆盖 Provider Catalog、Model Catalog 的 Schema、能力筛选与安全边界；model-management.e2e-spec 验证管理 HTTP，ai-text.e2e-spec 验证发布到独立 Worker 的正式链。后者保留旧兼容插件，并检查 OpenAI Chat Completions / Anthropic Messages 的实际本机请求、凭证轮换、权限和不重试行为。
 
 ## Web 模型管理验证
 
-Web 包测试覆盖响应处理、Schema 表单与缓存边界；`pnpm test:web:models` 验证真实创建、刷新、启停、轮换和项目隔离，不调用外部模型。负向网络拦截只作测试，不是产品降级路径。
+Web 包测试覆盖响应处理、Schema 表单、缓存边界，以及独立 Publish 状态、版本身份、sourceRevision 恢复和发布控件的静态渲染；`pnpm test:web:models` 验证真实创建、刷新、启停、轮换和项目隔离，不调用外部模型。负向网络拦截只作测试，不是产品降级路径。
 
 ## 文档维护
 

@@ -1,16 +1,55 @@
 import {
+  publishWorkflowRequestSchema,
+  workflowVersionResponseSchema,
+  workflowVersionListResponseSchema,
   saveWorkflowDraftRequestSchema,
   saveWorkflowDraftResponseSchema,
   workflowResponseSchema,
   type SaveWorkflowDraftRequest,
 } from '@dramaflow/contracts';
-import { jsonBody, request } from '../../lib/http';
+import type { WorkflowPublicationStatus } from './workflow-publish';
+import { ApiError, jsonBody, request } from '../../lib/http';
 
 export const workflowKeys = {
+  versions: (workflowId: string) => ['workflow-versions', workflowId] as const,
+  publication: (workflowId: string, revision: number) =>
+    ['workflow-versions', workflowId, revision] as const,
   project: (projectId: string) => ['project-workflow', projectId] as const,
 };
 
 export const workflowApi = {
+  publish: (workflowId: string, expectedRevision: number) =>
+    request(`/workflows/${encodeURIComponent(workflowId)}/publish`, workflowVersionResponseSchema, {
+      method: 'POST',
+      body: jsonBody(publishWorkflowRequestSchema.parse({ expectedRevision })),
+    }),
+  publicationStatus: async (
+    workflowId: string,
+    revision: number,
+    signal?: AbortSignal,
+  ): Promise<WorkflowPublicationStatus> => {
+    let beforeVersion: number | undefined;
+    let latest: WorkflowPublicationStatus['latest'] = null;
+    do {
+      const query = beforeVersion === undefined ? '' : `?beforeVersion=${beforeVersion}`;
+      const page = await request(
+        `/workflows/${encodeURIComponent(workflowId)}/versions${query}`,
+        workflowVersionListResponseSchema,
+        { signal },
+      );
+      if (page.items.some((version) => version.workflowId !== workflowId))
+        throw new ApiError('版本列表与当前工作流不匹配', 200);
+      latest ??= page.items[0] ?? null;
+      const current = page.items.find((version) => version.sourceRevision === revision);
+      if (current) return { latest, current };
+      if (!page.nextBeforeVersion || !latest || latest.sourceRevision < revision)
+        return { latest, current: null };
+      if (beforeVersion !== undefined && page.nextBeforeVersion >= beforeVersion)
+        throw new ApiError('版本列表分页游标无效', 200);
+      beforeVersion = page.nextBeforeVersion;
+    } while (beforeVersion !== undefined);
+    return { latest, current: null };
+  },
   get: (projectId: string) =>
     request(`/projects/${encodeURIComponent(projectId)}/workflow`, workflowResponseSchema),
   initialize: (projectId: string) =>

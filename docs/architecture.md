@@ -6,7 +6,7 @@
 
 已有登录、账户中心、项目管理、React Flow 草稿编辑和项目模型管理。前端使用 Next.js App Router、Ant Design、TanStack Query；业务 API 默认认证，项目按当前所有者隔离。
 
-Web 可加载 / 保存真实草稿，从 Node Types 目录添加节点、移动节点、编辑 Data / Control Edge；文本节点支持模型选择和 prompt / system 上游变量编辑。尚无节点删除 / 重命名、发布和运行操作。服务端已有正式发布与 Run HTTP。每项目一个逻辑 Workflow，Project 与 Draft 分别保存 revision，发布另有 version。
+Web 可加载 / 保存真实草稿，从 Node Types 目录添加节点、移动节点、编辑 Data / Control Edge；文本节点支持模型选择和 prompt / system 上游变量编辑。已有独立 Publish 操作，尚无节点删除 / 重命名和运行操作。服务端已有正式发布与 Run HTTP。每项目一个逻辑 Workflow，Project 与 Draft 分别保存 revision，发布另有 version。
 
 PostgreSQL / Prisma 保存业务记录，Redis / BullMQ 交付执行命令，RustFS 保存内容，官方 PostgreSQL Checkpointer 保存图快照。API 负责提交，独立 Worker 执行图。
 
@@ -49,6 +49,14 @@ Project 不嵌入图内容。草稿保存与项目保存独立，冲突返回 40
 API 只装配 Submission / Queue；Worker 装配 Consumer、Outbox Pump 和执行服务。`WorkflowExecutionService` 核验持久意图，从 Run 读取真实项目 / 所有者，再构造有权限作用域的 Runner、Executor、能力和 Artifact 服务，不跨用户缓存 Runner。
 
 Node 目录与执行共用 `WorkflowNodeRegistryModule`。`ArtifactRuntimeFactory.forRun` 提供真实 Writer / Resolver / Codec；`WorkflowCapabilitiesFactory.forRun` 提供按 Run 授权的能力调用。服务对象不进入 State 或 checkpoint。
+
+### Web 基础发布
+
+Save 与 Publish 独立。Web 仅发布已加载、无 dirty、无保存 / 重载 / 发布操作且修订状态明确的 Draft；未保存修改、冲突或保存结果未确认时禁用并给出原因，不隐式保存，也不在客户端禁止空图发布。发布期间锁定 Draft 编辑、保存和重载；项目名称 / 视口仍独立管理。
+
+发布状态由当前 Editor 的 useWorkflowPublish / WorkflowPublisher 保存，与 Draft reducer 分离，只记录版本摘要身份和受控错误信息，不替换 definition、revision 或保存基线。版本状态按 workflowId / 当前保存 revision 查询，分别表示最新已发布版本与该修订对应版本，不产生未来 Run 的隐式版本选择。
+
+成功后取消旧版本查询并刷新目录；已确认版本在目录刷新失败时仍保留。WORKFLOW_REVISION_ALREADY_PUBLISHED 通过分页查询 sourceRevision 找回原版本，不拿 latest 猜测；WORKFLOW_REVISION_CONFLICT 进入既有 Draft conflict / reload 流程。错误保留 code、requestId、nodeId、portKey 和 path 等已提供的定位信息，不实现自动聚焦或字段高亮。版本历史管理与 Run UI 尚未实现。
 
 ## Workflow Run HTTP API
 

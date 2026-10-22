@@ -1,5 +1,5 @@
 'use client';
-import { useReducer, useRef } from 'react';
+import { useCallback, useReducer, useRef } from 'react';
 import {
   workflowDefinitionSchema,
   type WorkflowDefinition,
@@ -11,41 +11,58 @@ import {
   createWorkflowDraftState,
   workflowDraftReducer,
   workflowDraftSignature,
+  workflowPublishDisabledReason,
+  type WorkflowDraftAction,
 } from './workflow-draft-state';
 
 export function useWorkflowDraft(initial: WorkflowResponse) {
   const [state, dispatch] = useReducer(workflowDraftReducer, initial, createWorkflowDraftState);
-  const current = useRef(initial.draft);
-  const operation = useRef<'save' | 'reload' | null>(null);
+  const current = useRef(state);
+  const operation = useRef<'saving' | 'reloading' | 'publishing' | null>(null);
+  // 同步记录操作结果，避免同一事件循环中的保存 / 发布跨过 React 尚未提交的状态。
+  const send = useCallback((action: WorkflowDraftAction) => {
+    current.current = workflowDraftReducer(current.current, action);
+    dispatch(action);
+  }, []);
   const dirty = workflowDraftSignature(state.definition) !== state.savedSignature;
 
-  function edit(apply: (definition: WorkflowDefinition) => WorkflowDefinition) {
-    if (operation.current === 'reload') return;
-    try {
-      const definition = workflowDefinitionSchema.parse(apply(current.current));
-      current.current = definition;
-      dispatch({ type: 'edit', definition });
-    } catch (error) {
-      dispatch({
-        type: 'edit-failed',
-        message: error instanceof Error ? error.message : '图修改未能应用',
-      });
-    }
-  }
+  const edit = useCallback(
+    (apply: (definition: WorkflowDefinition) => WorkflowDefinition) => {
+      if (operation.current === 'reloading' || operation.current === 'publishing') return;
+      try {
+        send({
+          type: 'edit',
+          definition: workflowDefinitionSchema.parse(apply(current.current.definition)),
+        });
+      } catch (error) {
+        send({
+          type: 'edit-failed',
+          message: error instanceof Error ? error.message : '图修改未能应用',
+        });
+      }
+    },
+    [send],
+  );
 
-  async function save() {
-    if (operation.current || state.conflict || !dirty) return;
-    const snapshot = structuredClone(current.current);
-    operation.current = 'save';
-    dispatch({ type: 'save-started' });
+  const save = useCallback(async () => {
+    const before = current.current;
+    if (
+      operation.current ||
+      before.conflict ||
+      workflowDraftSignature(before.definition) === before.savedSignature
+    )
+      return;
+    const snapshot = structuredClone(before.definition);
+    operation.current = 'saving';
+    send({ type: 'save-started' });
     try {
-      const result = await workflowApi.saveDraft(state.workflowId, {
-        expectedRevision: state.revision,
+      const result = await workflowApi.saveDraft(before.workflowId, {
+        expectedRevision: before.revision,
         definition: snapshot,
       });
-      dispatch({ type: 'save-succeeded', revision: result.revision, snapshot });
+      send({ type: 'save-succeeded', revision: result.revision, snapshot });
     } catch (error) {
-      dispatch({
+      send({
         type: 'save-failed',
         conflict: error instanceof ApiError && error.status === 409,
         message: error instanceof ApiError ? error.message : '草稿保存结果未确认，请检查网络后重试',
@@ -53,25 +70,38 @@ export function useWorkflowDraft(initial: WorkflowResponse) {
     } finally {
       operation.current = null;
     }
-  }
+  }, [send]);
 
-  async function reload() {
+  const reload = useCallback(async () => {
     if (operation.current) return;
-    operation.current = 'reload';
-    dispatch({ type: 'reload-started' });
+    operation.current = 'reloading';
+    send({ type: 'reload-started' });
     try {
-      const workflow = await workflowApi.get(state.projectId);
-      current.current = workflow.draft;
-      dispatch({ type: 'reload-succeeded', workflow });
+      const workflow = await workflowApi.get(current.current.projectId);
+      send({ type: 'reload-succeeded', workflow });
     } catch (error) {
-      dispatch({
+      send({
         type: 'reload-failed',
         message: error instanceof ApiError ? error.message : '服务器草稿读取失败，请检查网络后重试',
       });
     } finally {
       operation.current = null;
     }
-  }
+  }, [send]);
 
-  return { ...state, dirty, edit, save, reload };
+  const beginPublish = useCallback(() => {
+    const saved = current.current;
+    if (workflowPublishDisabledReason(saved, operation.current ?? saved.operation)) return null;
+    operation.current = 'publishing';
+    return { workflowId: saved.workflowId, revision: saved.revision };
+  }, []);
+  const endPublish = useCallback(() => {
+    if (operation.current === 'publishing') operation.current = null;
+  }, []);
+  const publishConflict = useCallback(
+    (message: string) => send({ type: 'revision-conflict', message }),
+    [send],
+  );
+
+  return { ...state, dirty, edit, save, reload, beginPublish, endPublish, publishConflict };
 }

@@ -10,7 +10,13 @@ import { ApiError } from '@/lib/http';
 import { AccountMenuButton } from '@/features/auth/account-menu';
 import { ModelSettings } from '@/features/models/model-settings';
 import { WorkflowCanvas } from '@/features/workflow/workflow-canvas';
-import type { ModelSelectionIntent, ModelSelectionResume } from '@/features/workflow/model-selector';
+import type {
+  ModelSelectionIntent,
+  ModelSelectionResume,
+} from '@/features/workflow/model-selector';
+import { useWorkflowPublish } from '@/features/workflow/use-workflow-publish';
+import { WorkflowPublishControls } from '@/features/workflow/workflow-publish-controls';
+import { workflowPublishDisabledReason } from '@/features/workflow/workflow-draft-state';
 import { useWorkflowDraft } from '@/features/workflow/use-workflow-draft';
 import { projectApi } from './project-api';
 import { clampViewport, draftSignature } from './viewport';
@@ -24,7 +30,7 @@ export function CanvasEditor({
 }) {
   return (
     <ReactFlowProvider>
-      <CanvasBoard project={project} workflow={workflow} />
+      <CanvasBoard key={workflow.id} project={project} workflow={workflow} />
     </ReactFlowProvider>
   );
 }
@@ -34,6 +40,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
   const { message, modal } = App.useApp();
   const { getViewport, setViewport: setCanvasViewport } = useReactFlow();
   const draft = useWorkflowDraft(workflow);
+  const publication = useWorkflowPublish(draft);
   const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
   const [setupRequest, setSetupRequest] = useState<{
     definitionId: string;
@@ -54,7 +61,12 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
   const signature = draftSignature(name, viewport);
   const dirty = signature !== savedSignature;
   const leavingDirty =
-    dirty || draft.dirty || saving || reloadingProject || draft.operation !== 'idle';
+    dirty ||
+    draft.dirty ||
+    saving ||
+    reloadingProject ||
+    draft.operation !== 'idle' ||
+    publication.publishing;
 
   useEffect(() => {
     if (!leavingDirty) return;
@@ -187,6 +199,14 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
     });
   }
 
+  const publishDisabledReason =
+    workflowPublishDisabledReason(draft, publication.publishing ? 'publishing' : draft.operation) ??
+    (modelSettingsOpen
+      ? '请先关闭模型设置'
+      : publication.currentSavedRevisionPublished
+        ? '当前保存修订已发布'
+        : null);
+
   return (
     <main className="canvas-shell" onContextMenu={(event) => event.preventDefault()}>
       <header className="canvas-top">
@@ -242,7 +262,12 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
             size="small"
             title="保存草稿（⌘/Ctrl+S）"
             loading={draft.operation === 'saving'}
-            disabled={!draft.dirty || draft.conflict || draft.operation === 'reloading'}
+            disabled={
+              !draft.dirty ||
+              draft.conflict ||
+              draft.operation === 'reloading' ||
+              publication.publishing
+            }
             onClick={() => void draft.save()}
           >
             保存草稿
@@ -252,6 +277,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
           <Button
             size="small"
             icon={<Settings2 size={15} />}
+            disabled={publication.publishing}
             onClick={() => {
               setSetupRequest(null);
               setModelSettingsOpen(true);
@@ -300,7 +326,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
             <Button
               size="small"
               loading={draft.operation === 'reloading'}
-              disabled={draft.operation === 'saving'}
+              disabled={draft.operation === 'saving' || publication.publishing}
               onClick={reloadDraft}
             >
               重新读取草稿
@@ -308,6 +334,22 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
           }
         />
       ) : null}
+      <WorkflowPublishControls
+        revision={draft.revision}
+        revisionConflict={draft.conflict}
+        dirty={draft.dirty}
+        disabledReason={publishDisabledReason}
+        publishing={publication.publishing}
+        current={publication.currentSavedRevisionPublished}
+        latest={publication.latestPublishedVersion}
+        error={publication.error}
+        versionsError={publication.versions.isError || publication.refreshError !== null}
+        versionsLoading={publication.versions.isPending || publication.versions.isFetching}
+        onPublish={() => {
+          if (!publishDisabledReason) void publication.publish();
+        }}
+        onRetryVersions={() => void publication.versions.refetch()}
+      />
       <ModelSettings
         open={modelSettingsOpen}
         projectId={project.id}
@@ -341,7 +383,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
         modelResume={modelResume}
         onModelResumeConsumed={() => setModelResume(null)}
         reloading={draft.operation === 'reloading'}
-        interactionLocked={modelSettingsOpen}
+        interactionLocked={modelSettingsOpen || publication.publishing}
         defaultViewport={project.viewport}
         onMoveEnd={onMoveEnd}
       />
