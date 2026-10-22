@@ -1,6 +1,7 @@
 export * from './definition/values.js';
 export * from './definition/version.js';
 export * from './definition/validate-publish.js';
+export * from './definition/validate-invocation.js';
 export * from './node/operation.js';
 export * from './node/registry.js';
 export * from './run/config.js';

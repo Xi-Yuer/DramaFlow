@@ -22,6 +22,7 @@ import {
   type WorkflowRunRepository,
   type WorkflowVersionRecord,
   type WorkflowVersionRepository,
+  type StartWorkflowRunInput,
 } from '../src/index.js';
 import { nodeRunRepositoryFixture } from './node-run-fixture.js';
 
@@ -190,7 +191,9 @@ export function workflowRunnerFixture() {
   const runner = new DefaultWorkflowRunner({ getVersion }, runs, { compile }, resolver);
   let intent = 0;
   const submissionRepository = {
-    createWithExecution: (request: Parameters<typeof runs.create>[0]) => runs.create(request),
+    createWithExecution: vi.fn((request: Parameters<typeof runs.create>[0]) =>
+      runs.create(request),
+    ),
     async createResumeExecution(request: { workflowRunId: string; value: unknown }) {
       const run = await runs.getById(request.workflowRunId);
       if (!run || run.status !== 'waiting') throw new Error('运行不在 waiting');
@@ -203,13 +206,14 @@ export function workflowRunnerFixture() {
     },
   };
   const submission = new DefaultWorkflowRunSubmissionService({ getVersion }, submissionRepository);
-  const start = async (request: typeof input) => {
+  const start = async (request: StartWorkflowRunInput) => {
     const pending = await submission.start(request);
     return runner.executeStart(pending.id);
   };
   return {
     start,
     submission,
+    submissionRepository,
     runner,
     input,
     version,

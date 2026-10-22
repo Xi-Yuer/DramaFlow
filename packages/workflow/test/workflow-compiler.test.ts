@@ -53,7 +53,6 @@ describe('普通 Action 整图编译', () => {
           { name: 'answer', type: NumberType, source: { nodeId: 'C', outputKey: 'result' } },
         ],
       };
-      f.input.inputs = { a: { storage: 'inline', type: NumberType, value: 10 } };
       let releaseA!: () => void;
       let releaseB!: () => void;
       const a = new Promise<void>((resolve) => {
@@ -74,7 +73,7 @@ describe('普通 Action 整图编译', () => {
         }
         return { result: input.a + input.b, internal: '内部值' };
       });
-      const invocation = f.start(f.input);
+      const invocation = f.start({ ...f.input, inputs: {} });
       try {
         await vi.waitFor(() => expect(f.execute).toHaveBeenCalledTimes(2));
         (first === 'A' ? releaseA : releaseB)();
@@ -99,7 +98,10 @@ describe('普通 Action 整图编译', () => {
   it('空定义直接到 END，最终输出为空且不执行节点', async () => {
     const f = workflowRunnerFixture();
     f.version.definition = { inputs: [], nodes: [], edges: [], outputs: [] };
-    expect(await f.start(f.input)).toMatchObject({ status: 'completed', outputs: {} });
+    expect(await f.start({ ...f.input, inputs: {} })).toMatchObject({
+      status: 'completed',
+      outputs: {},
+    });
     expect(f.nodeRuns.createRunning).not.toHaveBeenCalled();
     expect(f.execute).not.toHaveBeenCalled();
   });

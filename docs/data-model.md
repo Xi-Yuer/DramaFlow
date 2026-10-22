@@ -31,6 +31,8 @@ isTypeAssignable 前后端共用：
 
 DataTypeManifest 只有 name、displayName、category、storage。服务端把 Manifest 和 Zod 组成 DataTypeDefinition。Registry 拒绝重复或未知名称。结构对象的字段均为必填；可选由节点输入契约表达。没有生产目录 API，也不自动安装插件。未注册的媒体 Schema 不能进入 Registry。
 
+调用契约校验复用 Registry 的递归 Schema，对 inline 同时验证类型标签与声明类型下的实际值，不使用 Schema 的转换或默认结果改写输入。未注册的 named Schema 以独立的不可用错误拒绝 inline，不回退 JSON 或猜测字段；当前生产 Submission 未注册 named 业务 Schema。reference 只按 DataType 兼容规则检查，其真实内容留给 Runtime。类型标签不兼容与实际值错误分别使用 WORKFLOW_INVOCATION_INPUT_TYPE_MISMATCH、WORKFLOW_INVOCATION_INPUT_VALUE_INVALID。
+
 ## RuntimeValue 与存储策略
 
 ```ts

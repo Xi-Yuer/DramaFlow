@@ -211,12 +211,15 @@ async function failure(response: Response, status: number, code: string) {
   expect(body).not.toHaveProperty('cause');
   return error;
 }
-async function version(native = false) {
+async function version(
+  native = false,
+  inputs: WorkflowDefinition['inputs'] = [],
+) {
   const project = await db.project.create({
     data: { ownerId, name: 'Run HTTP', viewport: {} },
   });
   const definition: WorkflowDefinition = {
-    inputs: [],
+    inputs,
     nodes: native
       ? ['first', 'second'].map((id) => ({
           id,
@@ -287,6 +290,61 @@ async function waiting() {
 }
 
 describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker', () => {
+  it.each([
+    ['WORKFLOW_INVOCATION_INPUT_REQUIRED', {}],
+    [
+      'WORKFLOW_INVOCATION_INPUT_UNKNOWN',
+      {
+        count: { storage: 'inline', type: NumberType, value: 0 },
+        extra: { storage: 'inline', type: NumberType, value: 1 },
+      },
+    ],
+    [
+      'WORKFLOW_INVOCATION_INPUT_TYPE_MISMATCH',
+      {
+        count: {
+          storage: 'inline',
+          type: { kind: 'primitive', name: 'string' },
+          value: '0',
+        },
+      },
+    ],
+    [
+      'WORKFLOW_INVOCATION_INPUT_VALUE_INVALID',
+      {
+        count: {
+          storage: 'inline',
+          type: NumberType,
+          value: 'private-invalid-value',
+        },
+      },
+    ],
+  ])(
+    '调用契约 %s 在受理前拒绝，数据库中无 Run / Outbox',
+    async (code, inputs) => {
+      const f = await version(false, [
+        { name: 'count', type: NumberType, required: true },
+      ]);
+      const error = await failure(
+        await api(0, '', 'POST', {
+          workflowVersionId: f.workflowVersionId,
+          inputs,
+        }),
+        400,
+        code,
+      );
+      expect(JSON.stringify(error)).not.toContain('private-invalid-value');
+      expect(
+        await db.workflowRun.count({ where: { projectId: f.projectId } }),
+      ).toBe(0);
+      expect(
+        await db.workflowExecutionOutbox.count({
+          where: { workflowRun: { projectId: f.projectId } },
+        }),
+      ).toBe(0);
+    },
+  );
+
   it('三个入口默认鉴权，写请求校验 Origin；API DI 不含 Runner factory 或 ExecutionService', async () => {
     for (const [path, method, body] of [
       ['', 'POST', { workflowVersionId: 'missing', inputs: {} }],

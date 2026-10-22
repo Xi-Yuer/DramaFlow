@@ -21,7 +21,11 @@ edges 是节点间连接的唯一来源。Node.inputs 只保存 constant、workf
 
 每个 Workflow Input 声明 name、type 和 required。required=true 表示调用应提供该 key，false 允许缺失；旧定义省略 required 时读取为 true，解析后的新定义显式保存该字段，不回写已有不可变版本。nullable 由 DataType union 表达，只允许显式 null，不等于允许 key 缺失。没有默认值，reference 的存在性规则与 inline 相同。Workflow Output 不含 required。
 
-发布时，required 来源可绑定类型兼容的必填或可选节点输入；optional 来源只能绑定 Manifest 与实际输入 Schema 均允许省略的节点输入，否则报 INPUT_SOURCE_OPTIONAL。TemplateBinding 的 workflow_input 变量必须 required 且类型可赋给 string，optional 不自动替换为空文本。Run Submission 尚未统一校验本次 inputs 是否满足版本契约；本轮存在性约束在发布和实际绑定消费处落实，不据此认为所有缺失参数已在受理前拒绝。
+发布时，required 来源可绑定类型兼容的必填或可选节点输入；optional 来源只能绑定 Manifest 与实际输入 Schema 均允许省略的节点输入，否则报 INPUT_SOURCE_OPTIONAL。TemplateBinding 的 workflow_input 变量必须 required 且类型可赋给 string，optional 不自动替换为空文本。
+
+WorkflowInvocationContractValidator 是独立的领域调用契约校验器。它按固定版本检查 required missing、未知参数、RuntimeValue.type 到声明类型的兼容性，再检查 inline 实际内容。optional missing 保持缺失，null / false / 0 / 空字符串不视为 missing，不应用默认值。Run Submission 加载并核对版本后调用它，通过后才创建 Run / Outbox；其他调用入口可复用同一校验器。
+
+inline 内容同时检查运行值标签类型和 Workflow 声明类型，递归规则复用 DataTypeRegistry。named 类型必须注册真实 Schema；未注册时明确报 WORKFLOW_INVOCATION_TYPE_SCHEMA_UNAVAILABLE，不猜测结构或静默放行，包含该类型的复合 Schema 也采取相同规则。reference 只做类型兼容性检查，不查询资源、鉴权、读取内容或要求 named Schema。这些资源检查仍由执行时 Resolver 承担，Template 对 inline string 的消费限制也不在调用契约校验中处理。
 
 媒体和资料使用可校验引用，不把二进制或服务器本地路径写入定义。静态兼容不代替真实值校验，类型规则见数据模型。
 

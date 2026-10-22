@@ -6,6 +6,7 @@ import {
   type ResumeWorkflowExecutionJob,
 } from '@dramaflow/contracts';
 import { z } from 'zod';
+import { WorkflowInvocationContractValidator } from '../definition/validate-invocation.js';
 import type { WorkflowRunSubmissionRepository } from './workflow-run-submission-repository.js';
 import {
   loadWorkflowVersion,
@@ -36,12 +37,16 @@ export class DefaultWorkflowRunSubmissionService implements WorkflowRunSubmissio
   constructor(
     private readonly versions: WorkflowVersionRepository,
     private readonly runs: WorkflowRunSubmissionRepository,
+    private readonly invocationContract = new WorkflowInvocationContractValidator(),
   ) {}
 
   async start(input: StartWorkflowRunInput): Promise<WorkflowRun> {
     const request = startInputSchema.parse(input);
-    await loadWorkflowVersion(this.versions, request);
-    const run = workflowRunSchema.parse(await this.runs.createWithExecution(request));
+    const version = await loadWorkflowVersion(this.versions, request);
+    const inputs = this.invocationContract.validate(version.definition.inputs, request.inputs);
+    const run = workflowRunSchema.parse(
+      await this.runs.createWithExecution({ ...request, inputs }),
+    );
     if (
       run.projectId !== request.projectId ||
       run.workflowId !== request.workflowId ||

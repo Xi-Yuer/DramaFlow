@@ -1,9 +1,64 @@
 import { END, interrupt, START, StateGraph } from '@langchain/langgraph';
+import {
+  NumberType,
+  StringType,
+  workflowDefinitionSchema,
+  type RuntimeValue,
+} from '@dramaflow/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { DefaultWorkflowRunner, WorkflowStateAnnotation } from '../src/index.js';
 import { workflowRunnerFixture } from './workflow-runner-fixture.js';
 
 describe('Workflow 提交 / 执行边界', () => {
+  it.each([
+    ['missing', 'WORKFLOW_INVOCATION_INPUT_REQUIRED'],
+    ['unknown', 'WORKFLOW_INVOCATION_INPUT_UNKNOWN'],
+    ['type', 'WORKFLOW_INVOCATION_INPUT_TYPE_MISMATCH'],
+    ['value', 'WORKFLOW_INVOCATION_INPUT_VALUE_INVALID'],
+    ['named', 'WORKFLOW_INVOCATION_TYPE_SCHEMA_UNAVAILABLE'],
+  ])('调用 %s 校验失败时不创建 Run / Outbox', async (kind, code) => {
+    const f = workflowRunnerFixture();
+    let inputs: Record<string, RuntimeValue> = {
+      a: { storage: 'inline', type: NumberType, value: 10 },
+    };
+    if (kind === 'missing') inputs = {};
+    if (kind === 'unknown')
+      inputs.extra = { storage: 'inline', type: StringType, value: '额外参数' };
+    if (kind === 'type') inputs.a = { storage: 'inline', type: StringType, value: '10' };
+    if (kind === 'value') inputs.a = { storage: 'inline', type: NumberType, value: '伪造标签' };
+    if (kind === 'named') {
+      const type = { kind: 'named' as const, name: 'story.unregistered' };
+      f.version.definition.inputs[0]!.type = type;
+      inputs.a = { storage: 'inline', type, value: {} };
+    }
+    await expect(f.submission.start({ ...f.input, inputs })).rejects.toMatchObject({ code });
+    expect(f.getVersion).toHaveBeenCalledExactlyOnceWith(f.version.id);
+    expect(f.submissionRepository.createWithExecution).not.toHaveBeenCalled();
+    expect(f.runs.create).not.toHaveBeenCalled();
+    expect(f.compile).not.toHaveBeenCalled();
+  });
+
+  it('optional missing 可受理，持久输入不补占位值', async () => {
+    const f = workflowRunnerFixture();
+    f.version.definition.inputs.push({ name: 'note', type: StringType, required: false });
+    const run = await f.submission.start(f.input);
+    expect(run.inputs).toEqual(f.input.inputs);
+    expect(run.inputs).not.toHaveProperty('note');
+    expect(f.submissionRepository.createWithExecution).toHaveBeenCalledExactlyOnceWith(f.input);
+  });
+
+  it('历史版本输入缺省 required=true 的读取路径仍在创建 Run 前拒绝 missing', async () => {
+    const f = workflowRunnerFixture();
+    const legacy = { ...f.version.definition, inputs: [{ name: 'a', type: NumberType }] };
+    f.version.definition = workflowDefinitionSchema.parse(legacy);
+    await expect(f.submission.start({ ...f.input, inputs: {} })).rejects.toMatchObject({
+      code: 'WORKFLOW_INVOCATION_INPUT_REQUIRED',
+      inputName: 'a',
+    });
+    expect(f.submissionRepository.createWithExecution).not.toHaveBeenCalled();
+    expect(legacy.inputs[0]).not.toHaveProperty('required');
+  });
+
   it('提交只创建 pending；新执行实例按 ID 读取原输入、版本与 thread，不再创建 Run', async () => {
     const f = workflowRunnerFixture();
     const run = await f.submission.start(f.input);

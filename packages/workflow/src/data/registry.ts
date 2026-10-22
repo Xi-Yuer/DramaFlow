@@ -11,6 +11,13 @@ export interface DataTypeDefinition<Value = unknown> {
   readonly schema: z.ZodType<Value>;
 }
 
+export class DataTypeSchemaUnavailableError extends Error {
+  constructor(readonly typeName: string) {
+    super(`数据类型不可用：${typeName}`);
+    this.name = 'DataTypeSchemaUnavailableError';
+  }
+}
+
 // Named 类型的真实值契约仅在服务端存在，公开列表只返回 Manifest 副本。
 export class DataTypeRegistry {
   private readonly definitions = new Map<string, DataTypeDefinition>();
@@ -21,7 +28,7 @@ export class DataTypeRegistry {
   }
   get(name: string): DataTypeDefinition {
     const definition = this.definitions.get(name);
-    if (!definition) throw new Error(`数据类型不可用：${name}`);
+    if (!definition) throw new DataTypeSchemaUnavailableError(name);
     return {
       manifest: dataTypeManifestSchema.parse(definition.manifest),
       schema: definition.schema,

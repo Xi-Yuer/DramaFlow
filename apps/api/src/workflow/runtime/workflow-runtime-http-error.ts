@@ -5,9 +5,11 @@ import {
   WorkflowRunNotPendingError,
   WorkflowResumeAlreadySubmittedError,
   WorkflowRunRecordingError,
+  WorkflowInvocationValidationError,
 } from '@dramaflow/workflow';
 import {
   ConflictException,
+  BadRequestException,
   HttpException,
   InternalServerErrorException,
   NotFoundException,
@@ -47,6 +49,14 @@ export function workflowRuntimeHttpError(
   error: unknown,
   notFoundCode: WorkflowResourceNotFoundCode,
 ): HttpException {
+  if (error instanceof WorkflowInvocationValidationError) {
+    const response = { code: error.code, message: error.message };
+    if (error.code === 'WORKFLOW_INVOCATION_TYPE_SCHEMA_UNAVAILABLE')
+      return new ServiceUnavailableException(response);
+    if (error.code === 'WORKFLOW_INVOCATION_CONTRACT_INVALID')
+      return new InternalServerErrorException(response);
+    return new BadRequestException(response);
+  }
   if (
     error instanceof WorkflowRunNotWaitingError ||
     error instanceof WorkflowRunNotPendingError

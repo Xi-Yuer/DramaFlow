@@ -43,7 +43,7 @@ NodeRun 记录 attempt、输入输出和安全错误；Checkpoint 保存图的�
 
 ### WorkflowRun 记录边界
 
-Submission 只事务创建 pending Run / Outbox 或 waiting 周期的 resume 意图，不编译、不 claim。Runner 只执行已存在 Run，原子 claim 胜者才进入 Graph；Repository 每次校验当前项目 / 所有者。Run 身份、固定版本、thread 和初始输入不可改写。
+Submission 加载固定版本并调用独立 WorkflowInvocationContractValidator，通过后才事务创建 pending Run / Outbox；waiting 周期的 resume 意图仍复用原 Run 输入。Submission 不编译、不 claim，也不解析 reference 内容。Runner 只执行已存在 Run，原子 claim 胜者才进入 Graph；Repository 每次校验当前项目 / 所有者。Run 身份、固定版本、thread 和初始输入不可改写。
 
 ### WorkflowRunner 首次启动
 

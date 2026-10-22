@@ -4,12 +4,36 @@ import {
   WorkflowRunNotWaitingError,
   WorkflowRunNotPendingError,
   WorkflowRunRecordingError,
+  WorkflowInvocationValidationError,
 } from '@dramaflow/workflow';
 import { describe, expect, it } from 'vitest';
 import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { workflowRuntimeHttpError } from './workflow-runtime-http-error.js';
 
 describe('Runtime HTTP 错误边界', () => {
+  it.each([
+    ['WORKFLOW_INVOCATION_INPUT_REQUIRED', 400],
+    ['WORKFLOW_INVOCATION_INPUT_UNKNOWN', 400],
+    ['WORKFLOW_INVOCATION_INPUT_TYPE_MISMATCH', 400],
+    ['WORKFLOW_INVOCATION_INPUT_VALUE_INVALID', 400],
+    ['WORKFLOW_INVOCATION_TYPE_SCHEMA_UNAVAILABLE', 503],
+    ['WORKFLOW_INVOCATION_CONTRACT_INVALID', 500],
+  ] as const)('调用契约错误 %s 安全映射为 %s', (code, status) => {
+    const mapped = workflowRuntimeHttpError(
+      new WorkflowInvocationValidationError(
+        code,
+        'private-input-name',
+        'private-type-name',
+      ),
+      'WORKFLOW_VERSION_NOT_FOUND',
+    );
+    expect(mapped.getStatus()).toBe(status);
+    expect(mapped.getResponse()).toMatchObject({ code });
+    expect(JSON.stringify(mapped.getResponse())).not.toMatch(
+      /private|cause|stack/,
+    );
+  });
+
   it('领域修订冲突保持 409，Checkpoint unavailable 保持 503，均只返回白名单说明', () => {
     const revision = workflowRuntimeHttpError(
       new ConflictException({
