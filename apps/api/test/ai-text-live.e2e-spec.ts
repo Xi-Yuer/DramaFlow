@@ -245,7 +245,7 @@ describe('显式启用：真实外部文本模型端到端验收', () => {
         });
         assertNoCredential({ provider, model });
         const definition: WorkflowDefinition = {
-          inputs: [{ name: 'prompt', type: StringType }],
+          inputs: [{ name: 'prompt', type: StringType, required: true }],
           nodes: [
             {
               id: 'text',

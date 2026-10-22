@@ -19,6 +19,10 @@ edges 是节点间连接的唯一来源。Node.inputs 只保存 constant、workf
 
 运行输入以所选版本的契约为准，不依赖某种 Start Node。名称在输入、输出和来源键中唯一，须以英文字母开头，只含字母、数字、下划线，并拒绝原型保留名。
 
+每个 Workflow Input 声明 name、type 和 required。required=true 表示调用应提供该 key，false 允许缺失；旧定义省略 required 时读取为 true，解析后的新定义显式保存该字段，不回写已有不可变版本。nullable 由 DataType union 表达，只允许显式 null，不等于允许 key 缺失。没有默认值，reference 的存在性规则与 inline 相同。Workflow Output 不含 required。
+
+发布时，required 来源可绑定类型兼容的必填或可选节点输入；optional 来源只能绑定 Manifest 与实际输入 Schema 均允许省略的节点输入，否则报 INPUT_SOURCE_OPTIONAL。TemplateBinding 的 workflow_input 变量必须 required 且类型可赋给 string，optional 不自动替换为空文本。Run Submission 尚未统一校验本次 inputs 是否满足版本契约；本轮存在性约束在发布和实际绑定消费处落实，不据此认为所有缺失参数已在受理前拒绝。
+
 媒体和资料使用可校验引用，不把二进制或服务器本地路径写入定义。静态兼容不代替真实值校验，类型规则见数据模型。
 
 最后一个节点的输出不是 Workflow Output。输出显式声明 name、type，以及来源 nodeId 和 outputKey。来源必须存在且类型兼容。WorkflowRun.outputs 只按声明名称收集；缺失输出不能用空值或其他节点结果补齐。

@@ -10,6 +10,9 @@ const schemas = createWorkflowSchemas({
   edge: workflowEdgeSchema,
 });
 
+export const workflowInputDefinitionSchema = schemas.inputSchema;
+export type WorkflowInputDefinition = z.infer<typeof workflowInputDefinitionSchema>;
+
 // 仅校验静态引用与控制 / 数据联合 DAG，不解释运行值、不查询资产，也不推断声明端口。
 export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
   (definition, context) => {

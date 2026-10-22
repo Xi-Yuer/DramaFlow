@@ -58,6 +58,7 @@ export class DefaultNodeExecutor implements NodeExecutor {
         nodeType: nodeType.manifest,
         edges: context.workflow.edges,
         state: context.state,
+        workflowInputs: context.workflow.inputs,
       });
     } catch (cause) {
       return this.failNodeRun(node, nodeRun.id, 'resolve_input', cause);

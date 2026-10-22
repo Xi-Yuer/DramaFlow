@@ -74,8 +74,10 @@ export function createWorkflowSchemas<
   NodeSchema extends z.ZodType<{ id: string }>,
   EdgeSchema extends z.ZodType,
 >(schemas: { dataType: DataTypeSchema; node: NodeSchema; edge: EdgeSchema }) {
-  const inputSchema = z.object({ name: workflowPortNameSchema, type: schemas.dataType }).strict();
-  const outputSchema = inputSchema.extend({ source: workflowOutputSourceSchema });
+  const portFields = { name: workflowPortNameSchema, type: schemas.dataType };
+  // 旧定义读取时补齐存在性语义；解析结果显式携带 required，不回写原始版本。
+  const inputSchema = z.object({ ...portFields, required: z.boolean().default(true) }).strict();
+  const outputSchema = z.object({ ...portFields, source: workflowOutputSourceSchema }).strict();
   const definitionSchema = z
     .object({
       inputs: z.array(inputSchema),

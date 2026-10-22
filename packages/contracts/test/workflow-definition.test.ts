@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   workflowDefinitionSchema,
+  workflowInputDefinitionSchema,
   workflowEdgeSchema,
   type ControlEdgeDefinition,
   type DataEdgeDefinition,
@@ -50,7 +51,7 @@ function controlEdge(
 
 function definition(): WorkflowDefinition {
   return {
-    inputs: [{ name: 'novel', type: { kind: 'primitive', name: 'string' } }],
+    inputs: [{ name: 'novel', type: { kind: 'primitive', name: 'string' }, required: true }],
     nodes: [
       node('a', { novel: { type: 'workflow_input', key: 'novel' } }),
       node('b', {
@@ -70,6 +71,53 @@ function definition(): WorkflowDefinition {
 }
 
 describe('正式 WorkflowDefinition 静态校验', () => {
+  it('历史 input 读取为 required=true，序列化显式保存且不修改原始定义', () => {
+    const legacy = {
+      ...definition(),
+      inputs: [{ name: 'novel', type: { kind: 'primitive', name: 'string' } }],
+    };
+    const before = structuredClone(legacy);
+    const parsed = workflowDefinitionSchema.parse(legacy);
+    expect(parsed.inputs[0]?.required).toBe(true);
+    expect(JSON.parse(JSON.stringify(parsed)).inputs[0].required).toBe(true);
+    expect(legacy).toEqual(before);
+    expect(legacy.inputs[0]).not.toHaveProperty('required');
+  });
+
+  it.each([true, false])('required=%s 与 nullable 独立，输出不增加 required', (required) => {
+    const source = definition();
+    source.inputs[0] = {
+      name: 'novel',
+      type: {
+        kind: 'union',
+        types: [
+          { kind: 'primitive', name: 'string' },
+          { kind: 'primitive', name: 'null' },
+        ],
+      },
+      required,
+    };
+    const parsed = workflowDefinitionSchema.parse(source);
+    expect(parsed.inputs[0]).toEqual(source.inputs[0]);
+    expect(parsed.outputs[0]).not.toHaveProperty('required');
+    expect(
+      workflowDefinitionSchema.safeParse({
+        ...source,
+        outputs: source.outputs.map((output) => ({ ...output, required })),
+      }).success,
+    ).toBe(false);
+  });
+
+  it('存在性只接受 boolean，不增加 optional 或 default 字段', () => {
+    const input = { name: 'novel', type: { kind: 'primitive', name: 'string' } };
+    for (const required of [null, 0, 'false']) {
+      expect(workflowInputDefinitionSchema.safeParse({ ...input, required }).success).toBe(false);
+    }
+    for (const extra of [{ optional: true }, { default: '值' }, { defaultValue: '值' }]) {
+      expect(workflowInputDefinitionSchema.safeParse({ ...input, ...extra }).success).toBe(false);
+    }
+  });
+
   it('保留静态绑定、数据边及完整输入输出，不解析资产或运行值', () => {
     const source = definition();
     expect(workflowDefinitionSchema.parse(JSON.parse(JSON.stringify(source)))).toEqual(source);
@@ -194,7 +242,7 @@ describe('正式 WorkflowDefinition 静态校验', () => {
       },
     };
     const source: WorkflowDefinition = {
-      inputs: [{ name: 'novel', type: { kind: 'primitive', name: 'string' } }],
+      inputs: [{ name: 'novel', type: { kind: 'primitive', name: 'string' }, required: true }],
       nodes: [node('outline'), node('characters'), node('script', { prompt })],
       edges: [],
       outputs: [],
@@ -368,8 +416,8 @@ describe('正式 WorkflowDefinition 静态校验', () => {
       { nodes: [node('a'), node('a'), node('b')] },
       {
         inputs: [
-          { name: 'novel', type: { kind: 'primitive', name: 'string' } },
-          { name: 'novel', type: { kind: 'primitive', name: 'string' } },
+          { name: 'novel', type: { kind: 'primitive', name: 'string' }, required: true },
+          { name: 'novel', type: { kind: 'primitive', name: 'string' }, required: true },
         ],
       },
       {

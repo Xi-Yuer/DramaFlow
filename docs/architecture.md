@@ -16,6 +16,8 @@ PostgreSQL / Prisma 保存业务记录，Redis / BullMQ 交付执行命令，Rus
 
 草稿可保留未完成配置；发布严格验证真实节点 / 端口、类型、必填来源及本地模型绑定。版本保存完整不可变定义，以 workflowId / version、workflowId / sourceRevision 唯一约束保护。执行只读取指定版本，不回退 draft / latest。
 
+Workflow Input 已有显式 required / optional 声明及历史缺省 true 的读取兼容。发布校验限制 optional 来源的节点绑定和模板使用，Runtime 按合法可选绑定传播 missing，不写占位值。Run Submission 的整份版本输入契约校验尚未接入，详见 [Workflow 输入与输出](workflow-model.md#输入与输出)。
+
 ## Workflow 编辑 HTTP API
 
 以下接口均以 `/api/v1` 为前缀，默认认证、no-store；写入检查 Origin。资源不存在或无权访问统一 404。

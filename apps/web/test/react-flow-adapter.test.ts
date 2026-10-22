@@ -40,7 +40,7 @@ function definition() {
 
 function workflow(): WorkflowDefinition {
   return {
-    inputs: [{ name: 'novel', type: { kind: 'primitive', name: 'string' } }],
+    inputs: [{ name: 'novel', type: { kind: 'primitive', name: 'string' }, required: true }],
     nodes: [
       nodeDefinitionSchema.parse({
         id: 'script',

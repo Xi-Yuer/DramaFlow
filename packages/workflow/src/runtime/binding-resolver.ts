@@ -9,6 +9,7 @@ import {
   type StaticInputBinding,
   type TemplateBinding,
   type WorkflowEdge,
+  type WorkflowInputDefinition,
 } from '@dramaflow/contracts';
 import {
   BindingResolutionError,
@@ -22,6 +23,7 @@ export interface BindingResolverContext {
   readonly nodeType: NodeTypeManifest;
   readonly edges: readonly WorkflowEdge[];
   readonly state: WorkflowState;
+  readonly workflowInputs: readonly WorkflowInputDefinition[];
 }
 
 export interface BindingResolver {
@@ -243,6 +245,16 @@ export function createBindingResolver(): BindingResolver {
       }));
       const inputs = Object.entries(resolveDataEdgeInputs(node.id, edges, state.outputs));
       for (const { inputKey, binding, port } of staticInputs) {
+        // 发布已核对节点 Schema 的可省略性；这里只传播明确 optional 来源的 missing。
+        if (
+          binding.type === 'workflow_input' &&
+          !Object.hasOwn(state.inputs, binding.key) &&
+          port.required !== true &&
+          context.workflowInputs.some(
+            (input) => input.name === binding.key && input.required === false,
+          )
+        )
+          continue;
         inputs.push([inputKey, resolveStaticBinding(binding, port, context)]);
       }
       return Object.fromEntries(inputs);

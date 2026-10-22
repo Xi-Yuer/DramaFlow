@@ -48,7 +48,7 @@ afterAll(async () => {
 
 function definition(text: string): WorkflowDefinition {
   return {
-    inputs: [{ name: 'context', type: StringType }],
+    inputs: [{ name: 'context', type: StringType, required: true }],
     nodes: [
       {
         id: 'source',

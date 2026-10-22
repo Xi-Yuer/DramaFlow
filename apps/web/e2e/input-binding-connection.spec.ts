@@ -28,32 +28,52 @@ function textNode(
 function definition(): WorkflowDefinition {
   const templateSource = 'src-template';
   return {
-    inputs: [{ name: 'topic', type: { kind: 'primitive', name: 'string' } }],
+    inputs: [{ name: 'topic', type: { kind: 'primitive', name: 'string' }, required: true }],
     nodes: [
       textNode('src-blank', '空白来源', { x: 24, y: 40 }),
       textNode('blank', '空白', { x: 400, y: 40 }),
       textNode('src-constant', '常量来源', { x: 800, y: 40 }),
-      textNode('constant', '常量', { x: 1176, y: 40 }, {
-        prompt: { type: 'constant', value: '保持这段提示词' },
-      }),
+      textNode(
+        'constant',
+        '常量',
+        { x: 1176, y: 40 },
+        {
+          prompt: { type: 'constant', value: '保持这段提示词' },
+        },
+      ),
       textNode(templateSource, '模板来源', { x: 24, y: 640 }),
-      textNode('template', '模板', { x: 400, y: 640 }, {
-        prompt: {
-          type: 'template',
-          value: '请根据 {{text}} 写剧本',
-          variables: {
-            text: { type: 'node_output', nodeId: templateSource, portKey: 'text' },
+      textNode(
+        'template',
+        '模板',
+        { x: 400, y: 640 },
+        {
+          prompt: {
+            type: 'template',
+            value: '请根据 {{text}} 写剧本',
+            variables: {
+              text: { type: 'node_output', nodeId: templateSource, portKey: 'text' },
+            },
           },
         },
-      }),
+      ),
       textNode('src-reference', '引用来源', { x: 800, y: 640 }),
-      textNode('reference', '引用', { x: 1176, y: 640 }, {
-        prompt: { type: 'workflow_input', key: 'topic' },
-      }),
+      textNode(
+        'reference',
+        '引用',
+        { x: 1176, y: 640 },
+        {
+          prompt: { type: 'workflow_input', key: 'topic' },
+        },
+      ),
       textNode('src-asset', '资产来源', { x: 1600, y: 640 }),
-      textNode('asset', '资产', { x: 1976, y: 640 }, {
-        prompt: { type: 'asset', assetId: 'image-v1', versionId: 'asset-version-1' },
-      }),
+      textNode(
+        'asset',
+        '资产',
+        { x: 1976, y: 640 },
+        {
+          prompt: { type: 'asset', assetId: 'image-v1', versionId: 'asset-version-1' },
+        },
+      ),
     ],
     edges: [],
     outputs: [],

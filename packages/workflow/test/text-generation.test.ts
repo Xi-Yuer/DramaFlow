@@ -45,7 +45,7 @@ function fixture() {
     projectId: 'project-a',
     workflowRunId: 'run-a',
     workflow: {
-      inputs: [{ name: 'prompt', type: StringType }],
+      inputs: [{ name: 'prompt', type: StringType, required: true }],
       nodes: [node],
       edges: [],
       outputs: [],
@@ -77,6 +77,21 @@ function fixture() {
 }
 
 describe('正式文本 AI Node 的 Runtime 连接', () => {
+  it('optional 工作流输入缺失时不向 NodeRun 或能力调用写入 system 占位值', async () => {
+    const f = fixture();
+    f.context.workflow.inputs.push({ name: 'style', type: StringType, required: false });
+    f.node.inputs.system = { type: 'workflow_input', key: 'style' };
+    await f.makeExecutor({ invoke: f.invoke }).execute(f.node, f.context);
+    expect(f.invoke).toHaveBeenCalledExactlyOnceWith('text.generate', {
+      modelConfigurationId,
+      input: { prompt: '编写开场对白' },
+    });
+    expect(f.nodeRuns.updateInputs).toHaveBeenCalledExactlyOnceWith('node-run-1', {
+      prompt: { storage: 'inline', type: StringType, value: '编写开场对白' },
+    });
+    expect(f.nodeRuns.markFailed).not.toHaveBeenCalled();
+  });
+
   it('通过真实 Registry / Binding / Codec / Executor，调用明确能力并记录 RuntimeValue 输入输出', async () => {
     const f = fixture();
     const snapshot = structuredClone({ node: f.node, state: f.context.state });

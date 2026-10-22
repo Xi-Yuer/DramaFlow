@@ -224,7 +224,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
       [
         'INPUT_TYPE_MISMATCH',
         (g) => {
-          g.inputs = [{ name: 'prompt', type: NumberType }];
+          g.inputs = [{ name: 'prompt', type: NumberType, required: true }];
           g.nodes[0]!.inputs.prompt = { type: 'workflow_input', key: 'prompt' };
         },
       ],

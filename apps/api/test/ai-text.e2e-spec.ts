@@ -333,7 +333,7 @@ async function published(
   legacy = false,
 ) {
   const definition: WorkflowDefinition = {
-    inputs: [{ name: 'prompt', type: StringType }],
+    inputs: [{ name: 'prompt', type: StringType, required: true }],
     nodes: [
       {
         id: 'text',

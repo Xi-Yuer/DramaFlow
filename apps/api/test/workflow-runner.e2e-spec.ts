@@ -112,7 +112,7 @@ async function fixture(
     version: 3,
     publishedAt: '2026-10-20T00:00:00.000Z',
     definition: {
-      inputs: [{ name: 'a', type: NumberType }],
+      inputs: [{ name: 'a', type: NumberType, required: true }],
       nodes: [
         {
           id: 'sum',

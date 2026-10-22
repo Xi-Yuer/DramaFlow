@@ -18,6 +18,7 @@ export type WorkflowPublishIssueCode =
   | 'INPUT_PORT_NOT_FOUND'
   | 'OUTPUT_PORT_NOT_FOUND'
   | 'INPUT_SOURCE_MISSING'
+  | 'INPUT_SOURCE_OPTIONAL'
   | 'INPUT_VALUE_INVALID'
   | 'INPUT_TYPE_MISMATCH'
   | 'WORKFLOW_OUTPUT_TYPE_MISMATCH'
@@ -88,7 +89,7 @@ export function validateWorkflowForPublish(
     return { node, nodeType, config: config.data };
   });
   const nodes = new Map(entries.map((entry) => [entry.node.id, entry]));
-  const workflowInputs = new Map(definition.inputs.map((input) => [input.name, input.type]));
+  const workflowInputs = new Map(definition.inputs.map((input) => [input.name, input]));
 
   for (const edge of definition.edges) {
     if (edge.kind === 'control') {
@@ -124,15 +125,22 @@ export function validateWorkflowForPublish(
       else if (binding.type === 'workflow_input') {
         dynamic = true;
         const source = workflowInputs.get(binding.key)!;
-        if (!isTypeAssignable(source, port.dataType)) invalid('INPUT_TYPE_MISMATCH', node.id, key);
+        if (
+          source.required === false &&
+          (port.required === true || !nodeType.inputSchema.shape[key]!.safeParse(undefined).success)
+        )
+          invalid('INPUT_SOURCE_OPTIONAL', node.id, key);
+        if (!isTypeAssignable(source.type, port.dataType))
+          invalid('INPUT_TYPE_MISMATCH', node.id, key);
       } else if (binding.type === 'template') {
         dynamic = true;
         if (!isTypeAssignable(StringType, port.dataType))
           invalid('INPUT_TYPE_MISMATCH', node.id, key);
         for (const source of Object.values(binding.variables)) {
           if (source.type === 'workflow_input') {
-            const sourceType = workflowInputs.get(source.key);
-            if (!sourceType || !isTypeAssignable(sourceType, StringType))
+            const input = workflowInputs.get(source.key);
+            if (input?.required === false) invalid('INPUT_SOURCE_OPTIONAL', node.id, key);
+            if (!input || !isTypeAssignable(input.type, StringType))
               invalid('INPUT_TYPE_MISMATCH', node.id, key);
             continue;
           }

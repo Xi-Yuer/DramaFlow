@@ -9,7 +9,7 @@ import { test, expect, origin } from './fixtures.js';
 
 function definition(): WorkflowDefinition {
   return {
-    inputs: [{ name: 'topic', type: { kind: 'primitive', name: 'string' } }],
+    inputs: [{ name: 'topic', type: { kind: 'primitive', name: 'string' }, required: true }],
     nodes: [
       {
         id: 'a',

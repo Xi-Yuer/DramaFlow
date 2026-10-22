@@ -18,7 +18,7 @@ import {
 
 export function persistentTestDefinition(): WorkflowDefinition {
   return {
-    inputs: [{ name: 'seed', type: NumberType }],
+    inputs: [{ name: 'seed', type: NumberType, required: true }],
     nodes: ['prepare', 'native_wait', 'finish'].map((id, index) => ({
       id,
       type: `test.${id}`,

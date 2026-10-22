@@ -16,7 +16,7 @@ import {
 const modelConfigurationId = '00000000-0000-4000-8000-000000000001';
 function definition(): WorkflowDefinition {
   return {
-    inputs: [{ name: 'prompt', type: StringType }],
+    inputs: [{ name: 'prompt', type: StringType, required: true }],
     nodes: ['A', 'B'].map((id): WorkflowDefinition['nodes'][number] => ({
       id,
       type: 'ai.text_generate',
@@ -45,6 +45,137 @@ function check(
 }
 
 describe('正式 Registry 的静态发布校验', () => {
+  it.each([
+    [true, 'prompt', true],
+    [true, 'system', true],
+    [false, 'system', true],
+    [false, 'prompt', false],
+  ] as const)('required=%s 绑定 %s：允许=%s', (required, portKey, allowed) => {
+    const graph = definition();
+    graph.inputs[0]!.required = required;
+    graph.nodes[0]!.inputs = {
+      prompt: { type: 'constant', value: '写作' },
+      [portKey]: { type: 'workflow_input', key: 'prompt' },
+    };
+    if (allowed) expect(check(graph)).toHaveLength(2);
+    else
+      expect(() => check(graph)).toThrow(
+        expect.objectContaining({
+          code: 'INPUT_SOURCE_OPTIONAL',
+          nodeId: 'A',
+          portKey,
+        }),
+      );
+  });
+
+  it.each([true, false])('optional 目标仍校验 DataType，来源 required=%s', (required) => {
+    const graph = definition();
+    graph.inputs[0] = { name: 'prompt', type: NumberType, required };
+    graph.nodes[0]!.inputs = {
+      prompt: { type: 'constant', value: '写作' },
+      system: { type: 'workflow_input', key: 'prompt' },
+    };
+    expect(() => check(graph)).toThrow(expect.objectContaining({ code: 'INPUT_TYPE_MISMATCH' }));
+  });
+
+  it.each([true, false])(
+    'Manifest 与 Schema 的可省略性必须同时成立：Manifest required=%s',
+    (required) => {
+      const graph = definition();
+      graph.inputs[0]!.required = false;
+      graph.nodes[0]!.inputs = {
+        prompt: { type: 'constant', value: '写作' },
+        system: { type: 'workflow_input', key: 'prompt' },
+      };
+      const text = createTextGenerationNodeType();
+      const registry = new NodeRegistry([
+        {
+          ...text,
+          manifest: {
+            ...text.manifest,
+            inputs: text.manifest.inputs.map((port) =>
+              port.key === 'system' ? { ...port, required } : port,
+            ),
+          },
+          inputSchema: z.object({
+            prompt: z.string(),
+            system: required ? z.string().optional() : z.string(),
+          }),
+        },
+      ]);
+      expect(() => check(graph, registry)).toThrow(
+        expect.objectContaining({ code: 'INPUT_SOURCE_OPTIONAL' }),
+      );
+    },
+  );
+
+  it('nullable 不代表 optional，也不能自动作为 string 模板变量', () => {
+    const graph = definition();
+    const nullable = {
+      kind: 'union' as const,
+      types: [StringType, { kind: 'primitive' as const, name: 'null' as const }],
+    };
+    graph.inputs[0] = { name: 'prompt', type: nullable, required: true };
+    graph.nodes[0]!.inputs = {
+      prompt: { type: 'constant', value: '写作' },
+      system: { type: 'workflow_input', key: 'prompt' },
+    };
+    const text = createTextGenerationNodeType();
+    const registry = new NodeRegistry([
+      {
+        ...text,
+        manifest: {
+          ...text.manifest,
+          inputs: text.manifest.inputs.map((port) =>
+            port.key === 'system' ? { ...port, dataType: nullable, required: true } : port,
+          ),
+        },
+        inputSchema: z.object({ prompt: z.string(), system: z.string().nullable() }),
+      },
+    ]);
+    graph.nodes[1]!.inputs.system = { type: 'constant', value: null };
+    expect(check(graph, registry)).toHaveLength(2);
+    graph.inputs[0]!.required = false;
+    expect(() => check(graph, registry)).toThrow(
+      expect.objectContaining({ code: 'INPUT_SOURCE_OPTIONAL' }),
+    );
+    graph.inputs[0]!.required = true;
+    graph.nodes[0]!.inputs.system = {
+      type: 'template',
+      value: '{{style}}',
+      variables: { style: { type: 'workflow_input', key: 'prompt' } },
+    };
+    expect(() => check(graph)).toThrow(expect.objectContaining({ code: 'INPUT_TYPE_MISMATCH' }));
+  });
+
+  it.each(['prompt', 'system'])('optional workflow_input 不能作为 %s 模板变量', (portKey) => {
+    const graph = definition();
+    graph.inputs[0]!.required = false;
+    graph.nodes[0]!.inputs = {
+      prompt: { type: 'constant', value: '写作' },
+      [portKey]: {
+        type: 'template',
+        value: '{{style}}',
+        variables: { style: { type: 'workflow_input', key: 'prompt' } },
+      },
+    };
+    expect(() => check(graph)).toThrow(
+      expect.objectContaining({ code: 'INPUT_SOURCE_OPTIONAL', portKey }),
+    );
+  });
+
+  it('历史 input 缺少 required 时仍能向必填端口发布，原定义不回写', () => {
+    const graph = definition();
+    const legacy = { ...graph, inputs: [{ name: 'prompt', type: StringType }] };
+    expect(
+      validateWorkflowForPublish(
+        workflowDefinitionSchema.parse(legacy),
+        new NodeRegistry([createTextGenerationNodeType()]),
+      ),
+    ).toHaveLength(2);
+    expect(legacy.inputs[0]).not.toHaveProperty('required');
+  });
+
   it('合法文本 DAG 保留完整定义，不执行 Node 或回写默认值', () => {
     const nodeType = createTextGenerationNodeType();
     const execute = vi.spyOn(nodeType, 'execute');
@@ -276,7 +407,7 @@ describe('正式 Registry 的静态发布校验', () => {
     ]);
     const graph = definition();
     graph.edges = [];
-    graph.inputs.push({ name: 'style', type: StringType });
+    graph.inputs.push({ name: 'style', type: StringType, required: true });
     graph.nodes.push({
       id: 'C',
       type: 'ai.text_generate',

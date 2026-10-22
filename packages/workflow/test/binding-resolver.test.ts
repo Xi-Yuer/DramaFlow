@@ -164,6 +164,87 @@ describe('Data Edge 输入解析', () => {
 describe('BindingResolver 完整输入组装', () => {
   const bindingResolver = createBindingResolver();
 
+  it('optional 来源缺失时省略目标 key，保留其他输入，不修改 State', async () => {
+    const original = { ...state(), inputs: {} };
+    const inputs = await bindingResolver.resolveInputs({
+      workflowInputs: [{ name: 'novel', type: DocumentType, required: false }],
+      node: {
+        ...node,
+        inputs: {
+          document: { type: 'workflow_input', key: 'novel' },
+          prompt: { type: 'constant', value: '写作' },
+        },
+      },
+      nodeType,
+      edges: [],
+      state: original,
+    });
+    expect(inputs).toEqual({ prompt: { storage: 'inline', type: StringType, value: '写作' } });
+    expect(Object.hasOwn(inputs, 'document')).toBe(false);
+    expect(original.inputs).toEqual({});
+  });
+
+  it.each([true, false])('缺失来源 required=%s 不能静默满足必填端口', async (required) => {
+    await expect(
+      bindingResolver.resolveInputs({
+        workflowInputs: [{ name: 'picture', type: ImageType, required }],
+        node: { ...node, inputs: { image: { type: 'workflow_input', key: 'picture' } } },
+        nodeType,
+        edges: [],
+        state: state(),
+      }),
+    ).rejects.toMatchObject({ code: 'WORKFLOW_INPUT_MISSING' });
+  });
+
+  it('required nullable 来源缺失时即使目标可省略仍报错', async () => {
+    await expect(
+      bindingResolver.resolveInputs({
+        workflowInputs: [
+          {
+            name: 'novel',
+            required: true,
+            type: { kind: 'union', types: [DocumentType, { kind: 'primitive', name: 'null' }] },
+          },
+        ],
+        node: { ...node, inputs: { document: { type: 'workflow_input', key: 'novel' } } },
+        nodeType,
+        edges: [],
+        state: { ...state(), inputs: {} },
+      }),
+    ).rejects.toMatchObject({ code: 'WORKFLOW_INPUT_MISSING' });
+  });
+
+  it.each([null, false, 0, ''])('optional 的显式值 %s 仍保留，不当作 missing', async (value) => {
+    const runtimeValue: RuntimeValue = { storage: 'inline', type: JsonType, value };
+    const inputs = await bindingResolver.resolveInputs({
+      workflowInputs: [{ name: 'novel', type: JsonType, required: false }],
+      node: { ...node, inputs: { document: { type: 'workflow_input', key: 'novel' } } },
+      nodeType,
+      edges: [],
+      state: { ...state(), inputs: { novel: runtimeValue } },
+    });
+    expect(Object.hasOwn(inputs, 'document')).toBe(true);
+    expect(inputs.document).toBe(runtimeValue);
+  });
+
+  it('optional reference 原样传递，不读取引用内容', async () => {
+    const value: RuntimeValue = {
+      storage: 'reference',
+      type: DocumentType,
+      get reference(): never {
+        throw new Error('不能解析引用');
+      },
+    };
+    const inputs = await bindingResolver.resolveInputs({
+      workflowInputs: [{ name: 'novel', type: DocumentType, required: false }],
+      node: { ...node, inputs: { document: { type: 'workflow_input', key: 'novel' } } },
+      nodeType,
+      edges: [],
+      state: { ...state(), inputs: { novel: value } },
+    });
+    expect(inputs.document).toBe(value);
+  });
+
   it('实际解析四类来源，保留输入和上游值，整个过程不发生外部 I/O', async () => {
     const target: NodeDefinition = {
       ...node,
@@ -173,7 +254,13 @@ describe('BindingResolver 完整输入组装', () => {
         document: { type: 'workflow_input', key: 'novel' },
       },
     };
-    const context = { node: target, nodeType, edges: [imageEdge], state: state() };
+    const context = {
+      workflowInputs: [],
+      node: target,
+      nodeType,
+      edges: [imageEdge],
+      state: state(),
+    };
     const snapshot = structuredClone(context);
     const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
       throw new Error('BindingResolver 不得访问网络');
@@ -201,6 +288,7 @@ describe('BindingResolver 完整输入组装', () => {
     { value: { nested: ['值'] } },
   ])('常量保留 JSON 值并使用目标端口类型，不推断实际值类型：$value', async ({ value }) => {
     const inputs = await bindingResolver.resolveInputs({
+      workflowInputs: [],
       node: { ...node, inputs: { prompt: { type: 'constant', value } } },
       nodeType: {
         ...nodeType,
@@ -215,6 +303,7 @@ describe('BindingResolver 完整输入组装', () => {
 
   it('业务值与端口类型不符时仍只构造 RuntimeValue，校验留给 NodeExecutor', async () => {
     const inputs = await bindingResolver.resolveInputs({
+      workflowInputs: [],
       node: { ...node, inputs: { prompt: { type: 'constant', value: 123 } } },
       nodeType,
       edges: [],
@@ -227,6 +316,7 @@ describe('BindingResolver 完整输入组装', () => {
     '工作流输入原样复用 RuntimeValue，不按目标端口重新包装：$storage',
     async (value) => {
       const inputs = await bindingResolver.resolveInputs({
+        workflowInputs: [],
         node: { ...node, inputs: { document: { type: 'workflow_input', key: 'novel' } } },
         nodeType,
         edges: [],
@@ -239,6 +329,7 @@ describe('BindingResolver 完整输入组装', () => {
   it('缺失的工作流输入抛 WORKFLOW_INPUT_MISSING，不返回 undefined', async () => {
     await expect(
       bindingResolver.resolveInputs({
+        workflowInputs: [],
         node: { ...node, inputs: { document: { type: 'workflow_input', key: 'missing' } } },
         nodeType,
         edges: [],
@@ -256,6 +347,7 @@ describe('BindingResolver 完整输入组装', () => {
     Object.setPrototypeOf(inputs, { novel: document });
     await expect(
       bindingResolver.resolveInputs({
+        workflowInputs: [],
         node: { ...node, inputs: { document: { type: 'workflow_input', key: 'novel' } } },
         nodeType,
         edges: [],
@@ -273,6 +365,7 @@ describe('BindingResolver 完整输入组装', () => {
       },
     };
     const inputs = await bindingResolver.resolveInputs({
+      workflowInputs: [],
       node: { ...node, inputs: { document: { type: 'workflow_input', key: 'novel' } } },
       nodeType,
       edges: [],
@@ -284,6 +377,7 @@ describe('BindingResolver 完整输入组装', () => {
   it('同一资产的不同绑定固定各自版本，后续解析不改写先前的引用', async () => {
     const resolveVersion = (versionId: string) =>
       bindingResolver.resolveInputs({
+        workflowInputs: [],
         node: { ...node, inputs: { reference: { type: 'asset', assetId: 'asset-1', versionId } } },
         nodeType,
         edges: [],
@@ -313,6 +407,7 @@ describe('BindingResolver 完整输入组装', () => {
     async (binding) => {
       await expect(
         bindingResolver.resolveInputs({
+          workflowInputs: [],
           node: { ...node, inputs: { image: binding } },
           nodeType,
           edges: [imageEdge],
@@ -329,6 +424,7 @@ describe('BindingResolver 完整输入组装', () => {
   it('上游输出缺失时直接抛原始问题，不用静态值补齐', async () => {
     await expect(
       bindingResolver.resolveInputs({
+        workflowInputs: [],
         node: { ...node, inputs: { prompt: { type: 'constant', value: '提示词' } } },
         nodeType,
         edges: [imageEdge],
@@ -340,6 +436,7 @@ describe('BindingResolver 完整输入组装', () => {
   it('没有绑定时返回空 map，必填检查留到执行层，控制边不触发取值', async () => {
     expect(
       await bindingResolver.resolveInputs({
+        workflowInputs: [],
         node,
         nodeType,
         edges: [
@@ -362,6 +459,7 @@ describe('BindingResolver 完整输入组装', () => {
   ])('未声明的静态输入端口抛 INPUT_PORT_NOT_FOUND：$type', async (binding) => {
     await expect(
       bindingResolver.resolveInputs({
+        workflowInputs: [],
         node: { ...node, inputs: { undeclared: binding } },
         nodeType,
         edges: [],
@@ -376,6 +474,7 @@ describe('BindingResolver 完整输入组装', () => {
   it('数据边的目标端口未声明时抛 INPUT_PORT_NOT_FOUND', async () => {
     await expect(
       bindingResolver.resolveInputs({
+        workflowInputs: [],
         node,
         nodeType: { ...nodeType, inputs: [] },
         edges: [imageEdge],
@@ -386,6 +485,7 @@ describe('BindingResolver 完整输入组装', () => {
 
   it('控制边的同名端口不占用静态输入，也不读取上游输出', async () => {
     const inputs = await bindingResolver.resolveInputs({
+      workflowInputs: [],
       node: { ...node, inputs: { prompt: { type: 'constant', value: '让人物向前走' } } },
       nodeType,
       edges: [
@@ -404,6 +504,7 @@ describe('BindingResolver 完整输入组装', () => {
   it('一个模板引用多个上游输出，并按原文替换为内联字符串', async () => {
     const bindingResolver = createBindingResolver();
     const inputs = await bindingResolver.resolveInputs({
+      workflowInputs: [],
       node: {
         ...node,
         inputs: {
@@ -434,6 +535,7 @@ describe('BindingResolver 完整输入组装', () => {
   it('模板中的 workflow input 渲染为字符串，不读取引用', async () => {
     const bindingResolver = createBindingResolver();
     const inputs = await bindingResolver.resolveInputs({
+      workflowInputs: [],
       node: {
         ...node,
         inputs: {
@@ -465,6 +567,7 @@ describe('BindingResolver 完整输入组装', () => {
     };
     await expect(
       bindingResolver.resolveInputs({
+        workflowInputs: [],
         node: { ...node, inputs: { prompt } },
         nodeType,
         edges: [],
@@ -482,6 +585,7 @@ describe('BindingResolver 完整输入组装', () => {
     });
     await expect(
       bindingResolver.resolveInputs({
+        workflowInputs: [],
         node: {
           ...node,
           inputs: {
@@ -518,6 +622,7 @@ describe('BindingResolver 完整输入组装', () => {
     };
     await expect(
       bindingResolver.resolveInputs({
+        workflowInputs: [],
         node: {
           ...node,
           inputs: {
@@ -540,6 +645,7 @@ describe('BindingResolver 完整输入组装', () => {
     });
     await expect(
       bindingResolver.resolveInputs({
+        workflowInputs: [],
         node: {
           ...node,
           inputs: {

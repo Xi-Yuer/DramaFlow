@@ -16,7 +16,7 @@ const schemas = createWorkflowSchemas({
 
 function definition() {
   return {
-    inputs: [{ name: 'novel', type: 'text' }],
+    inputs: [{ name: 'novel', type: 'text', required: true }],
     nodes: [{ id: 'script', label: '剧本' }],
     edges: [],
     outputs: [
@@ -55,7 +55,7 @@ describe('Workflow 定义组合校验', () => {
     expect(
       schemas.definitionSchema.safeParse({
         ...definition(),
-        inputs: [{ name: 'novel', type: 'unsupported' }],
+        inputs: [{ name: 'novel', type: 'unsupported', required: true }],
       }).success,
     ).toBe(false);
   });

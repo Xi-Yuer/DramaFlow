@@ -95,7 +95,7 @@ function fixture() {
     projectId: 'p',
     workflowRunId: 'r',
     workflow: {
-      inputs: [{ name: 'a', type: NumberType }],
+      inputs: [{ name: 'a', type: NumberType, required: true }],
       nodes: [node],
       edges: [],
       outputs: [],
@@ -160,6 +160,7 @@ describe('普通 Action Node 执行主链', () => {
       nodeType: f.manifest,
       edges: f.context.workflow.edges,
       state: f.context.state,
+      workflowInputs: f.context.workflow.inputs,
     });
     expect(f.decodeRecord).toHaveBeenCalledWith(
       {
