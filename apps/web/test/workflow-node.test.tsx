@@ -7,6 +7,7 @@ import {
   GenericWorkflowNode,
   WorkflowManifestProvider,
 } from '../src/features/workflow/workflow-node';
+import { WorkflowInputContext } from '../src/features/workflow/workflow-input-context';
 import { toReactFlowNode, type WorkflowNode } from '../src/features/workflow/react-flow-adapter';
 import { controlHandleId } from '../src/features/workflow/workflow-handles';
 
@@ -142,6 +143,86 @@ describe('通用 WorkflowNode', () => {
     const html = render([manifest], node);
     expect(html).toContain('1080p');
     expect(html).not.toContain('不应显示的字段');
+  });
+
+  it('只在文本节点提供变量编辑，其他节点不出现插入按钮', () => {
+    const html = render([manifest], props());
+    expect(html).not.toContain('插入变量');
+    const text = nodeTypeManifestSchema.parse({
+      ...manifest,
+      type: 'ai.text_generate',
+      metadata: { name: '文本生成', category: 'ai' },
+      inputs: [
+        {
+          key: 'prompt',
+          name: '提示词',
+          dataType: { kind: 'primitive', name: 'string' },
+          required: true,
+        },
+        { key: 'system', name: '系统提示词', dataType: { kind: 'primitive', name: 'string' } },
+      ],
+      outputs: [{ key: 'text', name: '生成文本', dataType: { kind: 'primitive', name: 'string' } }],
+      config: [],
+    });
+    const node = toReactFlowNode({
+      id: 'script',
+      type: 'ai.text_generate',
+      typeVersion: 1,
+      name: '剧本',
+      inputs: {
+        prompt: {
+          type: 'template',
+          value: '请根据 {{text}} 生成剧本',
+          variables: { text: { type: 'node_output', nodeId: 'outline', portKey: 'text' } },
+        },
+      },
+      config: {},
+      ui: { position: { x: 0, y: 0 } },
+    });
+    const markup = renderToStaticMarkup(
+      <ReactFlowProvider>
+        <WorkflowInputContext.Provider
+          value={{
+            disabled: false,
+            definition: {
+              inputs: [],
+              nodes: [
+                {
+                  id: 'outline',
+                  type: 'ai.text_generate',
+                  typeVersion: 1,
+                  name: '生成大纲',
+                  inputs: {},
+                  config: {},
+                  ui: { position: { x: 0, y: 0 } },
+                },
+                {
+                  id: 'script',
+                  type: 'ai.text_generate',
+                  typeVersion: 1,
+                  name: '剧本',
+                  inputs: node.data.inputs,
+                  config: {},
+                  ui: { position: { x: 0, y: 0 } },
+                },
+              ],
+              edges: [],
+              outputs: [],
+            },
+            manifests: [text],
+            onReplaceInput: () => undefined,
+          }}
+        >
+          <WorkflowManifestProvider manifests={[text]}>
+            <GenericWorkflowNode {...props()} id="script" data={node.data} />
+          </WorkflowManifestProvider>
+        </WorkflowInputContext.Provider>
+      </ReactFlowProvider>,
+    );
+    expect(markup).toContain('请根据 {{text}} 生成剧本');
+    expect(markup).toContain('生成大纲 / 生成文本');
+    expect(markup).toContain('aria-label="向提示词插入变量"');
+    expect(markup).toContain('aria-label="向系统提示词插入变量"');
   });
 
   it('类型缺失时安全显示名称，不把名称当 HTML 或注入脚本', () => {

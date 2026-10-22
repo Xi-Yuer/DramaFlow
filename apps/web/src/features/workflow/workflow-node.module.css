@@ -118,6 +118,12 @@
   border-top: 1px solid #ffffff0b;
 }
 
+.inputs {
+  display: grid;
+  gap: 14px;
+  padding: 0 16px 14px;
+}
+
 .config > div {
   display: flex;
   align-items: baseline;

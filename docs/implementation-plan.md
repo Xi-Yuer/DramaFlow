@@ -10,7 +10,7 @@
 
 ## 待决策与后续边界
 
-- 编辑器后续入口：节点添加、其余节点配置、发布与运行交互。文本节点的模型选择已落地。实施前需明确本轮页面和操作边界。
+- 编辑器后续入口：节点添加、其余节点配置、发布与运行交互。文本节点的模型选择，以及 prompt / system 的上游变量插入已落地。实施前需明确本轮页面和操作边界。
 - Runtime：recovery_required 的核查与人工处理、业务记录与 checkpoint 的对账、运行删除及 checkpoint 保留策略。
 - Human Review：interaction 节点的 waiting / resume，以及复用 NodeRun 与 attempt 的关联。继续采用 LangGraph 原生机制。
 - Tool / Agent、Asset / Promote、控制结构、Batch / SubWorkflow、媒体节点与漫剧模板按各自任务设计。协议或测试节点不是已交付功能。

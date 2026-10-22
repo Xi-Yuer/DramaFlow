@@ -16,6 +16,9 @@ import {
 import type { DataType, NodeTypeManifest } from '@dramaflow/contracts';
 import { ModelSelector } from './model-selector';
 import type { WorkflowNode } from './react-flow-adapter';
+import { TemplateInputEditor } from './template-input-editor';
+import { availableStringOutputs } from './template-input';
+import { WorkflowInputContext } from './workflow-input-context';
 import { controlHandleId } from './workflow-handles';
 import styles from './workflow-node.module.css';
 
@@ -91,6 +94,7 @@ export function GenericWorkflowNode({
   isConnectable,
 }: NodeProps<WorkflowNode>) {
   const manifests = useContext(ManifestContext);
+  const inputActions = useContext(WorkflowInputContext);
   const manifest = findNodeManifest(manifests, data.nodeType, data.typeVersion);
   const icon = manifest ? (
     (metadataIcons.get(manifest.metadata.icon ?? '') ?? nodeIcons[manifest.metadata.category])
@@ -175,6 +179,35 @@ export function GenericWorkflowNode({
               ))}
             </div>
           </div>
+          {inputActions && data.nodeType === 'ai.text_generate' ? (
+            <div className={styles.inputs}>
+              {manifest.inputs
+                .filter((port) => port.key === 'prompt' || port.key === 'system')
+                .map((port) => (
+                  <TemplateInputEditor
+                    key={port.key}
+                    portName={port.name}
+                    rows={port.key === 'system' ? 2 : 4}
+                    binding={data.inputs[port.key]}
+                    connected={inputActions.definition.edges.some(
+                      (edge) =>
+                        edge.kind === 'data' &&
+                        edge.target.nodeId === id &&
+                        edge.target.portKey === port.key,
+                    )}
+                    outputs={availableStringOutputs(
+                      inputActions.definition,
+                      id,
+                      inputActions.manifests,
+                    )}
+                    definition={inputActions.definition}
+                    manifests={inputActions.manifests}
+                    disabled={inputActions.disabled}
+                    onChange={(binding) => inputActions.onReplaceInput(id, port.key, binding)}
+                  />
+                ))}
+            </div>
+          ) : null}
           {manifest.config.length ? (
             <dl className={styles.config}>
               {manifest.config.slice(0, 3).map((field) => (

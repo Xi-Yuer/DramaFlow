@@ -1,0 +1,163 @@
+.editor {
+  display: grid;
+  gap: 8px;
+}
+
+.label {
+  color: #a2a2ad;
+  font-size: 12px;
+}
+
+.locked,
+.empty {
+  margin: 0;
+  color: #929498;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.shell {
+  display: grid;
+  border: 1px solid #ffffff14;
+  border-radius: 10px;
+  background: #101012;
+}
+
+.shell:focus-within {
+  border-color: #79c9c4;
+}
+
+.highlight,
+.field {
+  grid-area: 1 / 1;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.highlight {
+  overflow: hidden;
+  color: #efeff2;
+  pointer-events: none;
+}
+
+.field {
+  resize: none;
+  color: transparent;
+  caret-color: #efeff2;
+  background: transparent;
+}
+
+.field::placeholder {
+  color: #8d9096;
+}
+
+.field::selection {
+  background: #79c9c455;
+}
+
+.field:disabled {
+  cursor: not-allowed;
+}
+
+.token {
+  padding: 0;
+  border-radius: 4px;
+  background: #79c9c426;
+  color: #d7f4f1;
+  font: inherit;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  gap: 6px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid #ffffff14;
+  border-radius: 999px;
+  background: #ffffff08;
+  color: #d7f4f1;
+  font-size: 11px;
+}
+
+.chip span,
+.chip code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip code {
+  color: #8fd4cf;
+}
+
+.chip button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #a2a2ad;
+  cursor: pointer;
+}
+
+.chip button:hover {
+  background: #ffffff10;
+  color: #efeff2;
+}
+
+.menu {
+  width: min(280px, 70vw);
+  max-height: 320px;
+  overflow: auto;
+  padding: 4px;
+}
+
+.group h3 {
+  margin: 8px 8px 4px;
+  color: #a2a2ad;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #efeff2;
+  cursor: pointer;
+  text-align: left;
+}
+
+.option:hover {
+  background: #ffffff0d;
+}
+
+.option code {
+  color: #8fd4cf;
+  font-size: 11px;
+}

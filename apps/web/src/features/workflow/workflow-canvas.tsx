@@ -6,6 +6,8 @@ import { Button } from 'antd';
 import type { Project, WorkflowDefinition } from '@dramaflow/contracts';
 import { nodeTypeApi, nodeTypeKeys } from './node-type-api';
 import { WorkflowModelActionsContext } from './model-selector';
+import { replaceNodeInput } from './template-input';
+import { WorkflowInputContext } from './workflow-input-context';
 import { WorkflowManifestProvider, workflowNodeTypes } from './workflow-node';
 import { areWorkflowHandlesCompatible } from './workflow-handles';
 import {
@@ -80,72 +82,85 @@ export function WorkflowCanvas({
             })),
         }}
       >
-      <WorkflowManifestProvider manifests={nodeTypes.data ?? []}>
-        <ReactFlow<WorkflowNode, WorkflowEdge>
-          nodeTypes={workflowNodeTypes}
-          nodes={nodes}
-          edges={edges}
-          nodesDraggable={!locked}
-          nodesConnectable={!locked && !nodeTypes.isPending && !nodeTypes.isError}
-          edgesReconnectable={!locked}
-          deleteKeyCode={locked ? null : ['Backspace', 'Delete']}
-          onNodesChange={(changes) => {
-            // 受控 React Flow 仍需接收测量结果；仅缓存在视图，不回写领域草稿。
-            setNodeView((current) => {
-              const viewChanges = changes.filter(
-                (change) => change.type === 'select' || change.type === 'dimensions',
-              );
-              if (!viewChanges.length) return current;
-              const next = new Map(current);
-              for (const change of viewChanges) {
-                if (change.type === 'select')
-                  next.set(change.id, { ...next.get(change.id), selected: change.selected });
-                else if (change.type === 'dimensions' && change.dimensions)
-                  next.set(change.id, { ...next.get(change.id), measured: change.dimensions });
-              }
-              return next;
-            });
-            if (!locked && changes.some((change) => change.type === 'position' && change.position))
-              onEdit((current) => applyWorkflowNodePositions(current, changes));
+        <WorkflowInputContext.Provider
+          value={{
+            disabled: locked,
+            definition: workflow,
+            manifests: nodeTypes.data ?? [],
+            onReplaceInput: (nodeId, portKey, binding) =>
+              onEdit((current) => replaceNodeInput(current, nodeId, portKey, binding)),
           }}
-          onConnect={(connection) =>
-            onEdit((current) => connectWorkflowNodes(current, connection, nodeTypes.data ?? []))
-          }
-          onReconnect={(edge, connection) =>
-            onEdit((current) =>
-              reconnectWorkflowEdge(current, edge, connection, nodeTypes.data ?? []),
-            )
-          }
-          onEdgesDelete={(deleted) => {
-            onEdit((current) => deleted.reduce(disconnectWorkflowEdge, current));
-          }}
-          onEdgesChange={(changes) => {
-            setSelectedEdgeIds((current) => {
-              const next = new Set(current);
-              for (const change of changes) {
-                if (change.type === 'select') {
-                  if (change.selected) next.add(change.id);
-                  else next.delete(change.id);
-                } else if (change.type === 'remove') next.delete(change.id);
-              }
-              return next;
-            });
-          }}
-          isValidConnection={(connection) =>
-            areWorkflowHandlesCompatible(connection.sourceHandle, connection.targetHandle)
-          }
-          onMoveEnd={onMoveEnd}
-          defaultViewport={defaultViewport}
-          minZoom={0.1}
-          maxZoom={3}
-          colorMode="dark"
-          fitView={false}
-          proOptions={{ hideAttribution: false }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="#ffffff18" />
-          <Controls showInteractive={false} position="bottom-left" />
-        </ReactFlow>
-      </WorkflowManifestProvider>
+          <WorkflowManifestProvider manifests={nodeTypes.data ?? []}>
+            <ReactFlow<WorkflowNode, WorkflowEdge>
+              nodeTypes={workflowNodeTypes}
+              nodes={nodes}
+              edges={edges}
+              nodesDraggable={!locked}
+              nodesConnectable={!locked && !nodeTypes.isPending && !nodeTypes.isError}
+              edgesReconnectable={!locked}
+              deleteKeyCode={locked ? null : ['Backspace', 'Delete']}
+              onNodesChange={(changes) => {
+                // 受控 React Flow 仍需接收测量结果；仅缓存在视图，不回写领域草稿。
+                setNodeView((current) => {
+                  const viewChanges = changes.filter(
+                    (change) => change.type === 'select' || change.type === 'dimensions',
+                  );
+                  if (!viewChanges.length) return current;
+                  const next = new Map(current);
+                  for (const change of viewChanges) {
+                    if (change.type === 'select')
+                      next.set(change.id, { ...next.get(change.id), selected: change.selected });
+                    else if (change.type === 'dimensions' && change.dimensions)
+                      next.set(change.id, { ...next.get(change.id), measured: change.dimensions });
+                  }
+                  return next;
+                });
+                if (
+                  !locked &&
+                  changes.some((change) => change.type === 'position' && change.position)
+                )
+                  onEdit((current) => applyWorkflowNodePositions(current, changes));
+              }}
+              onConnect={(connection) =>
+                onEdit((current) => connectWorkflowNodes(current, connection, nodeTypes.data ?? []))
+              }
+              onReconnect={(edge, connection) =>
+                onEdit((current) =>
+                  reconnectWorkflowEdge(current, edge, connection, nodeTypes.data ?? []),
+                )
+              }
+              onEdgesDelete={(deleted) => {
+                onEdit((current) => deleted.reduce(disconnectWorkflowEdge, current));
+              }}
+              onEdgesChange={(changes) => {
+                setSelectedEdgeIds((current) => {
+                  const next = new Set(current);
+                  for (const change of changes) {
+                    if (change.type === 'select') {
+                      if (change.selected) next.add(change.id);
+                      else next.delete(change.id);
+                    } else if (change.type === 'remove') next.delete(change.id);
+                  }
+                  return next;
+                });
+              }}
+              isValidConnection={(connection) =>
+                areWorkflowHandlesCompatible(connection.sourceHandle, connection.targetHandle)
+              }
+              onMoveEnd={onMoveEnd}
+              defaultViewport={defaultViewport}
+              minZoom={0.1}
+              maxZoom={3}
+              colorMode="dark"
+              fitView={false}
+              proOptions={{ hideAttribution: false }}
+            >
+              <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="#ffffff18" />
+              <Controls showInteractive={false} position="bottom-left" />
+            </ReactFlow>
+          </WorkflowManifestProvider>
+        </WorkflowInputContext.Provider>
       </WorkflowModelActionsContext.Provider>
       {workflow.nodes.length === 0 ? (
         <div className="canvas-empty">
