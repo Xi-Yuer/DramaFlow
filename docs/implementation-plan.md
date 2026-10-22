@@ -1,28 +1,14 @@
 # 实施方案
 
-本文件只维护当前阶段和待决策项。已实现能力集中在 [当前架构](architecture.md)。规划不构成整批实施授权。
+仅维护当前工作和待决策项；能力、接口与限制以[当前架构](architecture.md)为准。规划不构成实施授权。
 
 ## 当前阶段
 
-截至 2026-10-22，已完成项目画布与模型管理基础（A3 / A4）、C2.1 文本能力接入、C2.2 生产残留清理、C2.3 架构文档校正，后端 Provider Catalog 及通用节点新增入口，并完成 Workflow Start invocation 幂等受理及 Web 基础 Publish 接入。正式文本链由 `text_generation@1` 在内部通过 Vercel AI SDK 调用 OpenAI 与 Anthropic。OpenAI / Anthropic 的 Provider Definition 在代码目录中，实例复用 ModelProvider。Web 模型供应商页按该目录配置凭证。Model Catalog 用代码声明 OpenAI `gpt-4o` 与 Anthropic `claude-sonnet-4-20250514`，均可按 `text.generate` 查询。`ai.text_generate` 节点可按该目录选择模型，草稿仍只保存 `modelConfigurationId`。调用厂商 API 的模型发现、其他厂商和新媒体能力尚未实现。
-
-下一步等待明确任务，不自动推进 A6、图片或视频模型选择器、其他厂商或新生成能力。
+停留在 Workflow Result UI 实现前的核查与资料整理。下一步需明确授权；不自动开始 Result、Artifact API 或其他功能。
 
 ## 待决策与后续边界
 
-- 编辑器后续入口：其余节点配置与运行交互。实施前需明确本轮页面和操作边界。
-- Runtime：recovery_required 的核查与人工处理、业务记录与 checkpoint 的对账、运行删除及 checkpoint 保留策略。
-- Human Review：interaction 节点的 waiting / resume，以及复用 NodeRun 与 attempt 的关联。继续采用 LangGraph 原生机制。
-- Tool / Agent、Asset / Promote、控制结构、Batch / SubWorkflow、媒体节点与漫剧模板按各自任务设计。协议或测试节点不是已交付功能。
-
-总体顺序仍是定义与数据、执行底座、外部能力与资料、人工交互及组合、领域模板。每步只落地可验证需求，不预建完整框架。
-
-## 技术路线结论
-
-| 路线          | 结论与证据                                                                                                                                                           |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Vercel AI SDK | C1 为 GO。C2.1 起由 `text_generation@1` 在内部使用，覆盖 OpenAI / Anthropic 文本。其他能力各自选择插件。证据见 [C1](../experiments/ai-sdk-c1/README.md)              |
-| LiteLLM       | 已评估，REJECTED / NO-GO。证据见 [L1](../experiments/litellm-l1/README.md)、[L2](../experiments/litellm-l2/README.md)、[L2.1](../experiments/litellm-l2-1/README.md) |
-| Bifrost       | 已评估，REJECTED / NO-GO。证据见 [B1](../experiments/bifrost-b1/README.md)、[B1.1](../experiments/bifrost-b1-1/README.md)                                            |
-
-LiteLLM 与 Bifrost 不是当前或计划中的生产依赖。保留 `openai_compatible@1` 作为高级 Custom OpenAI-Compatible。历史评估只在复核决策时读取。
+- Result presentation：复用现有 Run 查询，明确 inline 展示、reference 降级及空结果；不扩展为 Run History。
+- Runtime 运维：recovery_required 人工处理、业务记录 / checkpoint 对账、运行删除与保留策略；maxConcurrency=1 的已知宽并行异常需独立调查。
+- Human Review、Iteration、Batch、SubWorkflow、conditional 各自定义执行语义，不能沿用普通 Action DAG 的技术预算公式。
+- Artifact 内容 HTTP、Asset / Promote、媒体能力、Tool / Agent 和上下文构建均待独立任务；声明或测试夹具不代表产品已交付。

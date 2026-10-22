@@ -15,7 +15,7 @@ Image 不等于 Asset，Character 不等于 Asset。签名 URL、供应商 URL �
 
 ## DataType
 
-正式描述是纯 JSON：any；primitive（string / number / boolean / null）；named；array.itemType；object.properties；union.types。旧的 image / domain kind 和 array.item 不再接受。
+正式描述是纯 JSON：any；primitive（string / number / boolean / null）；named；array.itemType；object.properties；union.types。
 
 命名类型使用 namespace，例如 media.image、story.character、system.json。核心 union 不随领域名称增长。any 是独立 kind；system.json 不能自动等于所有语义类型。
 

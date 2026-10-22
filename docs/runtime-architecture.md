@@ -1,108 +1,67 @@
 # Runtime 架构与技术分工
 
-平台负责领域协议、编译适配和业务记录；LangGraph 负责调度、State 通道、checkpoint、interrupt / resume。定义见 [Workflow](workflow-model.md)，业务类型见 [Node](node-model.md)，值与内容见[数据模型](data-model.md)，实际装配见[架构](architecture.md)。
-
-## 技术边界
-
-React Flow 只负责编辑。`text_generation@1` 在内部使用 Vercel AI SDK 调用 OpenAI / Anthropic；`openai_compatible@1` 在内部使用 LangChain。Tool / Agent 等抽象按实际需要再使用 LangChain。这些 SDK 留在插件实现里，contracts 不依赖它们，也不自建第二套调度或恢复机制。
+平台负责领域协议、编译适配和业务记录；LangGraph 负责调度、State 通道、checkpoint、interrupt / resume。输入输出见 [Workflow](workflow-model.md)，值与内容见[数据模型](data-model.md)，生产装配与队列见[架构](architecture.md#生产-runtime-装配)。
 
 ## 编译与执行分离
 
-```text
-WorkflowDefinition → WorkflowCompiler → LangGraph StateGraph
-Action wrapper → NodeExecutor → RuntimeValue 输出 → State reducer
-```
+Compiler 冻结定义、校验精确 Registry 版本并连接依赖与 START / END；不创建 Run / thread 或执行业务。普通 Action 只实现 execute，经编译 wrapper 调用统一 NodeExecutor；其他 executionKind 必须使用独立策略。
 
-Compiler 冻结定义，按 Registry / executionKind 选择策略，连接 START / END 及依赖边；不创建 Run / thread、记录状态或执行业务。空图可直接结束，普通 Action 不自行 compile。
-
-Executor 的顺序固定为 createRunning → 精确版本 / Binding → 记录 RuntimeValue 输入 → decode → input / config Schema → execute → output Schema → encode → markCompleted。完成记录成功才返回输出，不直接修改 State；Codec / Writer 接收最小项目、运行、节点 / 输出定位，不取得整个 State。
+NodeExecutor 顺序为 createRunning → 解析绑定 → 记录 RuntimeValue 输入 → decode → 校验 input / config → execute → 校验 output → encode → markCompleted。完成记录成功后才写 State。服务对象不进入 State；Codec / Writer 只取得当前项目 / 运行 / 节点 / 输出定位。
 
 ### Action 执行错误阶段
 
-业务异常记录 resolve_input、decode_input、validate_input、validate_config、execute、validate_output 或 encode_output；编码 / 写入失败与输出校验失败分开。NodeExecutionError 可保留原始 cause，但持久 NodeRunError 只投影安全阶段摘要，不保存 cause / stack / Provider 内容。
+业务失败记录 resolve_input、decode_input、validate_input、validate_config、execute、validate_output 或 encode_output；持久错误只保留安全摘要，不保存 cause / stack / Provider 内容。节点失败不产生占位输出，不自动重试。
 
-Repository 故障是基础设施错误；完成记录失败不能反向 markFailed 或产生 State 输出，双重记录失败保留两种原因。GraphBubbleUp（含 interrupt / 父图 Command）原样交回 LangGraph，不包装为业务失败，已有 NodeRun 保持 running。普通失败停止后续步骤，不自动重试。
+Repository 故障独立于业务错误；完成记录失败不得反向 markFailed 或写 State，双重记录失败保留两个原因。GraphBubbleUp 原样交回 LangGraph，已有 NodeRun 保持 running；普通 Action 不主动 interrupt。
 
 ### 普通确定性依赖的 ALL Join
 
-Data / Control Edge 和 template 的 node_output 都产生确定性执行依赖。collectNodeDependencies 只读 nodeId，先记录边再追加模板来源，按 target 聚合、source 去重，同一节点对只计一次；不读取端口或构造输入。workflow_input 变量不产生节点依赖。START / END 使用同一份依赖结果。
+`collectNodeDependencies` 合并 Data / Control Edge 与 template node_output，按 target 聚合、source 去重；不读取端口或构造输入，workflow_input 不产生节点依赖。START / END 使用同一语义。
 
-单上游使用 `addEdge(source, target)`，多上游必须使用一次 `addEdge([sources], target)`，等待全部完成后执行一次；不拆成独立触发边，不增加 joinMode 或 ready 计数。条件候选分支、Send / Batch 不套用静态 ALL，需独立结构策略。
+单上游 `addEdge(source, target)`；多上游一次 `addEdge([sources], target)`，全部完成后执行一次，不拆成独立触发边，不自建 ready 计数。Conditional / Send / Batch 不套用静态 ALL。
 
 ### Action DAG 技术执行预算
 
-当前 Action DAG 的 execution depth 是联合依赖图中最长 Action 节点路径的节点数 D：根节点 level = 1，下游 level = 1 + max(上游 level)，D = max(level)；空图 D = 0。Compiler 内的纯函数 `analyzeActionDagExecution` 复用 `collectNodeDependencies`，因此 Data Edge、Control Edge 和 template node_output 均参与分析，同一节点对去重，workflow_input 不增加深度。宽并行图按最长路径计算，不按总节点数计算。
+联合依赖图中根节点 level = 1，下游 level = 1 + max(上游 level)，最长 Action 路径深度 D = max(level)，空图 D = 0。纯分析复用 `collectNodeDependencies`，与依赖编译使用同一规则。
 
-Compiler 先冻结定义、确认所有节点的精确版本均可作为普通 Action 执行，再完成分析，之后才创建 Executor 和图节点。通过 LangGraph 官方 `withConfig` 将 `recursionLimit = D + 1` 绑定到编译图：空图为 1，100 个独立节点为 2，100 层串行为 101。该预算覆盖当前编译策略的首次正常执行及结束判定，避免合法图运行到默认 25 的边界后失败。
+Compiler 在创建 Executor / 图节点前确认全图均为受支持的 Action DAG，再以官方 `withConfig` 绑定 `recursionLimit = D + 1`。空图为 1，100 个独立节点为 2，100 层串行为 101。Publish 与 Runtime 校验同一联合 DAG，不新增任意节点数或深度上限。
 
-Publish 与 Compiler 使用同一 Definition Schema 验证 Data / Control / Template 联合 DAG，发布另做 Registry / 端口 / 配置等静态校验；Runtime 从本次运行绑定的不可变 WorkflowVersion 分析同一依赖语义并连接执行边。这里不增加 Publish 最大节点数或深度限制。
+这只覆盖当前策略首次正常执行的技术预算，不是费用、节点数量或 thread 累计额度。Runner 不分析拓扑；interrupt / resume 语义不变，未来执行种类必须独立定义预算。
 
-这是当前 Action DAG 编译策略的技术执行预算，不是费用预算、节点数量限制或 thread 累计业务额度。Runner 仍只提供 thread 和 invoke / resume，不做拓扑分析；本次不改变 interrupt / resume 语义。Iteration、Batch、SubWorkflow、HumanReview 和 conditional 必须各自明确 execution semantics，不能直接套用此公式。
+## Submission 与 Runner
 
-### Data Edge 与节点输入
+Submission 校验固定版本的调用契约，再原子创建 / 复用 Run 与 Outbox；不编译、claim 或解析引用内容。Repository 持续按项目 / 所有者授权，身份、版本、thread 和 inputs 不可改写。幂等规则见 [Workflow](workflow-model.md#start-invocation-身份)。
 
-BindingResolver 按 Manifest 读取 Data Edge 的上游端口或包装静态输入，并在这里把 template 渲染成内联字符串。NodeExecutor 不解释模板。Control Edge 不提供输入值。依赖编译保持原始端口信息，取值、decode 与真实 Schema 校验依次独立。
+首次 executeStart 原子 claim pending → running，设置 startedAt，然后读取原版本、编译、初始化 State。executeResume 原子 claim waiting → running，保留 startedAt，读取原 thread checkpoint；缺失或身份不符失败，不初始化新 State / Run / thread。竞争失败不执行。
 
-### RuntimeValue Decode 边界
+Graph 返回后核对 checkpoint 身份、next / tasks、任务错误和 interrupt：仍有任务记 waiting，否则解析最终输出。执行 / 解析失败由 claim 胜者记录 failed；记录服务自身故障不能再反向记录业务失败，留给既有恢复边界。
 
-inline 无 I/O，reference 仅交给有授权作用域的 Resolver；任一引用失败则整组失败，不返回部分值。临时媒体 URL 只供业务消费，不回写持久快照，完整规则见数据模型。
+resume 只传不透明 value；单 interrupt 的 false / 0 / null 使用原生 interrupt ID map，避免依赖库 truthy 判断。恢复后可再次 waiting。Runner 不按 interaction NodeRun 自建暂停状态机，Human Review 尚未交付。
 
-### 节点业务记录与 Checkpoint
+### 最终输出
 
-NodeRun 记录 attempt、输入输出和安全错误；Checkpoint 保存图的可恢复状态，不能相互推导。输入在 decode 前保存，输出在 encode 后保存。业务状态和 checkpoint 不承诺跨存储原子提交，记录不一致时需要核查，不通过自动重跑掩盖。
+`DefaultWorkflowOutputResolver` 只按 Definition.outputs 的声明名称收集 RuntimeValue；inline / reference 原样保留，不返回整份 State、不 materialize Artifact、不生成临时 URL。来源缺失或实际类型不兼容使 Run 在 resolve_output 阶段失败；空声明得到 `{}`。
 
-### WorkflowRun 记录边界
-
-Submission 加载固定版本并调用独立 WorkflowInvocationContractValidator，通过后按 workflowId / invocationKey 原子创建或复用 Run；新建才事务创建 pending Run / start Outbox，已存在 key 的等价性由 Submission 判断；waiting 周期的 resume 意图仍复用原 Run 输入。Submission 不编译、不 claim，也不解析 reference 内容。Runner 只执行已存在 Run，原子 claim 胜者才进入 Graph；Repository 每次校验当前项目 / 所有者。Run 身份、固定版本、thread 和初始输入不可改写。
-
-### WorkflowRunner 首次启动
-
-executeStart 先 claim pending → running，首次设置 startedAt，再加载原版本并冻结、编译；初始 State 和 thread_id 只取自持久 Run。竞争失败不执行。Graph 返回后检查 StateSnapshot.next / tasks、interrupt 及身份：有待执行任务记 waiting，结束时按 Workflow 输出声明解析 RuntimeValue 后记 completed。
-
-claim 后准备 / 执行失败由胜者记录 failed；记录服务失败不能再反向写失败。Node 失败不作为下游占位输出。输出来源缺失或类型不符同样失败。
-
-### WorkflowRunner 恢复
-
-executeResume 只接受 Run ID / value，原子 claim waiting → running，保留 startedAt，再读取原版本和原 thread 的 checkpoint。缺失或身份不符明确失败，不初始化新 State、不重跑已完成节点、不创建新 Run / thread。
-
-使用 LangGraph Command 继续原快照；单个 interrupt 的 falsy value 通过其原生 interrupt ID 映射适配，不把 null / 0 / false 当作缺参。恢复后可再次 waiting。Runner 不查询 interaction NodeRun，具体关联留待 Human Review 设计。
-
-### 生产装配、文本调用与 Run HTTP
-
-API 事务提交并确认入队，Worker 核验持久意图后执行。Job 不复制定义、State 或 thread。claim、重投和 recovery_required 见[架构](architecture.md#workflow-execution-queue)。Node 只保存 modelConfigurationId，调用边界见[文本能力](architecture.md#文本-ai-与-provider-plugin)。Run 身份从当前用户和固定版本派生，受理与错误见[Run API](architecture.md#workflow-run-http-api)。
+生产 Runner 调用 `markCompleted`，同一次数据库更新写 completed、outputs 与 completedAt；Graph checkpoint、Run、Outbox 不承诺跨存储原子完成。Run 查询与 invocation lookup 已返回该安全输出投影，Web Status 保留完整 Run，但尚无 Result 展示或引用内容接口。
 
 ## State 与持久化
-
-Definition / Version 保存静态流程，Run 保存运行身份，State 保存当前必要值，NodeRun 保存历史，Artifact / Asset 保存内容，Checkpoint 保存恢复快照。State 不承载全部日志、原始媒体、数据库或模型对话历史。
-
-### 五个分区
 
 | 分区      | 内容与写入边界                                                     |
 | --------- | ------------------------------------------------------------------ |
 | run       | workflowId / workflowVersionId / workflowRunId / projectId，不可变 |
-| inputs    | 本次 Workflow RuntimeValue 输入，不可变                            |
+| inputs    | 本次 RuntimeValue 输入，不可变                                     |
 | outputs   | nodeId → outputKey → RuntimeValue，当前有效结果                    |
-| variables | 显式工作流变量，不开放节点任意读写                                 |
-| execution | 图控制状态，目前保留为空                                           |
+| variables | 显式变量，不开放节点任意读写                                       |
+| execution | 图控制状态，当前为空                                               |
 
-State 类型与 Annotation 共处 runtime/state.ts。run / inputs / variables / execution 为单值通道，Action wrapper 只写 outputs。不增加 isInterrupted。通道定义不代表 checkpoint 已经持久化。
+State 与 Annotation 共处 runtime/state.ts。run / inputs / variables / execution 为单值通道，Action wrapper 只返回当前 nodeId 的 outputs 增量，不展开旧 State。非变异 reducer 合并不同节点；重复 nodeId 即报 DUPLICATE_NODE_OUTPUT_WRITE，不合并端口片段或静默覆盖。
 
-### 并行与历史
+这是普通 DAG 的单次有效输出约束，不能推断循环 / 批量 / 审核语义。NodeRun 保存 attempt 与业务历史，Artifact 保存内容，Checkpoint 保存恢复状态；attempt 不等于函数重入次数，不把日志、媒体、服务或对话历史塞入 State。输入绑定、decode / encode 和内容失败边界见[数据模型](data-model.md#codec-与-binding)。
 
-wrapper 只返回 `{ outputs: { [nodeId]: result.output } }`，不展开旧 outputs。mergeNodeOutputs 非变异合并不同节点的结果；重复 nodeId 抛 DUPLICATE_NODE_OUTPUT_WRITE，即使值相同也拒绝，不合并端口片段、不静默覆盖。
+## PostgreSQL Checkpointer
 
-这是普通 DAG 的单次有效输出约束，同时拒绝同 step 和后续 step 重写；reducer 无法凭累计状态猜测重试 / 循环 / 审核语义。历史和成本应进入独立记录，attempt 不等于函数重入次数，Send 分支不能只用 nodeId 标识。
-
-### PostgreSQL Checkpointer
-
-官方 PostgresSaver 使用独立 pg.Pool 与 langgraph schema，不由 Prisma 管理表或序列化。应用初始化以 advisory transaction lock 串行 setup 并 getTuple 验证读取；失败阻止就绪，关闭时 end，无 MemorySaver 生产降级。
-
-Compiler 只接收 saver，不执行 setup；恢复依赖同一数据库 / schema、原 thread、原版本与兼容实现。thread_id 不代表访问权限，运行配置拒绝覆盖它。初始化、连接与备份见[部署](deployment.md#langgraph-postgresql-checkpointer)。
+生产显式注入官方 PostgresSaver；Compiler 不执行 setup，不用 MemorySaver 兜底。恢复依赖同一数据库 / schema、原 thread、原版本与兼容实现；thread_id 不代表权限，运行配置拒绝覆盖它。初始化、连接和备份见[部署](deployment.md#langgraph-postgresql-checkpointer)。
 
 ## 人工介入、并行与副作用
 
-人工介入使用 LangGraph interrupt / Command.resume；节点可能从开头重入，审核审计独立于 checkpoint，生成副作用与审核分离。普通 Action 禁止主动 interrupt，不能用业务状态轮询另建恢复状态机，不承诺外部 exactly-once。
-
-Send 使用 branch-local 输入；SubWorkflow 通过显式输入输出映射组合，不复制父 State。图级 maxConcurrency、Worker 跨运行并发及供应商配额属于不同边界。控制 / interaction、Batch / SubWorkflow 的产品实现仍待单独任务，不把测试中断图当作已交付能力。
-
-官方机制参考：[Graph API](https://docs.langchain.com/oss/javascript/langgraph/graph-api)、[Interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts)、[Persistence](https://docs.langchain.com/oss/javascript/langgraph/persistence)。本项目适配细节以安装包和代码为准。
+人工审核采用 LangGraph interrupt / Command.resume，生成副作用与审核分离；重入不承诺外部 exactly-once。Send 需要 branch-local 输入；子流程必须显式输入输出映射，不能复制父 State。图级 maxConcurrency、Worker 跨运行并发和供应商配额是不同边界，测试夹具不是产品功能。

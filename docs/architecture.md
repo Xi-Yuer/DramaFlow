@@ -1,217 +1,118 @@
 # 当前架构与目录职责
 
-本文件维护已实现能力和公开接口。协议约束分别见 [Workflow](workflow-model.md)、[Node](node-model.md)、[数据模型](data-model.md) 与 [Runtime](runtime-architecture.md)；阶段只见[实施方案](implementation-plan.md)。
+只记录已实现能力及其入口。协议见 [Workflow](workflow-model.md)、[Node](node-model.md)、[数据模型](data-model.md)、[Runtime](runtime-architecture.md)；当前工作与待决策项见[实施方案](implementation-plan.md)。精确字段以 contracts、Schema 和 Controller 为准。
 
 ## 已实现的基础工程
 
-已有登录、账户中心、项目管理、React Flow 草稿编辑和项目模型管理。前端使用 Next.js App Router、Ant Design、TanStack Query；业务 API 默认认证，项目按当前所有者隔离。
-
-Web 可加载 / 保存真实草稿，从 Node Types 目录添加节点、移动节点、编辑 Data / Control Edge；文本节点支持模型选择和 prompt / system 上游变量编辑。已有独立 Publish、已发布版本的 Run 提交与状态查询，尚无节点删除 / 重命名操作。服务端已有正式发布与 Run HTTP。每项目一个逻辑 Workflow，Project 与 Draft 分别保存 revision，发布另有 version。
-
-PostgreSQL / Prisma 保存业务记录，Redis / BullMQ 交付执行命令，RustFS 保存内容，官方 PostgreSQL Checkpointer 保存图快照。API 负责提交，独立 Worker 执行图。
+| 领域       | 当前能力与边界                                                                                |
+| ---------- | --------------------------------------------------------------------------------------------- |
+| 身份与项目 | 登录、账户中心、项目所有者隔离；每项目一张画布、一个逻辑 Workflow                             |
+| Editor     | 草稿加载 / 保存、节点创建和移动、Data / Control Edge、文本变量与模型选择；无节点删除 / 重命名 |
+| Publish    | 静态语义、同项目模型绑定校验、不可变版本；保存和发布独立                                      |
+| Run        | 已发布版本提交、幂等身份、状态查询、离开保护和 invocation identity recovery                   |
+| Result     | declared outputs 已解析、落库并返回 Web；尚无 Result presentation 或 Artifact 内容 HTTP API   |
+| 执行       | 普通 Action DAG；API 提交，独立 Worker 执行；其他 executionKind 只有声明边界                  |
+| 基础设施   | PostgreSQL / Prisma、Redis / BullMQ、RustFS、官方 PostgreSQL Checkpointer                     |
 
 ## Workflow 基础库
 
-`packages/contracts` 定义中立 JSON 协议；`packages/workflow` 提供类型 / 节点 Registry、发布静态校验、Binding / Codec、Action Compiler、Submission 与 Runner。普通确定性 Action DAG 已可执行；其他 executionKind 只有声明边界。
-
-Action Compiler 根据 Data / Control / Template 联合依赖图的最长 Action 路径深度 D，将 LangGraph `recursionLimit = D + 1` 绑定到编译图，空图为 1；不依赖默认 25，也不新增静态产品规模限制。这是当前 Action DAG 的技术执行预算，具体边界见 [Runtime](runtime-architecture.md#action-dag-技术执行预算)。
-
-节点 Picker 使用 API 返回的 Manifest 展示名称、描述、图标和 category。通用创建 helper 精确保留 type / version，仅应用 Manifest 显式 defaultValue；Editor 生成实例 ID，并将可见区域的屏幕位置经 React Flow 转为画布坐标。新增节点写入 WorkflowDefinition.nodes，复用 Draft dirty / 保存链路；不创建连线、Workflow 输入输出或模型绑定，目录不可用时禁用创建。
-
-草稿可保留未完成配置；发布严格验证真实节点 / 端口、类型、必填来源及本地模型绑定。版本保存完整不可变定义，以 workflowId / version、workflowId / sourceRevision 唯一约束保护。执行只读取指定版本，不回退 draft / latest。
-
-Workflow Input 已有显式 required / optional 声明及历史缺省 true 的读取兼容。发布校验限制 optional 来源的节点绑定和模板使用，Runtime 按合法可选绑定传播 missing，不写占位值。独立 WorkflowInvocationContractValidator 已接入 Run Submission：核对固定版本后校验参数存在性、未知输入、类型兼容及 inline 实际内容，通过后才创建 Run / Outbox。reference 本轮仅检查类型；详见 [Workflow 输入与输出](workflow-model.md#输入与输出)。
+`packages/contracts` 定义中立 JSON 协议；`packages/workflow` 负责 Registry、发布 / 调用校验、编译和执行适配。运行绑定指定 WorkflowVersion，不读 draft / latest。Action DAG 的联合依赖与技术执行预算见 [Runtime](runtime-architecture.md#action-dag-技术执行预算)。
 
 ## Workflow 编辑 HTTP API
 
-以下接口均以 `/api/v1` 为前缀，默认认证、no-store；写入检查 Origin。资源不存在或无权访问统一 404。
+业务接口均在 `/api/v1`，默认认证、no-store；写入检查 Origin，资源不存在或无权访问统一 404。
 
-| 方法与路径                         | 行为                                            |
-| ---------------------------------- | ----------------------------------------------- |
-| GET / POST /projects               | 项目列表 / 创建；新建时原子创建默认 Workflow    |
-| GET / PUT /projects/:id            | 读取 / 按 revision 保存名称与视口               |
-| GET /projects/:projectId/workflow  | 读取完整草稿；缺失时不隐式创建                  |
-| POST /projects/:projectId/workflow | 空请求或 `{}` 幂等初始化；保留已有草稿          |
-| PUT /workflows/:workflowId/draft   | `{ expectedRevision, definition }` 保存完整草稿 |
-
-Project 不嵌入图内容。草稿保存与项目保存独立，冲突返回 409；保存不发布、不调用模型、不创建 Run。初始化按项目行锁和唯一约束落实幂等。
+Project 使用 `GET / POST /projects`、`GET / PUT /projects/:id`；Workflow 使用 `GET / POST /projects/:projectId/workflow` 和 `PUT /workflows/:workflowId/draft`。Project 名称 / 视口与 Draft 各自维护 revision。初始化幂等，保存冲突返回 409，保存不发布或执行。请求与响应见 [Workflow contracts](../packages/contracts/src/workflow/workflow-api.ts)。
 
 ## Workflow 发布与版本 HTTP API
 
-| 方法与路径                          | 行为                                              |
-| ----------------------------------- | ------------------------------------------------- |
-| POST /workflows/:workflowId/publish | `{ expectedRevision }`，返回 201 与完整快照       |
-| GET /workflows/:workflowId/versions | 版本倒序摘要，最多 20 条，使用 beforeVersion 分页 |
-| GET /workflow-versions/:versionId   | 读取指定完整快照                                  |
-
-发布事务锁定 Workflow，校验来源修订并分配版本号；过期 / 重复修订返回 409，失败不写版本、不消耗版本号。当前拒绝 Asset 绑定、命名控制端口和非 Action 结构。文本模型归属、enabled、插件能力及参数在同一事务中验证并持有共享行锁；不读取密文、不解密或探活。
+发布入口 `POST /workflows/:workflowId/publish`；版本摘要 `GET /workflows/:workflowId/versions`；固定版本 `GET /workflow-versions/:versionId`。发布锁定来源修订并原子分配版本号，失败不写版本；不解密凭证或调用模型。当前拒绝 Asset 绑定、命名控制端口和非 Action 结构。
 
 ## 生产 Runtime 装配
 
-API 只装配 Submission / Queue；Worker 装配 Consumer、Outbox Pump 和执行服务。`WorkflowExecutionService` 核验持久意图，从 Run 读取真实项目 / 所有者，再构造有权限作用域的 Runner、Executor、能力和 Artifact 服务，不跨用户缓存 Runner。
-
-Node 目录与执行共用 `WorkflowNodeRegistryModule`。`ArtifactRuntimeFactory.forRun` 提供真实 Writer / Resolver / Codec；`WorkflowCapabilitiesFactory.forRun` 提供按 Run 授权的能力调用。服务对象不进入 State 或 checkpoint。
+API 装配 Submission / Queue；Worker 装配 Consumer、Outbox Pump 和执行服务。执行服务核验持久意图，从 Run 派生项目 / 所有者，再创建有权限作用域的 Runner、Executor、能力和 Artifact 服务，不跨用户缓存。Node 目录与执行共用 Registry，服务对象不进入 State / checkpoint。
 
 ### Web 基础发布
 
-Save 与 Publish 独立。Web 仅发布已加载、无 dirty、无保存 / 重载 / 发布操作且修订状态明确的 Draft；未保存修改、冲突或保存结果未确认时禁用并给出原因，不隐式保存，也不在客户端禁止空图发布。发布期间锁定 Draft 编辑、保存和重载；项目名称 / 视口仍独立管理。
-
-发布状态由当前 Editor 的 useWorkflowPublish / WorkflowPublisher 保存，与 Draft reducer 分离，只记录版本摘要身份和受控错误信息，不替换 definition、revision 或保存基线。版本状态按 workflowId / 当前保存 revision 查询，分别表示最新已发布版本与该修订对应版本，不产生未来 Run 的隐式版本选择。
-
-成功后取消旧版本查询并刷新目录；已确认版本在目录刷新失败时仍保留。WORKFLOW_REVISION_ALREADY_PUBLISHED 通过分页查询 sourceRevision 找回原版本，不拿 latest 猜测；WORKFLOW_REVISION_CONFLICT 进入既有 Draft conflict / reload 流程。错误保留 code、requestId、nodeId、portKey 和 path 等已提供的定位信息，不实现自动聚焦或字段高亮。版本历史管理尚未实现。
+dirty、修订冲突或保存未确认时禁止发布；发布锁定 Draft 编辑，不隐式保存或运行。当前保存修订的发布状态与最新版本分别展示，重复发布按 sourceRevision 找回版本，不拿 latest 猜测。目录刷新失败仍保留已确认身份；定位信息保留，但未实现自动聚焦或版本历史管理。
 
 ## Workflow Run HTTP API
 
-| 方法与路径                                                  | 行为                                                               |
-| ----------------------------------------------------------- | ------------------------------------------------------------------ |
-| POST /workflow-runs                                         | `{ workflowVersionId, invocationKey, inputs }`，受理成功返回 202   |
-| GET /workflow-runs/:runId                                   | 状态、输入、最终输出和安全错误摘要                                 |
-| GET /workflow-runs/by-invocation/:workflowId/:invocationKey | 授权 Workflow 下只读查询，返回 `{ run }`；不存在为 `{ run: null }` |
-| POST /workflow-runs/:runId/resume                           | `{ value }`，受理成功返回 202                                      |
+| 方法与路径                                                  | 行为                                                           |
+| ----------------------------------------------------------- | -------------------------------------------------------------- |
+| POST /workflow-runs                                         | 固定 workflowVersionId、invocationKey、inputs；受理返回 202    |
+| GET /workflow-runs/:runId                                   | 安全 Run projection，含可选 outputs / error，不含 threadId     |
+| GET /workflow-runs/by-invocation/:workflowId/:invocationKey | 授权 Workflow 下只读 lookup，返回 `{ run }` 或 `{ run: null }` |
+| POST /workflow-runs/:runId/resume                           | 用原 Run / thread 继续；非 waiting 或重复意图为 409            |
 
-身份由当前用户与固定版本派生，拒绝客户端提供 threadId、状态或项目归属。响应不公开 threadId / executionId；非 waiting 或重复恢复意图为 409。Start 的 invocationKey 必填（1—200 字符，不含首尾空白），由调用方在首次请求前生成并持有。HTTP 在 pending Run 事务提交后确认入队；确认失败返回 WORKFLOW_QUEUE_UNAVAILABLE（503），携带 workflowRunId / invocationKey。客户端重试必须复用原 key；明确再次运行使用新 key。非 pending 的幂等复用直接返回原 Run 当前状态，沿用 202 响应。
-
-invocation lookup 先校验 Workflow 的 Project 所有者，再按 workflow / project / invocationKey 查询并复用 GET Run 的授权与安全投影；Workflow 不存在或无权访问统一 404。接口 no-store，不创建 Run / Outbox，不提交队列或执行图。查无 Run 仅表示本次查询未找到，不证明原 Start 请求不会随后提交。
+Start key 的等价性与终态保留规则见 [Workflow](workflow-model.md#start-invocation-身份)。入队确认失败返回 `WORKFLOW_QUEUE_UNAVAILABLE`（503），携带已持久化的 Run ID / key。lookup 不创建 Run / Outbox、不投递或执行；查无结果不能证明原 POST 不会稍后提交。
 
 ## Workflow Execution Queue
 
-Start 按 (workflowId, invocationKey) 唯一受理，Run 与 start Outbox 同事务写入；resume 在行锁下按 waitingRevision 创建唯一恢复意图。Job 只携带 kind、workflowRunId，resume 另含 executionId / value，不复制定义、State 或 thread。
+新 Run 与 start Outbox 同事务提交；resume 按 waiting 周期创建唯一意图。Job 不复制定义、State 或 thread。Worker 原子 claim 后执行，claim 前基础设施故障可重投，业务失败不自动重跑。
 
-Worker 在执行前核对意图并原子 claim。claim 前基础设施故障可以重投；业务失败不自动重跑。claim 后进程退出或结果不明进入 recovery_required，Run 保留真实状态；已有 completed / 下一 waiting 只补记意图终态。没有自动恢复或人工处理入口，详见 [Runtime](runtime-architecture.md)。
+claim 后进程退出或结果不明进入 recovery_required；已完成或进入下一 waiting 周期时只补记意图，不重新 invoke。尚无 recovery_required 人工处理入口。队列配置和数据保留见[部署](deployment.md#workflow-执行队列)。
 
 ## PostgreSQL Checkpointer
 
-API / Worker 启动时通过应用级 `WorkflowCheckpointerService` 初始化官方 PostgresSaver，在同一 DATABASE_URL 的 langgraph schema 持久化。独立 pg 连接池、串行 setup 与真实读取健康检查，不提供内存回退；配置和备份见[部署](deployment.md#langgraph-postgresql-checkpointer)。
-
-## 数据与 Node 基础库
-
-`DataTypeRegistry` 负责真实值校验；共享 `isTypeAssignable` 负责静态兼容。`NodeRegistry` 按 type / version 精确匹配，公开 JSON Manifest。生产节点目录目前只有 `ai.text_generate@1`，GET /workflow/node-types 不公开实现或凭证。
-
-NodeExecutor 统一执行绑定、输入记录、decode、三组 Schema、业务调用、encode 和完成记录。NodeRun 独立保存 attempt 与业务历史；State 只保留当前 RuntimeValue。完整失败与恢复规则见 Runtime，值和引用规则见数据模型。
+API / Worker 启动时初始化官方 PostgresSaver，不提供内存回退。它与业务表使用同一 DATABASE_URL、独立连接池和 langgraph schema；初始化、备份与恢复见[部署](deployment.md#langgraph-postgresql-checkpointer)。
 
 ## 文本 AI 与 Provider Plugin
 
-NodeType、Capability、Provider、Plugin 彼此独立。`ai.text_generate` 是工作流中的业务节点；`text.generate` 是它请求的能力；OpenAI、Anthropic 是用户使用的模型服务；`text_generation@1` 是执行该能力的受信任插件。Vercel AI SDK 只出现在这个插件内部，用来完成 OpenAI / Anthropic 文本协议。
+生产调用链是 Node → `text.generate` → ModelConfiguration → Provider Instance → ProviderCapability → Plugin → Provider API。节点只保存 modelConfigurationId，调用时重新验证 running Run、项目权限与 enabled，再解密本次凭证；无默认厂商、自动替换或全局 credential 缓存。
 
-已落地的正式文本链：
+| 插件                | 当前用途                                                |
+| ------------------- | ------------------------------------------------------- |
+| text_generation@1   | 正式 OpenAI / Anthropic 文本实现，SDK 只在插件内部使用  |
+| openai_compatible@1 | 高级 Custom OpenAI-Compatible，可显式配置兼容地址与模型 |
 
-```text
-Workflow Node
-→ text.generate
-→ ModelConfiguration
-→ Provider Instance
-→ ProviderCapability
-→ text_generation@1
-→ Vercel AI SDK
-→ Provider API
-```
-
-Node 输入为 prompt / 可选 system，输出为 text，config 只保存 modelConfigurationId。当前正式支持 OpenAI 与 Anthropic。
-
-已确定的产品模型是：
-
-```text
-Provider Catalog
-→ Provider Definition
-→ Model Catalog
-→ Provider Instance
-→ Credential
-→ Model Configuration
-```
-
-平台可以预设 OpenAI、Anthropic、DeepSeek、Gemini、Qwen、Kimi、智谱、豆包等 Provider。普通用户选择 Provider，填写该 Provider 要求的凭证，再从 Model Catalog 选择该 Provider 下具备所需 Capability 的模型。自定义 endpoint、协议或厂商身份只属于高级 Custom OpenAI-Compatible。Model Catalog 是代码中的模型与能力目录，不是项目里保存的 ModelConfiguration；节点仍只保存 modelConfigurationId。
-
-| 插件                | 定位                                                                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| text_generation@1   | 正式文本实现。内部使用 ai 7.0.148、OpenAI 4.0.99、Anthropic 4.0.85，按 configuration.provider 调用 Chat Completions 或 Messages |
-| openai_compatible@1 | 高级 Custom OpenAI-Compatible。保留 LangChain ChatOpenAICompletions，配置兼容地址、模型和 apiKey                                |
-
-图片、视频、音频按各自 Provider 使用对应插件，例如视频原生适配、ComfyUI 图像或语音插件。文本插件和 Vercel AI SDK 只覆盖当前的 `text.generate`。LiteLLM 与 Bifrost 已评估并否决，证据在 experiments，不进入生产依赖。
-
-OpenAI 与 Anthropic 的 Provider Definition 随代码发布，不进数据库。两者都映射到 `text_generation@1`：OpenAI 固定 `https://api.openai.com/v1`，Anthropic 固定 `https://api.anthropic.com/v1`。用户通过目录创建实例时只提交凭证；`provider` 与 `baseURL` 由定义写入实例 configuration。`ModelProvider.providerDefinitionId` 记录这个关联，直接按插件创建的实例（含 `openai_compatible@1`）该字段为空。其他厂商尚未注册。
-
-Registry 统一校验配置、凭证、输入输出及模型参数，精确绑定插件版本，不自动切换。`text_generation@1` 的 maxOutputTokens 必填（1—65536），temperature 可选（0—1）。`openai_compatible@1` 两项可选，temperature 为 0—2。timeoutMs 默认 60000，范围 100—180000。HTTP(S) endpoint 拒绝 userinfo、query、fragment。
-
-Provider 与模型绑定不可改写；凭证可轮换，enabled 可变。每次 invocation 检查 running Run、当前所有者 / 项目及 enabled，再经 SecretsService（AES-256-GCM，ownerId 作 AAD）解密当前凭证。SDK client / model 按调用创建，无全局 credential 缓存，无 SDK / Gateway 领域 ID。
-
-`text_generation@1` 显式 maxRetries=0、isStepCount(1)，custom fetch 使用 manual redirect；关闭 telemetry 和原始请求 / 响应收集。内部检查 OpenAI refusal，在自动日志前拒绝 SDK warnings，将 statusCode 映射至既有安全错误。`openai_compatible@1` 保留原重试 / tracing / 日志隔离与 LANGCHAIN_VERBOSE 拒绝机制。拒绝空白、截断、过滤、工具调用等无效文本，成功仅返回 `{text}`。两个插件在返回业务文本前共用内部纯函数，精确检查正文是否包含本次调用实际使用的 API Key；命中时仅抛出 `CAPABILITY_OUTPUT_INVALID`，不返回正文、不记录凭证，也不重发请求。不含实际 API Key 的普通 `api_key`、`token` 等字样不触发该检查。
-
-原始 SDK / Provider 错误、headers、凭证不进入 NodeRun / API 错误投影；正常 NodeRun.inputs 仍记录显式 prompt。超时或 5xx 按受理结果不明处理，不自动重发。既有 CapabilityInvoker 尚未透传取消信号，生产调用依赖插件 deadline。
-
-生产链测试覆盖真实鉴权 HTTP、发布、Outbox、BullMQ、独立 Worker 和两种本机协议，以及凭证轮换、权限隔离、单次失败请求与安全投影。OpenAI / Anthropic 收费模型未在 C2.1 调用；旧兼容插件另有操作者显式选择服务的 live 验收。复验入口见[开发指南](development.md)。
+两个插件关闭自动重试并隔离日志 / tracing，拒绝 redirect、空白、截断、过滤、工具调用等无效文本；成功正文包含本次实际 API credential 时以 `CAPABILITY_OUTPUT_INVALID` 拒绝，不返回正文、不重发。错误投影不带原始请求、响应或凭证。参数边界以[插件 Schema](../packages/plugins/src)为准；CapabilityInvoker 尚未透传取消信号，调用依赖插件 deadline。它们不构成通用媒体或内容安全框架。
 
 ## Plugin / Provider / 模型配置管理 HTTP
 
-| 方法与路径                                                     | 行为                                                                                                |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| GET /provider-plugins                                          | 受信任且允许配置的插件精确版本、JSON Schema 和凭证字段约束                                          |
-| GET /provider-catalog                                          | 官方 Provider 的安全目录：id、名称、能力、凭证字段和用户配置 Schema                                 |
-| GET /model-catalog                                             | 官方模型目录。可选 `capability` 精确筛选；项含稳定模型 id、显示名、providerDefinitionId 和能力      |
-| GET / POST /projects/:projectId/providers                      | Provider 列表 / 按插件 Schema 创建                                                                  |
-| POST /projects/:projectId/providers/catalog                    | 按 Provider Definition 创建实例。请求为定义 id、名称和凭证；官方 Provider 不接受用户填写的 endpoint |
-| GET / PATCH /projects/:projectId/providers/:providerId         | 安全详情 / 修改 enabled                                                                             |
-| PUT /projects/:projectId/providers/:providerId/credentials     | 完整替换凭证                                                                                        |
-| GET / POST /projects/:projectId/model-configurations           | 模型配置列表 / 创建                                                                                 |
-| GET / PATCH /projects/:projectId/model-configurations/:modelId | 模型详情 / 修改 enabled                                                                             |
+`GET /provider-plugins`、`/provider-catalog`、`/model-catalog` 返回安全目录。项目内 Provider / ModelConfiguration 的创建、列表、启停与凭证轮换见[管理 Controller](../apps/api/src/models/model-management.controller.ts)。绑定创建后不可改写；没有删除、远程插件安装或调用厂商 API 的模型发现。
 
-所有业务读写按项目所有者授权。列表为有界游标分页；读取投影排除凭证明文和密文。无效参数 / Schema 为安全 400，停用绑定为 409，密钥或服务不可用为安全 503。没有删除、原地改绑、调用厂商 API 的模型发现或远程插件安装。Provider Catalog 与 Model Catalog 目前只有 OpenAI 与 Anthropic：前者是服务定义，后者是 `gpt-4o` 与 `claude-sonnet-4-20250514` 两个 `text.generate` 模型。目录不含用户 API Key。ModelConfiguration 仍是项目内的模型实例，执行链不读取 Catalog。
+官方 Provider / Model Catalog 随代码发布，当前为 OpenAI、Anthropic 及其预设文本模型；目录不是项目 ModelConfiguration。官方地址不由普通用户填写，自定义地址只属于高级兼容路径。凭证规则见[认证与安全](authentication.md#业务权限与密钥边界)。
 
 ## Web 项目模型设置
 
-项目画布内提供模型设置抽屉。模型供应商页以 Provider Catalog 为卡片，展示目录中的名称和能力；未配置时按 credentialFields 提交目录创建接口，已配置由同一定义的 Provider Instance 判断，并可轮换凭证和启停。自定义接入单独保留插件 Schema。模型页仍手写模型 id。`ai.text_generate` 的 model-selector 按节点声明的 `text.generate` 查询 Model Catalog，按 Provider 分组展示显示名；已有可选 ModelConfiguration 时只把 `modelConfigurationId` 写入节点。Provider 未配置时进入对应的凭证配置。若这次配置是从节点的某个目录模型进入且成功，配置完成后继续该模型：没有可用 ModelConfiguration 时进入添加流程并在创建后选中，已有一个可用配置时直接选中，有多个或暂不可选时回到该模型的选择列表。用户取消配置或取消添加则不写入节点。该意图不进入 WorkflowDefinition。Provider 已配置但该目录模型还没有 ModelConfiguration 时，沿用模型配置创建接口，并填写该能力已有的生成参数。已选模型展示当前 ModelConfiguration 的最大输出和随机度，节点不另存参数。未知结构禁止提交。Secret 不进入 Form store、Query / Mutation 缓存、URL 或浏览器存储；请求发出及退出组件时清空，不回填已保存值。创建 / 轮换不触发模型生成，设置操作不丢失未保存画布。
+画布内抽屉配置供应商、凭证和模型。节点从 Model Catalog 选择模型，仅写 modelConfigurationId；从节点进入供应商配置成功后继续原选择意图，取消不写入节点，设置页主动配置则留在设置。已选模型展示配置参数，不在节点另存。Secret 不回填、不进入 Form / Query 缓存或浏览器存储，请求发出及退出表单时清空；配置不触发生成。
 
 ## Artifact 生产数据通道
 
-PostgreSQL 保存 Artifact 身份、来源、类型、JSON / blob 编码、私有 key、大小与摘要；内容统一写 RustFS。Writer 先登记 writing，上传后确认 ready，只有 ready 可解析。失败补偿、提交结果不明及保留记录见[对象存储](object-storage.md)。
-
-JSON decode 还原业务值；媒体使用 BinaryContent，blob decode 返回含临时 signed URL 的 MediaResource。引用授权限定项目 / Run，不自动下载任意 URL，不把临时 URL 回写 State。Asset 版本读取、Promote、资产库、自动对账与垃圾回收尚未实现。
+PostgreSQL 保存身份与元数据，内容写 RustFS；只有 ready Artifact 可解析。内部 Runtime 可还原 JSON 或生成临时媒体访问资源，规则见[数据模型](data-model.md#artifact-与-asset)与[对象存储](object-storage.md)。Run 查询只返回 reference 身份，不 materialize、不签发 URL；Web 尚不能读取引用内容。Asset / Promote、自动对账与垃圾回收未接入。
 
 ## React Flow 数据适配
 
-React Flow 只管理视图，平台 WorkflowDefinition 是持久内容。renderer 读取精确 Manifest；数据 / 控制 Handle 隔离，selected / dragging / measured 不保存。端口、单连接、类型和过期事件规则见[Node](node-model.md)。
+WorkflowDefinition 是唯一持久来源，React Flow 只管理视图；导出不保留 selected / dragging / measured。节点目录、创建与连接行为见 [Node](node-model.md)，界面约束见[前端规范](frontend-ui.md)。
 
 ### Web Workflow Draft 持久化
 
-真实草稿可加载、保存并刷新恢复；旧项目缺失 Workflow 时显式初始化，不用本地空图兜底。Project（名称 / 视口）与 Draft 各自维护 revision、脏状态和冲突处理。保存失败保留编辑，409 后经明确操作重读对应资源，不覆盖另一类未保存内容。
+缺失 Workflow 时显式初始化，不用本地空图兜底。草稿允许未完成配置；保存失败保留编辑，冲突后经用户明确操作重读对应资源，不覆盖另一类未保存内容。Draft 修改不影响已发布版本及已有 Run。
 
 ### Editor session 离开保护
 
-`features/workflow/editor` 统一计算离开安全性并提供 `useEditorLeaveGuard`。Draft dirty、项目名称 / 视口 dirty、保存 / 重读 / 发布中的操作以及 Start request submitting 均触发保护；已保存但未发布的 Draft、已受理后的 pending / running 不触发保护。返回项目、账户页和 Logout 使用同一个确认入口；Logout 只有确认后才调用原退出逻辑。模型设置在当前页打开，不构成离开。加载 / 错误页面的返回链接没有挂载 Editor，也没有本地 Editor 状态；明确授权失效后的自动隐藏 / 跳转保留原安全边界。
+Editor 统一保护 dirty Draft、项目修改、进行中的保存 / 重载 / 发布，以及 submitting / uncertain Start；返回项目、账户和 Logout 共用确认，Logout 确认后才执行。clean 但未发布、已受理的 pending / running 不单独阻止离开。
 
-Start 沿用现有 Controller 状态：明确的 4xx 拒绝允许离开，但 408、网络异常、5xx、成功响应的格式 / 身份异常，以及携带 workflowRunId 或 `WORKFLOW_QUEUE_UNAVAILABLE` 的错误继续保护。队列持久化不代表客户端已确认此次提交；这些身份仍只保留在当前页面内存。此处只询问是否离开，不保存、发布、重试或恢复请求。
-
-unsafe 时注册标准 `beforeunload`（preventDefault / returnValue），恢复 safe 或卸载组件时移除；浏览器决定是否展示通用确认文案，刷新、关闭 Tab、地址栏跳转的真实交互待人工验收。它不能保证拦截崩溃、进程终止、移动端强制关闭，也不覆盖不卸载文档的 App Router 浏览器历史切换；当前页面主动导航入口由显式 guard 保护，不改写 Next Router 或浏览器 history。
-
-离开保护仍覆盖恢复后尚未确认的 invocation；lookup 找到当前错误请求对应的 Run 后转为已确认身份，不继续仅因旧 uncertainty 阻止离开。
+unsafe 注册标准 beforeunload，safe / 卸载时解除。不改写 Router / history；同文档历史切换、崩溃或强制关闭不保证触发。明确授权失效时仍遵守原隐藏 / 跳转边界。
 
 ### Web invocation identity recovery
 
-Run 提交、Status 与 recovery 归属 `features/workflow/run`。Start Controller 保留页面内冻结 request 的同 key retry；恢复只持久化严格 Schema 的 metadata receipt，不持久化 inputs、request snapshot、prompt、Definition、凭证、临时 URL、异常或 outputs。每个 receipt 的 localStorage key 按格式版本 / userId / projectId / workflowId / invocationKey 隔离，值只含项目、Workflow、固定版本、key、创建时间及可选 Run ID。
+每个 invocation 在 localStorage 独立保存严格 metadata receipt，key 按格式版本 / user / project / workflow / invocationKey 隔离。只保存固定版本、创建时间与可选 Run ID，不保存 inputs、完整 request、凭证、URL、异常或 outputs。冻结合法请求后同步保存，成功才 POST；失败明确提示尚未发送，不回退 memory-only。
 
-生成并冻结合法 request 后同步保存 receipt，成功才 POST；存储不可用或写入失败明确提示尚未发送，不回退 memory-only。accepted 或匹配身份的 queue uncertainty 补写 Run ID；补写失败仅提示，不重发或换 key。全新请求明确拒绝可清理；既有 receipt 或曾有不确定请求的后续 4xx 不消除先前 uncertainty。
+页面重进只读 lookup，核对 workflow / version / key / 已知 Run ID 后复用 Status tracking。未找到、冲突或查询失败时保留身份，可重新查询，不自动 POST / 换 key；存在未确认身份时，用户确认新旧请求可能同时执行后才发起独立 Run。accepted / queue uncertainty 补写失败不重发，旧 uncertainty 不被后续一次 4xx 消除。
 
-进入页面后先读取当前用户作用域并只读 lookup，再允许普通新 Run。找到时核对 workflow / version / key / 已知 Run ID，复用现有 Status tracking；未找到、冲突或查询失败保留 receipt，显示未确认状态并允许重新查询，不自动 POST。存在未确认 receipt 时，发起独立新 Run 先确认其可能与原请求同时执行，再生成新 key。多个 Run 独立保存，可选择其中一个跟踪，不覆盖其他未确认身份。
-
-lookup 或 Status 确认 completed / failed / cancelled 后，先让当前页面持有身份和状态再自动清理 receipt；waiting 保留。刷新查询清空 receipt 集合不会清空已加载的页面身份，不建立已读状态或浏览器 Run History。多 Tab 通过 storage event 同步 create / update / remove；不选 leader、不跨 Tab 自动 POST，服务端唯一约束仍是幂等边界。
-
-Logout 成功后失效本用户的旧 Store / 异步写回，写入用户作用域的退出标记并清理 receipts；退出失败保留，其他用户 namespace 不受影响。清理失败明确提示，用户 namespace 不代替服务端授权。localStorage 可由同 origin JavaScript 读取，只保存恢复 metadata，不能保证在清除站点数据、存储被禁用或设备故障后仍可恢复。request snapshot 丢失后不支持自动重放；Run History / Result UI 尚未实现。
+确认 completed / failed / cancelled 后先由页面持有 Run，再自动清理 receipt；waiting 保留。清理不清空当前页面，但下次重进不依赖已删除的终态 receipt 自动发现历史。多 Run 不覆盖，storage event 只同步集合，不当锁或跨 Tab 自动提交。Logout 成功清本用户并失效晚到写回，失败保留；存储清理失败明确提示。离开保护仍保留，找到当前错误请求的 Run 后解除旧 uncertainty。
 
 ## 目录与依赖
 
-Web Workflow 按领域职责组织：`editor` 装配页面、Draft 与离开保护，`canvas` 负责 React Flow 适配和节点渲染，`node-catalog` 负责节点目录与创建，`inputs` 负责输入绑定和模板编辑，`model-selection` 负责节点模型选择，`publish` 负责发布，`run` 负责提交并在内部区分 `status` 与 `recovery`。Project 列表与项目 HTTP 留在 `features/projects`；Workflow 根目录只保留跨职责使用的 `workflow-api.ts`，不增加重复转发入口。
+| 目录                                 | 职责                                                                                                                 |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| apps/web                             | Editor、账户 / 项目 / 模型管理；Workflow 按 editor、canvas、node-catalog、inputs、model-selection、publish、run 组织 |
+| apps/api / apps/worker               | 认证 HTTP 与提交 / 持久投递与执行                                                                                    |
+| packages/contracts                   | 无框架依赖的 JSON 协议和 Schema                                                                                      |
+| packages/workflow                    | 领域校验、编译、执行；runtime/values 管运行值，run/submission 管受理                                                 |
+| packages/server                      | 授权 Repository、基础设施和生产装配；workflow/runtime 与 queue 分工                                                  |
+| packages/plugins / packages/database | 受信任插件与目录 / Prisma 模型与迁移                                                                                 |
 
-后端同样按职责归拢：`packages/workflow/src/runtime/values` 集中运行值编解码、引用解析与内容存储协议，`run/submission` 集中调用等价性与提交协议；`packages/server/src/workflow/runtime` 集中运行装配与执行，既有 `queue` 负责持久投递。Registry、共享 Repository 与包级导出保留原有公共边界。目录较小且职责单一的 Auth、模型管理与 Contracts 不按文件类型继续拆分。
-
-| 目录               | 职责                                                     |
-| ------------------ | -------------------------------------------------------- |
-| apps/web           | 编辑器、账户 / 项目 / 模型管理与前端适配                 |
-| apps/api           | 身份与业务 HTTP，提交运行                                |
-| apps/worker        | Outbox Pump、队列消费与图执行                            |
-| packages/contracts | 无框架依赖的 JSON 协议和 Schema                          |
-| packages/workflow  | 领域校验、Registry、Compiler、Codec、Submission / Runner |
-| packages/server    | 共享基础设施、授权 Repository、凭证与 Runtime 装配       |
-| packages/plugins   | 受信任 ProviderCapability 实现与 PluginRegistry          |
-| packages/database  | Prisma 模型与业务迁移；pgvector                          |
-| packages/context   | 空入口，尚未实现上下文构建                               |
-
-历史技术证据在 experiments，默认不读、不进入生产镜像；路线结论见实施方案。
+run 内部区分 status 与 recovery，跨职责 API 留在 Workflow 根目录。已实现模块按领域归类，不按技术类型机械拆分，不保留重复入口。`packages/context` 仍为空入口。

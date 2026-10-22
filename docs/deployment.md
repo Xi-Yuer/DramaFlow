@@ -12,15 +12,15 @@ Prisma 迁移保存身份、资料、会话、项目、Workflow / WorkflowVersio
 
 需要遵守的约束：
 
-- 表名使用 lowercase snake_case。不使用 PascalCase、camelCase，也不靠双引号保留大小写。Prisma `@@map` 同样遵守。`20261022120000_rename_legacy_pascal_tables` 先把遗留 PascalCase 表改成小写；`20261022130000_drop_unused_legacy_tables` 再删除这些已不在当前模型中的表，以及 public 里不再使用的 checkpoint、project_asset、asset_version。现行业务表和 langgraph schema 不删除。
+- 表名使用 lowercase snake_case。不使用 PascalCase、camelCase，也不靠双引号保留大小写。Prisma `@@map` 同样遵守。
 - 每项目一个 Workflow。版本不可更新，workflowId / version 与 workflowId / sourceRevision 唯一。
-- Run 的身份、invocationKey、版本和输入不可改写；状态转换由数据库约束保护。threadId 唯一，workflowId / invocationKey 唯一。Start key 随 Run 生命周期保留；历史 Run 由增量迁移补独立 legacy key，新建无数据库默认 key。
+- Run 的身份、invocationKey、版本和输入不可改写；状态转换由数据库约束保护。threadId 唯一，workflowId / invocationKey 唯一。Start key 随 Run 生命周期保留，新建无数据库默认 key。
 - NodeRun 的 workflowRunId、nodeId、attempt 唯一，attempt 为正数，终态字段一致。
 - Artifact 只有 writing / ready / failed；内容身份不可改，终态不可覆盖。对象本体不在数据库。
 - Provider 的插件版本、configuration，以及模型的 Provider、capability、model、settings 创建后不可改。enabled 和凭证密文可以按服务操作更新。删除配置不是已交付的产品入口。
 - Outbox 与 start 同事务写入；恢复意图按 waiting 周期唯一。running → waiting 时递增内部周期。
 
-不要重写已被应用的迁移。早期项目迁移会删除旧的 definition、nodeCount 和 plugin_installation；尚未应用它的环境会失去旧画布和旧插件安装，不触碰 Redis 或 RustFS。缺少真实 sourceRevision 的旧开发版本不能伪造来源，应先核对再按开发数据授权清理。
+升级前审阅实际 Prisma migration SQL，确认可能删除的废弃开发表并备份；禁止重写已在生产或外部共享环境应用的迁移。缺少真实 sourceRevision 的旧开发版本不能伪造来源，只能按下方开发数据授权处理。
 
 执行前核对 DATABASE_URL 属于本项目开发库，然后 `pnpm db:generate` 和 `pnpm db:migrate`。当前基础迁移不需要例行 reset 或删除卷。
 
