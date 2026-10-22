@@ -3,3 +3,4 @@ export * from './capability-error.js';
 export * from './plugin-registry.js';
 export * from './openai-compatible.js';
 export * from './text-generation.js';
+export * from './provider-catalog.js';

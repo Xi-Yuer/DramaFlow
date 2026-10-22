@@ -234,7 +234,8 @@ model Artifact {
   @@map("artifact")
 }
 
-// Provider 是受信任插件的项目配置实例，凭证只能以服务端密文保存。
+// 项目内的 Provider Instance。plugin 与 configuration 是执行配置；
+// providerDefinitionId 指向代码中的官方定义，直接插件配置时为空。凭证只保存密文。
 model ModelProvider {
   id                   String               @id @default(uuid()) @db.Uuid
   projectId            String               @db.Uuid
@@ -242,6 +243,7 @@ model ModelProvider {
   pluginId             String               @db.VarChar(100)
   pluginVersion        Int
   configuration        Json
+  providerDefinitionId String?              @db.VarChar(100)
   encryptedCredentials String
   enabled              Boolean              @default(true)
   createdAt            DateTime             @default(now())

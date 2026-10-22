@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { providerDefinitionIdSchema } from './provider-catalog.js';
 
 const jsonObjectSchema = z.record(z.string(), z.json());
 export const createModelProviderSchema = z
@@ -15,6 +16,7 @@ export const modelProviderSchema = createModelProviderSchema
   .omit({ credentials: true })
   .extend({
     id: z.uuid(),
+    providerDefinitionId: providerDefinitionIdSchema.nullable(),
     enabled: z.boolean(),
     createdAt: z.iso.datetime(),
   })

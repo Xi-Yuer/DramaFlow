@@ -14,8 +14,10 @@ import {
   setModelResourceEnabledRequestSchema,
   modelManagementListQuerySchema,
   providerPluginCatalogSchema,
+  providerCatalogSchema,
+  createCatalogProviderSchema,
 } from '@dramaflow/contracts';
-import { PluginRegistry } from '@dramaflow/plugins';
+import { PluginRegistry, ProviderCatalog } from '@dramaflow/plugins';
 import type { Prisma } from '@dramaflow/database';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
@@ -45,6 +47,7 @@ const providerSelect = {
   pluginId: true,
   pluginVersion: true,
   configuration: true,
+  providerDefinitionId: true,
   enabled: true,
   createdAt: true,
 } satisfies Prisma.ModelProviderSelect;
@@ -69,6 +72,7 @@ function providerDto(row: ProviderRow): ModelProvider {
     pluginId: row.pluginId,
     pluginVersion: row.pluginVersion,
     configuration: row.configuration,
+    providerDefinitionId: row.providerDefinitionId,
     enabled: row.enabled,
     createdAt: row.createdAt.toISOString(),
   });
@@ -90,6 +94,7 @@ export class ModelProviderService {
     private readonly db: DatabaseService,
     private readonly secrets: SecretsService,
     private readonly plugins: PluginRegistry,
+    private readonly catalog: ProviderCatalog,
   ) {}
 
   private async authorize(ownerId: string, projectId: string): Promise<void> {
@@ -127,6 +132,41 @@ export class ModelProviderService {
       },
     });
     return providerDto(row);
+  }
+
+  async createProviderFromCatalog(ownerId: string, input: unknown): Promise<ModelProvider> {
+    const parsed = createCatalogProviderSchema.safeParse(input);
+    if (!parsed.success) throw new ModelConfigurationError('MODEL_PROVIDER_CONFIGURATION_INVALID');
+    const value = parsed.data;
+    await this.authorize(ownerId, value.projectId);
+    let materialized;
+    try {
+      materialized = this.catalog.materialize(value.providerDefinitionId, {
+        ...(value.configuration === undefined ? {} : { configuration: value.configuration }),
+        credentials: value.credentials,
+      });
+    } catch {
+      throw new ModelConfigurationError('MODEL_PROVIDER_CONFIGURATION_INVALID');
+    }
+    const row = await this.db.client.modelProvider.create({
+      data: {
+        projectId: value.projectId,
+        name: value.name,
+        pluginId: materialized.pluginId,
+        pluginVersion: materialized.pluginVersion,
+        configuration: materialized.configuration,
+        providerDefinitionId: materialized.providerDefinitionId,
+        encryptedCredentials: this.secrets.encrypt(
+          JSON.stringify(materialized.credentials),
+          ownerId,
+        ),
+      },
+    });
+    return providerDto(row);
+  }
+
+  listProviderCatalog() {
+    return providerCatalogSchema.parse({ items: this.catalog.list() });
   }
 
   async createModelConfiguration(

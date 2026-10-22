@@ -5,6 +5,7 @@ import {
   modelProviderSchema,
   managedModelConfigurationSchema,
   providerPluginCatalogSchema,
+  providerCatalogSchema,
   modelProviderListSchema,
   modelConfigurationListSchema,
   workflowResponseSchema,
@@ -196,6 +197,82 @@ describe('项目模型管理 HTTP', () => {
     expect(JSON.stringify(result)).not.toMatch(
       /invoke|credentialsSchema|encryptedCredentials/,
     );
+  });
+
+  it('Provider Catalog 发布 OpenAI / Anthropic，实例绑定定义并物化官方调用配置', async () => {
+    expect((await http('/provider-catalog', 'GET', undefined, -1)).status).toBe(401);
+    const catalog = providerCatalogSchema.parse(await json(await http('/provider-catalog')));
+    expect(catalog.items.map((item) => item.id)).toEqual(['anthropic', 'openai']);
+    expect(new Set(catalog.items.map((item) => item.id)).size).toBe(2);
+    expect(JSON.stringify(catalog)).not.toMatch(
+      /text_generation|pluginId|pluginVersion|baseURL|api\.openai\.com|api\.anthropic\.com|vercel|encryptedCredentials/,
+    );
+    const owned = await project();
+    const created = await http(`/projects/${owned.id}/providers/catalog`, 'POST', {
+      name: '官方 OpenAI',
+      providerDefinitionId: 'openai',
+      credentials: { apiKey: marker },
+    });
+    expect(created.status).toBe(201);
+    const openai = modelProviderSchema.parse(await json(created));
+    expect(openai).toMatchObject({
+      providerDefinitionId: 'openai',
+      pluginId: 'text_generation',
+      pluginVersion: 1,
+      configuration: {
+        provider: 'openai',
+        baseURL: 'https://api.openai.com/v1',
+        timeoutMs: 60000,
+      },
+    });
+    expect(JSON.stringify(openai)).not.toContain(marker);
+    expect(
+      (await http(`/projects/${owned.id}/providers/${openai.id}`, 'GET', undefined, 1)).status,
+    ).toBe(404);
+    const anthropicResponse = await http(`/projects/${owned.id}/providers/catalog`, 'POST', {
+      name: '官方 Anthropic',
+      providerDefinitionId: 'anthropic',
+      credentials: { apiKey: marker },
+      configuration: {},
+    });
+    expect(anthropicResponse.status).toBe(201);
+    expect(modelProviderSchema.parse(await json(anthropicResponse))).toMatchObject({
+      providerDefinitionId: 'anthropic',
+      pluginId: 'text_generation',
+      pluginVersion: 1,
+      configuration: { provider: 'anthropic', baseURL: 'https://api.anthropic.com/v1' },
+    });
+    const configured = await http(`/projects/${owned.id}/model-configurations`, 'POST', {
+      providerId: openai.id,
+      capability: 'text.generate',
+      model: 'gpt-4o',
+      settings: { temperature: 0.2, maxOutputTokens: 32 },
+    });
+    expect(configured.status).toBe(201);
+    expect(managedModelConfigurationSchema.parse(await json(configured)).availability).toEqual({
+      selectable: true,
+      unavailableReason: null,
+    });
+    for (const body of [
+      { name: '未知服务', providerDefinitionId: 'deepseek', credentials: { apiKey: marker } },
+      {
+        name: '改地址',
+        providerDefinitionId: 'openai',
+        credentials: { apiKey: marker },
+        configuration: { baseURL: 'https://evil.example/v1' },
+      },
+      {
+        name: '伪造插件',
+        providerDefinitionId: 'openai',
+        pluginId: 'text_generation',
+        credentials: { apiKey: marker },
+      },
+    ]) {
+      const rejected = await http(`/projects/${owned.id}/providers/catalog`, 'POST', body);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.text()).not.toContain(marker);
+    }
+    expect((await provider(owned.id)).providerDefinitionId).toBeNull();
   });
 
   it('自定义兼容 endpoint / model 经正式 API 创建、列出和读取，无默认厂商且不解密或探活', async () => {

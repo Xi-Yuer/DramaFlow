@@ -24,7 +24,7 @@ DramaFlow 是团队自部署的 AI 视频生产工作流平台，漫剧优先，
 
 Workflow 描述怎么生产，Node 描述做什么，Capability 描述需要哪类能力，Provider 描述用户使用哪家服务，Plugin 负责执行。LangGraph 负责怎么执行。平台保存自己的定义并编译到 LangGraph，不自建调度器或暂停恢复状态机。角色、剧集、卖点等语义留在节点、资料和模板，不写进 Runtime。
 
-已确定的产品模型是 Provider Catalog → Provider Definition → Provider Instance → Credential → Model Configuration。普通用户选择预设 Provider，填写该 Provider 要求的凭证，再选择或配置模型。Custom OpenAI-Compatible 允许高级用户配置 endpoint、API Key 和 model；当前保留 `openai_compatible@1`，它不作为所有 Provider 的基础交互。文本厂商协议由对应插件在内部适配。图片、视频、音频按 Provider 使用各自插件，不建一个覆盖全部模态的 Provider 抽象。Catalog 与这些媒体插件尚未实现。LiteLLM 与 Bifrost 已评估并否决，证据在 experiments。
+已确定的产品模型是 Provider Catalog → Provider Definition → Provider Instance → Credential → Model Configuration。普通用户选择预设 Provider，填写该 Provider 要求的凭证，再选择或配置模型。Custom OpenAI-Compatible 允许高级用户配置 endpoint、API Key 和 model；当前保留 `openai_compatible@1`，它不作为所有 Provider 的基础交互。文本厂商协议由对应插件在内部适配。图片、视频、音频按 Provider 使用各自插件，不建一个覆盖全部模态的 Provider 抽象。OpenAI 与 Anthropic 已有代码定义的 Catalog。其他 Provider、媒体插件和选择界面尚未实现。LiteLLM 与 Bifrost 已评估并否决，证据在 experiments。
 
 草稿修改不影响已有运行。跨运行复用靠显式 Asset 引用，不靠复用可变 State。新素材写入 RustFS，不静默回退本地文件。
 

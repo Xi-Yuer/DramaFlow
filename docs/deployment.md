@@ -45,7 +45,7 @@ Worker 必须常驻，否则 API 可以受理但不会执行。Outbox 没有独�
 
 ## 文本模型 Provider 配置
 
-模型配置的 HTTP 见 [架构](architecture.md#plugin--provider--模型配置管理-http)。服务端也可以用 CLI 按当前插件 Schema 创建实例，每次都新建，不更新、不去重；Provider 与模型配置不是同一次原子写入。这个 CLI 还不能选择 Provider Catalog。下面的示例是高级 Custom OpenAI-Compatible，用来指定兼容地址、API Key 和 model；它不是 OpenAI、Anthropic 等普通 Provider 的默认配置方式。
+模型配置的 HTTP 见 [架构](architecture.md#plugin--provider--模型配置管理-http)。服务端也可以用 CLI 按当前插件 Schema 创建实例，每次都新建，不更新、不去重；Provider 与模型配置不是同一次原子写入。官方 OpenAI / Anthropic 由 `GET /api/v1/provider-catalog` 提供定义，创建实例时不手填 endpoint。这个 CLI 仍按插件 Schema 创建，下面的示例是高级 Custom OpenAI-Compatible，不是普通 Provider 的默认配置方式。
 
 ```sh
 pnpm build

@@ -1,5 +1,6 @@
 import {
   createProjectProviderRequestSchema,
+  createProjectCatalogProviderRequestSchema,
   createProjectModelRequestSchema,
   replaceProviderCredentialsRequestSchema,
   setModelResourceEnabledRequestSchema,
@@ -80,6 +81,12 @@ export class ModelManagementController {
     return safe(() => this.models.listProviderPlugins());
   }
 
+  @Get('provider-catalog')
+  @Header('Cache-Control', 'no-store')
+  providerCatalog() {
+    return safe(() => this.models.listProviderCatalog());
+  }
+
   @Get('projects/:projectId/providers')
   @Header('Cache-Control', 'no-store')
   listProviders(
@@ -109,6 +116,21 @@ export class ModelManagementController {
         parse(z.uuid(), projectId),
         parse(z.uuid(), providerId),
       ),
+    );
+  }
+
+  @Post('projects/:projectId/providers/catalog')
+  @Header('Cache-Control', 'no-store')
+  createCatalogProvider(
+    @Actor() actor: AuthActor,
+    @Param('projectId') projectId: string,
+    @Body() body: unknown,
+  ) {
+    return safe(() =>
+      this.models.createProviderFromCatalog(actor.user.id, {
+        ...parse(createProjectCatalogProviderRequestSchema, body),
+        projectId: parse(z.uuid(), projectId),
+      }),
     );
   }
 

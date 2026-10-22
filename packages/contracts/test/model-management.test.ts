@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createProjectProviderRequestSchema,
+  createProjectCatalogProviderRequestSchema,
   createProjectModelRequestSchema,
   setModelResourceEnabledRequestSchema,
   replaceProviderCredentialsRequestSchema,
@@ -18,6 +19,21 @@ describe('模型管理协议', () => {
       credentials: { apiKey: 'test-only' },
     };
     expect(createProjectProviderRequestSchema.parse(provider)).toEqual(provider);
+    const catalogProvider = {
+      name: 'OpenAI',
+      providerDefinitionId: 'openai',
+      credentials: { apiKey: 'test-only' },
+    };
+    expect(createProjectCatalogProviderRequestSchema.parse(catalogProvider)).toEqual(
+      catalogProvider,
+    );
+    expect(
+      createProjectCatalogProviderRequestSchema.safeParse({
+        ...catalogProvider,
+        pluginId: 'text_generation',
+        projectId: '00000000-0000-4000-8000-000000000001',
+      }).success,
+    ).toBe(false);
     expect(
       createProjectProviderRequestSchema.safeParse({ ...provider, projectId: 'spoof' }).success,
     ).toBe(false);

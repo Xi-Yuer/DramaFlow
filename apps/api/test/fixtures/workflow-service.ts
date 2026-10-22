@@ -2,6 +2,7 @@ import {
   DatabaseService,
   ModelProviderService,
   SecretsService,
+  createProviderCatalog,
   createProviderPluginRegistry,
 } from '@dramaflow/server';
 import {
@@ -18,13 +19,15 @@ export function createWorkflowService(
   database: DatabaseService,
   registry: NodeRegistry,
 ) {
+  const plugins = createProviderPluginRegistry();
   return new WorkflowService(
     database,
     registry,
     new ModelProviderService(
       database,
       new SecretsService(),
-      createProviderPluginRegistry(),
+      plugins,
+      createProviderCatalog(plugins),
     ),
   );
 }

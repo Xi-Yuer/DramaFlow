@@ -110,7 +110,7 @@ Provider Catalog
 
 图片、视频、音频按各自 Provider 使用对应插件，例如视频原生适配、ComfyUI 图像或语音插件。文本插件和 Vercel AI SDK 只覆盖当前的 `text.generate`。LiteLLM 与 Bifrost 已评估并否决，证据在 experiments，不进入生产依赖。
 
-当前库和接口还没有 Catalog / Provider Definition。`text_generation@1` 的 configuration 仍保存 `provider` 与 `baseURL`。这是尚未补上的实现缺口；管理操作仍按插件 Schema 提交。
+OpenAI 与 Anthropic 的 Provider Definition 随代码发布，不进数据库。两者都映射到 `text_generation@1`：OpenAI 固定 `https://api.openai.com/v1`，Anthropic 固定 `https://api.anthropic.com/v1`。用户通过目录创建实例时只提交凭证；`provider` 与 `baseURL` 由定义写入实例 configuration。`ModelProvider.providerDefinitionId` 记录这个关联，直接按插件创建的实例（含 `openai_compatible@1`）该字段为空。其他厂商尚未注册。
 
 Registry 统一校验配置、凭证、输入输出及模型参数，精确绑定插件版本，不自动切换。`text_generation@1` 的 maxOutputTokens 必填（1—65536），temperature 可选（0—1）。`openai_compatible@1` 两项可选，temperature 为 0—2。timeoutMs 默认 60000，范围 100—180000。HTTP(S) endpoint 拒绝 userinfo、query、fragment。
 
@@ -127,13 +127,15 @@ Provider 与模型绑定不可改写；凭证可轮换，enabled 可变。每次
 | 方法与路径 | 行为 |
 | --- | --- |
 | GET /provider-plugins | 受信任且允许配置的插件精确版本、JSON Schema 和凭证字段约束 |
-| GET / POST /projects/:projectId/providers | Provider 列表 / 创建 |
+| GET /provider-catalog | 官方 Provider 的安全目录：id、名称、能力、凭证字段和用户配置 Schema |
+| GET / POST /projects/:projectId/providers | Provider 列表 / 按插件 Schema 创建 |
+| POST /projects/:projectId/providers/catalog | 按 Provider Definition 创建实例。请求为定义 id、名称和凭证；官方 Provider 不接受用户填写的 endpoint |
 | GET / PATCH /projects/:projectId/providers/:providerId | 安全详情 / 修改 enabled |
 | PUT /projects/:projectId/providers/:providerId/credentials | 完整替换凭证 |
 | GET / POST /projects/:projectId/model-configurations | 模型配置列表 / 创建 |
 | GET / PATCH /projects/:projectId/model-configurations/:modelId | 模型详情 / 修改 enabled |
 
-所有业务读写按项目所有者授权。列表为有界游标分页；读取投影排除凭证明文和密文。无效参数 / Schema 为安全 400，停用绑定为 409，密钥或服务不可用为安全 503。没有删除、原地改绑、自动模型发现或远程插件安装。Provider Catalog 预设也尚未提供。
+所有业务读写按项目所有者授权。列表为有界游标分页；读取投影排除凭证明文和密文。无效参数 / Schema 为安全 400，停用绑定为 409，密钥或服务不可用为安全 503。没有删除、原地改绑、自动模型发现或远程插件安装。Catalog 目前只有 OpenAI 与 Anthropic，没有模型发现。
 
 ## Web 项目模型设置
 

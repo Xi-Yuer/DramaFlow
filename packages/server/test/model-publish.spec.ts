@@ -1,4 +1,4 @@
-import { PluginRegistry } from '@dramaflow/plugins';
+import { PluginRegistry, ProviderCatalog } from '@dramaflow/plugins';
 import { DatabaseService, ModelProviderService, SecretsService } from '../src/index.js';
 import type { Prisma } from '@dramaflow/database';
 import { describe, expect, it, vi } from 'vitest';
@@ -27,7 +27,12 @@ describe('发布只检查本地能力配置', () => {
     const secrets = new SecretsService();
     const decrypt = vi.spyOn(secrets, 'decrypt');
     const database = new DatabaseService();
-    const service = new ModelProviderService(database, secrets, plugins);
+    const service = new ModelProviderService(
+      database,
+      secrets,
+      plugins,
+      new ProviderCatalog(plugins, []),
+    );
     // SQL / 锁与权限用真实数据库 HTTP 用例验证；这里定向检查 Registry 能力分派。
     const tx = {
       $queryRaw: vi.fn().mockResolvedValue([

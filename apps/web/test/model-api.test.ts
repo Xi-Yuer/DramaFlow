@@ -8,6 +8,7 @@ const provider = {
   name: '供应商',
   pluginId: 'custom',
   pluginVersion: 1,
+  providerDefinitionId: null,
   configuration: { endpoint: 'https://custom.example' },
   enabled: true,
   createdAt: '2026-10-21T00:00:00.000Z',

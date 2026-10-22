@@ -39,6 +39,21 @@ function parseObject(schema: z.ZodObject, value: unknown, code: CapabilityErrorC
   return parse(jsonObjectSchema, parse(schema, input, code), code);
 }
 
+export function credentialFieldsFromSchema(schema: z.ZodObject) {
+  const credentials = z.toJSONSchema(schema, { io: 'input' });
+  const required = new Set(credentials.required ?? []);
+  return Object.entries(credentials.properties ?? {}).map(([key, value]) => ({
+    key,
+    required: required.has(key),
+    ...(typeof value === 'object' && typeof value.minLength === 'number'
+      ? { minLength: value.minLength }
+      : {}),
+    ...(typeof value === 'object' && typeof value.maxLength === 'number'
+      ? { maxLength: value.maxLength }
+      : {}),
+  }));
+}
+
 export class PluginRegistry {
   private readonly plugins = new Map<string, ProviderPlugin>();
 
@@ -116,23 +131,12 @@ export class PluginRegistry {
     return [...this.plugins.values()]
       .filter((plugin) => plugin.management)
       .map((plugin) => {
-        const credentials = z.toJSONSchema(plugin.credentialsSchema, { io: 'input' });
-        const required = new Set(credentials.required ?? []);
         return providerPluginDescriptionSchema.parse({
           id: plugin.id,
           version: plugin.version,
           ...plugin.management,
           configurationSchema: z.toJSONSchema(plugin.configSchema, { io: 'input' }),
-          credentialFields: Object.entries(credentials.properties ?? {}).map(([key, value]) => ({
-            key,
-            required: required.has(key),
-            ...(typeof value === 'object' && typeof value.minLength === 'number'
-              ? { minLength: value.minLength }
-              : {}),
-            ...(typeof value === 'object' && typeof value.maxLength === 'number'
-              ? { maxLength: value.maxLength }
-              : {}),
-          })),
+          credentialFields: credentialFieldsFromSchema(plugin.credentialsSchema),
           capabilities: plugin.capabilities.map((capability) => ({
             type: capability.type,
             name: capability.metadata?.name ?? capability.type,
