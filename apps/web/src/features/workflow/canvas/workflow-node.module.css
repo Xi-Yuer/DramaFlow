@@ -21,7 +21,7 @@
   padding: 15px 16px;
 }
 
-.header .controlHandle {
+.controlHandle {
   width: 9px;
   height: 9px;
   border: 1.5px solid #b4b8be;
@@ -29,11 +29,11 @@
   background: #18191d;
 }
 
-.header .controlInput {
+.controlInput {
   transform: translate(-50%, -50%) rotate(45deg);
 }
 
-.header .controlOutput {
+.controlOutput {
   transform: translate(50%, -50%) rotate(45deg);
 }
 

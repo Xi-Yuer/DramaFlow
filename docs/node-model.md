@@ -16,7 +16,7 @@ Manifest 固定 type / version 与 executionKind（action / control / composite 
 
 数据端口使用正式 DataType，Handle.id 等于端口 key，同方向唯一。required 表示可省略，null 用 union 表达；集合用 array.itemType，没有 multiple。输出 storagePolicy 为 inline / reference / auto，缺省 auto，不改变端口类型。
 
-普通控制 Handle 为 `control:source` / `control:target`，与数据 key 隔离，默认 Handle 不写入领域 portKey。Manifest 可选 `controlOutputs: [{ key, name, description? }]` 声明控制出口，不携带 DataType，不属于数据 outputs；同组 key 唯一。ControlEdge.source.portKey 只能引用该精确 Manifest 的已声明出口，target 命名控制输入仍不支持。当前 Web 尚无 If 控制出口编辑交互。
+普通控制 Handle 为 `control:source` / `control:target`，与数据 key 隔离，默认 Handle 不写入领域 portKey。Manifest 可选 `controlOutputs: [{ key, name, description? }]` 声明控制出口，不携带 DataType，不属于数据 outputs；同组 key 唯一。ControlEdge.source.portKey 只能引用该精确 Manifest 的已声明出口，target 命名控制输入仍不支持。Web 依 Manifest 渲染命名控制 Handle；If 只能从 true / false 出口连线，不使用默认控制出口。
 
 config 用 string / number / boolean / select 字段数组；condition 字段只声明条件配置，不开放通用对象表单或默认表达式。默认值按类型、范围与选项校验。配置编辑提示在 config[].ui，输入提示在 ui.inputs，必须引用现有输入。Zod transform / 默认值不回写定义或 State。
 
@@ -62,7 +62,7 @@ Workflow 的 `runtime/condition-evaluator.ts` 封装精确版本 json-logic-engi
 
 If CompilationStrategy 不经 Action NodeExecutor，不提供 matched Data Output；内部条件结果按 nodeId 写入 execution.controlResults，LangGraph 原生 conditional edges 读取结果后只激活一支。分支输入依赖不再编译成无条件触发，原始 Binding 数据来源保持不变。执行预算、START / END、checkpoint / resume 和阶段性拓扑限制见 [Runtime](runtime-architecture.md#简单-if-的条件路由与预算)。
 
-暂不支持分支后继、merge / nested、跨支依赖及条件分支来源的最终 output；这些属于 Compiler 能力限制，不是永久 Workflow Contract。没有修改 OutputResolver 或引入 optional output。Web 的 value / condition / true-false 出口编辑仍需独立任务。
+暂不支持分支后继、merge / nested、跨支依赖及条件分支来源的最终 output；这些属于 Compiler 能力限制，不是永久 Workflow Contract。没有修改 OutputResolver 或引入 optional output。Web 在 Generic Node 内复用 string Binding 编辑 value，通过等于 / 不等于 / 包含 / 不包含表单读写 condition；控制连线保存对应 source.portKey。未配置完整的 If 可以保存 Draft，Publish 仍以服务端校验为准；未知条件表达式保留，需用户明确替换后才能转为可编辑条件。
 
 ## 视频领域能力与厂商边界
 

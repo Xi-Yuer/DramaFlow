@@ -226,14 +226,35 @@ function addWorkflowEdge(
   const targetManifest = manifestFor(manifests, target.type, target.typeVersion);
   if (!sourceManifest || !targetManifest) throw new Error('节点类型不可用');
   if (sourceHandle.kind === 'control' && targetHandle.kind === 'control') {
-    // 当前通用节点只声明默认控制入口 / 出口；命名路由需后续控制端口协议。
-    if (sourceHandle.portKey !== undefined || targetHandle.portKey !== undefined) {
+    if (
+      targetHandle.portKey !== undefined ||
+      (sourceHandle.portKey !== undefined &&
+        !sourceManifest.controlOutputs?.some((port) => port.key === sourceHandle.portKey))
+    ) {
       throw new Error('命名控制端口尚未声明');
+    }
+    if (sourceManifest.controlOutputs?.length && sourceHandle.portKey === undefined)
+      throw new Error('请选择已声明的控制出口');
+    if (
+      source.type === 'flow.if' &&
+      source.typeVersion === 1 &&
+      sourceManifest.executionKind === 'control'
+    ) {
+      const routes = workflow.edges.filter(
+        (edge) => edge.kind === 'control' && edge.source.nodeId === source.id,
+      );
+      if (routes.some((edge) => edge.source.portKey === sourceHandle.portKey))
+        throw new Error('该条件出口已连接，请先断开或重连');
+      if (routes.some((edge) => edge.target.nodeId === target.id))
+        throw new Error('true / false 不能连接同一目标');
     }
     workflow.edges.push({
       id,
       kind: 'control',
-      source: { nodeId: source.id },
+      source: {
+        nodeId: source.id,
+        ...(sourceHandle.portKey === undefined ? {} : { portKey: sourceHandle.portKey }),
+      },
       target: { nodeId: target.id },
     });
     return workflowDefinitionSchema.parse(workflow);

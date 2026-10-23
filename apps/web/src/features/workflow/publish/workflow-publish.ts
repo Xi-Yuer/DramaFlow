@@ -39,6 +39,28 @@ const errorSchema = z.object({
   portKey: z.string().optional(),
   details: z.array(issueSchema).optional(),
 });
+
+const publishIssueMessages = new Map([
+  [
+    'IF_TOPOLOGY_UNSUPPORTED',
+    '当前仅支持 true / false 分别连接不同的末端操作节点；暂不支持分支后续连接、汇合或嵌套条件。分支输入须来自条件节点已完成的上游。',
+  ],
+  [
+    'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',
+    '工作流输出不能引用可能不执行的条件分支，请选择必定执行的节点输出。',
+  ],
+  ['NODE_EXECUTION_KIND_UNSUPPORTED', '当前暂不支持运行此类节点，请调整工作流后再发布。'],
+  ['CONTROL_OUTPUT_PORT_REQUIRED', '请从条件节点的 true / false 出口连接分支。'],
+  ['CONTROL_OUTPUT_BRANCH_MISSING', '请为条件节点连接 true 和 false 两个分支。'],
+]);
+
+export function workflowPublishErrorDescription(error: WorkflowPublishError): string {
+  const issue = error.issues.find((item) => item.code && publishIssueMessages.has(item.code));
+  const message = publishIssueMessages.get(issue?.code ?? error.code ?? '');
+  if (message) return `${message}${issue?.nodeId ? `（节点：${issue.nodeId}）` : ''}`;
+  return `${error.message}${error.issues[0]?.message ? `：${error.issues[0].message}` : ''}${error.code ? `（${error.code}）` : ''}`;
+}
+
 export function workflowPublishError(error: unknown): WorkflowPublishError {
   const parsed = errorSchema.safeParse(error instanceof ApiError ? error.details : undefined);
   return {

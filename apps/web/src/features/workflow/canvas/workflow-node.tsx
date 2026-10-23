@@ -9,6 +9,7 @@ import type { WorkflowNode } from './react-flow-adapter';
 import { TemplateInputEditor } from '../inputs/template-input-editor';
 import { availableStringOutputs } from '../inputs/template-input';
 import { WorkflowInputContext } from '../inputs/workflow-input-context';
+import { IfConditionEditor } from '../conditions/if-condition-editor';
 import { controlHandleId } from './workflow-handles';
 import styles from './workflow-node.module.css';
 
@@ -69,6 +70,8 @@ export function GenericWorkflowNode({
   const manifests = useContext(ManifestContext);
   const inputActions = useContext(WorkflowInputContext);
   const manifest = findNodeManifest(manifests, data.nodeType, data.typeVersion);
+  const isIf =
+    data.nodeType === 'flow.if' && data.typeVersion === 1 && manifest?.executionKind === 'control';
 
   return (
     <article
@@ -87,15 +90,17 @@ export function GenericWorkflowNode({
               aria-label="控制输入"
               title="控制输入"
             />
-            <Handle
-              className={`${styles.controlHandle} ${styles.controlOutput}`}
-              type="source"
-              position={Position.Right}
-              id={controlHandleId('source')}
-              isConnectable={isConnectable}
-              aria-label="控制输出"
-              title="控制输出"
-            />
+            {!manifest.controlOutputs?.length ? (
+              <Handle
+                className={`${styles.controlHandle} ${styles.controlOutput}`}
+                type="source"
+                position={Position.Right}
+                id={controlHandleId('source')}
+                isConnectable={isConnectable}
+                aria-label="控制输出"
+                title="控制输出"
+              />
+            ) : null}
           </>
         ) : null}
         <span className={styles.icon} aria-hidden="true">
@@ -145,12 +150,29 @@ export function GenericWorkflowNode({
                   />
                 </div>
               ))}
+              {manifest.controlOutputs?.map((port) => (
+                <div className={styles.output} key={`control:${port.key}`}>
+                  <span>{port.key}</span>
+                  <small>{port.name}</small>
+                  <Handle
+                    className={`${styles.controlHandle} ${styles.controlOutput}`}
+                    type="source"
+                    position={Position.Right}
+                    id={controlHandleId('source', port.key)}
+                    isConnectable={isConnectable}
+                    aria-label={`控制输出：${port.key}`}
+                    title={`${port.key} · ${port.name}`}
+                  />
+                </div>
+              ))}
             </div>
           </div>
-          {inputActions && data.nodeType === 'ai.text_generate' ? (
+          {inputActions && (data.nodeType === 'ai.text_generate' || isIf) ? (
             <div className={styles.inputs}>
               {manifest.inputs
-                .filter((port) => port.key === 'prompt' || port.key === 'system')
+                .filter((port) =>
+                  isIf ? port.key === 'value' : port.key === 'prompt' || port.key === 'system',
+                )
                 .map((port) => (
                   <TemplateInputEditor
                     key={port.key}
@@ -176,7 +198,8 @@ export function GenericWorkflowNode({
                 ))}
             </div>
           ) : null}
-          {manifest.config.length ? (
+          {isIf ? <IfConditionEditor nodeId={id} condition={data.config.condition} /> : null}
+          {!isIf && manifest.config.length ? (
             <dl className={styles.config}>
               {manifest.config.slice(0, 3).map((field) => (
                 <div

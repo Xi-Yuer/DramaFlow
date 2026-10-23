@@ -1,5 +1,6 @@
 import { Alert, Button, Tooltip } from 'antd';
 import type { PublishedWorkflowVersion, WorkflowPublishError } from './workflow-publish';
+import { workflowPublishErrorDescription } from './workflow-publish';
 import styles from './workflow-publish.module.css';
 
 export function WorkflowPublishControls({
@@ -83,13 +84,7 @@ export function WorkflowPublishControls({
           showIcon
           type="error"
           title="上次发布操作未完成"
-          description={
-            <span>
-              {error.message}
-              {error.issues[0]?.message ? `：${error.issues[0].message}` : ''}
-              {error.code ? `（${error.code}）` : ''}
-            </span>
-          }
+          description={workflowPublishErrorDescription(error)}
         />
       ) : null}
       {versionsError ? (

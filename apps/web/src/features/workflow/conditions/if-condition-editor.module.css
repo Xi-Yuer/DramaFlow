@@ -1,0 +1,31 @@
+.editor {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #ffffff0b;
+}
+.editor p {
+  margin: 0;
+  line-height: 1.6;
+}
+.summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #a6d5d1;
+}
+.row,
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+}
+.row > :last-child {
+  flex: 1;
+  min-width: 0;
+}
+.footer small {
+  color: #96999d;
+}

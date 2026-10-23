@@ -34,6 +34,8 @@ import {
 } from '../outputs/workflow-outputs';
 import { replaceNodeInput } from '../inputs/template-input';
 import { WorkflowInputContext } from '../inputs/workflow-input-context';
+import { WorkflowConditionActions } from '../conditions/if-condition-editor';
+import { setIfCondition } from '../conditions/if-condition';
 import { WorkflowManifestProvider, workflowNodeTypes } from './workflow-node';
 import { areWorkflowHandlesCompatible } from './workflow-handles';
 import {
@@ -195,161 +197,177 @@ export function WorkflowCanvas({
               },
             }}
           >
-            <WorkflowManifestProvider manifests={nodeTypes.data ?? []}>
-              <ReactFlow<CanvasNode, CanvasEdge>
-                nodeTypes={canvasNodeTypes}
-                nodes={nodes}
-                edges={edges}
-                nodesDraggable={!locked}
-                nodesConnectable={!locked && !nodeTypes.isPending && !nodeTypes.isError}
-                edgesReconnectable={!locked}
-                deleteKeyCode={locked ? null : ['Backspace', 'Delete']}
-                onNodesChange={(changes) => {
-                  // 受控 React Flow 仍需接收测量结果；仅缓存在视图，不回写领域草稿。
-                  setNodeView((current) => {
-                    const viewChanges = changes.filter(
-                      (change) => change.type === 'select' || change.type === 'dimensions',
-                    );
-                    if (!viewChanges.length) return current;
-                    const next = new Map(current);
-                    for (const change of viewChanges) {
-                      if (change.type === 'select')
-                        next.set(change.id, { ...next.get(change.id), selected: change.selected });
-                      else if (change.type === 'dimensions' && change.dimensions)
-                        next.set(change.id, {
-                          ...next.get(change.id),
-                          measured: change.dimensions,
-                        });
-                    }
-                    return next;
-                  });
-                  if (locked) return;
-                  const domainChanges = changes.filter(
-                    (change) =>
-                      change.type !== 'add' &&
-                      change.type !== 'replace' &&
-                      change.id !== end.node.id,
-                  );
-                  for (const change of changes) {
-                    if (change.type === 'position' && change.id === end.node.id && change.position)
-                      setEndPosition(change.position);
-                  }
-                  const removedIds = domainChanges.flatMap((change) =>
-                    change.type === 'remove' ? [change.id] : [],
-                  );
-                  if (
-                    removedIds.length ||
-                    domainChanges.some((change) => change.type === 'position' && change.position)
-                  ) {
-                    onEdit((current) =>
-                      applyWorkflowNodePositions(
-                        removeWorkflowNodes(current, removedIds),
-                        domainChanges.flatMap((change) =>
-                          change.type === 'position' ? [change] : [],
-                        ),
-                      ),
-                    );
-                  }
-                }}
-                onConnect={(connection) => {
-                  if (locked) return;
-                  if (connection.target === end.node.id) {
-                    const sourceHandle = connection.sourceHandle;
-                    if (connection.targetHandle !== END_INPUT_HANDLE || !sourceHandle) return;
-                    onEdit((current) =>
-                      addWorkflowOutput(
-                        current,
-                        { nodeId: connection.source, outputKey: sourceHandle },
-                        nodeTypes.data ?? [],
-                      ),
-                    );
-                    return;
-                  }
-                  commitDataConnection(connection, (current, replaceBinding) =>
-                    connectWorkflowNodes(current, connection, nodeTypes.data ?? [], {
-                      replaceBinding,
-                    }),
-                  );
-                }}
-                onReconnect={(edge, connection) => {
-                  if (
-                    locked ||
-                    edge.data?.kind === 'workflow-output' ||
-                    connection.target === end.node.id ||
-                    connection.source === end.node.id
-                  )
-                    return;
-                  commitDataConnection(connection, (current, replaceBinding) =>
-                    reconnectWorkflowEdge(current, edge, connection, nodeTypes.data ?? [], {
-                      replaceBinding,
-                    }),
-                  );
-                }}
-                onEdgesDelete={(deleted) => {
-                  if (locked) return;
-                  onEdit((current) =>
-                    deleted.reduce((definition, edge) => {
-                      if (edge.data?.kind !== 'workflow-output')
-                        return disconnectWorkflowEdge(definition, edge);
-                      const outputName = edge.data.outputName;
-                      const output = definition.outputs.find(
-                        (output) => output.name === outputName,
+            <WorkflowConditionActions.Provider
+              value={{
+                disabled: locked,
+                onChange: (nodeId, condition) => {
+                  if (!locked) onEdit((current) => setIfCondition(current, nodeId, condition));
+                },
+              }}
+            >
+              <WorkflowManifestProvider manifests={nodeTypes.data ?? []}>
+                <ReactFlow<CanvasNode, CanvasEdge>
+                  nodeTypes={canvasNodeTypes}
+                  nodes={nodes}
+                  edges={edges}
+                  nodesDraggable={!locked}
+                  nodesConnectable={!locked && !nodeTypes.isPending && !nodeTypes.isError}
+                  edgesReconnectable={!locked}
+                  deleteKeyCode={locked ? null : ['Backspace', 'Delete']}
+                  onNodesChange={(changes) => {
+                    // 受控 React Flow 仍需接收测量结果；仅缓存在视图，不回写领域草稿。
+                    setNodeView((current) => {
+                      const viewChanges = changes.filter(
+                        (change) => change.type === 'select' || change.type === 'dimensions',
                       );
-                      return output?.source.nodeId === edge.source &&
-                        output.source.outputKey === edge.sourceHandle
-                        ? removeWorkflowOutput(definition, output.name)
-                        : definition;
-                    }, current),
-                  );
-                }}
-                onEdgesChange={(changes) => {
-                  setSelectedEdgeIds((current) => {
-                    const next = new Set(current);
-                    for (const change of changes) {
-                      if (change.type === 'select') {
-                        if (change.selected) next.add(change.id);
-                        else next.delete(change.id);
-                      } else if (change.type === 'remove') next.delete(change.id);
-                    }
-                    return next;
-                  });
-                }}
-                isValidConnection={(connection) => {
-                  if (connection.source === end.node.id) return false;
-                  if (connection.target === end.node.id) {
-                    const node = workflow.nodes.find((node) => node.id === connection.source);
-                    return (
-                      connection.targetHandle === END_INPUT_HANDLE &&
-                      !!nodeTypes.data
-                        ?.find(
-                          (manifest) =>
-                            manifest.type === node?.type && manifest.version === node.typeVersion,
-                        )
-                        ?.outputs.some((port) => port.key === connection.sourceHandle)
+                      if (!viewChanges.length) return current;
+                      const next = new Map(current);
+                      for (const change of viewChanges) {
+                        if (change.type === 'select')
+                          next.set(change.id, {
+                            ...next.get(change.id),
+                            selected: change.selected,
+                          });
+                        else if (change.type === 'dimensions' && change.dimensions)
+                          next.set(change.id, {
+                            ...next.get(change.id),
+                            measured: change.dimensions,
+                          });
+                      }
+                      return next;
+                    });
+                    if (locked) return;
+                    const domainChanges = changes.filter(
+                      (change) =>
+                        change.type !== 'add' &&
+                        change.type !== 'replace' &&
+                        change.id !== end.node.id,
                     );
-                  }
-                  return areWorkflowHandlesCompatible(
-                    connection.sourceHandle,
-                    connection.targetHandle,
-                  );
-                }}
-                onMoveEnd={onMoveEnd}
-                defaultViewport={defaultViewport}
-                minZoom={0.1}
-                maxZoom={3}
-                colorMode="dark"
-                fitView={false}
-                proOptions={{ hideAttribution: false }}
-              >
-                <Background
-                  variant={BackgroundVariant.Dots}
-                  gap={22}
-                  size={1.2}
-                  color="#ffffff18"
-                />
-                <Controls showInteractive={false} position="bottom-left" />
-              </ReactFlow>
-            </WorkflowManifestProvider>
+                    for (const change of changes) {
+                      if (
+                        change.type === 'position' &&
+                        change.id === end.node.id &&
+                        change.position
+                      )
+                        setEndPosition(change.position);
+                    }
+                    const removedIds = domainChanges.flatMap((change) =>
+                      change.type === 'remove' ? [change.id] : [],
+                    );
+                    if (
+                      removedIds.length ||
+                      domainChanges.some((change) => change.type === 'position' && change.position)
+                    ) {
+                      onEdit((current) =>
+                        applyWorkflowNodePositions(
+                          removeWorkflowNodes(current, removedIds),
+                          domainChanges.flatMap((change) =>
+                            change.type === 'position' ? [change] : [],
+                          ),
+                        ),
+                      );
+                    }
+                  }}
+                  onConnect={(connection) => {
+                    if (locked) return;
+                    if (connection.target === end.node.id) {
+                      const sourceHandle = connection.sourceHandle;
+                      if (connection.targetHandle !== END_INPUT_HANDLE || !sourceHandle) return;
+                      onEdit((current) =>
+                        addWorkflowOutput(
+                          current,
+                          { nodeId: connection.source, outputKey: sourceHandle },
+                          nodeTypes.data ?? [],
+                        ),
+                      );
+                      return;
+                    }
+                    commitDataConnection(connection, (current, replaceBinding) =>
+                      connectWorkflowNodes(current, connection, nodeTypes.data ?? [], {
+                        replaceBinding,
+                      }),
+                    );
+                  }}
+                  onReconnect={(edge, connection) => {
+                    if (
+                      locked ||
+                      edge.data?.kind === 'workflow-output' ||
+                      connection.target === end.node.id ||
+                      connection.source === end.node.id
+                    )
+                      return;
+                    commitDataConnection(connection, (current, replaceBinding) =>
+                      reconnectWorkflowEdge(current, edge, connection, nodeTypes.data ?? [], {
+                        replaceBinding,
+                      }),
+                    );
+                  }}
+                  onEdgesDelete={(deleted) => {
+                    if (locked) return;
+                    onEdit((current) =>
+                      deleted.reduce((definition, edge) => {
+                        if (edge.data?.kind !== 'workflow-output')
+                          return disconnectWorkflowEdge(definition, edge);
+                        const outputName = edge.data.outputName;
+                        const output = definition.outputs.find(
+                          (output) => output.name === outputName,
+                        );
+                        return output?.source.nodeId === edge.source &&
+                          output.source.outputKey === edge.sourceHandle
+                          ? removeWorkflowOutput(definition, output.name)
+                          : definition;
+                      }, current),
+                    );
+                  }}
+                  onEdgesChange={(changes) => {
+                    setSelectedEdgeIds((current) => {
+                      const next = new Set(current);
+                      for (const change of changes) {
+                        if (change.type === 'select') {
+                          if (change.selected) next.add(change.id);
+                          else next.delete(change.id);
+                        } else if (change.type === 'remove') next.delete(change.id);
+                      }
+                      return next;
+                    });
+                  }}
+                  isValidConnection={(connection) => {
+                    if (connection.source === end.node.id) return false;
+                    if (connection.target === end.node.id) {
+                      const node = workflow.nodes.find((node) => node.id === connection.source);
+                      return (
+                        connection.targetHandle === END_INPUT_HANDLE &&
+                        !!nodeTypes.data
+                          ?.find(
+                            (manifest) =>
+                              manifest.type === node?.type && manifest.version === node.typeVersion,
+                          )
+                          ?.outputs.some((port) => port.key === connection.sourceHandle)
+                      );
+                    }
+                    return areWorkflowHandlesCompatible(
+                      connection.sourceHandle,
+                      connection.targetHandle,
+                    );
+                  }}
+                  onMoveEnd={onMoveEnd}
+                  defaultViewport={defaultViewport}
+                  minZoom={0.1}
+                  maxZoom={3}
+                  colorMode="dark"
+                  fitView={false}
+                  proOptions={{ hideAttribution: false }}
+                >
+                  <Background
+                    variant={BackgroundVariant.Dots}
+                    gap={22}
+                    size={1.2}
+                    color="#ffffff18"
+                  />
+                  <Controls showInteractive={false} position="bottom-left" />
+                </ReactFlow>
+              </WorkflowManifestProvider>
+            </WorkflowConditionActions.Provider>
           </WorkflowOutputActions.Provider>
         </WorkflowInputContext.Provider>
       </WorkflowModelActionsContext.Provider>

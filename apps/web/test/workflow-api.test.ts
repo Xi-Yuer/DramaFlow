@@ -6,6 +6,13 @@ import {
 } from '../src/features/workflow/outputs/workflow-outputs';
 import { definition, manifest } from './fixtures/workflow-output';
 import { ApiError } from '../src/lib/http';
+import { ifWorkflow, ifCatalog } from './fixtures/workflow-if';
+import { connectWorkflowNodes } from '../src/features/workflow/canvas/react-flow-adapter';
+import {
+  conditionFromFields,
+  conditionToFields,
+  setIfCondition,
+} from '../src/features/workflow/conditions/if-condition';
 
 const draft = { inputs: [], nodes: [], edges: [], outputs: [] };
 const workflow = {
@@ -25,6 +32,43 @@ function mockResponse(body: unknown, status = 200) {
 }
 
 describe('Workflow 编辑 HTTP 边界', () => {
+  it('If 缺少条件、输入或分支仍可保存；完整定义保存/读取保留条件和 named port', async () => {
+    const incomplete = ifWorkflow();
+    let fetch = mockResponse({ revision: 4 });
+    await workflowApi.saveDraft(workflow.id, { expectedRevision: 3, definition: incomplete });
+    expect(JSON.parse(fetch.mock.calls[0]![1].body as string).definition).toEqual(incomplete);
+    let complete = setIfCondition(incomplete, 'if', conditionFromFields('not_contains', ' 通过 '));
+    complete = connectWorkflowNodes(
+      complete,
+      { source: 'a', sourceHandle: 'text', target: 'if', targetHandle: 'value' },
+      ifCatalog,
+    );
+    for (const [port, target] of [
+      ['true', 'b'],
+      ['false', 'c'],
+    ])
+      complete = connectWorkflowNodes(
+        complete,
+        {
+          source: 'if',
+          sourceHandle: `control:source:${port}`,
+          target,
+          targetHandle: 'control:target',
+        },
+        ifCatalog,
+      );
+    fetch = mockResponse({ revision: 5 });
+    await workflowApi.saveDraft(workflow.id, { expectedRevision: 4, definition: complete });
+    const request = JSON.parse(fetch.mock.calls[0]![1].body as string);
+    expect(request.definition).toEqual(complete);
+    mockResponse({ ...workflow, revision: 5, draft: request.definition });
+    const reloaded = await workflowApi.get(workflow.projectId);
+    expect(reloaded.draft).toEqual(complete);
+    expect(conditionToFields(reloaded.draft.nodes[0]!.config.condition)).toEqual({
+      operator: 'not_contains',
+      expected: ' 通过 ',
+    });
+  });
   it('GET 保留真实身份、草稿和独立 revision，并使用同源会话', async () => {
     const fetch = mockResponse(workflow);
     expect(await workflowApi.get(workflow.projectId)).toEqual(workflow);

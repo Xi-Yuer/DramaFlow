@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-If Task 2 已完成自动验证：专用编译策略、原生条件路由、内部 State、简单拓扑准入与执行预算；仅支持终端 Action 分支。Task 3 Web 编辑尚未授权，不自动开始。
+If Web 编辑进入交付验收，能力见[当前架构](architecture.md)。浏览器真实拖线、Save / reload / Publish / Run 待人工验收，本轮不运行浏览器 E2E 或真实 Provider。后续条件类型或拓扑扩展须单独授权。
 
 ## 待决策与后续边界
 

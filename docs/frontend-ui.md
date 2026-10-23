@@ -4,7 +4,7 @@
 
 ## 交互边界
 
-- 节点只读 JSON Manifest；config[].ui / ui.inputs 指定控件，不重复维护数值范围、默认值或厂商列表。Data Handle 使用端口 key，Control Handle 使用 control:source / control:target；连接语义见 [Node](node-model.md)。
+- 节点只读 JSON Manifest；config[].ui / ui.inputs 指定控件，不重复维护数值范围、默认值或厂商列表。Data Handle 使用端口 key，Control Handle 使用 control:source / control:target，命名出口追加 Manifest 的 key；连接语义见 [Node](node-model.md)。
 - 新 Data Edge 替换已有静态输入须确认，取消保持定义不变；selected / dragging / measured 不持久化。保存失败不得显示已保存，短暂会话检查故障保留 Editor，明确拒绝访问则隐藏内容。
 - 模型选择只写 modelConfigurationId，配置从 Schema / Catalog 得到；不静默替换失效配置。供应商配置意图只在当前界面保留，取消不继续。Secret 不回填、不进 Form / Query / 浏览器存储，请求发出及退出表单时清空。
 - prompt / system 独立保存 constant 或 template；变量展示当前节点 / 端口名称，保存 nodeId / portKey，不额外创建 Data Edge。禁止自身和下游来源。
@@ -23,6 +23,12 @@
 - 新增按钮、输入、菜单、确认与提示使用成熟组件，当前复用 Ant Design；不手写原生 button / input 替代产品控件，不引入第二套组件库或手写已有的通用交互原语。
 
 实现完整的加载、空态、错误和响应式行为，不用模拟数据冒充已接入。视觉规范不授权新增业务或重做全站。
+
+## If 条件编辑
+
+`flow.if@1` 继续使用 Generic Node；value 使用现有 string 输入 / Binding / DataEdge，条件表单只编辑 `config.condition`，不写入输入来源。四个操作为等于、不等于、包含、不包含，映射正式 ConditionExpression，不展示 JSON Logic 编辑器。新节点不填默认条件；选择操作后比较文本允许为空，保留大小写、空格与换行。画布摘要使用普通文本。
+
+true / false Handle 来自精确 Manifest 的 controlOutputs，保存为 ControlEdge.source.portKey。Web 拒绝未声明或无名称出口、重复出口和两支同目标；复杂拓扑仍由 Publish 权威校验，并给出中文限制说明，不复制 Compiler 分析。Draft 允许不完整并可 Save；未知表达式不因加载、编辑其他字段或保存而改写，明确点击「替换为可编辑条件」后才替换。条件编辑职责集中于 `features/workflow/conditions/`，不另建 React Flow 节点模型。
 
 ## Workflow 输出编辑
 

@@ -38,7 +38,7 @@ Compiler 使用 LangGraph 原生 addConditionalEdges，callback 只读取该 If 
 
 预算按实际编译后的静态依赖与两条潜在条件路径计算最长节点深度（包含 If），再加 1 次终止检测；If 路由 callback 不额外占 superstep。这是独立的简单 If 分析，不调用 Action 专用分析。真实边界为 A=1、If=2、leaf=3，recursionLimit=4；100 个上游并行节点仍为 4，100 层串行上游加 If 和 leaf 为 103。预算属于单次 invocation，不是 thread 累计额度。
 
-Publish 与 Compiler 共用同一个能力分析：拒绝分支后继链、merge / nested、跨支依赖、共享分支目标、一出口多目标、来源未被 If 前置保证就绪的分支输入，以及条件分支来源的 Workflow output；不新增长期 Contract 限制或 optional output。不通过能力检查时，在创建执行服务 / 执行任何节点前失败。只允许声明必定执行的无条件节点输出，OutputResolver 不变。Web If 编辑尚未交付。
+Publish 与 Compiler 共用同一个能力分析：拒绝分支后继链、merge / nested、跨支依赖、共享分支目标、一出口多目标、来源未被 If 前置保证就绪的分支输入，以及条件分支来源的 Workflow output；不新增长期 Contract 限制或 optional output。不通过能力检查时，在创建执行服务 / 执行任何节点前失败。只允许声明必定执行的无条件节点输出，OutputResolver 不变。Web 的四种 string 条件与命名控制出口只编辑 Definition，不扩展这些运行能力。
 
 ## Submission 与 Runner
 

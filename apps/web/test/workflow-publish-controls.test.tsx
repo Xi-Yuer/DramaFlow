@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { WorkflowPublishControls } from '../src/features/workflow/publish/workflow-publish-controls';
 import type { PublishedWorkflowVersion } from '../src/features/workflow/publish/workflow-publish';
+import { workflowPublishError } from '../src/features/workflow/publish/workflow-publish';
+import { ApiError } from '../src/lib/http';
 
 const identity: PublishedWorkflowVersion = {
   id: 'version-explicit-id',
@@ -27,6 +29,24 @@ const props = {
 };
 
 describe('Publish 基础界面（静态组件测试）', () => {
+  it.each([
+    ['IF_TOPOLOGY_UNSUPPORTED', '末端操作节点'],
+    ['CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED', '可能不执行的条件分支'],
+    ['NODE_EXECUTION_KIND_UNSUPPORTED', '暂不支持运行此类节点'],
+    ['CONTROL_OUTPUT_BRANCH_MISSING', '连接 true 和 false 两个分支'],
+  ])('If 发布拒绝 %s 使用用户文案并保留安全定位', (code, message) => {
+    const error = workflowPublishError(
+      new ApiError('内部执行能力限制', 400, {
+        code: 'WORKFLOW_PUBLISH_VALIDATION_FAILED',
+        details: [{ code, nodeId: 'if_1' }],
+      }),
+    );
+    const html = renderToStaticMarkup(<WorkflowPublishControls {...props} error={error} />);
+    expect(html).toContain(message);
+    expect(html).toContain('if_1');
+    expect(html).not.toContain(code);
+    expect(html).not.toContain('内部执行能力限制');
+  });
   it('紧凑工具栏不把已发布版本误报为无版本，也不重复显示相同最新版本', () => {
     const html = renderToStaticMarkup(
       <WorkflowPublishControls {...props} compact current={identity} latest={identity} />,
