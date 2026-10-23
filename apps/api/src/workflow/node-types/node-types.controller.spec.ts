@@ -60,7 +60,7 @@ describe('节点类型目录 API', () => {
     expect(list).not.toHaveBeenCalled();
   });
 
-  it('受保护目录提供正式 AI / Control 声明，禁止缓存', async () => {
+  it('受保护目录提供正式 AI / Control / Interaction 声明，禁止缓存', async () => {
     const context = await setup();
     const response = await request(context.app.getHttpServer())
       .get('/api/v1/workflow/node-types')
@@ -75,9 +75,29 @@ describe('节点类型目录 API', () => {
         outputs: [],
         controlOutputs: [{ key: 'true' }, { key: 'false' }],
       },
+      {
+        type: 'flow.human_review',
+        version: 1,
+        executionKind: 'interaction',
+        inputs: [
+          {
+            key: 'content',
+            required: true,
+            dataType: { kind: 'primitive', name: 'string' },
+          },
+        ],
+        outputs: [{ key: 'content' }, { key: 'action' }, { key: 'feedback' }],
+        config: [{ key: 'instruction', required: false }],
+      },
     ]);
     expect(JSON.stringify(response.body)).not.toMatch(
       /apiKey|encryptedCredentials|configSchema|inputSchema|outputSchema/,
+    );
+    expect(context.registry.get('flow.human_review', 1)).not.toHaveProperty(
+      'execute',
+    );
+    expect(() => context.registry.getAction('flow.human_review', 1)).toThrow(
+      '不是普通',
     );
     expect(context.requireSession).toHaveBeenCalledOnce();
   });

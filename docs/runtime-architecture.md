@@ -58,7 +58,7 @@ Submission 校验固定版本的调用契约，再原子创建 / 复用 Run 与 
 
 Graph 返回后核对 checkpoint 身份、next / tasks、任务错误和 interrupt：仍有任务记 waiting，否则解析最终输出。执行 / 解析失败由 claim 胜者记录 failed；记录服务自身故障不能再反向记录业务失败，留给既有恢复边界。
 
-resume 只传不透明 value；单 interrupt 的 false / 0 / null 使用原生 interrupt ID map，避免依赖库 truthy 判断。恢复后可再次 waiting。Runner 不按 interaction NodeRun 自建暂停状态机，Human Review 尚未交付。
+resume 只传不透明 value；单 interrupt 的 false / 0 / null 使用原生 interrupt ID map，避免依赖库 truthy 判断。恢复后可再次 waiting。Runner 不按 interaction NodeRun 自建暂停状态机；Human Review 的协议 / 目录声明不代表已有运行策略，接入边界见[当前架构](architecture.md#human-review-声明与纯业务边界)。
 
 ### 最终输出
 

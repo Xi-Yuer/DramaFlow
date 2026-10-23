@@ -24,3 +24,4 @@ export * from './ai/model-management.js';
 export * from './ai/provider-catalog.js';
 export * from './ai/model-catalog.js';
 export * from './workflow/condition.js';
+export * from './workflow/human-review.js';

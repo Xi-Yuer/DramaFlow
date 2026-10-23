@@ -8,7 +8,10 @@ import {
   type BaseCheckpointSaver,
   type StateSnapshot,
 } from '@langchain/langgraph';
-import { validateWorkflowDefinitionSemantics } from '../definition/validate-publish.js';
+import {
+  validateWorkflowDefinitionSemantics,
+  WorkflowPublishValidationError,
+} from '../definition/validate-publish.js';
 import { createWorkflowDefinitionSnapshot } from '../definition/version.js';
 import { NodeRegistry } from '../node/registry.js';
 import type { NodeExecutor } from '../runtime/node-executor.js';
@@ -52,8 +55,12 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     const ifStrategy = new IfNodeCompilationStrategy();
     const entries = definition.nodes.map((node) => {
       const declaration = this.registry.get(node.type, node.typeVersion);
-      if (!ifStrategy.supports(declaration.manifest))
+      if (!ifStrategy.supports(declaration.manifest)) {
+        // 目录声明不代表已有执行策略；非 Action 必须在创建执行服务前明确拒绝。
+        if (declaration.manifest.executionKind !== 'action')
+          throw new WorkflowPublishValidationError('NODE_EXECUTION_KIND_UNSUPPORTED', node.id);
         this.registry.getAction(node.type, node.typeVersion);
+      }
       return { node, declaration };
     });
     const ifNodeIds = new Set(

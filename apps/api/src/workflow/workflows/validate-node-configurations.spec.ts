@@ -1,6 +1,11 @@
-import { StringType, type WorkflowDefinition } from '@dramaflow/contracts';
+import {
+  StringType,
+  saveWorkflowDraftRequestSchema,
+  type WorkflowDefinition,
+} from '@dramaflow/contracts';
 import {
   createTextGenerationNodeType,
+  createHumanReviewNodeType,
   NodeRegistry,
 } from '@dramaflow/workflow';
 import { describe, expect, it } from 'vitest';
@@ -36,6 +41,27 @@ function definition(
 }
 
 describe('Draft 配置字段边界', () => {
+  it('正式 Human Review 的完整或未完成草稿均可通过保存前配置边界', () => {
+    const types = new NodeRegistry([
+      createTextGenerationNodeType(),
+      createHumanReviewNodeType(),
+    ]);
+    for (const complete of [false, true]) {
+      const draft = definition(complete ? { instruction: '核对人物' } : {});
+      const node = draft.nodes[0]!;
+      node.type = 'flow.human_review';
+      node.name = '人工审核标题';
+      node.inputs = complete
+        ? { content: { type: 'constant', value: '待审核文本' } }
+        : {};
+      draft.outputs = [];
+      const request = { expectedRevision: 1, definition: draft };
+      expect(saveWorkflowDraftRequestSchema.parse(request)).toEqual(request);
+      expect(() =>
+        validateWorkflowNodeConfigurations(draft, types),
+      ).not.toThrow();
+    }
+  });
   const registry = new NodeRegistry([createTextGenerationNodeType()]);
 
   it.each(['apiKey', 'secret', 'baseURL', 'model', 'provider'])(

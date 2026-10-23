@@ -20,6 +20,14 @@ End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 nodes
 
 `packages/contracts` 定义中立 JSON 协议；`packages/workflow` 负责 Registry、发布 / 调用校验、编译和执行适配。运行绑定指定 WorkflowVersion，不读 draft / latest。Action DAG 的联合依赖与技术执行预算见 [Runtime](runtime-architecture.md#action-dag-技术执行预算)。
 
+## Human Review 声明与纯业务边界
+
+`flow.human_review@1` 已进入生产 Registry / 节点目录，执行种类为 interaction，不提供 Action execute 或审批控制出口；Draft 可以创建、保存，Publish / Compile 仍以 NODE_EXECUTION_KIND_UNSUPPORTED 拒绝，未接入执行策略。节点标题使用 NodeDefinition.name，不另加 title config。
+
+[Human Review V1 协议](../packages/contracts/src/workflow/human-review.ts)定义严格文本 input、可选静态 instruction、approve / reject decision 与稳定业务 output。合法 reject 是正常业务结果；content 原样透传，缺省 feedback 归一化为空字符串。payload 固定 human_review / schemaVersion 1，保留 RuntimeValue 结构及未来 reference 表达；[纯转换函数](../packages/workflow/src/node/human-review.ts)只接受 string 业务输入，构造 inline string payload，不解释 instruction 模板、不读取 Artifact，也不调用 interrupt。payload 不含 Run / thread / NodeRun / interrupt 身份；Decision 的版本由 V1 Schema/type 名称明确。
+
+NodeRun 状态、Repository 和数据库未因节点声明而扩展。interaction 执行、原生 interrupt/resume 接入、待审批查询与 Web 操作均未交付；现有暂停测试夹具不代表 Human Review 运行能力。
+
 ## Workflow 编辑 HTTP API
 
 业务接口均在 `/api/v1`，默认认证、no-store；写入检查 Origin，资源不存在或无权访问统一 404。

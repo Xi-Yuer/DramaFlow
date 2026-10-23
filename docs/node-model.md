@@ -22,7 +22,7 @@ config 用 string / number / boolean / select 字段数组；condition 字段只
 
 ## 服务端执行与编译
 
-NodeType 持 manifest、三组 Zod Schema 和 execute(input, config, context)，不取得 Graph builder、BindingResolver、内容 Store 或 Checkpoint。普通业务只接收已校验输入与配置并返回结果，不自行调度、解析绑定或持久化输出。
+普通 Action NodeType 持 manifest、三组 Zod Schema 和 execute(input, config, context)，不取得 Graph builder、BindingResolver、内容 Store 或 Checkpoint。普通业务只接收已校验输入与配置并返回结果，不自行调度、解析绑定或持久化输出。非 Action 使用不带 execute 的 NodeDeclaration，由独立策略决定是否可执行；正式目录注册不等于获准 Publish / Compile。
 
 NodeRegistry 按 type / version 精确注册，拒绝重复 / 缺失版本，固定 Manifest 并保留实现的 this；getAction 拒绝非 action。assertNodeSchemas 检查公开字段及默认值，不承诺证明任意 Zod 与 Manifest 完全等价。
 
@@ -47,6 +47,10 @@ State 只保留当前有效值，Artifact 保存内容，Checkpoint 负责恢复
 `ai.text_generate@1` 为普通 Action：必填 prompt、可选 system，输出 text，均为 string。config 只有必填 UUID modelConfigurationId，不保存插件、endpoint、模型名或 key。Web 的 model-selector 按 `text.generate` 读取 Model Catalog，选择结果仍只写 modelConfigurationId。已选模型展示该配置的最大输出和随机度，不在节点上另存参数。prompt 与 system 可分别插入当前节点可用的上游文本输出，写入该端口自己的 template；编辑时展示当前节点显示名和端口显示名，保存值仍是 `{{名称}}` 对应 nodeId 与 portKey。没有变量时仍是 constant。选择变量不创建 Data Edge。
 
 execute 通过 CapabilityInvoker 调用 text.generate。节点只保存 modelConfigurationId，不保存插件、厂商或 SDK。正式执行由 `text_generation@1` 完成；新增文本厂商不因此新增 NodeType、Compiler 或 Executor。保存草稿允许未完成选择，但拒绝额外配置字段；发布要求完整严格 Schema 及同 Owner 可用模型绑定，执行时重新授权并解密，见[架构](architecture.md#文本-ai-与-provider-plugin)。
+
+## Human Review
+
+Human Review 使用 interaction 声明，审批决策是数据输出，后续流程控制由 Control Node 决定；不把 reject 记为执行失败，也不增加 approve / reject 控制出口。V1 为文本审核，instruction 是静态配置，节点名称来自 NodeDefinition.name。领域协议与当前接入边界见[当前架构](architecture.md#human-review-声明与纯业务边界)。
 
 ## If 条件节点与编译能力边界
 

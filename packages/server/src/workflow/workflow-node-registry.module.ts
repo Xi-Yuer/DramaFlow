@@ -1,4 +1,9 @@
-import { NodeRegistry, createTextGenerationNodeType, createIfNodeType } from '@dramaflow/workflow';
+import {
+  NodeRegistry,
+  createTextGenerationNodeType,
+  createIfNodeType,
+  createHumanReviewNodeType,
+} from '@dramaflow/workflow';
 import { Module } from '@nestjs/common';
 
 // 每个应用一个生产 Registry，目录与 Runtime 共享；注册声明不代表已支持发布执行。
@@ -6,7 +11,12 @@ import { Module } from '@nestjs/common';
   providers: [
     {
       provide: NodeRegistry,
-      useFactory: () => new NodeRegistry([createTextGenerationNodeType(), createIfNodeType()]),
+      useFactory: () =>
+        new NodeRegistry([
+          createTextGenerationNodeType(),
+          createIfNodeType(),
+          createHumanReviewNodeType(),
+        ]),
     },
   ],
   exports: [NodeRegistry],
