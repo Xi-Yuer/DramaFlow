@@ -12,6 +12,8 @@ export interface NodeDependency {
 export interface DependencyCompilationContext {
   edges: readonly WorkflowEdge[];
   nodes?: readonly Pick<NodeDefinition, 'id' | 'inputs'>[];
+  // collector 的默认结果每目标一组 ALL；经过能力证明的编译投影可为同一目标
+  // 提供多个互斥 completion groups，每条记录独立生成一条原生边 / barrier。
   dependencies?: readonly NodeDependency[];
   addEdge(sourceNodeId: string | string[], targetNodeId: string): void;
 }

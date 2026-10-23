@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前保持 If branch successor、分支内 parallel / ALL join 与 conditional Workflow Output 能力，implicit cross-branch convergence 仍由 Publish / Compiler 拒绝。下一任务才研究并实施基于静态分析的直接 convergence，不新增领域汇聚节点，本轮不开放执行。已实现能力见[当前架构](architecture.md)与 [Runtime](runtime-architecture.md#简单-if-的条件路由与预算)。
+If direct convergence 已进入自动验证：当前范围为同一 If 的唯一完整汇聚边界，不包含 candidate input binding 或 Web 改造，也未创建人工测试 Workflow。本轮不运行浏览器 E2E 或真实 Provider；人工交互验收待后续独立任务。已实现能力见[当前架构](architecture.md)与 [Runtime](runtime-architecture.md#if-的直接汇聚)。
 
 ## 待决策与后续边界
 

@@ -16,7 +16,7 @@ Prisma 迁移保存身份、资料、会话、项目、Workflow / WorkflowVersio
 - 每项目一个 Workflow。版本不可更新，workflowId / version 与 workflowId / sourceRevision 唯一。
 - Run 的身份、invocationKey、版本和输入不可改写；状态转换由数据库约束保护。threadId 唯一，workflowId / invocationKey 唯一。Start key 随 Run 生命周期保留，新建无数据库默认 key。
 - NodeRun 的 workflowRunId、nodeId、attempt 唯一，attempt 为正数，终态字段一致。
-- Artifact 只有 writing / ready / failed；内容身份不可改，终态不可覆盖。对象本体不在数据库。
+- Artifact 只有 writing / ready / failed；内容身份不可改，终态不可覆盖。对象本体不在数据库。删除项目时按已登记的 storageKey 删除对应对象。
 - Provider / ModelConfiguration 归用户所有，两者 Owner 由复合外键保持一致；删除项目不删除模型资源。Provider 的插件版本、configuration，以及模型的 Provider、capability、model、settings 创建后不可改。enabled 和凭证密文可以按服务操作更新。删除配置不是已交付的产品入口。
 - Outbox 与 start 同事务写入；恢复意图按 waiting 周期唯一。running → waiting 时递增内部周期。
 
@@ -30,7 +30,7 @@ API 与 Worker 用应用级 WorkflowCheckpointerService 和官方 PostgresSaver�
 
 初始化用事务级 advisory lock 串行 setup()，再用 getTuple() 验证读取。失败报告 WORKFLOW_CHECKPOINT_UNAVAILABLE 并阻止就绪。每进程连接池上限 10，连接超时 5 秒，单条 SQL 超时 10 秒。数据库角色须能创建该 schema 及其中的表。
 
-备份和恢复必须同时覆盖业务表与 langgraph schema。只恢复 Run 或 threadId 不能恢复图。业务删除不会级联清理官方 checkpoint，保留策略尚未实现。升级官方包前，在独立环境验证 setup 和数据兼容。
+备份和恢复必须同时覆盖业务表与 langgraph schema。只恢复 Run 或 threadId 不能恢复图。删除项目时按该项目运行的 threadId 调用官方 deleteThread，并移除对应的执行队列任务；数据库外键不会自动清理 checkpoint。升级官方包前，在独立环境验证 setup 和数据兼容。
 
 ## Workflow 执行队列
 

@@ -268,6 +268,36 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
         </div>
         <div className="canvas-actions">
           <Button
+            type="text"
+            danger
+            size="small"
+            aria-label="删除项目"
+            onClick={() => {
+              const label = name.trim() || project.name;
+              modal.confirm({
+                title: `删除「${label}」？`,
+                content:
+                  '将删除该项目的工作流、版本、运行记录、队列任务、Checkpoint 和已保存素材。账号中的模型配置会保留。此操作不能撤销。',
+                okText: '删除',
+                cancelText: '取消',
+                okButtonProps: { danger: true },
+                onOk: async () => {
+                  try {
+                    await projectApi.remove(project.id);
+                    void message.success('项目已删除');
+                    router.push('/projects');
+                  } catch (error) {
+                    void message.error(error instanceof Error ? error.message : '项目删除未完成');
+                    if (error instanceof ApiError && (error.status === 404 || error.status === 503))
+                      router.push('/projects');
+                  }
+                },
+              });
+            }}
+          >
+            删除项目
+          </Button>
+          <Button
             size="small"
             icon={<Settings2 size={15} />}
             disabled={publication.publishing}

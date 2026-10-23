@@ -91,6 +91,12 @@ export class WorkflowCheckpointerService implements OnModuleInit, OnModuleDestro
     }
   }
 
+  // 只调用官方 Saver 按 thread 删除 checkpoint、blob 和 pending writes，不复制其表结构。
+  async deleteThread(threadId: string): Promise<void> {
+    if (!this.initialized || this.closed) throw unavailable();
+    await this.instance.deleteThread(threadId);
+  }
+
   async onModuleDestroy(): Promise<void> {
     this.initialized = false;
     if (this.closed) return;

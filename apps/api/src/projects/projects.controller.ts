@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
+  HttpCode,
   Param,
   Post,
   Put,
@@ -36,5 +38,12 @@ export class ProjectsController {
     @Body() body: unknown,
   ) {
     return this.projects.save(actor.user.id, id, body);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @Header('Cache-Control', 'no-store')
+  remove(@Actor() actor: AuthActor, @Param('id') id: string) {
+    return this.projects.remove(actor.user.id, id);
   }
 }

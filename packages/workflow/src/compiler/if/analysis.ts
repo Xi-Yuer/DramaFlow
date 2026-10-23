@@ -1,4 +1,9 @@
 import type { WorkflowDefinition } from '@dramaflow/contracts';
+import {
+  inferConvergenceBoundaries,
+  analyzeConvergenceDependencies,
+  type IfConvergence,
+} from './convergence.js';
 import { collectNodeDependencies, type NodeDependency } from '../dependency.compiler.js';
 
 import {
@@ -12,6 +17,7 @@ export type IfCapabilityIssueCode =
   | 'IF_TOPOLOGY_UNSUPPORTED'
   | 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED'
   | 'IF_CONVERGENCE_UNSUPPORTED'
+  | 'IF_CONVERGENCE_INPUT_UNSUPPORTED'
   | 'IF_NESTED_UNSUPPORTED'
   | 'IF_REGION_INTERSECTION_UNSUPPORTED'
   | 'IF_BRANCH_DEPENDENCY_UNSUPPORTED';
@@ -21,7 +27,14 @@ const messages = new Map<string, string>([
     'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',
     '当前 Compiler 要求候选分别覆盖同一 If 的 true / false region；单来源须必定执行',
   ],
-  ['IF_CONVERGENCE_UNSUPPORTED', '当前版本暂不支持条件分支汇合'],
+  [
+    'IF_CONVERGENCE_UNSUPPORTED',
+    '当前 Compiler 要求唯一汇聚边界完整覆盖两侧分支末端，不能交叉或绕行',
+  ],
+  [
+    'IF_CONVERGENCE_INPUT_UNSUPPORTED',
+    '汇聚节点不能直接读取互斥分支的业务值；当前尚无候选输入绑定',
+  ],
   ['IF_NESTED_UNSUPPORTED', '当前版本暂不支持嵌套 If'],
   ['IF_REGION_INTERSECTION_UNSUPPORTED', '当前版本暂不支持不同 If 的分支区域交叉'],
   ['IF_BRANCH_DEPENDENCY_UNSUPPORTED', '分支输入必须来自本分支或所属 If 之前保证完成的祖先'],
@@ -42,6 +55,7 @@ export interface IfTopologyAnalysis {
   routes: SimpleIfRoute[];
   branchRegions: BranchRegionAnalysis;
   ordinaryDependencies: NodeDependency[];
+  convergences: IfConvergence[];
 }
 export interface SimpleIfExecutionAnalysis extends IfTopologyAnalysis {
   staticDependencies: NodeDependency[];
@@ -81,11 +95,23 @@ export function analyzeIfTopology(
   }
   const ordinaryEdges = definition.edges.filter((edge) => !ifNodeIds.has(edge.source.nodeId));
   const ordinaryDependencies = collectNodeDependencies(ordinaryEdges, definition.nodes);
-  const branchRegions = analyzeBranchRegions(
+  const evidence = analyzeBranchRegions(
     definition.nodes.map((node) => node.id),
     routes,
     ordinaryDependencies,
   );
+  const fail = (code: IfCapabilityIssueCode, nodeId: string): never => {
+    throw new SimpleIfCapabilityError(code, nodeId);
+  };
+  const boundaries = inferConvergenceBoundaries(routes, ordinaryDependencies, evidence, fail);
+  const branchRegions = boundaries.size
+    ? analyzeBranchRegions(
+        definition.nodes.map((node) => node.id),
+        routes,
+        ordinaryDependencies,
+        boundaries,
+      )
+    : evidence;
   for (const id of ifNodeIds)
     if (branchRegions.memberships.get(id)?.length)
       throw new SimpleIfCapabilityError('IF_NESTED_UNSUPPORTED', id);
@@ -99,6 +125,13 @@ export function analyzeIfTopology(
       'IF_REGION_INTERSECTION_UNSUPPORTED',
       branchRegions.intersections[0]!,
     );
+  const convergences = analyzeConvergenceDependencies(
+    definition,
+    ordinaryDependencies,
+    boundaries,
+    branchRegions,
+    fail,
+  );
   const parents = new Map(
     ordinaryDependencies.map((dependency) => [dependency.targetNodeId, dependency.sourceNodeIds]),
   );
@@ -139,10 +172,10 @@ export function analyzeIfTopology(
         output.source.nodeId,
       );
   }
-  return { routes, branchRegions, ordinaryDependencies };
+  return { routes, branchRegions, ordinaryDependencies, convergences };
 }
 
-// 静态拓扑校验与执行投影分离；仅支持分支内 Action DAG，不放行互斥汇合。
+// 静态拓扑校验与执行投影分离；仅对已证明安全的汇聚目标产生 alternative completion groups。
 export function analyzeSimpleIfExecution(
   definition: WorkflowDefinition,
   ifNodeIds: ReadonlySet<string>,
@@ -154,9 +187,17 @@ export function analyzeSimpleIfExecution(
   };
   // entry 仅由 conditional route 触发；successor 的 ALL 依赖和原始 Binding 均保留。
   const entries = new Set(routes.flatMap((route) => [route.true, route.false]));
-  const staticDependencies = ordinaryDependencies.filter(
-    (dependency) => !entries.has(dependency.targetNodeId),
-  );
+  const convergenceByTarget = new Map(topology.convergences.map((c) => [c.targetNodeId, c]));
+  const staticDependencies = ordinaryDependencies.flatMap((dependency): NodeDependency[] => {
+    if (entries.has(dependency.targetNodeId)) return [];
+    const convergence = convergenceByTarget.get(dependency.targetNodeId);
+    return convergence
+      ? Object.values(convergence.completionGroups).map((sourceNodeIds) => ({
+          targetNodeId: convergence.targetNodeId,
+          sourceNodeIds,
+        }))
+      : [dependency];
+  });
   const executionParents = new Map(definition.nodes.map((node) => [node.id, new Set<string>()]));
   for (const dependency of staticDependencies) {
     for (const source of dependency.sourceNodeIds)

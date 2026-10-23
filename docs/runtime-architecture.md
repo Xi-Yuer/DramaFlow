@@ -32,13 +32,23 @@ Compiler 在创建 Executor / 图节点前确认全图均为受支持的 Action 
 
 当前仅开放精确 `flow.if@1`，由独立 IfNodeCompilationStrategy 编译；普通 Action strategy / NodeExecutor 不变。If 复用 BindingResolver 与本次 Run 已授权的 Codec，校验 RuntimeValue 和解码后的 string，再调用 evaluateCondition 一次。它不创建 Action NodeRun，也不返回公开 Data Output。条件结果写入内部 `execution.controlResults[nodeId]`，boolean map reducer 合并并行 If、拒绝重复写入；旧空 execution 仍有效，checkpoint / resume 保存该结果。
 
-Compiler 使用 LangGraph 原生 addConditionalEdges，callback 只读取该 If 已写入的 boolean，不再 Binding / decode / 求值。true / false 各路由到一个不同的 Action entry，后继允许串行、并行和同一分支内部的 ALL join。多个独立 If 的 region 不得交叉。Branch Region 是 compiler/if/branch-regions.ts 的内部分析结果，不进入 Definition、State 或数据库。以两个 entry 为 seed，沿 collectNodeDependencies 的统一普通依赖传播，记录所有 membership、terminal、ordinary 节点及汇合 / 交叉证据。分支输入仅能来自本 region 或所属 If 之前确定完成的祖先；祖先由依赖推导，不看位置。
+Compiler 使用 LangGraph 原生 addConditionalEdges，callback 只读取该 If 已写入的 boolean，不再 Binding / decode / 求值。true / false 各路由到一个不同的 Action entry，后继允许串行、并行和同一分支内部的 ALL join。多个独立 If 的 region 不得交叉。Branch Region 是 compiler/if/branch-regions.ts 的内部分析结果，不进入 Definition、State 或数据库。以两个 entry 为 seed，沿 collectNodeDependencies 的统一普通依赖传播，记录所有 membership、terminal、ordinary 节点及汇合 / 交叉证据；合法汇聚边界在编译期推导，分支传播在边界前停止。分支输入仅能来自本 region 或所属 If 之前确定完成的祖先；祖先由依赖推导，不看位置。
 
-`compiler/if/analysis.ts` 复用 collectNodeDependencies，同时验证当前拓扑并产生编译投影。If 的命名 ControlEdge 不进入普通静态依赖；只移除 entry 的静态触发依赖；successor 保留全部普通依赖，且至少有一个本 region 的上游作为 gate，避免共同祖先先完成就绕过 If。多个上游仍由 DependencyCompiler 编译为一次原生 ALL，包含已经完成的 pre-If 祖先；原始 edges / template 完整保留给 Binding。START 排除所有条件目标；每个 region 可有多个 terminal（无 region 内后继）；END 分别连接执行叶子，不对两支 terminal 建 ALL barrier，不等待未选分支。
+`compiler/if/analysis.ts` 复用 collectNodeDependencies，同时验证当前拓扑并产生编译投影。If 的命名 ControlEdge 不进入普通静态依赖；entry 的静态触发依赖移除，合法汇聚入边按 completion groups 投影；其余 successor 保留全部普通依赖，且至少有一个本 region 的上游作为 gate，避免共同祖先先完成就绕过 If。多个上游仍由 DependencyCompiler 编译为一次原生 ALL，包含已经完成的 pre-If 祖先；原始 edges / template 完整保留给 Binding。START 排除所有条件目标；每个 region 可有多个 terminal（无 region 内后继）；END 分别连接执行叶子，不对两支 terminal 建 ALL barrier，不等待未选分支。
 
 预算算法保持不变：按实际编译后的静态依赖与两条潜在条件路径计算最长节点深度（包含 If 和全部 successor），再加 1 次终止检测；If 路由 callback 不额外占 superstep。这是独立的简单 If 分析，不调用 Action 专用分析。真实边界为 A=1、If=2、leaf=3，recursionLimit=4；100 个上游并行节点仍为 4，100 层串行上游加 If 和 leaf 为 103。预算属于单次 invocation，不是 thread 累计额度。
 
-Publish 与 Compiler 共用同一个能力分析：拒绝普通 Action 的隐式跨互斥分支汇合、nested If、不同 If region 交叉、一出口多 entry，以及来源既非本 region 又非 guaranteed-before 祖先的输入；不新增长期 Contract 限制或 optional output。不通过能力检查时，在创建执行服务 / 执行任何节点前失败。单 source 只允许必定执行的节点；sources 允许同一 If 的两个 region 各一个保证执行的候选，可取不同深度且不要求 terminal；无环 Action region 的可达性、本地 gate 与全部父依赖就绪证明共同保证选中后必执行。隐式汇合 / nested / region 交叉 / 外部依赖分别返回 IF_CONVERGENCE_UNSUPPORTED、IF_NESTED_UNSUPPORTED、IF_REGION_INTERSECTION_UNSUPPORTED、IF_BRANCH_DEPENDENCY_UNSUPPORTED，保留安全 nodeId 定位；这些是当前 Compiler 能力限制，不是永久 Contract 规则。
+Publish 与 Compiler 共用同一个能力分析：拒绝不完整或有歧义的汇聚、nested If、不同 If region 交叉、一出口多 entry，以及来源既非本 region 又非 guaranteed-before 祖先的输入；不新增长期 Contract 限制或 optional output。不通过能力检查时，在创建执行服务 / 执行任何节点前失败。单 source 只允许必定执行的节点；sources 允许同一 If 的两个 region 各一个保证执行的候选，可取不同深度且不要求 terminal；无环 Action region 的可达性、本地 gate 与全部父依赖就绪证明共同保证选中后必执行。不安全汇合 / nested / region 交叉 / 外部依赖分别返回 IF_CONVERGENCE_UNSUPPORTED、IF_NESTED_UNSUPPORTED、IF_REGION_INTERSECTION_UNSUPPORTED、IF_BRANCH_DEPENDENCY_UNSUPPORTED，保留安全 nodeId 定位；这些是当前 Compiler 能力限制，不是永久 Contract 规则。
+
+### If 的直接汇聚
+
+Compiler 内部以 `IfConvergence { ifNodeId, targetNodeId, completionGroups: { true, false } }` 表示汇聚，不增加领域节点、Definition 字段或 Runtime State。`compiler/if/convergence.ts` 从原始双分支可达证据推导首个共同前沿，当前要求同一 If 恰好一个汇聚边界、覆盖两侧分支全部末端，且目标不能是 branch entry / 嵌套 If。重新计算 membership 时在边界前停止，因此目标及后继恢复 ordinary；未覆盖末端、绕行、多个独立共同前沿及不同 If 区域交叉仍拒绝。这些是当前 Compiler 能力限制，不是永久领域协议。
+
+静态分析将汇聚目标的原始父依赖拆成两组：本支完成依赖 + 全部 ordinary 必需上游。每组成为一条 NodeDependency 记录，同一 target 可以重复；DependencyCompiler 原样逐组调用 LangGraph addEdge，单来源用字符串、多来源用数组 ALL barrier。两支是互斥 alternatives，组内是 ALL。共同依赖 X 必须进入两组，不能另外生成独立 X → target 激活边。普通 collector 仍每目标一组 ALL，不因 convergence 改变原始 DataEdge / ControlEdge / template 来源或普通 join 语义。
+
+只开放控制汇聚。目标直接以 DataEdge 或 template 读取分支值时，Publish / Compiler 以 IF_CONVERGENCE_INPUT_UNSUPPORTED 拒绝；ordinary 来源仍按原有 Binding 处理。没有 candidate input binding，也不依靠 BindingResolver 的运行时 missing 兜底。汇聚后确定执行的节点可声明单来源 Workflow Output；汇聚前分支候选仍遵守现有互斥覆盖规则。
+
+START / END 与预算使用完成组全部潜在父关系的并集，仅供静态 root / leaf 和最长路径计算，不将并集编译成跨支 ALL。没有额外汇聚节点 / superstep；recursionLimit 仍为潜在最长节点路径 + 1。真实边界 A=1、If=2、B/C=3、汇聚目标=4，limit=4 失败而 5 完成；100 层分支再接 30 层普通后继的深度为 132、limit=133。Publish 和 Compiler 继续共用能力分析，在创建服务或执行节点前拒绝非法图。
 
 ## Submission 与 Runner
 

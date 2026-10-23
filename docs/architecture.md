@@ -28,7 +28,7 @@ Project 使用 `GET / POST /projects`、`GET / PUT /projects/:id`；Workflow 使
 
 ## Workflow 发布与版本 HTTP API
 
-发布入口 `POST /workflows/:workflowId/publish`；版本摘要 `GET /workflows/:workflowId/versions`；固定版本 `GET /workflow-versions/:versionId`。发布锁定来源修订并原子分配版本号，失败不写版本；不解密凭证或调用模型。当前拒绝 Asset 绑定及未支持执行种类。精确 flow.if@1 已支持原生条件路由；Publish 与 Compiler 共享简单拓扑分析，放行分支内串行 / 并行 / ALL join，证明输入就绪和最终输出覆盖；生产执行拒绝普通节点的隐式互斥汇合、嵌套 If 与不同 If region 交叉。Web 复用 Generic Node 编辑 string value、四种单条件和 true / false 命名控制出口；允许保存不完整 Draft，未知条件不静默改写。协议与能力限制见 [Node](node-model.md#if-条件节点与编译能力边界)。
+发布入口 `POST /workflows/:workflowId/publish`；版本摘要 `GET /workflows/:workflowId/versions`；固定版本 `GET /workflow-versions/:versionId`。发布锁定来源修订并原子分配版本号，失败不写版本；不解密凭证或调用模型。当前拒绝 Asset 绑定及未支持执行种类。精确 flow.if@1 已支持原生条件路由；Publish 与 Compiler 共享简单拓扑分析，放行分支内串行 / 并行 / ALL join 和静态证明安全的直接汇聚；汇聚按互斥 completion groups 编译为原生 edges / barriers，共同必需上游进入每一组，不新增领域汇聚节点或执行 step。仍拒绝不安全汇聚、分支值直接输入汇聚目标、嵌套 If 与不同 If region 交叉。Web 复用 Generic Node 编辑 string value、四种单条件和 true / false 命名控制出口；允许保存不完整 Draft，未知条件不静默改写。协议与能力限制见 [Node](node-model.md#if-条件节点与编译能力边界)。
 
 ## 生产 Runtime 装配
 

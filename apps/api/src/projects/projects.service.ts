@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { z } from 'zod';
 import {
@@ -12,13 +13,26 @@ import {
   projectListQuerySchema,
   projectSchema,
   projectSummarySchema,
+  workflowExecutionJobSchema,
+  type WorkflowExecutionJob,
 } from '@dramaflow/contracts';
-import { DatabaseService } from '@dramaflow/server';
+import {
+  DatabaseService,
+  StorageService,
+  WorkflowCheckpointerService,
+  WorkflowExecutionQueue,
+  workflowExecutionJobId,
+} from '@dramaflow/server';
 import { createInitialWorkflowData } from '../workflow/workflows/initial-workflow.js';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly storage: StorageService,
+    private readonly checkpoints: WorkflowCheckpointerService,
+    private readonly queue: WorkflowExecutionQueue,
+  ) {}
   async list(ownerId: string, query: unknown) {
     const { cursor: rawCursor } = projectListQuerySchema.parse(query);
     const cursor = rawCursor ? decodeProjectPageCursor(rawCursor) : undefined;
@@ -104,6 +118,74 @@ export class ProjectsService {
     // 响应使用本次写入的 revision，不读取可能已被下一次写入覆盖的内容。
     return { revision: input.revision + 1 };
   }
+
+  // 模型供应商和模型配置属于账号，不随项目删除。项目内的工作流、运行和素材由外键级联删除。
+  async remove(ownerId: string, rawId: string): Promise<void> {
+    const id = z.string().uuid().parse(rawId);
+    const removed = await this.db.client.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM canvas_project
+        WHERE id = ${id}::uuid AND "ownerId" = ${ownerId}
+        FOR UPDATE
+      `;
+      if (!rows[0]) return null;
+      const artifacts = await tx.artifact.findMany({
+        where: { projectId: id },
+        select: { storageKey: true },
+      });
+      const runs = await tx.workflowRun.findMany({
+        where: { projectId: id },
+        select: {
+          id: true,
+          threadId: true,
+          executions: { select: { payload: true } },
+        },
+      });
+      await tx.project.delete({ where: { id } });
+      return { artifacts, runs };
+    });
+    if (!removed) throw new NotFoundException('项目不存在或无权访问');
+
+    const jobs = new Map<string, WorkflowExecutionJob>();
+    for (const run of removed.runs) {
+      const start = { kind: 'start' as const, workflowRunId: run.id };
+      jobs.set(workflowExecutionJobId(start), start);
+      for (const execution of run.executions) {
+        const parsed = workflowExecutionJobSchema.safeParse(execution.payload);
+        if (parsed.success)
+          jobs.set(workflowExecutionJobId(parsed.data), parsed.data);
+      }
+    }
+    let cleanupFailed = false;
+    for (const artifact of removed.artifacts) {
+      try {
+        await this.storage.delete(artifact.storageKey);
+      } catch {
+        cleanupFailed = true;
+      }
+    }
+    for (const threadId of new Set(removed.runs.map((run) => run.threadId))) {
+      try {
+        await this.checkpoints.deleteThread(threadId);
+      } catch {
+        cleanupFailed = true;
+      }
+    }
+    for (const job of jobs.values()) {
+      try {
+        await this.queue.remove(job);
+      } catch {
+        cleanupFailed = true;
+      }
+    }
+    if (cleanupFailed) {
+      throw new ServiceUnavailableException({
+        code: 'PROJECT_CLEANUP_INCOMPLETE',
+        message: '项目已删除，部分关联对象未能清理',
+      });
+    }
+  }
+
   private dto(project: {
     id: string;
     name: string;

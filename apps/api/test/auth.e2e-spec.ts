@@ -265,6 +265,33 @@ it('真实项目 API 保留基础字段、所有者隔离和修订号并发校�
   expect((await call('/api/v1/plugins', 'GET', undefined, cookie)).status).toBe(
     404,
   );
+
+  const removed = await call(path, 'DELETE', undefined, cookie);
+  expect(removed.status).toBe(204);
+  expect(await removed.text()).toBe('');
+  expect((await call(path, 'GET', undefined, cookie)).status).toBe(404);
+  expect(await db.workflow.count({ where: { projectId: created.id } })).toBe(0);
+  expect(await db.workflowRun.count({ where: { projectId: created.id } })).toBe(
+    0,
+  );
+  expect(await db.artifact.count({ where: { projectId: created.id } })).toBe(0);
+  expect(
+    (
+      await call(
+        `/api/v1/projects/${adminProject.id}`,
+        'DELETE',
+        undefined,
+        cookie,
+      )
+    ).status,
+  ).toBe(404);
+  expect(
+    await db.project.findUnique({ where: { id: adminProject.id } }),
+  ).not.toBeNull();
+  expect(
+    (await call('/api/v1/projects/not-a-uuid', 'DELETE', undefined, cookie))
+      .status,
+  ).toBe(400);
 });
 
 it('真实项目列表跨页保留相同毫秒记录的顺序，始终隔离所有者', async () => {

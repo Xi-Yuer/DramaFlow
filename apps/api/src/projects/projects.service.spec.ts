@@ -1,9 +1,18 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { encodeProjectPageCursor } from '@dramaflow/contracts';
-import { DatabaseService } from '@dramaflow/server';
+import {
+  DatabaseService,
+  StorageService,
+  WorkflowCheckpointerService,
+  WorkflowExecutionQueue,
+} from '@dramaflow/server';
 import { ProjectsService } from './projects.service.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
@@ -21,24 +30,60 @@ const record = { ...summary, ownerId, viewport };
 const saveInput = { name: '修改后的项目', revision: 3, viewport };
 
 async function setup() {
-  // 仅在测试中替换数据库；生产服务始终使用真实 DatabaseService。
+  // 仅在测试中替换数据库和外部清理；生产服务始终使用真实实现。
   const project = {
     findMany: vi.fn().mockResolvedValue([]),
     findFirst: vi.fn().mockResolvedValue(record),
     create: vi.fn().mockResolvedValue(record),
     updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    delete: vi.fn().mockResolvedValue(record),
   };
+  const tx = {
+    $queryRaw: vi.fn().mockResolvedValue([{ id: projectId }]),
+    artifact: { findMany: vi.fn().mockResolvedValue([]) },
+    workflowRun: { findMany: vi.fn().mockResolvedValue([]) },
+    project,
+  };
+  const client = {
+    project,
+    $transaction: vi.fn((callback: (current: typeof tx) => Promise<unknown>) =>
+      callback(tx),
+    ),
+  };
+  const storage = { delete: vi.fn().mockResolvedValue(undefined) };
+  const checkpoints = { deleteThread: vi.fn().mockResolvedValue(undefined) };
+  const queue = { remove: vi.fn().mockResolvedValue(undefined) };
   const module = await Test.createTestingModule({
     providers: [
-      { provide: DatabaseService, useValue: { client: { project } } },
+      { provide: DatabaseService, useValue: { client } },
+      { provide: StorageService, useValue: storage },
+      { provide: WorkflowCheckpointerService, useValue: checkpoints },
+      { provide: WorkflowExecutionQueue, useValue: queue },
       {
         provide: ProjectsService,
-        useFactory: (db: DatabaseService) => new ProjectsService(db),
-        inject: [DatabaseService],
+        useFactory: (
+          db: DatabaseService,
+          files: StorageService,
+          threads: WorkflowCheckpointerService,
+          jobs: WorkflowExecutionQueue,
+        ) => new ProjectsService(db, files, threads, jobs),
+        inject: [
+          DatabaseService,
+          StorageService,
+          WorkflowCheckpointerService,
+          WorkflowExecutionQueue,
+        ],
       },
     ],
   }).compile();
-  return { service: module.get(ProjectsService), project };
+  return {
+    service: module.get(ProjectsService),
+    project,
+    tx,
+    storage,
+    checkpoints,
+    queue,
+  };
 }
 
 describe('基础项目与所有者隔离', () => {
@@ -220,5 +265,78 @@ describe('基础项目与所有者隔离', () => {
     ).rejects.toBeInstanceOf(z.ZodError);
     expect(project.create).not.toHaveBeenCalled();
     expect(project.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('删除项目时级联数据库记录，并清理素材、Checkpoint 和队列任务', async () => {
+    const { service, project, tx, storage, checkpoints, queue } = await setup();
+    const runId = '00000000-0000-4000-8000-000000000041';
+    const executionId = '00000000-0000-4000-8000-000000000042';
+    tx.artifact.findMany.mockResolvedValue([
+      { storageKey: 'runs/a.bin' },
+      { storageKey: 'runs/b.bin' },
+    ]);
+    tx.workflowRun.findMany.mockResolvedValue([
+      {
+        id: runId,
+        threadId: 'thread-1',
+        executions: [
+          { payload: { kind: 'start', workflowRunId: runId } },
+          {
+            payload: {
+              kind: 'resume',
+              workflowRunId: runId,
+              executionId,
+              value: { approved: true },
+            },
+          },
+        ],
+      },
+    ]);
+    await service.remove(ownerId, projectId);
+    expect(project.delete).toHaveBeenCalledWith({ where: { id: projectId } });
+    expect(storage.delete).toHaveBeenCalledTimes(2);
+    expect(storage.delete).toHaveBeenNthCalledWith(1, 'runs/a.bin');
+    expect(storage.delete).toHaveBeenNthCalledWith(2, 'runs/b.bin');
+    expect(checkpoints.deleteThread).toHaveBeenCalledWith('thread-1');
+    expect(queue.remove).toHaveBeenCalledWith({
+      kind: 'start',
+      workflowRunId: runId,
+    });
+    expect(queue.remove).toHaveBeenCalledWith({
+      kind: 'resume',
+      workflowRunId: runId,
+      executionId,
+      value: { approved: true },
+    });
+  });
+
+  it('其他所有者或未知项目删除时返回 404，不清理外部对象', async () => {
+    const { service, project, tx, storage, checkpoints, queue } = await setup();
+    tx.$queryRaw.mockResolvedValue([]);
+    await expect(service.remove('owner-b', projectId)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(project.delete).not.toHaveBeenCalled();
+    expect(storage.delete).not.toHaveBeenCalled();
+    expect(checkpoints.deleteThread).not.toHaveBeenCalled();
+    expect(queue.remove).not.toHaveBeenCalled();
+  });
+
+  it('数据库删除成功但素材清理失败时说明项目已删除', async () => {
+    const { service, project, tx, storage } = await setup();
+    tx.artifact.findMany.mockResolvedValue([{ storageKey: 'runs/a.bin' }]);
+    storage.delete.mockRejectedValue(new Error('storage'));
+    await expect(service.remove(ownerId, projectId)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(project.delete).toHaveBeenCalledWith({ where: { id: projectId } });
+  });
+
+  it('无效项目标识不开启删除事务', async () => {
+    const { service, tx } = await setup();
+    await expect(service.remove(ownerId, 'not-a-uuid')).rejects.toBeInstanceOf(
+      z.ZodError,
+    );
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
   });
 });

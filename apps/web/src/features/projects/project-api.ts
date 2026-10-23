@@ -3,6 +3,7 @@ import { projectListSchema, projectSchema, type SaveProject } from '@dramaflow/c
 import { jsonBody, request } from '@/lib/http';
 
 const saveResultSchema = z.object({ revision: z.number().int().positive() });
+const emptyResponseSchema = z.null();
 
 export const projectKeys = {
   list: ['projects'] as const,
@@ -17,4 +18,6 @@ export const projectApi = {
   get: (id: string) => request(`/projects/${id}`, projectSchema),
   save: (id: string, input: SaveProject) =>
     request(`/projects/${id}`, saveResultSchema, { method: 'PUT', body: jsonBody(input) }),
+  remove: (id: string) =>
+    request(`/projects/${encodeURIComponent(id)}`, emptyResponseSchema, { method: 'DELETE' }),
 };

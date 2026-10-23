@@ -2,8 +2,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Form, Input, Modal, Spin } from 'antd';
-import { Clapperboard, Plus } from 'lucide-react';
+import { Alert, App, Button, Dropdown, Form, Input, Modal, Spin } from 'antd';
+import { Clapperboard, Ellipsis, Plus, Trash2 } from 'lucide-react';
+import { ApiError } from '@/lib/http';
 import { createProjectSchema } from '@dramaflow/contracts';
 import { AuthBoundary } from '@/features/auth/auth-boundary';
 import { AccountMenuButton } from '@/features/auth/account-menu';
@@ -16,7 +17,7 @@ export function ProjectList() {
 function ProjectListBody() {
   const router = useRouter();
   const cache = useQueryClient();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm<{ name: string }>();
   const projects = useInfiniteQuery({
@@ -32,6 +33,18 @@ function ProjectListBody() {
       router.push(`/projects/${project.id}`);
     },
     onError: (error) => void message.error(error.message),
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => projectApi.remove(id),
+    onSuccess: async () => {
+      await cache.invalidateQueries({ queryKey: projectKeys.list });
+      void message.success('项目已删除');
+    },
+    onError: async (error) => {
+      if (error instanceof ApiError && error.status === 503)
+        await cache.invalidateQueries({ queryKey: projectKeys.list });
+      void message.error(error.message);
+    },
   });
   const items = projects.data?.pages.flatMap((page) => page.items) ?? [];
   return (
@@ -82,25 +95,63 @@ function ProjectListBody() {
                 <span>新建项目</span>
               </button>
               {items.map((project) => (
-                <button
-                  key={project.id}
-                  type="button"
-                  className="project-card"
-                  onClick={() => router.push(`/projects/${project.id}`)}
-                >
-                  <span className="project-card-preview" aria-hidden />
-                  <span className="project-card-body">
-                    <strong>{project.name}</strong>
-                    <span>
-                      {new Date(project.updatedAt).toLocaleString('zh-CN', {
-                        month: 'numeric',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                <article key={project.id} className="project-card">
+                  <button
+                    type="button"
+                    className="project-card-open"
+                    onClick={() => router.push(`/projects/${project.id}`)}
+                  >
+                    <span className="project-card-preview" aria-hidden />
+                    <span className="project-card-body">
+                      <strong>{project.name}</strong>
+                      <span>
+                        {new Date(project.updatedAt).toLocaleString('zh-CN', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
                     </span>
+                  </button>
+                  <span className="project-card-more">
+                    <Dropdown
+                      trigger={['click']}
+                      placement="topRight"
+                      menu={{
+                        items: [
+                          {
+                            key: 'delete',
+                            danger: true,
+                            icon: <Trash2 size={14} />,
+                            label: '删除项目',
+                            disabled: remove.isPending && remove.variables === project.id,
+                          },
+                        ],
+                        onClick: ({ key }) => {
+                          if (key !== 'delete') return;
+                          modal.confirm({
+                            title: `删除「${project.name}」？`,
+                            content:
+                              '将删除该项目的工作流、版本、运行记录、队列任务、Checkpoint 和已保存素材。账号中的模型配置会保留。此操作不能撤销。',
+                            okText: '删除',
+                            cancelText: '取消',
+                            okButtonProps: { danger: true },
+                            onOk: () => remove.mutateAsync(project.id),
+                          });
+                        },
+                      }}
+                    >
+                      <Button
+                        type="text"
+                        size="small"
+                        aria-label={`${project.name} 的更多操作`}
+                        icon={<Ellipsis size={16} />}
+                        loading={remove.isPending && remove.variables === project.id}
+                      />
+                    </Dropdown>
                   </span>
-                </button>
+                </article>
               ))}
             </div>
             {projects.hasNextPage ? (

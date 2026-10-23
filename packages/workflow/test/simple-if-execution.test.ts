@@ -694,7 +694,6 @@ describe('真实 LangGraph 简单 If 路由', () => {
     expect(f.nodeRuns.createRunning).not.toHaveBeenCalled();
   });
   it.each([
-    'merge',
     'nested',
     'cross',
     'outside-input',
@@ -748,27 +747,10 @@ describe('真实 LangGraph 简单 If 路由', () => {
         source: { nodeId: 'B' },
         target: { nodeId: kind === 'cross' ? 'C' : 'D' },
       });
-      if (kind === 'merge')
-        d.edges.push({
-          id: 'c-next',
-          kind: 'control',
-          source: { nodeId: 'C' },
-          target: { nodeId: 'D' },
-        });
     }
     const f = fixture(d);
-    if (kind === 'merge') {
-      expect(() => validateWorkflowForPublish(f.version.definition, f.registry)).toThrow(
-        expect.objectContaining({ code: 'IF_CONVERGENCE_UNSUPPORTED', nodeId: 'D' }),
-      );
-      await expect(f.start({ ...f.input, inputs: {} })).rejects.toMatchObject({
-        code: 'IF_CONVERGENCE_UNSUPPORTED',
-        nodeId: 'D',
-      });
-    } else {
-      expect(() => validateWorkflowForPublish(f.version.definition, f.registry)).toThrow();
-      await expect(f.start({ ...f.input, inputs: {} })).rejects.toThrow();
-    }
+    expect(() => validateWorkflowForPublish(f.version.definition, f.registry)).toThrow();
+    await expect(f.start({ ...f.input, inputs: {} })).rejects.toThrow();
     expect(f.executorFactory).not.toHaveBeenCalled();
     expect(f.actionExecute).not.toHaveBeenCalled();
     expect(f.nodeRuns.createRunning).not.toHaveBeenCalled();

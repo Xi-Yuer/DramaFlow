@@ -62,7 +62,7 @@ Workflow 的 `runtime/condition-evaluator.ts` 封装精确版本 json-logic-engi
 
 If CompilationStrategy 不经 Action NodeExecutor，不提供 matched Data Output；内部条件结果按 nodeId 写入 execution.controlResults，LangGraph 原生 conditional edges 读取结果后只激活一支。分支输入依赖不再编译成无条件触发，原始 Binding 数据来源保持不变。执行预算、START / END、checkpoint / resume 和阶段性拓扑限制见 [Runtime](runtime-architecture.md#简单-if-的条件路由与预算)。
 
-生产执行拒绝普通 Action 的隐式跨互斥分支汇合、nested If、不同 If region 交叉与跨支依赖；这些属于 Compiler 能力限制，不是永久 Workflow Contract。条件最终输出仅允许同一 If 的两个 region 中保证执行的节点以 sources 声明，详见 [Workflow](workflow-model.md#输入与输出)，不引入 optional output。Web 在 Generic Node 内复用 string Binding 编辑 value，通过等于 / 不等于 / 包含 / 不包含表单读写 condition；控制连线保存对应 source.portKey。未配置完整的 If 可以保存 Draft，Publish 仍以服务端校验为准；未知条件表达式保留，需用户明确替换后才能转为可编辑条件。
+生产执行支持静态证明安全的直接汇聚：同一 If 的唯一共同目标完整覆盖两侧末端，目标之后恢复普通 DAG；不新增汇聚领域节点。仍拒绝不安全汇聚、nested If、不同 If region 交叉与跨支依赖；这些属于 Compiler 能力限制，不是永久 Workflow Contract。条件最终输出仅允许同一 If 的两个 region 中保证执行的节点以 sources 声明，详见 [Workflow](workflow-model.md#输入与输出)，不引入 optional output；汇聚后保证执行的节点可以声明单来源输出。汇聚目标不得直接读取分支业务值，完成组与共同上游处理见 [Runtime](runtime-architecture.md#if-的直接汇聚)。Web 在 Generic Node 内复用 string Binding 编辑 value，通过等于 / 不等于 / 包含 / 不包含表单读写 condition；控制连线保存对应 source.portKey。未配置完整的 If 可以保存 Draft，Publish 仍以服务端校验为准；未知条件表达式保留，需用户明确替换后才能转为可编辑条件。
 
 ## 视频领域能力与厂商边界
 

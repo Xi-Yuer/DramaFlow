@@ -528,7 +528,41 @@ a {
   background: #151518;
   border: 1px solid #ffffff10;
   border-radius: 16px;
+}
+.project-card {
+  position: relative;
+}
+.project-card-open {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 176px;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
   cursor: pointer;
+}
+.project-card-more {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  line-height: 0;
+}
+.project-card-more .ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: #8d8d98;
+}
+.project-card-more .ant-btn:hover {
+  color: #f3f3f5;
+  background: #ffffff10;
 }
 .project-card:hover,
 .project-create:hover {
@@ -542,6 +576,7 @@ a {
   color: #b7b7c2;
   border-style: dashed;
   background: transparent;
+  cursor: pointer;
 }
 .project-card-preview {
   height: 104px;
@@ -559,7 +594,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 14px 16px 16px;
+  padding: 14px 40px 16px 16px;
 }
 .project-card-body strong {
   font-size: 14px;

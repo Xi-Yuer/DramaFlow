@@ -28,6 +28,7 @@ export function analyzeBranchRegions(
   nodeIds: readonly string[],
   routes: readonly SimpleIfRoute[],
   ordinaryDependencies: readonly NodeDependency[],
+  convergenceBoundaries: ReadonlyMap<string, string> = new Map(),
 ): BranchRegionAnalysis {
   const children = new Map<string, string[]>();
   const parents = new Map<string, readonly string[]>();
@@ -42,12 +43,13 @@ export function analyzeBranchRegions(
   function reachable(
     seeds: readonly string[],
     adjacency: ReadonlyMap<string, readonly string[]>,
+    stopAt?: string,
   ): Set<string> {
     const result = new Set<string>();
     const pending = [...seeds];
     for (let index = 0; index < pending.length; index++) {
       const id = pending[index]!;
-      if (result.has(id)) continue;
+      if (id === stopAt || result.has(id)) continue;
       result.add(id);
       pending.push(...(adjacency.get(id) ?? []));
     }
@@ -59,7 +61,7 @@ export function analyzeBranchRegions(
     const guaranteedBefore = reachable(parents.get(route.nodeId) ?? [], parents);
     for (const branch of ['true', 'false'] as const) {
       const entryNodeId = route[branch];
-      const members = reachable([entryNodeId], children);
+      const members = reachable([entryNodeId], children, convergenceBoundaries.get(route.nodeId));
       const region: BranchRegion = {
         ifNodeId: route.nodeId,
         branch,

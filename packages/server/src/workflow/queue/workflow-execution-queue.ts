@@ -64,6 +64,17 @@ export class WorkflowExecutionQueue implements OnModuleDestroy {
     }
     await this.queue.add(job.kind, job, { jobId: workflowExecutionJobId(job) });
   }
+
+  // 正在执行的任务由 Worker 持有锁，不能从队列里抢走；调用方仍删除其持久记录。
+  async remove(input: WorkflowExecutionJob): Promise<void> {
+    const job = workflowExecutionJobSchema.parse(input);
+    try {
+      await this.queue.remove(workflowExecutionJobId(job));
+    } catch (error) {
+      if (error instanceof Error && /locked/i.test(error.message)) return;
+      throw error;
+    }
+  }
   async onModuleDestroy(): Promise<void> {
     const closing = this.queue.close();
     // 此连接由本服务持有；先停止重连，让尚未 ready 的关闭路径也能结束。
