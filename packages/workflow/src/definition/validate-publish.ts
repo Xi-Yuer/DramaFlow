@@ -6,7 +6,6 @@ import {
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
 import { StateGraph } from '@langchain/langgraph';
-import { isMergeManifest } from '../node/merge.js';
 import { NodeRegistry } from '../node/registry.js';
 import type { NodeDeclaration } from '../node/type.js';
 import { DefaultDataStoragePolicyResolver } from '../runtime/values/data-storage-policy-resolver.js';
@@ -95,7 +94,6 @@ export function validateWorkflowDefinitionSemantics(
     }
     if (
       !isSupportedIf(declaration) &&
-      !isMergeManifest(declaration.manifest) &&
       (declaration.manifest.executionKind !== 'action' || !declaration.execute)
     )
       return invalid('NODE_EXECUTION_KIND_UNSUPPORTED', node.id);
@@ -250,11 +248,7 @@ export function validateWorkflowForPublish(
   const ifNodeIds = new Set(
     entries.filter((entry) => isSupportedIf(entry.nodeType)).map((entry) => entry.node.id),
   );
-  if (
-    ifNodeIds.size ||
-    entries.some((entry) => isMergeManifest(entry.nodeType.manifest)) ||
-    definition.outputs.some((output) => output.sources !== undefined)
-  ) {
+  if (ifNodeIds.size || definition.outputs.some((output) => output.sources !== undefined)) {
     try {
       analyzeSimpleIfExecution(definition, ifNodeIds);
     } catch (error) {

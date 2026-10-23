@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-If Branch successor 已完成人工验证。Merge 当前仅交付领域声明与静态边界分析，生产 Publish / Compile gate 保持关闭。下一步须单独实现并验证 LangGraph 汇聚编译、选中分支完成 barrier、START / END 与预算后才能开放执行；Web Merge 编辑与候选输入绑定分别独立推进，未获本轮实施授权。已实现能力见[当前架构](architecture.md)与 [Runtime](runtime-architecture.md#merge-静态边界尚不可执行)。
+当前保持 If branch successor、分支内 parallel / ALL join 与 conditional Workflow Output 能力，implicit cross-branch convergence 仍由 Publish / Compiler 拒绝。下一任务才研究并实施基于静态分析的直接 convergence，不新增领域汇聚节点，本轮不开放执行。已实现能力见[当前架构](architecture.md)与 [Runtime](runtime-architecture.md#简单-if-的条件路由与预算)。
 
 ## 待决策与后续边界
 

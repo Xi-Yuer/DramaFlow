@@ -679,6 +679,20 @@ describe('真实 LangGraph 简单 If 路由', () => {
         expect(context.runnableConfig?.recursionLimit).toBe(depth + 3);
     },
   );
+  it('已移除的领域控制类型不能发布或编译，拒绝发生在创建执行服务前', async () => {
+    const d = definition();
+    d.nodes.push({ ...action('RemovedControl'), type: 'flow.merge', inputs: {} });
+    const f = fixture(d);
+    expect(f.registry.listManifests().map((manifest) => manifest.type)).not.toContain('flow.merge');
+    expect(() => validateWorkflowForPublish(f.version.definition, f.registry)).toThrow(
+      expect.objectContaining({ code: 'NODE_TYPE_UNAVAILABLE', nodeId: 'RemovedControl' }),
+    );
+    await expect(f.start({ ...f.input, inputs: {} })).rejects.toMatchObject({
+      code: 'unavailable_type',
+    });
+    expect(f.executorFactory).not.toHaveBeenCalled();
+    expect(f.nodeRuns.createRunning).not.toHaveBeenCalled();
+  });
   it.each([
     'merge',
     'nested',
@@ -743,8 +757,18 @@ describe('真实 LangGraph 简单 If 路由', () => {
         });
     }
     const f = fixture(d);
-    expect(() => validateWorkflowForPublish(f.version.definition, f.registry)).toThrow();
-    await expect(f.start({ ...f.input, inputs: {} })).rejects.toThrow();
+    if (kind === 'merge') {
+      expect(() => validateWorkflowForPublish(f.version.definition, f.registry)).toThrow(
+        expect.objectContaining({ code: 'IF_CONVERGENCE_UNSUPPORTED', nodeId: 'D' }),
+      );
+      await expect(f.start({ ...f.input, inputs: {} })).rejects.toMatchObject({
+        code: 'IF_CONVERGENCE_UNSUPPORTED',
+        nodeId: 'D',
+      });
+    } else {
+      expect(() => validateWorkflowForPublish(f.version.definition, f.registry)).toThrow();
+      await expect(f.start({ ...f.input, inputs: {} })).rejects.toThrow();
+    }
     expect(f.executorFactory).not.toHaveBeenCalled();
     expect(f.actionExecute).not.toHaveBeenCalled();
     expect(f.nodeRuns.createRunning).not.toHaveBeenCalled();

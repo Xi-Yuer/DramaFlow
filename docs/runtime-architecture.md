@@ -38,15 +38,7 @@ Compiler 使用 LangGraph 原生 addConditionalEdges，callback 只读取该 If 
 
 预算算法保持不变：按实际编译后的静态依赖与两条潜在条件路径计算最长节点深度（包含 If 和全部 successor），再加 1 次终止检测；If 路由 callback 不额外占 superstep。这是独立的简单 If 分析，不调用 Action 专用分析。真实边界为 A=1、If=2、leaf=3，recursionLimit=4；100 个上游并行节点仍为 4，100 层串行上游加 If 和 leaf 为 103。预算属于单次 invocation，不是 thread 累计额度。
 
-Publish 与 Compiler 共用同一个能力分析：拒绝跨互斥分支汇合、nested If、不同 If region 交叉、一出口多 entry，以及来源既非本 region 又非 guaranteed-before 祖先的输入；不新增长期 Contract 限制或 optional output。不通过能力检查时，在创建执行服务 / 执行任何节点前失败。单 source 只允许必定执行的节点；sources 允许同一 If 的两个 region 各一个保证执行的候选，可取不同深度且不要求 terminal；无环 Action region 的可达性、本地 gate 与全部父依赖就绪证明共同保证选中后必执行。汇合 / nested / region 交叉 / 外部依赖分别返回 IF_CONVERGENCE_UNSUPPORTED、IF_NESTED_UNSUPPORTED、IF_REGION_INTERSECTION_UNSUPPORTED、IF_BRANCH_DEPENDENCY_UNSUPPORTED，保留安全 nodeId 定位；这些是当前 Compiler 能力限制，不是永久 Contract 规则。
-
-### Merge 静态边界（尚不可执行）
-
-`flow.merge@1` 是无业务输入 / 输出、无 Action execute 的 Control 声明，`config.openerNodeId` 引用被关闭的控制入口；当前仅支持精确 flow.if@1，一个 opener 只能配对一个 Merge。不修改 Definition / ControlEdge 的通用结构，也不注册到生产节点目录，避免提前提供 Web 编辑入口。
-
-`analyzeIfTopology` 复用统一 dependency collector 与 Branch Region：true / false 的传播在配对 Merge 前停止，Merge 与后继归入 ordinary；每支全部 terminal 必须直接通过无名称 ControlEdge 接入 Merge，不能混入额外来源或非末端冗余边。分支内串行、并行、ALL join 和不等深路径均可静态识别。Merge 后可继续普通串行 / ALL join，但任何分支 DataEdge、ControlEdge 或 template 绕到 Merge 后都会拒绝。普通 Action 的隐式汇合、跨分支依赖、nested If 和不同 If region 交叉仍拒绝。
-
-分析返回 `mergeBoundaries`，包含 nodeId、openerNodeId 与 true / false 的 branchTerminals；不生成汇聚边或执行预算。新增 MERGE_OPENER_INVALID、MERGE_BRANCH_COVERAGE_INVALID、MERGE_BYPASS_UNSUPPORTED 定位静态问题。生产 Publish / Compiler 共用执行分析入口，静态合法后仍以 MERGE_EXECUTION_UNSUPPORTED 拒绝，且在创建执行服务前完成；尚无 Merge strategy。既有无 Merge 图的执行投影与预算不变。控制汇聚不提供候选业务值绑定，不改变 BindingResolver 或 WorkflowOutputResolver。
+Publish 与 Compiler 共用同一个能力分析：拒绝普通 Action 的隐式跨互斥分支汇合、nested If、不同 If region 交叉、一出口多 entry，以及来源既非本 region 又非 guaranteed-before 祖先的输入；不新增长期 Contract 限制或 optional output。不通过能力检查时，在创建执行服务 / 执行任何节点前失败。单 source 只允许必定执行的节点；sources 允许同一 If 的两个 region 各一个保证执行的候选，可取不同深度且不要求 terminal；无环 Action region 的可达性、本地 gate 与全部父依赖就绪证明共同保证选中后必执行。隐式汇合 / nested / region 交叉 / 外部依赖分别返回 IF_CONVERGENCE_UNSUPPORTED、IF_NESTED_UNSUPPORTED、IF_REGION_INTERSECTION_UNSUPPORTED、IF_BRANCH_DEPENDENCY_UNSUPPORTED，保留安全 nodeId 定位；这些是当前 Compiler 能力限制，不是永久 Contract 规则。
 
 ## Submission 与 Runner
 

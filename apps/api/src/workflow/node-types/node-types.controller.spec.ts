@@ -60,7 +60,7 @@ describe('节点类型目录 API', () => {
     expect(list).not.toHaveBeenCalled();
   });
 
-  it('受保护目录提供正式文本 AI 能力，禁止缓存', async () => {
+  it('受保护目录提供正式 AI / Control 声明，禁止缓存', async () => {
     const context = await setup();
     const response = await request(context.app.getHttpServer())
       .get('/api/v1/workflow/node-types')
