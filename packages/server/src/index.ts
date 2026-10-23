@@ -47,3 +47,8 @@ export {
   isRetryableWorkflowInfrastructureError,
 } from './workflow/queue/workflow-execution-consumer.js';
 export { WorkflowExecutionTerminalError } from './workflow/runtime/workflow-execution.service.js';
+export { WorkflowHumanReviewModule } from './workflow/human-review.module.js';
+export {
+  WorkflowHumanReviewService,
+  HumanReviewStateError,
+} from './workflow/human-review.service.js';

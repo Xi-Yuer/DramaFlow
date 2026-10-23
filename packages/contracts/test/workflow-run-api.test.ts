@@ -3,6 +3,7 @@ import {
   resumeWorkflowRunRequestSchema,
   startWorkflowRunRequestSchema,
   workflowRunResponseSchema,
+  pendingHumanReviewsResponseSchema,
 } from '../src/index.js';
 
 describe('Workflow Run HTTP 契约', () => {
@@ -32,16 +33,48 @@ describe('Workflow Run HTTP 契约', () => {
     ).toBe('call-A_1');
   });
 
-  it('resume 必须显式提供 value，允许 falsy / null / 对象，不允许覆盖 thread 或版本', () => {
-    for (const value of [false, 0, '', null, { decision: 'approve' }, [1, 2]])
-      expect(resumeWorkflowRunRequestSchema.parse({ value })).toEqual({ value });
+  it('Human Review resume 要求明确 token / revision / 正式 decision，拒绝裸 value', () => {
+    const target = { interruptId: 'opaque:token', expectedWaitingRevision: 1 };
     for (const value of [
-      {},
-      { value: undefined },
-      { value: 1, threadId: 'other' },
-      { value: 1, workflowVersionId: 'other' },
+      { action: 'approve' },
+      { action: 'reject' },
+      { action: 'reject', feedback: '修改意见' },
     ])
-      expect(resumeWorkflowRunRequestSchema.safeParse(value).success).toBe(false);
+      expect(resumeWorkflowRunRequestSchema.parse({ ...target, value })).toEqual({
+        ...target,
+        value,
+      });
+    for (const input of [
+      { value: { action: 'approve' } },
+      { ...target, value: null },
+      { ...target, value: { action: 'comment' } },
+      { ...target, value: { action: 'approve', approved: true } },
+      { ...target, interruptId: '', value: { action: 'approve' } },
+      { ...target, expectedWaitingRevision: 0, value: { action: 'approve' } },
+      { ...target, value: { action: 'reject', feedback: 2 } },
+      { ...target, value: { action: 'approve' }, threadId: 'private' },
+    ])
+      expect(resumeWorkflowRunRequestSchema.safeParse(input).success).toBe(false);
+  });
+  it('Pending 仅返回产品字段，内容为文本，无 LangGraph / NodeRun internals', () => {
+    const item = {
+      interruptId: 'opaque',
+      waitingRevision: 1,
+      node: { id: 'R', name: '审核' },
+      content: '原文',
+      submissionStatus: 'pending',
+    };
+    expect(pendingHumanReviewsResponseSchema.parse({ items: [item] })).toEqual({ items: [item] });
+    for (const key of ['threadId', 'checkpoint_ns', 'tasks', 'nodeRunId', 'definition'])
+      expect(
+        pendingHumanReviewsResponseSchema.safeParse({ items: [{ ...item, [key]: 'private' }] })
+          .success,
+      ).toBe(false);
+    expect(
+      pendingHumanReviewsResponseSchema.safeParse({
+        items: [{ ...item, content: { storage: 'inline', value: 'private' } }],
+      }).success,
+    ).toBe(false);
   });
 
   it('所有状态可使用同一响应协议，不公开项目 / thread，错误仅保留稳定摘要', () => {

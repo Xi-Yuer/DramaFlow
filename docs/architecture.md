@@ -26,15 +26,15 @@ End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 nodes
 
 [Human Review V1 协议](../packages/contracts/src/workflow/human-review.ts)定义严格文本 input、可选静态 instruction、approve / reject decision 与稳定业务 output。合法 reject 是正常业务结果；content 原样透传，缺省 feedback 归一化为空字符串。payload 固定 human_review / schemaVersion 1，保留 RuntimeValue 结构及未来 reference 表达；[纯转换函数](../packages/workflow/src/node/human-review.ts)只接受 string 业务输入，构造 inline string payload，不解释 instruction 模板、不读取 Artifact，也不调用 interrupt。payload 不含 Run / thread / NodeRun / interrupt 身份；Decision 的版本由 V1 Schema/type 名称明确。
 
-[专用策略](../packages/workflow/src/compiler/human-review/strategy.ts)复用 BindingResolver、Codec 和节点 Schema，解码前拒绝 reference content，再调用官方 interrupt(payload)。恢复值经 V1 decision Schema 校验后输出三个 RuntimeValue；缺省 feedback 为空，reject 正常完成，可把 action DataEdge 接入 If.value 控制后续分支。Runner 继续负责 checkpoint 检测、WorkflowRun waiting 与 Command.resume，HTTP Resume Contract 和 Outbox 不变。
+[专用策略](../packages/workflow/src/compiler/human-review/strategy.ts)复用 BindingResolver、Codec 和节点 Schema，解码前拒绝 reference content，再调用官方 interrupt(payload)。恢复值经 V1 decision Schema 校验后输出三个 RuntimeValue；缺省 feedback 为空，reject 正常完成，可把 action DataEdge 接入 If.value 控制后续分支。Runner 继续负责 checkpoint 检测、WorkflowRun waiting 与 Command.resume，正式 HTTP 恢复必须携带当前审核 token / waitingRevision，协议见下方 [Human Review 查询与恢复](#human-review-查询与恢复)。
 
 Publish / Compile 共用 Human Review 能力门禁：支持分支区域外有明确依赖先后的串行审核，包括审核后进入 If、已证明 Direct Convergence 的 Candidate 输入进入审核；拒绝 If branch region 内审核和彼此无先后依赖的并行待审批（HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED）。静态 DAG 与 If execution projection 的最长路径仍提供每次调用的技术预算，原生 MemorySaver 测试覆盖初次暂停、resume 和两次串行审核。恢复只重入当前审核函数，上游已完成 Action 不重跑；interrupt 前只做输入解析与可复用的审计持久化，不调用 Provider。
 
-Human Review 已有正式 NodeRun 审计：首次进入创建 attempt 1 running、首次记录 RuntimeValue inputs；WorkflowRun waiting 时 NodeRun 保持 running，interrupt 身份只留在 checkpoint。resume 重入获取同一记录，比较重新解析的 inputs 与首次快照（对象键顺序无关），不再次 updateInputs。decision / 输出校验及编码成功后 markCompleted，再提交 State；approve 和 reject 均正常 completed。业务错误将原记录记 failed，原生 GraphInterrupt / ParentCommand 不记失败；仓储失败不反向标记业务 failed。
+Human Review 已有正式 NodeRun 审计：首次进入创建 attempt 1 running、首次记录 RuntimeValue inputs；WorkflowRun waiting 时 NodeRun 保持 running，interrupt 身份以 checkpoint 为权威，不写入 NodeRun outputs。resume 重入获取同一记录，比较重新解析的 inputs 与首次快照（对象键顺序无关），不再次 updateInputs。decision / 输出校验及编码成功后 markCompleted，再提交 State；approve 和 reject 均正常 completed。业务错误将原记录记 failed，原生 GraphInterrupt / ParentCommand 不记失败；仓储失败不反向标记业务 failed。
 
 [审核专用 Repository](../packages/server/src/workflow/runtime/node-run-repository.ts)在原有事务 advisory lock 内获取 / 创建记录，核对 Owner / Project / Run、已 claim 的 running Run、固定 WorkflowVersion 中的精确 Human Review node，以及唯一 attempt 1 running 历史；终态、多 attempt 或错误节点 / 版本明确拒绝，不按 latest running 猜测，也不自动新建 attempt 2。inputs 仍受原有一次写约束保护，完整执行的串行性依赖 Run / Outbox 的数据库 claim，获取 / 创建本身的唯一性由节点锁与既有唯一约束保证。Action createRunning 继续原子分配新 attempt。
 
-该复用键仅适用于当前无环、每节点每 Run 一次逻辑审核的能力边界。未来 Loop / Iteration 必须增加显式 execution occurrence identity；本轮没有新增发生次数模型、NodeRun waiting、数据库字段或约束。审计 completed 与 Graph checkpoint 不构成跨系统原子提交；异常中断后的对账 / recovery_required 仍沿用既有边界，不重放终态记录。待审批查询、targeted resume HTTP、Web 审批与 Artifact 预览待后续任务。
+该复用键仅适用于当前无环、每节点每 Run 一次逻辑审核的能力边界。未来 Loop / Iteration 必须增加显式 execution occurrence identity；本轮没有新增发生次数模型、NodeRun waiting、数据库字段或约束。审计 completed 与 Graph checkpoint 不构成跨系统原子提交；异常中断后的对账 / recovery_required 仍沿用既有边界，不重放终态记录。待审批查询与 targeted resume HTTP 已接入，Web 审批与 Artifact 预览待后续任务。
 
 ## Workflow 编辑 HTTP API
 
@@ -56,14 +56,27 @@ dirty、修订冲突或保存未确认时禁止发布；发布锁定 Draft 编�
 
 ## Workflow Run HTTP API
 
-| 方法与路径                                                  | 行为                                                           |
-| ----------------------------------------------------------- | -------------------------------------------------------------- |
-| POST /workflow-runs                                         | 固定 workflowVersionId、invocationKey、inputs；受理返回 202    |
-| GET /workflow-runs/:runId                                   | 安全 Run projection，含可选 outputs / error，不含 threadId     |
-| GET /workflow-runs/by-invocation/:workflowId/:invocationKey | 授权 Workflow 下只读 lookup，返回 `{ run }` 或 `{ run: null }` |
-| POST /workflow-runs/:runId/resume                           | 用原 Run / thread 继续；非 waiting 或重复意图为 409            |
+| 方法与路径                                                  | 行为                                                                |
+| ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| POST /workflow-runs                                         | 固定 workflowVersionId、invocationKey、inputs；受理返回 202         |
+| GET /workflow-runs/:runId                                   | 安全 Run projection，含可选 outputs / error，不含 threadId          |
+| GET /workflow-runs/by-invocation/:workflowId/:invocationKey | 授权 Workflow 下只读 lookup，返回 `{ run }` 或 `{ run: null }`      |
+| GET /workflow-runs/:runId/pending-human-reviews             | 查询当前单个待审核产品对象；非 waiting 返回空 items                 |
+| POST /workflow-runs/:runId/resume                           | 指定 interruptId / expectedWaitingRevision 与 V1 decision；202 受理 |
 
 Start key 的等价性与终态保留规则见 [Workflow](workflow-model.md#start-invocation-身份)。入队确认失败返回 `WORKFLOW_QUEUE_UNAVAILABLE`（503），携带已持久化的 Run ID / key。lookup 不创建 Run / Outbox、不投递或执行；查无结果不能证明原 POST 不会稍后提交。
+
+### Human Review 查询与恢复
+
+[HTTP Contract](../packages/contracts/src/workflow/workflow-run-api.ts)的 Pending 响应为 `{ items }`，每项包含 opaque interruptId、waitingRevision、固定 WorkflowVersion 的 node id / name、纯文本 content、可选 instruction 与 submissionStatus（pending / submitted）。Run 非 waiting 返回空数组；没有通用 checkpoint inspection API，不返回 RuntimeValue wrapper、thread、task、namespace、NodeRunId 或完整 Definition。所有查询和提交均按 User → Project Owner → Run 授权，token 不能代替权限。
+
+[产品服务](../packages/server/src/workflow/human-review.service.ts)在授权 Run 行锁内使用官方 Saver.getTuple 读取原 thread 的 head checkpoint，验证运行身份，并适配 LangGraph 1.5.0 的 INTERRUPT pending write。只接受 HumanReviewInterrupt V1 与 inline string；名称读取原版本，不读 Draft / latest。多个 pending interrupt 返回 HUMAN_REVIEW_CAPABILITY_UNSUPPORTED；未知 kind 或损坏 payload 返回明确的 HUMAN_REVIEW_INTERRUPT_UNSUPPORTED / INVALID（409），不伪装成审核。
+
+POST `/resume` 的严格请求为 `{ interruptId, expectedWaitingRevision, value: { action: "approve" | "reject", feedback?: string } }`。旧裸 `{ value }` 不再属于产品 HTTP 协议；底层通用 Submission / Runner 仍供内部运行与测试使用。服务在同一 Run 行锁内验证 waiting、revision 完全相等、token 为当前 pending 审核，再原子写 Outbox。陈旧 token / revision 返回 HUMAN_REVIEW_STALE（409），不会创建恢复意图。
+
+当前 revision 存在任意已持久化 resume intent 时 submissionStatus 为 submitted，包括投递未确认和 recovery_required；不暴露 Outbox 状态机、不允许修改已提交决策。沿用既有冲突语义：相同请求重复提交或不同 decision 均返回 WORKFLOW_RESUME_ALREADY_SUBMITTED（409）；Worker 已 claim 时可返回 Run 非 waiting 冲突。POST 202 不保证 Run 已变 running。投递 503 后可查询 Pending 确认 submitted，不能盲目再次提交。
+
+Outbox 复用现有 value JSON，保存 `{ kind: "targeted_interrupt", interruptId, value: decision }`，waitingRevision 仍使用原列；无新增 DB / Job 顶层字段。Dispatcher 从持久化 Outbox 投递，Worker 校验 Job 与持久化 payload 完全一致后解包；Runner 验证当前 checkpoint 中的目标，再构造原生 `Command({ resume: { [interruptId]: value } })`。Runner 不解释 decision。通用单 interrupt 的兼容路径不用于正式 Human Review HTTP。
 
 ## Workflow Execution Queue
 

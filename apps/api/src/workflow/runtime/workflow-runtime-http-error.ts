@@ -1,3 +1,4 @@
+import { HumanReviewStateError } from '@dramaflow/server';
 import {
   NodeExecutionError,
   NodeRegistrationError,
@@ -50,6 +51,7 @@ export function workflowRuntimeHttpError(
   error: unknown,
   notFoundCode: WorkflowResourceNotFoundCode,
 ): HttpException {
+  if (error instanceof HumanReviewStateError) return error;
   if (error instanceof WorkflowInvocationConflictError)
     return new ConflictException({
       code: error.code,

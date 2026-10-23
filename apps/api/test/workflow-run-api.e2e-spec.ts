@@ -3,7 +3,10 @@ import { fork, type ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
+  StringType,
   NumberType,
+  pendingHumanReviewsResponseSchema,
+  type PendingHumanReview,
   AnyType,
   workflowRunResponseSchema,
   type WorkflowDefinition,
@@ -16,20 +19,22 @@ import {
   WorkflowRuntimeFactory,
   workflowExecutionJobId,
 } from '@dramaflow/server';
-import { DefaultWorkflowRunner, NodeRegistry } from '@dramaflow/workflow';
+import {
+  DefaultWorkflowRunner,
+  NodeRegistry,
+  createHumanReviewNodeType,
+} from '@dramaflow/workflow';
 import type { Type } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { INTERRUPT } from '@langchain/langgraph';
 import type { AuthService } from '../src/auth/auth.service.js';
 import { mountAuth } from '../src/auth/auth.http.js';
 import { authBaseUrl } from '../src/auth/trusted-origin.js';
 import { ApiExceptionFilter } from '../src/http/exception.filter.js';
-import {
-  createWorkflowService,
-  storeRuntimeTestVersion,
-} from './fixtures/workflow-service.js';
+import { createWorkflowService } from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
@@ -225,26 +230,35 @@ async function version(
     nodes: native
       ? ['first', 'second'].map((id) => ({
           id,
-          type: 'test.queue_wait',
+          type: 'flow.human_review',
           typeVersion: 1,
-          name: '原生测试等待',
-          inputs: {},
-          config: {},
+          name: id === 'first' ? '人物设定审核' : '第二轮审核',
+          inputs: { content: { type: 'constant', value: `${id} 审核文本` } },
+          config: { instruction: '请核对内容' },
           ui: { position: { x: 0, y: 0 } },
         }))
       : [],
-    edges: [],
+    edges: native
+      ? [
+          {
+            id: 'review-order',
+            kind: 'control',
+            source: { nodeId: 'first' },
+            target: { nodeId: 'second' },
+          },
+        ]
+      : [],
     outputs: native
       ? [
           {
             name: 'first',
-            type: NumberType,
-            source: { nodeId: 'first', outputKey: 'value' },
+            type: StringType,
+            source: { nodeId: 'first', outputKey: 'action' },
           },
           {
             name: 'second',
-            type: NumberType,
-            source: { nodeId: 'second', outputKey: 'value' },
+            type: StringType,
+            source: { nodeId: 'second', outputKey: 'action' },
           },
         ]
       : [],
@@ -256,15 +270,10 @@ async function version(
       draft: z.record(z.string(), z.json()).parse(definition),
     },
   });
-  const published = native
-    ? await storeRuntimeTestVersion(database, workflow, definition)
-    : await createWorkflowService(database, new NodeRegistry()).publish(
-        ownerId,
-        {
-          workflowId: workflow.id,
-          expectedRevision: 1,
-        },
-      );
+  const published = await createWorkflowService(
+    database,
+    new NodeRegistry(native ? [createHumanReviewNodeType()] : []),
+  ).publish(ownerId, { workflowId: workflow.id, expectedRevision: 1 });
   return { projectId: project.id, workflowVersionId: published.id };
 }
 async function waitRun(id: string, status: string, waitingRevision?: number) {
@@ -278,6 +287,29 @@ async function waitRun(id: string, status: string, waitingRevision?: number) {
     { timeout: 15000 },
   );
 }
+async function pending(id: string, index = 0) {
+  const response = await api(index, `/${id}/pending-human-reviews`);
+  expect(response.status).toBe(200);
+  expect(response.headers.get('Cache-Control')).toBe('no-store');
+  const body: unknown = await response.json();
+  const parsed = pendingHumanReviewsResponseSchema.parse(body);
+  expect(JSON.stringify(body)).not.toMatch(
+    /threadId|checkpoint|namespace|nodeRunId|tasks|RuntimeValue/,
+  );
+  return parsed;
+}
+function reviewBody(
+  review: PendingHumanReview,
+  value: { action: 'approve' | 'reject'; feedback?: string } = {
+    action: 'approve',
+  },
+) {
+  return {
+    interruptId: review.interruptId,
+    expectedWaitingRevision: review.waitingRevision,
+    value,
+  };
+}
 async function waiting() {
   const identity = await version(true);
   const run = await result(
@@ -289,7 +321,8 @@ async function waiting() {
     202,
   );
   await waitRun(run.id, 'waiting', 1);
-  return { ...identity, run };
+  const review = (await pending(run.id)).items[0]!;
+  return { ...identity, run, review };
 }
 
 describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker', () => {
@@ -437,7 +470,13 @@ describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker'
       'WORKFLOW_RUN_NOT_FOUND',
     );
     await failure(
-      await api(1, `/${f.run.id}/resume`, 'POST', { value: 1 }, cookieB),
+      await api(
+        1,
+        `/${f.run.id}/resume`,
+        'POST',
+        reviewBody(f.review),
+        cookieB,
+      ),
       404,
       'WORKFLOW_RUN_NOT_FOUND',
     );
@@ -452,24 +491,32 @@ describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker'
     ).toBe('waiting');
   });
 
-  it('两个等待周期通过两个独立 Outbox 意图恢复原版本 / thread；0 值保留', async () => {
+  it('两个审核周期通过各自 target / revision 恢复原版本 / thread', async () => {
     const f = await waiting();
     const original = await db.workflowRun.findUniqueOrThrow({
       where: { id: f.run.id },
     });
     await result(
-      await api(1, `/${f.run.id}/resume`, 'POST', { value: 0 }),
+      await api(1, `/${f.run.id}/resume`, 'POST', reviewBody(f.review)),
       202,
     );
     await waitRun(f.run.id, 'waiting', 2);
     await result(
-      await api(0, `/${f.run.id}/resume`, 'POST', { value: 20 }),
+      await api(
+        0,
+        `/${f.run.id}/resume`,
+        'POST',
+        reviewBody((await pending(f.run.id)).items[0]!, {
+          action: 'reject',
+          feedback: '第二轮需要修改',
+        }),
+      ),
       202,
     );
     await waitRun(f.run.id, 'completed');
     expect(await result(await api(1, `/${f.run.id}`))).toMatchObject({
       status: 'completed',
-      outputs: { first: { value: 0 }, second: { value: 20 } },
+      outputs: { first: { value: 'approve' }, second: { value: 'reject' } },
     });
     expect(
       await db.workflowRun.findUniqueOrThrow({ where: { id: f.run.id } }),
@@ -492,8 +539,13 @@ describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker'
     await queue.queue.pause();
     try {
       const responses = await Promise.all([
-        api(0, `/${f.run.id}/resume`, 'POST', { value: 5 }),
-        api(1, `/${f.run.id}/resume`, 'POST', { value: 7 }),
+        api(0, `/${f.run.id}/resume`, 'POST', reviewBody(f.review)),
+        api(
+          1,
+          `/${f.run.id}/resume`,
+          'POST',
+          reviewBody(f.review, { action: 'reject' }),
+        ),
       ]);
       expect(responses.map((response) => response.status).sort()).toEqual([
         202, 409,
@@ -514,6 +566,282 @@ describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker'
       await queue.queue.resume();
     }
     await waitRun(f.run.id, 'waiting', 2);
+  });
+
+  it('Pending 返回固定版本节点名、纯文本和说明；非 waiting 为空，读取必须授权', async () => {
+    const f = await waiting();
+    expect(f.review).toEqual({
+      interruptId: expect.any(String),
+      waitingRevision: 1,
+      node: { id: 'first', name: '人物设定审核' },
+      content: 'first 审核文本',
+      instruction: '请核对内容',
+      submissionStatus: 'pending',
+    });
+    await failure(
+      await api(
+        0,
+        `/${f.run.id}/pending-human-reviews`,
+        'GET',
+        undefined,
+        null,
+      ),
+      401,
+      'HTTP_401',
+    );
+    await failure(
+      await api(
+        0,
+        `/${f.run.id}/pending-human-reviews`,
+        'GET',
+        undefined,
+        cookieB,
+      ),
+      404,
+      'WORKFLOW_RUN_NOT_FOUND',
+    );
+    const identity = await version();
+    const run = await result(
+      await api(0, '', 'POST', {
+        workflowVersionId: identity.workflowVersionId,
+        invocationKey: randomUUID(),
+        inputs: {},
+      }),
+      202,
+    );
+    expect(await pending(run.id)).toEqual({ items: [] });
+  });
+
+  it.each(['revision', 'interrupt'] as const)(
+    '拒绝 stale %s，不创建恢复意图',
+    async (kind) => {
+      const f = await waiting();
+      const request = reviewBody(f.review);
+      if (kind === 'revision') request.expectedWaitingRevision++;
+      else request.interruptId = '伪造或旧 interrupt';
+      await failure(
+        await api(0, `/${f.run.id}/resume`, 'POST', request),
+        409,
+        'HUMAN_REVIEW_STALE',
+      );
+      expect(
+        await db.workflowExecutionOutbox.count({
+          where: { workflowRunId: f.run.id, kind: 'resume' },
+        }),
+      ).toBe(0);
+      expect((await pending(f.run.id)).items[0]!.submissionStatus).toBe(
+        'pending',
+      );
+    },
+  );
+
+  it('已提交但 Worker 尚未 claim：submitted；相同或不同 decision 均 409 且不覆盖', async () => {
+    const f = await waiting();
+    const queue = applications[0]!.app.get(WorkflowExecutionQueue);
+    await queue.queue.pause();
+    const request = reviewBody(f.review, {
+      action: 'reject',
+      feedback: '保留原始修改意见',
+    });
+    try {
+      await result(await api(0, `/${f.run.id}/resume`, 'POST', request), 202);
+      const review = (await pending(f.run.id, 1)).items[0]!;
+      expect(review).toEqual({ ...f.review, submissionStatus: 'submitted' });
+      expect(
+        (await db.workflowRun.findUniqueOrThrow({ where: { id: f.run.id } }))
+          .status,
+      ).toBe('waiting');
+      const intent = await db.workflowExecutionOutbox.findFirstOrThrow({
+        where: { workflowRunId: f.run.id, kind: 'resume' },
+      });
+      expect(intent.payload).toMatchObject({
+        value: {
+          kind: 'targeted_interrupt',
+          interruptId: f.review.interruptId,
+          value: request.value,
+        },
+      });
+      for (const body of [request, reviewBody(f.review, { action: 'approve' })])
+        await failure(
+          await api(1, `/${f.run.id}/resume`, 'POST', body),
+          409,
+          'WORKFLOW_RESUME_ALREADY_SUBMITTED',
+        );
+      expect(
+        await db.workflowExecutionOutbox.count({
+          where: { workflowRunId: f.run.id, kind: 'resume' },
+        }),
+      ).toBe(1);
+      expect(
+        (
+          await db.workflowExecutionOutbox.findUniqueOrThrow({
+            where: { id: intent.id },
+          })
+        ).payload,
+      ).toEqual(intent.payload);
+    } finally {
+      await queue.queue.resume();
+    }
+    await waitRun(f.run.id, 'waiting', 2);
+    const next = (await pending(f.run.id)).items[0]!;
+    expect(next.waitingRevision).toBe(2);
+    expect(next.node.id).toBe('second');
+    expect(next.interruptId).not.toBe(f.review.interruptId);
+    await failure(
+      await api(0, `/${f.run.id}/resume`, 'POST', request),
+      409,
+      'HUMAN_REVIEW_STALE',
+    );
+    await failure(
+      await api(0, `/${f.run.id}/resume`, 'POST', {
+        ...request,
+        expectedWaitingRevision: 2,
+      }),
+      409,
+      'HUMAN_REVIEW_STALE',
+    );
+    expect((await pending(f.run.id)).items[0]!.submissionStatus).toBe(
+      'pending',
+    );
+    expect(
+      await db.workflowExecutionOutbox.count({
+        where: { workflowRunId: f.run.id, kind: 'resume', waitingRevision: 2 },
+      }),
+    ).toBe(0);
+    const audit = await db.nodeRun.findFirstOrThrow({
+      where: { workflowRunId: f.run.id, nodeId: 'first' },
+    });
+    expect(audit.outputs).toMatchObject({
+      action: { value: 'reject' },
+      feedback: { value: request.value.feedback },
+    });
+  });
+
+  it('恢复投递结果不明仍可查询 submitted，刷新不能盲目重复审批', async () => {
+    const f = await waiting();
+    const queue = applications[0]!.app.get(WorkflowExecutionQueue);
+    await queue.queue.pause();
+    const publish = vi
+      .spyOn(queue, 'publish')
+      .mockRejectedValueOnce(new Error('private-queue-error'));
+    try {
+      const error = await failure(
+        await api(0, `/${f.run.id}/resume`, 'POST', reviewBody(f.review)),
+        503,
+        'WORKFLOW_QUEUE_UNAVAILABLE',
+      );
+      expect(JSON.stringify(error)).not.toContain('private-queue-error');
+      expect((await pending(f.run.id)).items[0]!.submissionStatus).toBe(
+        'submitted',
+      );
+      await failure(
+        await api(0, `/${f.run.id}/resume`, 'POST', reviewBody(f.review)),
+        409,
+        'WORKFLOW_RESUME_ALREADY_SUBMITTED',
+      );
+    } finally {
+      publish.mockRestore();
+      await queue.queue.resume();
+    }
+    await waitRun(f.run.id, 'waiting', 2);
+  });
+
+  it.each([
+    'unknown',
+    'malformed',
+    'reference',
+    'node',
+    'multiple',
+    'identity',
+  ] as const)('checkpoint %s 明确拒绝，不泄漏内部状态', async (kind) => {
+    const f = await waiting();
+    const saved = await db.workflowRun.findUniqueOrThrow({
+      where: { id: f.run.id },
+    });
+    const saver = applications[0]!.app.get(WorkflowCheckpointerService).saver;
+    const tuple = await saver.getTuple({
+      configurable: { thread_id: saved.threadId },
+    });
+    if (!tuple) throw new Error('缺少测试 checkpoint');
+    const value: Record<string, unknown> = {
+      kind: 'human_review',
+      schemaVersion: 1,
+      nodeId: 'first',
+      content: {
+        storage: 'inline',
+        type: StringType,
+        value: 'private-checkpoint-marker',
+      },
+    };
+    if (kind === 'unknown') value.kind = 'other';
+    if (kind === 'malformed') value.schemaVersion = 2;
+    if (kind === 'reference')
+      value.content = {
+        storage: 'reference',
+        type: StringType,
+        reference: { kind: 'artifact', id: 'private-artifact' },
+      };
+    if (kind === 'node') value.nodeId = 'not-in-version';
+    const interrupts = [{ id: f.review.interruptId, value }];
+    if (kind === 'multiple') interrupts.push({ id: 'other', value });
+    const channel_values =
+      kind === 'identity'
+        ? {
+            ...tuple.checkpoint.channel_values,
+            run: { workflowRunId: 'other' },
+          }
+        : tuple.checkpoint.channel_values;
+    const read = vi.spyOn(saver, 'getTuple').mockResolvedValueOnce({
+      ...tuple,
+      checkpoint: { ...tuple.checkpoint, channel_values },
+      pendingWrites: interrupts.map((interrupt, index) => [
+        `private-task-${index}`,
+        INTERRUPT,
+        interrupt,
+      ]),
+    });
+    try {
+      const code =
+        kind === 'unknown'
+          ? 'HUMAN_REVIEW_INTERRUPT_UNSUPPORTED'
+          : kind === 'multiple'
+            ? 'HUMAN_REVIEW_CAPABILITY_UNSUPPORTED'
+            : 'HUMAN_REVIEW_INTERRUPT_INVALID';
+      const error = await failure(
+        await api(0, `/${f.run.id}/pending-human-reviews`),
+        409,
+        code,
+      );
+      expect(JSON.stringify(error)).not.toMatch(
+        /private-checkpoint|private-task|private-artifact|threadId|checkpoint_ns/,
+      );
+    } finally {
+      read.mockRestore();
+    }
+  });
+
+  it('HTTP 只接受 V1 decision，裸 value / 非法 action / 身份注入均不创建意图', async () => {
+    const f = await waiting();
+    const base = reviewBody(f.review);
+    for (const body of [
+      { value: { action: 'approve' } },
+      { ...base, value: 0 },
+      { ...base, value: { action: 'comment' } },
+      { ...base, value: { action: 'reject', feedback: 1 } },
+      { ...base, value: { action: 'approve', approved: true } },
+      { ...base, threadId: 'injected' },
+      { ...base, expectedWaitingRevision: 0 },
+    ])
+      await failure(
+        await api(0, `/${f.run.id}/resume`, 'POST', body),
+        400,
+        'VALIDATION_FAILED',
+      );
+    expect(
+      await db.workflowExecutionOutbox.count({
+        where: { workflowRunId: f.run.id, kind: 'resume' },
+      }),
+    ).toBe(0);
   });
 
   it('严格校验 start / resume 字段，不能指定 thread、身份、版本副本或省略 value', async () => {

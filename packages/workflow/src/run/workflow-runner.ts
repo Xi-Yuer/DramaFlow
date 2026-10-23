@@ -30,6 +30,7 @@ import {
 const resumeInputSchema = z
   .object({
     workflowRunId: workflowIdentifierSchema,
+    interruptId: z.string().min(1).optional(),
     value: z.unknown().refine((value) => value !== undefined, '必须提供恢复值'),
   })
   .strict();
@@ -119,7 +120,10 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
       run,
       version,
       graph,
-      new Command<unknown, never, never>({ resume: request.value }),
+      new Command<unknown, never, never>({
+        resume: request.interruptId ? { [request.interruptId]: request.value } : request.value,
+      }),
+      request.interruptId,
     );
   }
 
@@ -170,6 +174,7 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
     version: WorkflowVersionRecord,
     graph: CompiledWorkflow,
     input: WorkflowState | WorkflowResumeCommand,
+    targetInterruptId?: string,
   ): Promise<StartWorkflowRunResult> {
     const config = createWorkflowRunConfig(run, {
       id: version.id,
@@ -187,7 +192,10 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
         const interrupts = snapshot.tasks.flatMap((task) => task.interrupts);
         // LangGraph 1.5.0 的直接 resume 值使用 truthy 检查；原生 ID map 可无损传递 false / 0 / null 等值。
         // 单个 pending interrupt 的 value 仍是不透明业务数据，不把其对象键误当作原生 resume map。
-        if (interrupts.length === 1 && interrupts[0]?.id) {
+        if (targetInterruptId !== undefined) {
+          if (interrupts.length !== 1 || interrupts[0]?.id !== targetInterruptId)
+            throw new Error('指定恢复目标已不属于当前待恢复任务');
+        } else if (interrupts.length === 1 && interrupts[0]?.id) {
           invocation = new Command<unknown, never, never>({
             resume: { [interrupts[0].id]: input.resume },
           });

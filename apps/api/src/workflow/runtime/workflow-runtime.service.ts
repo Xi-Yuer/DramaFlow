@@ -11,6 +11,7 @@ import {
   DatabaseService,
   WorkflowRunSubmissionFactory,
   WorkflowOutboxDispatcher,
+  WorkflowHumanReviewService,
 } from '@dramaflow/server';
 import type {
   ResumeWorkflowRunInput,
@@ -33,6 +34,7 @@ export class WorkflowRuntimeService {
     private readonly submissions: WorkflowRunSubmissionFactory,
     private readonly dispatcher: WorkflowOutboxDispatcher,
     private readonly database: DatabaseService,
+    private readonly humanReviews: WorkflowHumanReviewService,
   ) {}
 
   async startVersion(
@@ -136,16 +138,18 @@ export class WorkflowRuntimeService {
   ): Promise<WorkflowRunResponse> {
     const runId = workflowIdentifierSchema.parse(rawId);
     const request = resumeWorkflowRunRequestSchema.parse(body);
-    // 在调用 Runner 前完成 HTTP 资源权限检查；Runner 的 Repository 仍独立重新检查。
-    const run = await this.authorizedRun(ownerId, runId);
     await this.httpOperation('WORKFLOW_RUN_NOT_FOUND', async () => {
-      const job = await this.submitResume(ownerId, run.projectId, {
-        workflowRunId: runId,
-        value: request.value,
-      });
+      const job = await this.humanReviews.submit(ownerId, runId, request);
       await this.dispatcher.publishExecution(job.executionId);
     });
     return this.getRun(ownerId, runId);
+  }
+
+  async pendingHumanReviews(ownerId: string, rawId: string) {
+    const runId = workflowIdentifierSchema.parse(rawId);
+    return this.httpOperation('WORKFLOW_RUN_NOT_FOUND', () =>
+      this.humanReviews.pending(ownerId, runId),
+    );
   }
 
   private async authorizedRun(ownerId: string, runId: string) {

@@ -58,7 +58,7 @@ Submission 校验固定版本的调用契约，再原子创建 / 复用 Run 与 
 
 Graph 返回后核对 checkpoint 身份、next / tasks、任务错误和 interrupt：仍有任务记 waiting，否则解析最终输出。执行 / 解析失败由 claim 胜者记录 failed；记录服务自身故障不能再反向记录业务失败，留给既有恢复边界。
 
-resume 只传不透明 value；单 interrupt 的 false / 0 / null 使用原生 interrupt ID map，避免依赖库 truthy 判断。恢复后可再次 waiting。Runner 不按 interaction NodeRun 自建暂停状态机；Human Review 专用策略在 interrupt 前获取或创建 attempt 1 running 审计、首次记录输入，恢复时比较并复用原输入；合法决策完成同一 NodeRun 后才写 State。原生控制流不记 failed，审核等待仍用 WorkflowRun / checkpoint 表达；inline string 限制与拓扑门禁见[当前架构](architecture.md#human-review-声明与纯业务边界)。
+正式 Human Review 恢复传入持久化目标 token 与不透明 value；Runner 核对 checkpoint 后使用显式 interrupt ID map，不猜目标或解释业务决策。底层通用兼容路径的单 interrupt false / 0 / null 仍使用原生 ID map，避免依赖库 truthy 判断。恢复后可再次 waiting。Runner 不按 interaction NodeRun 自建暂停状态机；Human Review 专用策略在 interrupt 前获取或创建 attempt 1 running 审计、首次记录输入，恢复时比较并复用原输入；合法决策完成同一 NodeRun 后才写 State。原生控制流不记 failed，审核等待仍用 WorkflowRun / checkpoint 表达；inline string 限制与拓扑门禁见[当前架构](architecture.md#human-review-声明与纯业务边界)。
 
 ### 最终输出
 

@@ -294,6 +294,23 @@ describe('生产 Human Review 专用策略 / 原生 interrupt', () => {
     expect(f.runs.markWaiting).not.toHaveBeenCalled();
     expect(f.nodeRuns.createRunning).not.toHaveBeenCalled();
   });
+  it('显式 interruptId 恢复使用原生 ID map，不再对正式审核猜测目标', async () => {
+    const f = fixture();
+    await start(f);
+    const id = (await state(f)).interrupts[0]!.id!;
+    const decision = { action: 'approve', feedback: 'targeted' };
+    expect(
+      await f.runner.executeResume({ workflowRunId: 'run-1', interruptId: id, value: decision }),
+    ).toMatchObject({ status: 'completed' });
+    const invocation = vi.mocked(f.graphs[1]!.invoke).mock.calls[0]![0];
+    if (!(invocation instanceof Command)) throw new Error('恢复调用未使用 Command');
+    expect(invocation.resume).toEqual({ [id]: decision });
+    expect(f.nodeRuns.getRecords().find((row) => row.nodeId === 'R1')).toMatchObject({
+      attempt: 1,
+      status: 'completed',
+      outputs: { feedback: inline('targeted') },
+    });
+  });
   it('Binding 失败也有 failed 审核记录，未解析 inputs 保持缺失', async () => {
     const f = fixture({ inputs: [], nodes: [node('R', true)], edges: [], outputs: [] });
     f.resolveInputs.mockRejectedValue(new Error('来源缺失'));

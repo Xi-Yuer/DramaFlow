@@ -42,6 +42,12 @@ export class WorkflowRunsController {
     );
   }
 
+  @Get(':runId/pending-human-reviews')
+  @Header('Cache-Control', 'no-store')
+  pending(@Actor() actor: AuthActor, @Param('runId') runId: string) {
+    return this.runtime.pendingHumanReviews(actor.user.id, runId);
+  }
+
   @Post(':runId/resume')
   @HttpCode(202)
   @Header('Cache-Control', 'no-store')

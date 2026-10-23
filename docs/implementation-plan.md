@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-Human Review 第三阶段 NodeRun 重入审计已完成，内存执行、隔离 PostgreSQL 仓储并发与 Action 回归已验证；typecheck、lint、build 和格式检查按相关范围执行。待审批查询 / targeted resume HTTP 与 Web 闭环待后续独立授权。已实现能力及 gate 见[当前架构](architecture.md#human-review-声明与纯业务边界)。本轮不运行 Browser E2E 或 Provider。
+Human Review 第四阶段已接入 Pending 查询、严格 targeted resume HTTP 与持久化目标传递，真实 HTTP / PostgresSaver / Worker、Outbox recovery、相关运行时回归以及 typecheck / lint / build / format 检查均已通过。Web 闭环待后续独立授权。已实现能力及 gate 见[当前架构](architecture.md#human-review-声明与纯业务边界)。本轮不运行 Browser E2E 或 Provider。
 
 ## 待决策与后续边界
 

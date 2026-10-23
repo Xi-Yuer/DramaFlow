@@ -4,6 +4,7 @@ import {
   DatabaseService,
   WorkflowOutboxDispatcher,
   WorkflowRunSubmissionFactory,
+  WorkflowHumanReviewService,
 } from '@dramaflow/server';
 import { WorkflowRuntimeService } from './workflow-runtime.service.js';
 import { WorkflowRunsController } from './workflow-runs.controller.js';
@@ -56,6 +57,7 @@ function fixture() {
     submissions as unknown as WorkflowRunSubmissionFactory,
     dispatcher as unknown as WorkflowOutboxDispatcher,
     database as unknown as DatabaseService,
+    {} as WorkflowHumanReviewService,
   );
   return { service, workflow, workflowRun, submissions, dispatcher };
 }

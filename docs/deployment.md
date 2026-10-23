@@ -18,7 +18,7 @@ Prisma 迁移保存身份、资料、会话、项目、Workflow / WorkflowVersio
 - NodeRun 的 workflowRunId、nodeId、attempt 唯一，attempt 为正数，终态字段一致。
 - Artifact 只有 writing / ready / failed；内容身份不可改，终态不可覆盖。对象本体不在数据库。删除项目时按已登记的 storageKey 删除对应对象。
 - Provider / ModelConfiguration 归用户所有，两者 Owner 由复合外键保持一致；删除项目不删除模型资源。Provider 的插件版本、configuration，以及模型的 Provider、capability、model、settings 创建后不可改。enabled 和凭证密文可以按服务操作更新。删除配置不是已交付的产品入口。
-- Outbox 与 start 同事务写入；恢复意图按 waiting 周期唯一。running → waiting 时递增内部周期。
+- Outbox 与 start 同事务写入；恢复意图按 waiting 周期唯一。running → waiting 时由数据库递增 waitingRevision，也作为 Human Review 产品乐观锁返回；客户端只提交 expectedWaitingRevision，不能改写周期。targeted token / decision 复用现有 value JSON，未新增数据库字段或约束。
 
 升级前审阅实际 Prisma migration SQL，确认可能删除的废弃开发表并备份；禁止重写已在生产或外部共享环境应用的迁移。缺少真实 sourceRevision 的旧开发版本不能伪造来源，只能按下方开发数据授权处理。
 

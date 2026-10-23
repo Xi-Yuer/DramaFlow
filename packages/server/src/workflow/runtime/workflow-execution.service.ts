@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import {
   workflowExecutionJobSchema,
+  targetedInterruptResumeValueSchema,
   type WorkflowExecutionJob,
   type ResumeWorkflowExecutionJob,
 } from '@dramaflow/contracts';
@@ -74,12 +75,29 @@ export class WorkflowExecutionService {
       await this.finish(intent.id, 'failed');
       throw new WorkflowExecutionTerminalError('WORKFLOW_EXECUTION_INTENT_STALE');
     }
+    let resumeTarget: ReturnType<typeof targetedInterruptResumeValueSchema.parse> | undefined;
+    if (
+      job.kind === 'resume' &&
+      typeof job.value === 'object' &&
+      job.value !== null &&
+      'kind' in job.value &&
+      job.value.kind === 'targeted_interrupt'
+    ) {
+      const target = targetedInterruptResumeValueSchema.safeParse(job.value);
+      if (!target.success)
+        throw new WorkflowExecutionTerminalError('WORKFLOW_EXECUTION_INTENT_INVALID');
+      resumeTarget = target.data;
+    }
     const runner = await this.runtimes.forProject(run.project.ownerId, run.projectId, intent.id);
     try {
       const result =
         job.kind === 'start'
           ? await runner.executeStart(job.workflowRunId)
-          : await runner.executeResume({ workflowRunId: job.workflowRunId, value: job.value });
+          : await runner.executeResume({
+              workflowRunId: job.workflowRunId,
+              value: resumeTarget ? resumeTarget.value : job.value,
+              ...(resumeTarget ? { interruptId: resumeTarget.interruptId } : {}),
+            });
       await this.finish(intent.id, 'completed');
       return result;
     } catch (error) {

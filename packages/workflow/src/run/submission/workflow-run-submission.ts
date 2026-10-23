@@ -29,6 +29,7 @@ export type StartWorkflowRunInput = z.infer<typeof startInputSchema>;
 export interface ResumeWorkflowRunInput {
   readonly workflowRunId: string;
   readonly value: unknown;
+  readonly interruptId?: string;
 }
 
 export interface WorkflowRunSubmissionService {
