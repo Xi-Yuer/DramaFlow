@@ -38,9 +38,9 @@ Action 编译策略只调用统一 Executor，返回当前 nodeId 的 outputs �
 
 Preset 只是所属 type / typeVersion 的配置模板，applyNodePreset 验证归属并合并实例覆盖，不构成新的运行身份或执行器。
 
-NodeRun 保存 running / completed / failed 业务历史，inputs / outputs 为 RuntimeValue map，error 为安全 stage / 可选 code / message。Repository 按 workflowRunId + nodeId 原子分配正整数 attempt，新执行新建记录，终态不可覆盖。共享协议的 stage 可扩展，不要求使用 Runtime 的固定枚举。
+NodeRun 保存 running / completed / failed 业务历史，inputs / outputs 为 RuntimeValue map，error 为安全 stage / 可选 code / message。Action Repository 按 workflowRunId + nodeId 原子分配正整数 attempt，新执行新建记录，终态不可覆盖。共享协议的 stage 可扩展，不要求使用 Runtime 的固定枚举。
 
-State 只保留当前有效值，Artifact 保存内容，Checkpoint 负责恢复，NodeRun 不驱动调度。普通 Action 不主动 interrupt；Human Review 的恢复复用与 attempt 关联仍需单独设计。
+State 只保留当前有效值，Artifact 保存内容，Checkpoint 负责恢复，NodeRun 不驱动调度。普通 Action 不主动 interrupt；Human Review 在当前单次逻辑审核边界下复用 attempt 1 running，恢复不算新 attempt。完整审计、输入漂移检测和未来 occurrence 限制见[当前架构](architecture.md#human-review-声明与纯业务边界)。
 
 ## 正式文本节点
 

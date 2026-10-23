@@ -28,9 +28,13 @@ End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 nodes
 
 [专用策略](../packages/workflow/src/compiler/human-review/strategy.ts)复用 BindingResolver、Codec 和节点 Schema，解码前拒绝 reference content，再调用官方 interrupt(payload)。恢复值经 V1 decision Schema 校验后输出三个 RuntimeValue；缺省 feedback 为空，reject 正常完成，可把 action DataEdge 接入 If.value 控制后续分支。Runner 继续负责 checkpoint 检测、WorkflowRun waiting 与 Command.resume，HTTP Resume Contract 和 Outbox 不变。
 
-Publish / Compile 共用 Human Review 能力门禁：支持分支区域外有明确依赖先后的串行审核，包括审核后进入 If、已证明 Direct Convergence 的 Candidate 输入进入审核；拒绝 If branch region 内审核和彼此无先后依赖的并行待审批（HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED）。静态 DAG 与 If execution projection 的最长路径仍提供每次调用的技术预算，原生 MemorySaver 测试覆盖初次暂停、resume 和两次串行审核。恢复只重入当前审核函数，interrupt 前无外部副作用，上游已完成 Action 不重跑。
+Publish / Compile 共用 Human Review 能力门禁：支持分支区域外有明确依赖先后的串行审核，包括审核后进入 If、已证明 Direct Convergence 的 Candidate 输入进入审核；拒绝 If branch region 内审核和彼此无先后依赖的并行待审批（HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED）。静态 DAG 与 If execution projection 的最长路径仍提供每次调用的技术预算，原生 MemorySaver 测试覆盖初次暂停、resume 和两次串行审核。恢复只重入当前审核函数，上游已完成 Action 不重跑；interrupt 前只做输入解析与可复用的审计持久化，不调用 Provider。
 
-Human Review 暂不创建 NodeRun，状态、Repository 和数据库均未扩展。interaction NodeRun 审计、待审批查询、targeted resume HTTP、Web 审批与 Artifact 预览均待后续任务。
+Human Review 已有正式 NodeRun 审计：首次进入创建 attempt 1 running、首次记录 RuntimeValue inputs；WorkflowRun waiting 时 NodeRun 保持 running，interrupt 身份只留在 checkpoint。resume 重入获取同一记录，比较重新解析的 inputs 与首次快照（对象键顺序无关），不再次 updateInputs。decision / 输出校验及编码成功后 markCompleted，再提交 State；approve 和 reject 均正常 completed。业务错误将原记录记 failed，原生 GraphInterrupt / ParentCommand 不记失败；仓储失败不反向标记业务 failed。
+
+[审核专用 Repository](../packages/server/src/workflow/runtime/node-run-repository.ts)在原有事务 advisory lock 内获取 / 创建记录，核对 Owner / Project / Run、已 claim 的 running Run、固定 WorkflowVersion 中的精确 Human Review node，以及唯一 attempt 1 running 历史；终态、多 attempt 或错误节点 / 版本明确拒绝，不按 latest running 猜测，也不自动新建 attempt 2。inputs 仍受原有一次写约束保护，完整执行的串行性依赖 Run / Outbox 的数据库 claim，获取 / 创建本身的唯一性由节点锁与既有唯一约束保证。Action createRunning 继续原子分配新 attempt。
+
+该复用键仅适用于当前无环、每节点每 Run 一次逻辑审核的能力边界。未来 Loop / Iteration 必须增加显式 execution occurrence identity；本轮没有新增发生次数模型、NodeRun waiting、数据库字段或约束。审计 completed 与 Graph checkpoint 不构成跨系统原子提交；异常中断后的对账 / recovery_required 仍沿用既有边界，不重放终态记录。待审批查询、targeted resume HTTP、Web 审批与 Artifact 预览待后续任务。
 
 ## Workflow 编辑 HTTP API
 

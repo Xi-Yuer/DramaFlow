@@ -2,6 +2,7 @@ import {
   nodeRunErrorSchema,
   nodeRunSchema,
   runtimeValueMapSchema,
+  workflowDefinitionSchema,
   workflowIdentifierSchema,
   type NodeRun,
   type NodeRunError,
@@ -9,7 +10,7 @@ import {
 } from '@dramaflow/contracts';
 import { Prisma } from '@dramaflow/database';
 import { DatabaseService } from '../../database/database.service.js';
-import type { CreateNodeRunInput, NodeRunRepository } from '@dramaflow/workflow';
+import type { CreateNodeRunInput, HumanReviewNodeRunRepository } from '@dramaflow/workflow';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 
@@ -24,7 +25,7 @@ function snapshot(values: Record<string, RuntimeValue>): Prisma.InputJsonObject 
 }
 
 // 不提供未限定项目 / 运行的公开 Repository 实例，也不增加 HTTP 运行入口。
-class PrismaNodeRunRepository implements NodeRunRepository {
+class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
   constructor(
     private readonly db: DatabaseService,
     private readonly scope: RepositoryScope,
@@ -63,6 +64,69 @@ class PrismaNodeRunRepository implements NodeRunRepository {
           attempt: row.attempt,
           status: row.status,
           startedAt: row.startedAt.toISOString(),
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+    );
+  }
+
+  async getOrCreateHumanReviewRunning(
+    input: CreateNodeRunInput & { readonly workflowVersionId: string },
+  ): Promise<NodeRun> {
+    const { projectId, workflowRunId, ownerId } = this.scope;
+    if (input.workflowRunId !== workflowRunId) throw new Error('节点执行记录与已授权运行不匹配');
+    const nodeId = workflowIdentifierSchema.parse(input.nodeId);
+    const workflowVersionId = workflowIdentifierSchema.parse(input.workflowVersionId);
+    return this.db.client.$transaction(
+      async (tx) => {
+        // 与 Action attempt 分配使用同一把锁，不能 find 后无锁 create。
+        const lockKey = JSON.stringify([workflowRunId, nodeId]);
+        await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+        const run = await tx.workflowRun.findFirst({
+          where: { id: workflowRunId, projectId, project: { ownerId } },
+          select: { workflowId: true, workflowVersionId: true, status: true },
+        });
+        if (!run) throw new NotFoundException('运行不存在或无权访问');
+        if (run.status !== 'running' || run.workflowVersionId !== workflowVersionId)
+          throw new Error('Human Review 必须属于当前已 claim 的固定版本运行');
+        const version = await tx.workflowVersion.findFirst({
+          where: {
+            id: workflowVersionId,
+            workflowId: run.workflowId,
+            workflow: { projectId, project: { ownerId } },
+          },
+          select: { definition: true },
+        });
+        const node =
+          version &&
+          workflowDefinitionSchema
+            .parse(version.definition)
+            .nodes.find((node) => node.id === nodeId);
+        if (!node || node.type !== 'flow.human_review' || node.typeVersion !== 1)
+          throw new Error('固定运行版本中的节点不是 flow.human_review@1');
+        // Compiler 已 gate：无环、分支区域外、审核之间有先后依赖；每节点仅一次逻辑审核。
+        // 不按 latest running 猜身份；任何终态或多 attempt 的旧记录均拒绝复用。
+        const existing = await tx.nodeRun.findMany({
+          where: { projectId, workflowRunId, nodeId },
+          take: 2,
+        });
+        const previous = existing[0];
+        if (
+          previous &&
+          (existing.length !== 1 || previous.attempt !== 1 || previous.status !== 'running')
+        )
+          throw new Error('Human Review 已结束或存在不支持的 attempt 历史');
+        const row =
+          previous ??
+          (await tx.nodeRun.create({ data: { projectId, workflowRunId, nodeId, attempt: 1 } }));
+        return nodeRunSchema.parse({
+          id: row.id,
+          workflowRunId: row.workflowRunId,
+          nodeId: row.nodeId,
+          attempt: row.attempt,
+          status: row.status,
+          startedAt: row.startedAt.toISOString(),
+          ...(row.inputs !== null ? { inputs: row.inputs } : {}),
         });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
@@ -124,7 +188,7 @@ export class NodeRunRepositories {
     ownerId: string,
     rawProjectId: string,
     rawWorkflowRunId: string,
-  ): Promise<NodeRunRepository> {
+  ): Promise<HumanReviewNodeRunRepository> {
     const projectId = z.uuid().parse(rawProjectId);
     const workflowRunId = workflowIdentifierSchema.parse(rawWorkflowRunId);
     const run = await this.db.client.workflowRun.findFirst({

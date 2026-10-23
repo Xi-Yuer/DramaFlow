@@ -1,4 +1,6 @@
-import type { NodeRunError } from '@dramaflow/contracts';
+import { isGraphBubbleUp } from '@langchain/langgraph';
+import type { NodeRunRepository } from '../run/node-run-repository.js';
+import type { NodeDefinition, NodeRunError } from '@dramaflow/contracts';
 
 const stageCodes = {
   create_run: 'NODE_RUN_CREATION_FAILED',
@@ -46,4 +48,22 @@ export class NodeRunRecordingError extends NodeExecutionError {
     this.name = 'NodeRunRecordingError';
     this.message = `${error.message}；失败记录写入也失败`;
   }
+}
+
+// Action 与 Human Review 共用失败记录边界，原生图控制流不属于业务失败。
+export async function failNodeRun(
+  repository: Pick<NodeRunRepository, 'markFailed'>,
+  node: NodeDefinition,
+  nodeRunId: string,
+  stage: NodeExecutionStage,
+  cause: unknown,
+): Promise<never> {
+  if (cause !== null && isGraphBubbleUp(cause)) throw cause;
+  const error = new NodeExecutionError(node.id, node.type, stage, cause);
+  try {
+    await repository.markFailed(nodeRunId, toNodeRunError(error));
+  } catch (recordingError) {
+    throw new NodeRunRecordingError(nodeRunId, error, recordingError);
+  }
+  throw error;
 }

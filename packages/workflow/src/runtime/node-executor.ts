@@ -1,14 +1,8 @@
 import type { NodeDefinition, RuntimeValue, WorkflowDefinition } from '@dramaflow/contracts';
 import type { RunnableConfig } from '@langchain/core/runnables';
-import { isGraphBubbleUp } from '@langchain/langgraph';
 import { NodeRegistry } from '../node/registry.js';
 import type { BindingResolver } from './binding-resolver.js';
-import {
-  NodeExecutionError,
-  NodeRunRecordingError,
-  toNodeRunError,
-  type NodeExecutionStage,
-} from './node-execution-error.js';
+import { failNodeRun, type NodeExecutionStage } from './node-execution-error.js';
 import type { NodeRunRepository } from '../run/node-run-repository.js';
 import type { RuntimeValueCodec } from './values/runtime-value-codec.js';
 import type { RuntimeValueContext } from './values/value-codec.js';
@@ -61,7 +55,7 @@ export class DefaultNodeExecutor implements NodeExecutor {
         workflowInputs: context.workflow.inputs,
       });
     } catch (cause) {
-      return this.failNodeRun(node, nodeRun.id, 'resolve_input', cause);
+      return failNodeRun(this.nodeRunRepository, node, nodeRun.id, 'resolve_input', cause);
     }
 
     await this.nodeRunRepository.updateInputs(nodeRun.id, runtimeInputs);
@@ -101,27 +95,10 @@ export class DefaultNodeExecutor implements NodeExecutor {
         });
       }
     } catch (cause) {
-      return this.failNodeRun(node, nodeRun.id, stage, cause);
+      return failNodeRun(this.nodeRunRepository, node, nodeRun.id, stage, cause);
     }
 
     await this.nodeRunRepository.markCompleted(nodeRun.id, encodedOutputs);
     return { output: encodedOutputs };
-  }
-
-  private async failNodeRun(
-    node: NodeDefinition,
-    nodeRunId: string,
-    stage: NodeExecutionStage,
-    cause: unknown,
-  ): Promise<never> {
-    // 中断、父图 Command 等原生控制异常必须交还 LangGraph，不能记为业务失败。
-    if (cause !== null && isGraphBubbleUp(cause)) throw cause;
-    const error = new NodeExecutionError(node.id, node.type, stage, cause);
-    try {
-      await this.nodeRunRepository.markFailed(nodeRunId, toNodeRunError(error));
-    } catch (recordingError) {
-      throw new NodeRunRecordingError(nodeRunId, error, recordingError);
-    }
-    throw error;
   }
 }

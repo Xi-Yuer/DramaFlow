@@ -24,7 +24,7 @@ import {
   type WorkflowVersionRepository,
   type StartWorkflowRunInput,
 } from '../src/index.js';
-import { nodeRunRepositoryFixture } from './node-run-fixture.js';
+import { auditedNodeRunRepositoryFixture } from './node-run-fixture.js';
 
 export function workflowRunnerFixture() {
   const order: string[] = [];
@@ -132,7 +132,7 @@ export function workflowRunnerFixture() {
       }),
     markCancelled: vi.fn<WorkflowRunRepository['markCancelled']>(),
   } satisfies WorkflowRunRepository;
-  const nodeRuns = nodeRunRepositoryFixture();
+  const nodeRuns = auditedNodeRunRepositoryFixture();
   const execute = vi.fn(async (values: { a: number; b: number }) => {
     order.push('execute');
     return { result: values.a + values.b, internal: '内部数据' };
@@ -174,6 +174,7 @@ export function workflowRunnerFixture() {
     executorFactory,
     checkpointer,
     async () => ({ bindings, codec }),
+    async () => nodeRuns,
   );
   const graphs: CompiledWorkflow[] = [];
   const compile = vi

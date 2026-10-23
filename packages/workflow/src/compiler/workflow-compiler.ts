@@ -14,6 +14,7 @@ import {
 } from '../definition/validate-publish.js';
 import { createWorkflowDefinitionSnapshot } from '../definition/version.js';
 import { NodeRegistry } from '../node/registry.js';
+import type { HumanReviewNodeRunRepository } from '../run/node-run-repository.js';
 import type { NodeExecutor } from '../runtime/node-executor.js';
 import { WorkflowStateAnnotation, type WorkflowState } from '../runtime/state.js';
 import { collectNodeDependencies, DependencyCompiler } from './dependency.compiler.js';
@@ -49,6 +50,9 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     private readonly createExecutor: NodeExecutorFactory,
     private readonly checkpointer: BaseCheckpointSaver,
     private readonly createValueServices?: WorkflowValueServicesFactory,
+    private readonly createHumanReviewRuns?: (
+      run: WorkflowRun,
+    ) => Promise<HumanReviewNodeRunRepository>,
   ) {}
 
   async compile(input: WorkflowDefinition, run: WorkflowRun): Promise<CompiledWorkflow> {
@@ -119,6 +123,9 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     if (needsValueServices && !this.createValueServices)
       throw new Error('If / Human Review 编译必须显式注入 BindingResolver / Codec');
     const valueServices = needsValueServices ? await this.createValueServices!(run) : undefined;
+    if (reviewNodeIds.size && !this.createHumanReviewRuns)
+      throw new Error('Human Review 编译必须显式注入 NodeRun Repository');
+    const reviewRuns = reviewNodeIds.size ? await this.createHumanReviewRuns!(run) : undefined;
     const executor = entries.some((entry) => actionStrategy.supports(entry.declaration.manifest))
       ? valueServices
         ? await this.createExecutor(run, valueServices)
@@ -144,12 +151,13 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
           },
         });
       } else if (reviewStrategy.supports(declaration.manifest)) {
-        if (!valueServices) throw new Error('Human Review 执行服务未配置');
+        if (!valueServices || !reviewRuns) throw new Error('Human Review 执行服务未配置');
         reviewStrategy.compile({
           node,
           declaration,
           workflow: definition,
           services: valueServices,
+          nodeRuns: reviewRuns,
           addNode: (id, action) => {
             graph.addNode(id, action);
           },

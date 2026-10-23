@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Command } from '@langchain/langgraph';
+import { Command, GraphInterrupt, ParentCommand } from '@langchain/langgraph';
 import { z } from 'zod';
 import { StringType, type NodeDefinition, type WorkflowDefinition } from '@dramaflow/contracts';
 import {
@@ -9,6 +9,8 @@ import {
   validateWorkflowForPublish,
   workflowStateSchema,
 } from '../src/index.js';
+import { HumanReviewNodeCompilationStrategy } from '../src/compiler/human-review/strategy.js';
+import type { LangGraphNode } from '../src/index.js';
 import { analyzeStaticDagExecution } from '../src/compiler/action-dag-execution-analysis.js';
 import { analyzeSimpleIfExecution } from '../src/compiler/if/analysis.js';
 import { workflowRunnerFixture } from './workflow-runner-fixture.js';
@@ -94,7 +96,7 @@ async function resume(f: ReturnType<typeof fixture>, value: unknown) {
 }
 
 describe('生产 Human Review 专用策略 / 原生 interrupt', () => {
-  it('review-only 可发布执行；只创建值服务，不创建 Action Executor 或 NodeRun', async () => {
+  it('review-only 可发布执行；专用审计不进入 Action Executor', async () => {
     const d: WorkflowDefinition = { inputs: [], nodes: [node('R', true)], edges: [], outputs: [] };
     const f = fixture(d);
     expect(validateWorkflowForPublish(f.version.definition, f.registry)).toHaveLength(1);
@@ -115,6 +117,19 @@ describe('生产 Human Review 专用策略 / 原生 interrupt', () => {
     expect(JSON.parse(JSON.stringify(waiting.interrupts[0]!.value))).toEqual(
       waiting.interrupts[0]!.value,
     );
+    const audit = f.nodeRuns.getRecords()[0]!;
+    expect(audit).toMatchObject({
+      nodeId: 'R',
+      attempt: 1,
+      status: 'running',
+      inputs: { content: inline(text) },
+    });
+    expect(audit.outputs).toBeUndefined();
+    expect(audit.error).toBeUndefined();
+    expect(f.nodeRuns.markFailed).not.toHaveBeenCalled();
+    expect(f.nodeRuns.updateInputs).toHaveBeenCalledExactlyOnceWith(audit.id, {
+      content: inline(text),
+    });
     expect(f.executorFactory).not.toHaveBeenCalled();
     expect(f.nodeRuns.createRunning).not.toHaveBeenCalled();
     expect(await resume(f, { action: 'approve' })).toMatchObject({ status: 'completed' });
@@ -123,6 +138,20 @@ describe('生产 Human Review 专用策略 / 原生 interrupt', () => {
       action: inline('approve'),
       feedback: inline(''),
     });
+    expect(f.nodeRuns.getRecords()).toHaveLength(1);
+    expect(f.nodeRuns.getRecords()[0]).toMatchObject({
+      id: audit.id,
+      attempt: 1,
+      status: 'completed',
+      inputs: audit.inputs,
+      outputs: (await state(f)).state.outputs.R,
+    });
+    expect(f.nodeRuns.getOrCreateHumanReviewRunning).toHaveBeenCalledTimes(2);
+    expect(f.nodeRuns.updateInputs).toHaveBeenCalledTimes(1);
+    expect(f.nodeRuns.markCompleted).toHaveBeenCalledExactlyOnceWith(
+      audit.id,
+      (await state(f)).state.outputs.R,
+    );
     expect(f.executorFactory).not.toHaveBeenCalled();
     expect(f.nodeRuns.createRunning).not.toHaveBeenCalled();
   });
@@ -164,6 +193,16 @@ describe('生产 Human Review 专用策略 / 原生 interrupt', () => {
     ]);
     expect(f.resolveInputs.mock.calls.filter(([c]) => c.node.id === 'R1')).toHaveLength(2);
     expect(f.nodeRuns.markFailed).not.toHaveBeenCalled();
+    const records = f.nodeRuns.getRecords();
+    expect(records.map((row) => [row.nodeId, row.attempt, row.status])).toEqual([
+      ['A', 1, 'completed'],
+      ['R1', 1, 'completed'],
+      ['B', 1, 'completed'],
+    ]);
+    const audit = records.find((row) => row.nodeId === 'R1')!;
+    expect(audit.inputs).toEqual({ content: inline(text) });
+    expect(audit.outputs).toEqual((await state(f)).state.outputs.R1);
+    expect(f.nodeRuns.updateInputs.mock.calls.filter(([id]) => id === audit.id)).toHaveLength(1);
     expect(f.runs.markFailed).not.toHaveBeenCalled();
   });
   it.each([
@@ -183,6 +222,19 @@ describe('生产 Human Review 专用策略 / 原生 interrupt', () => {
     expect(await f.runs.getById('run-1')).toMatchObject({ status: 'failed' });
     expect(f.executeNode.mock.calls.map(([n]) => n.id)).toEqual(['A']);
     expect((await state(f)).state.outputs.R1).toBeUndefined();
+    const audit = f.nodeRuns.getRecords().find((row) => row.nodeId === 'R1')!;
+    expect(audit).toMatchObject({
+      status: 'failed',
+      attempt: 1,
+      error: { stage: 'execute', code: 'NODE_EXECUTION_FAILED' },
+    });
+    expect(audit.outputs).toBeUndefined();
+    expect(f.nodeRuns.markFailed).toHaveBeenCalledExactlyOnceWith(
+      audit.id,
+      expect.objectContaining({ stage: 'execute' }),
+    );
+    expect(f.nodeRuns.getRecords()).toHaveLength(2);
+    expect(f.nodeRuns.updateInputs.mock.calls.filter(([id]) => id === audit.id)).toHaveLength(1);
     expect(f.nodeRuns.createRunning).toHaveBeenCalledTimes(1);
   });
   it('reference content 在 decode 前拒绝，不 materialize Artifact', async () => {
@@ -242,6 +294,136 @@ describe('生产 Human Review 专用策略 / 原生 interrupt', () => {
     expect(f.runs.markWaiting).not.toHaveBeenCalled();
     expect(f.nodeRuns.createRunning).not.toHaveBeenCalled();
   });
+  it('Binding 失败也有 failed 审核记录，未解析 inputs 保持缺失', async () => {
+    const f = fixture({ inputs: [], nodes: [node('R', true)], edges: [], outputs: [] });
+    f.resolveInputs.mockRejectedValue(new Error('来源缺失'));
+    await expect(start(f)).rejects.toMatchObject({ nodeId: 'R', stage: 'resolve_input' });
+    const records = f.nodeRuns.getRecords();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      nodeId: 'R',
+      attempt: 1,
+      status: 'failed',
+      error: { stage: 'resolve_input' },
+    });
+    expect(records[0]!.inputs).toBeUndefined();
+    expect(f.nodeRuns.updateInputs).not.toHaveBeenCalled();
+  });
+  it('config 校验失败也创建 failed 审核记录，原 RuntimeValue inputs 已记录', async () => {
+    const f = fixture({ inputs: [], nodes: [node('R', true)], edges: [], outputs: [] });
+    vi.spyOn(f.registry.get('flow.human_review', 1).configSchema, 'parse').mockImplementation(
+      () => {
+        throw new Error('无效配置');
+      },
+    );
+    await expect(start(f)).rejects.toMatchObject({ nodeId: 'R', stage: 'validate_config' });
+    expect(f.nodeRuns.getRecords()).toHaveLength(1);
+    expect(f.nodeRuns.getRecords()[0]).toMatchObject({
+      nodeId: 'R',
+      attempt: 1,
+      status: 'failed',
+      inputs: { content: inline(text) },
+      error: { stage: 'validate_config' },
+    });
+    expect(f.runs.markWaiting).not.toHaveBeenCalled();
+  });
+  it('resume 输入漂移拒绝，原 inputs 保留且同一审核记 failed', async () => {
+    const f = fixture();
+    await start(f);
+    const original = f.nodeRuns.getRecords().find((row) => row.nodeId === 'R1')!;
+    f.resolveInputs.mockResolvedValue({ content: inline('已漂移的内容') });
+    await expect(resume(f, { action: 'approve' })).rejects.toMatchObject({
+      nodeId: 'R1',
+      stage: 'resolve_input',
+      code: 'NODE_INPUT_RESOLUTION_FAILED',
+    });
+    const audits = f.nodeRuns.getRecords().filter((row) => row.nodeId === 'R1');
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({
+      id: original.id,
+      status: 'failed',
+      inputs: original.inputs,
+      attempt: 1,
+    });
+    expect(audits[0]!.outputs).toBeUndefined();
+    expect(f.nodeRuns.updateInputs.mock.calls.filter(([id]) => id === original.id)).toHaveLength(1);
+  });
+  it.each(['validate_output', 'encode_output'] as const)(
+    '%s 错误写入原审核 failed',
+    async (stage) => {
+      const f = fixture();
+      await start(f);
+      if (stage === 'validate_output')
+        vi.spyOn(f.registry.get('flow.human_review', 1).outputSchema, 'parse').mockImplementation(
+          () => {
+            throw new Error('无效业务输出');
+          },
+        );
+      else vi.spyOn(f.codec, 'encode').mockRejectedValue(new Error('编码失败'));
+      await expect(resume(f, { action: 'approve' })).rejects.toMatchObject({ nodeId: 'R1', stage });
+      const audit = f.nodeRuns.getRecords().find((row) => row.nodeId === 'R1')!;
+      expect(audit).toMatchObject({ attempt: 1, status: 'failed', error: { stage } });
+      expect(audit.outputs).toBeUndefined();
+      expect((await state(f)).state.outputs.R1).toBeUndefined();
+    },
+  );
+  it.each(['getOrCreateHumanReviewRunning', 'updateInputs', 'markCompleted'] as const)(
+    '%s 基础设施失败不反向标为业务 failed 或提交 State',
+    async (method) => {
+      const f = fixture();
+      if (method === 'markCompleted') await start(f);
+      const error = new Error('审计仓储不可用');
+      f.nodeRuns[method].mockRejectedValue(error);
+      await expect(
+        method === 'markCompleted' ? resume(f, { action: 'approve' }) : start(f),
+      ).rejects.toBe(error);
+      expect(f.nodeRuns.markFailed).not.toHaveBeenCalled();
+      const audit = f.nodeRuns.getRecords().find((row) => row.nodeId === 'R1');
+      if (audit) expect(audit).toMatchObject({ attempt: 1, status: 'running' });
+      if (f.graphs.length) expect((await state(f)).state.outputs.R1).toBeUndefined();
+    },
+  );
+  it.each([new GraphInterrupt(), new ParentCommand(new Command({ goto: 'parent' }))])(
+    '原生 %s 信号从策略原样抛出，审核继续 running',
+    async (signal) => {
+      const d: WorkflowDefinition = {
+        inputs: [],
+        nodes: [node('R', true)],
+        edges: [],
+        outputs: [],
+      };
+      const f = fixture(d);
+      await start(f);
+      const initial = (await state(f)).state;
+      let action: LangGraphNode | undefined;
+      new HumanReviewNodeCompilationStrategy().compile({
+        node: d.nodes[0]!,
+        declaration: f.registry.get('flow.human_review', 1),
+        workflow: d,
+        services: { bindings: f.bindings, codec: f.codec },
+        nodeRuns: f.nodeRuns,
+        addNode: (_id, fn) => {
+          action = fn;
+        },
+      });
+      vi.spyOn(f.codec, 'decodeRecord').mockRejectedValue(signal);
+      await expect(action!(initial, {})).rejects.toBe(signal);
+      expect(f.nodeRuns.markFailed).not.toHaveBeenCalled();
+      expect(f.nodeRuns.getRecords()).toHaveLength(1);
+      expect(f.nodeRuns.getRecords()[0]).toMatchObject({ status: 'running', attempt: 1 });
+    },
+  );
+  it('错误记录失败保留业务与仓储双重原因', async () => {
+    const f = fixture();
+    await start(f);
+    const recordingError = new Error('审计不可写');
+    f.nodeRuns.markFailed.mockRejectedValue(recordingError);
+    await expect(resume(f, { action: 'invalid' })).rejects.toMatchObject({
+      name: 'NodeRunRecordingError',
+      recordingError,
+      nodeId: 'R1',
+    });
+  });
   it('串行两次 waiting/resume；原生 interrupt 独立，decision 保留且动作各执行一次', async () => {
     const f = fixture(serial(true));
     // 仓储测试替身记录生产 waitingRevision 的递增语义；不修改 Runner/HTTP 协议。
@@ -269,6 +451,13 @@ describe('生产 Human Review 专用策略 / 原生 interrupt', () => {
       feedback: inline('第一轮通过'),
     });
     expect(second.state.outputs.R2).toBeUndefined();
+    expect(f.nodeRuns.getRecords().map((row) => [row.nodeId, row.status])).toEqual([
+      ['A', 'completed'],
+      ['R1', 'completed'],
+      ['B', 'completed'],
+      ['R2', 'running'],
+    ]);
+
     expect(f.executeNode.mock.calls.map(([n]) => n.id)).toEqual(['A', 'B']);
     expect(await resume(f, { action: 'reject', feedback: '第二轮修改' })).toMatchObject({
       status: 'completed',
@@ -284,6 +473,21 @@ describe('生产 Human Review 专用策略 / 原生 interrupt', () => {
     expect(f.executeNode.mock.calls.map(([n]) => n.id)).toEqual(['A', 'B', 'C']);
     expect(f.nodeRuns.createRunning.mock.calls.map(([n]) => n.nodeId)).toEqual(['A', 'B', 'C']);
     expect(f.runs.markWaiting).toHaveBeenCalledTimes(2);
+    const records = f.nodeRuns.getRecords();
+    expect(records).toHaveLength(5);
+    for (const nodeId of ['R1', 'R2']) {
+      const audits = records.filter((row) => row.nodeId === nodeId);
+      expect(audits).toHaveLength(1);
+      expect(audits[0]).toMatchObject({
+        attempt: 1,
+        status: 'completed',
+        inputs: { content: inline(text) },
+        outputs: final.state.outputs[nodeId],
+      });
+      expect(
+        f.nodeRuns.updateInputs.mock.calls.filter(([id]) => id === audits[0]!.id),
+      ).toHaveLength(1);
+    }
   });
 });
 
@@ -457,17 +661,19 @@ describe('Human Review 与 If / capability / recursion budget', () => {
       recursionLimit: depth + 2,
     });
     expect(await start(f)).toMatchObject({ status: 'waiting' });
-    const initial = { ...(await state(f)).state, outputs: {}, execution: {} };
     expect(await resume(f, { action: 'approve' })).toMatchObject({ status: 'completed' });
     // 每次 resume 以 checkpoint 当前位置继续，不把所有历史 step 计入本次预算。
-    const graph = f.graphs[0]!;
     for (const limit of depth < 2 ? [1] : [depth - 1, depth]) {
+      const boundary = fixture(d);
+      await start(boundary);
       const cfg = {
-        configurable: { thread_id: `boundary-${depth}-${limit}` },
+        configurable: { thread_id: 'thread-7' },
         recursionLimit: limit,
       };
-      await graph.invoke(initial, cfg);
-      const execution = graph.invoke(new Command({ resume: { action: 'approve' } }), cfg);
+      const execution = boundary.graphs[0]!.invoke(
+        new Command({ resume: { action: 'approve' } }),
+        cfg,
+      );
       if (depth > 1 && limit === depth - 1)
         await expect(execution).rejects.toMatchObject({ name: 'GraphRecursionError' });
       else await expect(execution).resolves.toBeDefined();

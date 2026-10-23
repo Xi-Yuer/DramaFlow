@@ -7,14 +7,16 @@ import {
   type RuntimeValue,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
-import { interrupt, isGraphBubbleUp } from '@langchain/langgraph';
+import { interrupt } from '@langchain/langgraph';
 import {
   createHumanReviewInterruptPayload,
   humanReviewOutputFromDecision,
   isHumanReviewNodeManifest,
 } from '../../node/human-review.js';
 import type { NodeDeclaration } from '../../node/type.js';
-import { NodeExecutionError, type NodeExecutionStage } from '../../runtime/node-execution-error.js';
+import type { HumanReviewNodeRunRepository } from '../../run/node-run-repository.js';
+import { areRuntimeValueMapsEqual } from '../../runtime/values/runtime-value-equivalence.js';
+import { failNodeRun, type NodeExecutionStage } from '../../runtime/node-execution-error.js';
 import type { LangGraphNode, NodeCompilationStrategy, WorkflowValueServices } from '../strategy.js';
 
 interface HumanReviewCompilationContext {
@@ -22,6 +24,7 @@ interface HumanReviewCompilationContext {
   declaration: NodeDeclaration;
   workflow: WorkflowDefinition;
   services: WorkflowValueServices;
+  nodeRuns: HumanReviewNodeRunRepository;
   addNode(id: string, node: LangGraphNode): void;
 }
 
@@ -30,26 +33,58 @@ export class HumanReviewNodeCompilationStrategy implements NodeCompilationStrate
     return isHumanReviewNodeManifest(manifest);
   }
 
-  compile({ node, declaration, workflow, services, addNode }: HumanReviewCompilationContext): void {
+  compile({
+    node,
+    declaration,
+    workflow,
+    services,
+    nodeRuns,
+    addNode,
+  }: HumanReviewCompilationContext): void {
     if (
       !this.supports(declaration.manifest) ||
       node.type !== declaration.manifest.type ||
       node.typeVersion !== declaration.manifest.version
     )
       throw new Error('Human Review 编译策略仅支持 flow.human_review@1');
-    // interrupt 前仅做纯数据转换；LangGraph 恢复时会从函数开头重入。
-    // 不创建 NodeRun，不提交输出，也不在这里管理 WorkflowRun waiting。
+    // 当前能力边界下每个 node / Run 仅一次逻辑审核；重入不是新 attempt。
     addNode(node.id, async (state) => {
-      let stage: NodeExecutionStage = 'resolve_input';
+      const acquire = () =>
+        nodeRuns.getOrCreateHumanReviewRunning({
+          workflowRunId: state.run.workflowRunId,
+          workflowVersionId: state.run.workflowVersionId,
+          nodeId: node.id,
+        });
+      let values: Record<string, RuntimeValue>;
       try {
-        const values = await services.bindings.resolveInputs({
+        values = await services.bindings.resolveInputs({
           node,
           nodeType: declaration.manifest,
           edges: workflow.edges,
           state,
           workflowInputs: workflow.inputs,
         });
-        stage = 'decode_input';
+      } catch (cause) {
+        const audit = await acquire();
+        return failNodeRun(nodeRuns, node, audit.id, 'resolve_input', cause);
+      }
+      // Repository 故障留作基础设施异常，不把持久化失败反向写成业务失败。
+      const audit = await acquire();
+      if (audit.inputs !== undefined) {
+        if (!areRuntimeValueMapsEqual(audit.inputs, values))
+          return failNodeRun(
+            nodeRuns,
+            node,
+            audit.id,
+            'resolve_input',
+            new Error('Human Review 输入与首次审核不一致'),
+          );
+      } else {
+        await nodeRuns.updateInputs(audit.id, values);
+      }
+      let stage: NodeExecutionStage = 'decode_input';
+      const encoded: Record<string, RuntimeValue> = {};
+      try {
         const content = values.content;
         if (!content || content.storage !== 'inline' || !isTypeAssignable(content.type, StringType))
           throw new Error('Human Review V1 仅支持 inline string content');
@@ -62,24 +97,23 @@ export class HumanReviewNodeCompilationStrategy implements NodeCompilationStrate
         stage = 'execute';
         const payload = createHumanReviewInterruptPayload(node.id, input, config);
         const decision = humanReviewDecisionV1Schema.parse(interrupt<unknown>(payload));
-        const result = humanReviewOutputFromDecision(input, decision);
         stage = 'validate_output';
+        const result = humanReviewOutputFromDecision(input, decision);
         const output = declaration.outputSchema.parse(result);
         stage = 'encode_output';
-        const encoded: Record<string, RuntimeValue> = {};
         for (const port of declaration.manifest.outputs) {
           encoded[port.key] = await services.codec.encode(output[port.key], {
             type: port.dataType,
             storagePolicy: port.storagePolicy ?? 'auto',
-            context: { ...identity, nodeId: node.id, outputKey: port.key },
+            context: { ...identity, nodeRunId: audit.id, nodeId: node.id, outputKey: port.key },
           });
         }
-        return { outputs: { [node.id]: encoded } };
-      } catch (error) {
-        // GraphInterrupt 属于官方暂停信号，不能包装成节点业务失败。
-        if (isGraphBubbleUp(error)) throw error;
-        throw new NodeExecutionError(node.id, node.type, stage, error);
+      } catch (cause) {
+        return failNodeRun(nodeRuns, node, audit.id, stage, cause);
       }
+      // 完成持久化之后才提交 State；markCompleted 失败不能转为业务 failed。
+      await nodeRuns.markCompleted(audit.id, encoded);
+      return { outputs: { [node.id]: encoded } };
     });
   }
 }

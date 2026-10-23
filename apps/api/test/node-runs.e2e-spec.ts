@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { END, START, StateGraph } from '@langchain/langgraph';
+import { END, START, StateGraph, MemorySaver } from '@langchain/langgraph';
 import {
   ImageType,
   StringType,
@@ -12,12 +12,17 @@ import {
   DatabaseService,
   NodeRunRepositories,
   WorkflowRunRepositories,
+  WorkflowVersionRepositories,
 } from '@dramaflow/server';
 import {
   ActionNodeCompilationStrategy,
   createBindingResolver,
   DefaultDataStoragePolicyResolver,
   DefaultNodeExecutor,
+  DefaultWorkflowCompiler,
+  DefaultWorkflowRunner,
+  DefaultWorkflowOutputResolver,
+  createHumanReviewNodeType,
   DefaultRuntimeValueCodec,
   NodeRegistry,
   WorkflowStateAnnotation,
@@ -205,6 +210,316 @@ async function videoFixture() {
     graph,
   };
 }
+
+// 复用现有隔离库设施，不启动 HTTP / Worker / Provider。
+async function reviewFixture(running = true, includeAction = false) {
+  const definition: WorkflowDefinition = {
+    inputs: [],
+    nodes: ['R1', 'R2'].map((id) => ({
+      id,
+      type: 'flow.human_review',
+      typeVersion: 1,
+      name: '人工审核',
+      inputs: { content: { type: 'constant', value: ' 原审核文本\n' } },
+      config: {},
+      ui: { position: { x: 0, y: 0 } },
+    })),
+    edges: [
+      {
+        id: 'review-order',
+        kind: 'control',
+        source: { nodeId: 'R1' },
+        target: { nodeId: 'R2' },
+      },
+    ],
+    outputs: [],
+  };
+  if (includeAction)
+    definition.nodes.push({
+      id: 'action',
+      type: 'test.action',
+      typeVersion: 1,
+      name: '本地操作',
+      inputs: {},
+      config: {},
+      ui: { position: { x: 0, y: 0 } },
+    });
+  const json = z.record(z.string(), z.json()).parse(definition);
+  const workflow = await db.workflow.upsert({
+    where: { projectId },
+    create: { projectId, name: '审核审计测试', draft: json },
+    update: {},
+  });
+  const previous = await db.workflowVersion.aggregate({
+    where: { workflowId: workflow.id },
+    _max: { version: true },
+  });
+  const versionNumber = (previous._max.version ?? 0) + 1;
+  const version = await db.workflowVersion.create({
+    data: {
+      workflowId: workflow.id,
+      version: versionNumber,
+      sourceRevision: versionNumber,
+      definition: json,
+    },
+  });
+  const runs = await workflowRuns.forProject(ownerId, projectId);
+  const run = await runs.create({
+    projectId,
+    workflowId: workflow.id,
+    workflowVersionId: version.id,
+    invocationKey: randomUUID(),
+    inputs: {},
+  });
+  if (running) await runs.markRunning(run.id);
+  const repository = await repositories.forRun(ownerId, projectId, run.id);
+  const input = {
+    workflowRunId: run.id,
+    workflowVersionId: version.id,
+    nodeId: 'R1',
+  };
+  return { repository, input, runs, run, definition };
+}
+const reviewInput = {
+  content: {
+    storage: 'inline' as const,
+    type: StringType,
+    value: ' 原审核文本\n',
+  },
+};
+
+describe('真实 PostgreSQL Human Review 重入审计', () => {
+  it('多 Repository 并发获取仅创建 attempt 1；inputs 一次记录，恢复读取原记录', async () => {
+    const f = await reviewFixture();
+    const other = await repositories.forRun(ownerId, projectId, f.run.id);
+    const rows = await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        (i % 2 ? other : f.repository).getOrCreateHumanReviewRunning(f.input),
+      ),
+    );
+    expect(new Set(rows.map((row) => row.id)).size).toBe(1);
+    expect(
+      rows.every((row) => row.attempt === 1 && row.status === 'running'),
+    ).toBe(true);
+    const id = rows[0]!.id;
+    await f.repository.updateInputs(id, reviewInput);
+    await expect(other.updateInputs(id, reviewInput)).rejects.toThrow();
+    await f.runs.markWaiting(f.run.id);
+    expect(await db.nodeRun.findUniqueOrThrow({ where: { id } })).toMatchObject(
+      { status: 'running', inputs: reviewInput, outputs: null, error: null },
+    );
+    await expect(other.getOrCreateHumanReviewRunning(f.input)).rejects.toThrow(
+      'claim',
+    );
+    await f.runs.claimWaitingForResume(f.run.id);
+    expect(await other.getOrCreateHumanReviewRunning(f.input)).toMatchObject({
+      id,
+      attempt: 1,
+      inputs: reviewInput,
+    });
+    expect(
+      await db.nodeRun.count({
+        where: { workflowRunId: f.run.id, nodeId: 'R1' },
+      }),
+    ).toBe(1);
+  });
+  it.each(['completed', 'failed'] as const)(
+    '不复用 %s 历史，不自动创建下一次审核 attempt',
+    async (terminal) => {
+      const f = await reviewFixture();
+      const first = await f.repository.getOrCreateHumanReviewRunning(f.input);
+      await f.repository.updateInputs(first.id, reviewInput);
+      if (terminal === 'completed')
+        await f.repository.markCompleted(first.id, {});
+      else
+        await f.repository.markFailed(first.id, {
+          stage: 'execute',
+          message: '决策无效',
+        });
+      await expect(
+        f.repository.getOrCreateHumanReviewRunning(f.input),
+      ).rejects.toThrow('已结束');
+      expect(
+        await db.nodeRun.count({
+          where: { workflowRunId: f.run.id, nodeId: 'R1' },
+        }),
+      ).toBe(1);
+    },
+  );
+  it('拒绝错误版本、非 Human Review、其他 Run / owner 和多 attempt 历史', async () => {
+    const f = await reviewFixture(true, true);
+    await expect(
+      f.repository.getOrCreateHumanReviewRunning({
+        ...f.input,
+        workflowVersionId: 'wrong-version',
+      }),
+    ).rejects.toThrow('固定版本');
+    await expect(
+      f.repository.getOrCreateHumanReviewRunning({
+        ...f.input,
+        nodeId: 'missing',
+      }),
+    ).rejects.toThrow('不是 flow.human_review');
+    await expect(
+      f.repository.getOrCreateHumanReviewRunning({
+        ...f.input,
+        workflowRunId: randomUUID(),
+      }),
+    ).rejects.toThrow('不匹配');
+    await expect(
+      repositories.forRun(otherId, projectId, f.run.id),
+    ).rejects.toThrow('无权访问');
+    // 即使已有普通 Action 风格 attempt 历史，也不能猜 latest running 来复用。
+    await f.repository.createRunning(f.input);
+    await f.repository.createRunning(f.input);
+    await expect(
+      f.repository.getOrCreateHumanReviewRunning(f.input),
+    ).rejects.toThrow('attempt 历史');
+    expect(
+      await db.nodeRun.count({
+        where: { workflowRunId: f.run.id, nodeId: 'R1' },
+      }),
+    ).toBe(2);
+  });
+  it.each(['approve', 'reject'])(
+    '正式策略 + Runner 两次串行等待恢复，最终 %s 审核仍为 completed attempt 1',
+    async (action) => {
+      const f = await reviewFixture(false);
+      const codec = new DefaultRuntimeValueCodec(
+        { resolve: vi.fn() },
+        { write: vi.fn() },
+        new DefaultDataStoragePolicyResolver(),
+      );
+      const compiler = new DefaultWorkflowCompiler(
+        new NodeRegistry([createHumanReviewNodeType()]),
+        async () => {
+          throw new Error('审核不得创建 Action Executor');
+        },
+        new MemorySaver(),
+        async () => ({ bindings: createBindingResolver(), codec }),
+        async () => f.repository,
+      );
+      const versions = await new WorkflowVersionRepositories(
+        database,
+      ).forProject(ownerId, projectId);
+      const runner = new DefaultWorkflowRunner(
+        versions,
+        f.runs,
+        compiler,
+        new DefaultWorkflowOutputResolver(),
+      );
+      expect(await runner.executeStart(f.run.id)).toMatchObject({
+        status: 'waiting',
+      });
+      const first = await db.nodeRun.findMany({
+        where: { workflowRunId: f.run.id },
+      });
+      expect(first).toHaveLength(1);
+      expect(first[0]).toMatchObject({
+        nodeId: 'R1',
+        attempt: 1,
+        status: 'running',
+        inputs: reviewInput,
+        outputs: null,
+        error: null,
+      });
+      expect(
+        await runner.executeResume({
+          workflowRunId: f.run.id,
+          value: { action: 'approve' },
+        }),
+      ).toMatchObject({ status: 'waiting' });
+      const waiting = await db.workflowRun.findUniqueOrThrow({
+        where: { id: f.run.id },
+      });
+      expect(waiting.waitingRevision).toBe(2);
+      expect(
+        await runner.executeResume({
+          workflowRunId: f.run.id,
+          value: { action, feedback: '正式审计反馈' },
+        }),
+      ).toMatchObject({ status: 'completed' });
+      const rows = await db.nodeRun.findMany({
+        where: { workflowRunId: f.run.id },
+        orderBy: { nodeId: 'asc' },
+      });
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toMatchObject({
+        id: first[0]!.id,
+        nodeId: 'R1',
+        attempt: 1,
+        status: 'completed',
+        inputs: reviewInput,
+        outputs: {
+          ...reviewInput,
+          action: { storage: 'inline', type: StringType, value: 'approve' },
+          feedback: { storage: 'inline', type: StringType, value: '' },
+        },
+      });
+      expect(rows[1]).toMatchObject({
+        nodeId: 'R2',
+        attempt: 1,
+        status: 'completed',
+        inputs: reviewInput,
+        outputs: {
+          ...reviewInput,
+          action: { storage: 'inline', type: StringType, value: action },
+          feedback: {
+            storage: 'inline',
+            type: StringType,
+            value: '正式审计反馈',
+          },
+        },
+      });
+    },
+  );
+  it('非法 resume decision 在同一条审核上写 failed', async () => {
+    const f = await reviewFixture(false);
+    const codec = new DefaultRuntimeValueCodec(
+      { resolve: vi.fn() },
+      { write: vi.fn() },
+      new DefaultDataStoragePolicyResolver(),
+    );
+    const compiler = new DefaultWorkflowCompiler(
+      new NodeRegistry([createHumanReviewNodeType()]),
+      async () => {
+        throw new Error('审核不得创建 Action Executor');
+      },
+      new MemorySaver(),
+      async () => ({ bindings: createBindingResolver(), codec }),
+      async () => f.repository,
+    );
+    const versions = await new WorkflowVersionRepositories(database).forProject(
+      ownerId,
+      projectId,
+    );
+    const runner = new DefaultWorkflowRunner(
+      versions,
+      f.runs,
+      compiler,
+      new DefaultWorkflowOutputResolver(),
+    );
+    await runner.executeStart(f.run.id);
+    await expect(
+      runner.executeResume({
+        workflowRunId: f.run.id,
+        value: { action: 'invalid' },
+      }),
+    ).rejects.toMatchObject({ code: 'NODE_EXECUTION_FAILED' });
+    const rows = await db.nodeRun.findMany({
+      where: { workflowRunId: f.run.id },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      nodeId: 'R1',
+      attempt: 1,
+      status: 'failed',
+      inputs: reviewInput,
+      outputs: null,
+      error: { stage: 'execute', code: 'NODE_EXECUTION_FAILED' },
+    });
+  });
+});
 
 describe('真实 PostgreSQL NodeRun', () => {
   it('业务已成功但完成记录不可用时保留 running，不反向记录为 failed 或写入 State', async () => {
