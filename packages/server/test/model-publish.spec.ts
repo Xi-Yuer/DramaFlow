@@ -55,7 +55,6 @@ describe('发布只检查本地能力配置', () => {
         service.assertPublishableConfiguration(
           tx,
           'owner',
-          '00000000-0000-4000-8000-000000000001',
           '00000000-0000-4000-8000-000000000002',
           'text.generate',
         ),

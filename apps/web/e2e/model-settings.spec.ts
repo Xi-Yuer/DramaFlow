@@ -85,14 +85,12 @@ async function addModel(page: Page, name: string, withSettings = true) {
     drawer(page).getByRole('article', { name: `模型 ${name}`, exact: true }),
   ).toBeVisible();
 }
-async function readProviders(api: APIRequestContext, id: string) {
-  return modelProviderListSchema.parse(
-    await (await api.get(`/api/v1/projects/${id}/providers`)).json(),
-  );
+async function readProviders(api: APIRequestContext) {
+  return modelProviderListSchema.parse(await (await api.get(`/api/v1/providers`)).json());
 }
-async function readModels(api: APIRequestContext, id: string) {
+async function readModels(api: APIRequestContext) {
   return modelConfigurationListSchema.parse(
-    await (await api.get(`/api/v1/projects/${id}/model-configurations`)).json(),
+    await (await api.get(`/api/v1/model-configurations`)).json(),
   );
 }
 async function cacheSnapshot(page: Page) {
@@ -175,11 +173,11 @@ test('项目到模型设置：创建供应商、配置凭证和文本模型，�
   await addModel(page, 'custom-text-model');
   const card = drawer(page).getByRole('article', { name: '模型 custom-text-model', exact: true });
   await expect(card.getByText('可供工作流选择', { exact: true })).toBeVisible();
-  expect((await readModels(request, p.id)).items[0]).toMatchObject({
+  expect((await readModels(request)).items[0]).toMatchObject({
     model: 'custom-text-model',
     settings: { temperature: 0, maxOutputTokens: 64 },
   });
-  expect((await readProviders(request, p.id)).items[0]).toMatchObject({
+  expect((await readProviders(request)).items[0]).toMatchObject({
     providerDefinitionId: 'anthropic',
     pluginId: 'text_generation',
     configuration: {
@@ -217,7 +215,7 @@ test('同一供应商可添加多个模型，启停状态和不可选原因由�
   await addModel(page, 'model-one');
   await openAddModel(page);
   await addModel(page, 'model-two', false);
-  expect((await readModels(request, p.id)).items).toHaveLength(2);
+  expect((await readModels(request)).items).toHaveLength(2);
   const card = drawer(page).getByRole('article', { name: '模型 model-two', exact: true });
   await card.getByRole('button', { name: '停用模型' }).click();
   await expect(card.getByText('模型已停用', { exact: true })).toBeVisible();
@@ -234,7 +232,7 @@ test('同一供应商可添加多个模型，启停状态和不可选原因由�
   await expect(supplier.getByText('已配置', { exact: true })).toBeVisible();
   await modelsTab(page).click();
   await expect(drawer(page).getByText('供应商已停用', { exact: true })).toHaveCount(2);
-  expect((await readModels(request, p.id)).items.every((model) => model.enabled)).toBe(true);
+  expect((await readModels(request)).items.every((model) => model.enabled)).toBe(true);
   await suppliersTab(page).click();
   await supplier.getByRole('button', { name: '管理', exact: true }).click();
   await dialog(page, '管理 OpenAI').getByRole('button', { name: '启用供应商' }).click();
@@ -267,7 +265,7 @@ test('凭证轮换明确且输入总为空；取消、成功和失败均不恢�
   await expect(dialog(page, '轮换访问凭证')).toHaveCount(0);
   await rotate();
   await expect(dialog(page, '轮换访问凭证').getByLabel('API Key', { exact: true })).toHaveValue('');
-  await page.route('**/api/v1/projects/*/providers/*/credentials', (route) =>
+  await page.route('**/api/v1/providers/*/credentials', (route) =>
     route.fulfill({ status: 503, json: { message: next } }),
   );
   await dialog(page, '轮换访问凭证').getByLabel('API Key', { exact: true }).fill(next);
@@ -293,7 +291,7 @@ test('供应商创建失败保留非 Secret 表单，凭证清空且不进入错
     .click();
   await form.getByLabel('API Key', { exact: true }).fill(secret);
   let failed = false;
-  await page.route('**/api/v1/projects/*/providers/catalog', async (route) => {
+  await page.route('**/api/v1/providers/catalog', async (route) => {
     if (route.request().method() === 'POST' && !failed) {
       failed = true;
       await route.fulfill({
@@ -309,7 +307,7 @@ test('供应商创建失败保留非 Secret 表单，凭证清空且不进入错
   await expect(form.getByText('支持：文本生成', { exact: false })).toBeVisible();
   await expect(form.getByLabel('API Key', { exact: true })).toHaveValue('');
   await expectNoSecret(page, secret);
-  expect((await readProviders(request, p.id)).items).toHaveLength(0);
+  expect((await readProviders(request)).items).toHaveLength(0);
   await form.getByLabel('API Key', { exact: true }).fill(secret);
   await form.getByRole('button', { name: '保存 API Key', exact: true }).click();
   await expect(serviceCard(page, 'OpenAI').getByText('已配置', { exact: true })).toBeVisible();
@@ -328,24 +326,24 @@ test('模型创建及启停失败不误报成功；读取错误有明确重试',
     .getByRole('textbox', { name: '模型名称', exact: true })
     .fill('recover-model');
   await dialog(page, '添加模型').getByRole('spinbutton', { name: '最大输出 Token 数' }).fill('64');
-  await page.route('**/api/v1/projects/*/model-configurations', async (route) => {
+  await page.route('**/api/v1/model-configurations', async (route) => {
     if (route.request().method() === 'POST') await route.abort('failed');
     else await route.continue();
   });
   await dialog(page, '添加模型').getByRole('button', { name: '添加模型', exact: true }).click();
   await expect(dialog(page, '添加模型').getByText('模型未确认保存', { exact: true })).toBeVisible();
-  expect((await readModels(request, p.id)).items).toHaveLength(0);
-  await page.unroute('**/api/v1/projects/*/model-configurations');
+  expect((await readModels(request)).items).toHaveLength(0);
+  await page.unroute('**/api/v1/model-configurations');
   await dialog(page, '添加模型').getByRole('button', { name: '添加模型', exact: true }).click();
   const card = drawer(page).getByRole('article', { name: '模型 recover-model', exact: true });
   await expect(card.getByText('可供工作流选择', { exact: true })).toBeVisible();
-  await page.route('**/api/v1/projects/*/model-configurations/*', (route) =>
+  await page.route('**/api/v1/model-configurations/*', (route) =>
     route.fulfill({ status: 503, json: {} }),
   );
   await card.getByRole('button', { name: '停用模型' }).click();
   await expect(drawer(page).getByText('操作未确认', { exact: true })).toBeVisible();
   await expect(card.getByText('可供工作流选择', { exact: true })).toBeVisible();
-  await page.unroute('**/api/v1/projects/*/model-configurations/*');
+  await page.unroute('**/api/v1/model-configurations/*');
   let pluginReads = 0;
   await page.route('**/api/v1/provider-plugins', async (route) => {
     pluginReads += 1;
@@ -360,13 +358,9 @@ test('模型创建及启停失败不误报成功；读取错误有明确重试',
   await expect(card.getByText('可供工作流选择', { exact: true })).toBeVisible();
 });
 
-test('切换项目不复用另一项目配置；无权访问项目不能打开设置', async ({
-  page,
-  request,
-  foreignId,
-}) => {
-  const a = await project(request, '供应商项目 A'),
-    b = await project(request, '空白项目 B');
+test('切换项目复用当前用户配置；无权访问项目不能打开设置', async ({ page, request, foreignId }) => {
+  const a = await project(request, '供应商项目 A');
+  await project(request, '空白项目 B');
   await open(page, a.id);
   await addSupplier(page, `test-only-${randomUUID()}`);
   await addModel(page, 'project-a-model');
@@ -377,12 +371,11 @@ test('切换项目不复用另一项目配置；无权访问项目不能打开�
     .filter({ has: page.getByText('空白项目 B', { exact: true }) })
     .click();
   await page.getByRole('button', { name: '模型设置', exact: true }).click();
-  await expect(serviceCard(page, 'OpenAI').getByText('未配置', { exact: true })).toBeVisible();
+  await expect(serviceCard(page, 'OpenAI').getByText('已配置', { exact: true })).toBeVisible();
   await expect(serviceCard(page, 'Anthropic').getByText('未配置', { exact: true })).toBeVisible();
   await modelsTab(page).click();
-  await expect(drawer(page).getByText('project-a-model', { exact: true })).toHaveCount(0);
-  await expect(drawer(page).getByText('仅属于项目 A', { exact: true })).toHaveCount(0);
-  expect((await readModels(request, b.id)).items).toHaveLength(0);
+  await expect(drawer(page).getByText('project-a-model', { exact: true })).toBeVisible();
+  expect((await readModels(request)).items).toHaveLength(1);
   await page.goto(`/projects/${foreignId}`);
   await expect(page.getByRole('button', { name: '重新连接' })).toBeVisible();
   await expect(page.getByRole('button', { name: '模型设置', exact: true })).toHaveCount(0);
@@ -419,7 +412,7 @@ test('供应商保存请求期间凭证已清空，不进入 Query 缓存，也�
     received = resolve;
   });
   let writes = 0;
-  await page.route('**/api/v1/projects/*/providers/catalog', async (route) => {
+  await page.route('**/api/v1/providers/catalog', async (route) => {
     if (route.request().method() === 'POST') {
       writes++;
       received();
@@ -439,7 +432,7 @@ test('供应商保存请求期间凭证已清空，不进入 Query 缓存，也�
   }
   await expect(form).toHaveCount(0);
   await expect(serviceCard(page, 'OpenAI').getByText('已配置', { exact: true })).toBeVisible();
-  expect((await readProviders(request, p.id)).items).toHaveLength(1);
+  expect((await readProviders(request)).items).toHaveLength(1);
 });
 
 test('空目录阻止普通创建；无法呈现的自定义 Schema 不发送部分配置', async ({ page, request }) => {
@@ -483,7 +476,7 @@ test('空目录阻止普通创建；无法呈现的自定义 Schema 不发送部
   await expect(
     dialog(page, '自定义接入').getByRole('button', { name: '添加供应商', exact: true }),
   ).toBeDisabled();
-  expect((await readProviders(request, p.id)).items).toHaveLength(0);
+  expect((await readProviders(request)).items).toHaveLength(0);
 });
 
 test('自定义接入仍可配置兼容地址，刷新后保留', async ({ page, request }) => {
@@ -511,7 +504,7 @@ test('自定义接入仍可配置兼容地址，刷新后保留', async ({ page,
   await expect(
     drawer(page).getByText('http://127.0.0.1:1/custom/v1', { exact: true }),
   ).toBeVisible();
-  expect((await readProviders(request, p.id)).items[0]).toMatchObject({
+  expect((await readProviders(request)).items[0]).toMatchObject({
     providerDefinitionId: null,
     pluginId: 'openai_compatible',
     configuration: { baseURL: 'http://127.0.0.1:1/custom/v1', timeoutMs: 60000 },

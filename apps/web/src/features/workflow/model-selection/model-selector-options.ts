@@ -1,4 +1,4 @@
-// ModelConfiguration 决定项目里可执行的选择；Model Catalog 只负责发现与显示增强。
+// ModelConfiguration 决定用户所有项目中可执行的选择；Model Catalog 只负责发现与显示增强。
 // 两者保持独立身份，Catalog 缺失不能隐藏已有配置。
 
 export interface CatalogModelRef {
@@ -268,7 +268,7 @@ export type ModelSelectionResumeDecision =
   | { kind: 'choose' }
   | { kind: 'add'; providerId: string };
 
-// 配置供应商之后如何继续原来的目录模型。只看当前项目里的 ModelConfiguration，不保存这次判断。
+// 配置供应商之后如何继续原来的目录模型。只看当前用户所有项目中的 ModelConfiguration，不保存这次判断。
 export function resumeModelSelection(
   input: ModelSelectionResumeInput,
 ): ModelSelectionResumeDecision {

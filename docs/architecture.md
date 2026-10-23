@@ -8,7 +8,7 @@
 | ---------- | ----------------------------------------------------------------------------------------------- |
 | 身份与项目 | 登录、账户中心、项目所有者隔离；每项目一张画布、一个逻辑 Workflow                               |
 | Editor     | 草稿加载 / 保存、节点创建和移动、Data / Control Edge、文本变量与模型选择；无节点删除 / 重命名   |
-| Publish    | 静态语义、同项目模型绑定校验、不可变版本；保存和发布独立                                        |
+| Publish    | 静态语义、同 Owner 模型绑定校验、不可变版本；保存和发布独立                                     |
 | Run        | 已发布版本提交、幂等身份、状态查询、离开保护和 invocation identity recovery                     |
 | Result     | completed Run 展示 declared outputs；支持 inline 与 reference 身份，尚无 Artifact 内容 HTTP API |
 | 执行       | 普通 Action DAG；API 提交，独立 Worker 执行；其他 executionKind 只有声明边界                    |
@@ -59,7 +59,7 @@ API / Worker 启动时初始化官方 PostgresSaver，不提供内存回退。�
 
 ## 文本 AI 与 Provider Plugin
 
-生产调用链是 Node → `text.generate` → ModelConfiguration → Provider Instance → ProviderCapability → Plugin → Provider API。节点只保存 modelConfigurationId，调用时重新验证 running Run、项目权限与 enabled，再解密本次凭证；无默认厂商、自动替换或全局 credential 缓存。
+生产调用链是 Node → `text.generate` → ModelConfiguration → Provider Instance → ProviderCapability → Plugin → Provider API。节点只保存 modelConfigurationId，调用时重新验证 running Run、Run 项目权限、模型及 Provider Owner 与 enabled，再解密本次凭证；无默认厂商、自动替换或全局 credential 缓存。
 
 | 插件                | 当前用途                                                |
 | ------------------- | ------------------------------------------------------- |
@@ -70,13 +70,13 @@ API / Worker 启动时初始化官方 PostgresSaver，不提供内存回退。�
 
 ## Plugin / Provider / 模型配置管理 HTTP
 
-`GET /provider-plugins`、`/provider-catalog`、`/model-catalog` 返回安全目录。项目内 Provider / ModelConfiguration 的创建、列表、启停与凭证轮换见[管理 Controller](../apps/api/src/models/model-management.controller.ts)。绑定创建后不可改写；没有删除、远程插件安装或调用厂商 API 的模型发现。
+`GET /provider-plugins`、`/provider-catalog`、`/model-catalog` 返回安全目录。Provider / ModelConfiguration 归当前用户所有，管理入口为 `/providers` 与 `/model-configurations`；Owner 仅来自认证会话，创建请求不接受 projectId / ownerId。创建、列表、启停与凭证轮换见[管理 Controller](../apps/api/src/models/model-management.controller.ts)。绑定创建后不可改写；没有删除、远程插件安装或调用厂商 API 的模型发现。
 
-官方 Provider / Model Catalog 随代码发布，当前为 OpenAI、Anthropic 及其预设文本模型；目录不是项目 ModelConfiguration。官方地址不由普通用户填写，自定义地址只属于高级兼容路径。凭证规则见[认证与安全](authentication.md#业务权限与密钥边界)。
+官方 Provider / Model Catalog 随代码发布，当前为 OpenAI、Anthropic 及其预设文本模型；目录不是用户 ModelConfiguration。官方地址不由普通用户填写，自定义地址只属于高级兼容路径。凭证规则见[认证与安全](authentication.md#业务权限与密钥边界)。
 
-## Web 项目模型设置
+## Web 用户模型设置
 
-画布内抽屉配置供应商、凭证和模型。节点从 Model Catalog 选择模型，仅写 modelConfigurationId；从节点进入供应商配置成功后继续原选择意图，取消不写入节点，设置页主动配置则留在设置。已选模型展示配置参数，不在节点另存。Secret 不回填、不进入 Form / Query 缓存或浏览器存储，请求发出及退出表单时清空；配置不触发生成。
+画布内复用同一抽屉配置当前用户的供应商、凭证和模型；所有自有项目（包括后续新建项目）共用，Query 缓存按用户 ID 隔离。Publish 在事务内按 Workflow Owner 校验模型 / Provider；Runtime 先核对 Run 的项目权限，再按相同用户身份读取配置并解密，不接受跨用户 ID 引用。节点从 Model Catalog 选择模型，仅写 modelConfigurationId；从节点进入供应商配置成功后继续原选择意图，取消不写入节点，设置页主动配置则留在设置。已选模型展示配置参数，不在节点另存。Secret 不回填、不进入 Form / Query 缓存或浏览器存储，请求发出及退出表单时清空；配置不触发生成。
 
 ## Artifact 生产数据通道
 

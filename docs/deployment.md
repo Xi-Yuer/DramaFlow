@@ -17,7 +17,7 @@ Prisma 迁移保存身份、资料、会话、项目、Workflow / WorkflowVersio
 - Run 的身份、invocationKey、版本和输入不可改写；状态转换由数据库约束保护。threadId 唯一，workflowId / invocationKey 唯一。Start key 随 Run 生命周期保留，新建无数据库默认 key。
 - NodeRun 的 workflowRunId、nodeId、attempt 唯一，attempt 为正数，终态字段一致。
 - Artifact 只有 writing / ready / failed；内容身份不可改，终态不可覆盖。对象本体不在数据库。
-- Provider 的插件版本、configuration，以及模型的 Provider、capability、model、settings 创建后不可改。enabled 和凭证密文可以按服务操作更新。删除配置不是已交付的产品入口。
+- Provider / ModelConfiguration 归用户所有，两者 Owner 由复合外键保持一致；删除项目不删除模型资源。Provider 的插件版本、configuration，以及模型的 Provider、capability、model、settings 创建后不可改。enabled 和凭证密文可以按服务操作更新。删除配置不是已交付的产品入口。
 - Outbox 与 start 同事务写入；恢复意图按 waiting 周期唯一。running → waiting 时递增内部周期。
 
 升级前审阅实际 Prisma migration SQL，确认可能删除的废弃开发表并备份；禁止重写已在生产或外部共享环境应用的迁移。缺少真实 sourceRevision 的旧开发版本不能伪造来源，只能按下方开发数据授权处理。
@@ -46,6 +46,8 @@ Worker 必须常驻，否则 API 可以受理但不会执行。Outbox 没有独�
 
 ## 文本模型 Provider 配置
 
+用户级模型迁移从原 Project.ownerId 回填 Owner，保留原 ID、加密凭证及所有重复配置，不合并、不重加密，也不改 Workflow 引用。按正常 Prisma migration 升级后，原模型可供同用户其他项目使用。
+
 模型配置的 HTTP 见 [架构](architecture.md#plugin--provider--模型配置管理-http)。服务端也可以用 CLI 按当前插件 Schema 创建实例，每次都新建，不更新、不去重；Provider 与模型配置不是同一次原子写入。官方 OpenAI / Anthropic 由 `GET /api/v1/provider-catalog` 提供定义，创建实例时不手填 endpoint。这个 CLI 仍按插件 Schema 创建，下面的示例是高级 Custom OpenAI-Compatible，不是普通 Provider 的默认配置方式。
 
 ```sh
@@ -57,8 +59,7 @@ pnpm model:configure /受保护目录/model-provider.json
 
 ```json
 {
-  "ownerId": "项目所有者 ID",
-  "projectId": "项目 UUID",
+  "ownerId": "用户 ID",
   "name": "自选文本服务",
   "pluginId": "openai_compatible",
   "pluginVersion": 1,

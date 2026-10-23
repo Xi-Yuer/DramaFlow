@@ -38,15 +38,12 @@ export const providerCatalogSchema = z
   .strict();
 export const createCatalogProviderSchema = z
   .object({
-    projectId: z.uuid(),
     name: z.string().trim().min(1).max(80),
     providerDefinitionId: providerDefinitionIdSchema,
     credentials: z.record(z.string(), z.string()),
     configuration: jsonObjectSchema.optional(),
   })
   .strict();
-export const createProjectCatalogProviderRequestSchema = createCatalogProviderSchema.omit({
-  projectId: true,
-});
+export const createUserCatalogProviderRequestSchema = createCatalogProviderSchema;
 export type ProviderCatalogItem = z.infer<typeof providerCatalogItemSchema>;
 export type CreateCatalogProvider = z.infer<typeof createCatalogProviderSchema>;

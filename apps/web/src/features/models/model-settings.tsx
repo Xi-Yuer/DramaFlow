@@ -10,6 +10,7 @@ import type {
   ProviderPluginDescription,
   ModelAvailability,
 } from '@dramaflow/contracts';
+import { useIdentity } from '../auth/use-identity';
 import { modelApi, modelKeys } from './model-api';
 import {
   ConfigureCatalogProviderForm,
@@ -36,16 +37,12 @@ export function availabilityLabel(model: ManagedModelConfiguration) {
 }
 export function ModelSettings({
   open,
-  projectId,
-  projectName,
   setupRequest = null,
   onIntentCancelled,
   onIntentProviderReady,
   onClose,
 }: {
   open: boolean;
-  projectId: string;
-  projectName: string;
   setupRequest?: {
     definitionId: string;
     mode: 'configure' | 'manage';
@@ -55,6 +52,8 @@ export function ModelSettings({
   onIntentProviderReady?: (provider: ModelProvider) => void;
   onClose: () => void;
 }) {
+  const identity = useIdentity();
+  const userId = identity.data?.id;
   return (
     <Drawer
       open={open}
@@ -66,14 +65,15 @@ export function ModelSettings({
       destroyOnHidden
       className="model-settings-drawer"
     >
-      <ModelSettingsContent
-        key={projectId}
-        projectId={projectId}
-        projectName={projectName}
-        setupRequest={setupRequest}
-        onIntentCancelled={onIntentCancelled}
-        onIntentProviderReady={onIntentProviderReady}
-      />
+      {userId ? (
+        <ModelSettingsContent
+          key={userId}
+          userId={userId}
+          setupRequest={setupRequest}
+          onIntentCancelled={onIntentCancelled}
+          onIntentProviderReady={onIntentProviderReady}
+        />
+      ) : null}
     </Drawer>
   );
 }
@@ -89,14 +89,12 @@ type FormState =
       fields: ProviderCatalogItem['credentialFields'];
     };
 function ModelSettingsContent({
-  projectId,
-  projectName,
+  userId,
   setupRequest,
   onIntentCancelled,
   onIntentProviderReady,
 }: {
-  projectId: string;
-  projectName: string;
+  userId: string;
   setupRequest: {
     definitionId: string;
     mode: 'configure' | 'manage';
@@ -147,13 +145,13 @@ function ModelSettingsContent({
   }
   const providers = useQuery({
     ...options,
-    queryKey: modelKeys.providers(projectId),
-    queryFn: ({ signal }) => modelApi.providers(projectId, signal),
+    queryKey: modelKeys.providers(userId),
+    queryFn: ({ signal }) => modelApi.providers(signal),
   });
   const models = useQuery({
     ...options,
-    queryKey: modelKeys.models(projectId),
-    queryFn: ({ signal }) => modelApi.models(projectId, signal),
+    queryKey: modelKeys.models(userId),
+    queryFn: ({ signal }) => modelApi.models(signal),
   });
   const reading =
     catalog.isFetching || definitions.isFetching || providers.isFetching || models.isFetching;
@@ -163,14 +161,14 @@ function ModelSettingsContent({
     await Promise.all([
       cache.invalidateQueries({ queryKey: modelKeys.catalog }),
       cache.invalidateQueries({ queryKey: modelKeys.providerCatalog }),
-      cache.invalidateQueries({ queryKey: modelKeys.providers(projectId) }),
-      cache.invalidateQueries({ queryKey: modelKeys.models(projectId) }),
+      cache.invalidateQueries({ queryKey: modelKeys.providers(userId) }),
+      cache.invalidateQueries({ queryKey: modelKeys.models(userId) }),
     ]);
   }
   async function reloadResources() {
     await Promise.all([
-      cache.invalidateQueries({ queryKey: modelKeys.providers(projectId) }),
-      cache.invalidateQueries({ queryKey: modelKeys.models(projectId) }),
+      cache.invalidateQueries({ queryKey: modelKeys.providers(userId) }),
+      cache.invalidateQueries({ queryKey: modelKeys.models(userId) }),
     ]);
   }
   async function action(id: string, apply: () => Promise<unknown>, success: string) {
@@ -203,7 +201,7 @@ function ModelSettingsContent({
           showIcon
           type="error"
           title="模型设置读取失败"
-          description={readError?.message ?? '无法读取项目配置'}
+          description={readError?.message ?? '无法读取模型配置'}
         />
         <Button htmlType="button" onClick={() => void refresh()}>
           重新读取模型设置
@@ -240,9 +238,9 @@ function ModelSettingsContent({
     <section className="model-settings-content">
       <div className="model-settings-heading">
         <div>
-          <span className="model-project-name">{projectName}</span>
-          <h2>为这个项目接入模型</h2>
-          <p>在模型供应商里配置平台服务的访问凭证，再添加项目要用的模型。</p>
+          <span className="model-project-name">我的模型</span>
+          <h2>为我的工作流接入模型</h2>
+          <p>在模型供应商里配置平台服务的访问凭证，再添加模型；自己创建的所有项目均可使用。</p>
         </div>
         <Button icon={<RefreshCw size={15} />} loading={reading} onClick={() => void refresh()}>
           刷新列表
@@ -287,7 +285,7 @@ function ModelSettingsContent({
                 onToggle={(provider) =>
                   void action(
                     provider.id,
-                    () => modelApi.setProviderEnabled(projectId, provider.id, !provider.enabled),
+                    () => modelApi.setProviderEnabled(provider.id, !provider.enabled),
                     provider.enabled ? '供应商已停用' : '供应商已启用',
                   )
                 }
@@ -364,7 +362,7 @@ function ModelSettingsContent({
                             onClick={() =>
                               void action(
                                 model.id,
-                                () => modelApi.setModelEnabled(projectId, model.id, !model.enabled),
+                                () => modelApi.setModelEnabled(model.id, !model.enabled),
                                 model.enabled ? '模型已停用' : '模型已启用',
                               )
                             }
@@ -384,7 +382,6 @@ function ModelSettingsContent({
       />
       {configuring ? (
         <ConfigureCatalogProviderForm
-          projectId={projectId}
           provider={configuring}
           onClose={() => {
             if (
@@ -396,7 +393,7 @@ function ModelSettingsContent({
             setForm(null);
           }}
           onCreated={async (provider) => {
-            cache.setQueryData<ModelProvider[]>(modelKeys.providers(projectId), (current) => [
+            cache.setQueryData<ModelProvider[]>(modelKeys.providers(userId), (current) => [
               provider,
               ...(current ?? []).filter((item) => item.id !== provider.id),
             ]);
@@ -486,8 +483,7 @@ function ModelSettingsContent({
                       onClick={() =>
                         void action(
                           provider.id,
-                          () =>
-                            modelApi.setProviderEnabled(projectId, provider.id, !provider.enabled),
+                          () => modelApi.setProviderEnabled(provider.id, !provider.enabled),
                           provider.enabled ? '供应商已停用' : '供应商已启用',
                         )
                       }
@@ -503,11 +499,10 @@ function ModelSettingsContent({
       ) : null}
       {form?.kind === 'advanced' ? (
         <ProviderCreateForm
-          projectId={projectId}
           plugins={plugins}
           onClose={() => setForm(null)}
           onCreated={(provider) => {
-            cache.setQueryData<ModelProvider[]>(modelKeys.providers(projectId), (current) => [
+            cache.setQueryData<ModelProvider[]>(modelKeys.providers(userId), (current) => [
               provider,
               ...(current ?? []),
             ]);
@@ -520,16 +515,15 @@ function ModelSettingsContent({
       ) : null}
       {form?.kind === 'model' ? (
         <ModelCreateForm
-          projectId={projectId}
           providers={supplierItems}
           plugins={plugins}
           initialProviderId={form.providerId}
           onClose={() => setForm(null)}
           onCreated={(model) => {
-            cache.setQueryData<ManagedModelConfiguration[]>(
-              modelKeys.models(projectId),
-              (current) => [model, ...(current ?? [])],
-            );
+            cache.setQueryData<ManagedModelConfiguration[]>(modelKeys.models(userId), (current) => [
+              model,
+              ...(current ?? []),
+            ]);
             setTab('models');
             setForm(null);
             void message.success('模型配置已添加');
@@ -539,7 +533,6 @@ function ModelSettingsContent({
       ) : null}
       {form?.kind === 'rotate' ? (
         <CredentialRotationForm
-          projectId={projectId}
           provider={form.provider}
           fields={form.fields}
           onClose={() => setForm(null)}

@@ -4,7 +4,6 @@ import { providerDefinitionIdSchema } from './provider-catalog.js';
 const jsonObjectSchema = z.record(z.string(), z.json());
 export const createModelProviderSchema = z
   .object({
-    projectId: z.uuid(),
     name: z.string().trim().min(1).max(80),
     pluginId: z.string().min(1).max(100),
     pluginVersion: z.number().int().positive(),
@@ -16,6 +15,7 @@ export const modelProviderSchema = createModelProviderSchema
   .omit({ credentials: true })
   .extend({
     id: z.uuid(),
+    ownerId: z.string().min(1),
     providerDefinitionId: providerDefinitionIdSchema.nullable(),
     enabled: z.boolean(),
     createdAt: z.iso.datetime(),
@@ -23,7 +23,6 @@ export const modelProviderSchema = createModelProviderSchema
   .strict();
 export const createModelConfigurationSchema = z
   .object({
-    projectId: z.uuid(),
     providerId: z.uuid(),
     capability: z.string().min(1).max(100),
     model: z.string().trim().min(1).max(200),
@@ -33,6 +32,7 @@ export const createModelConfigurationSchema = z
 export const modelConfigurationSchema = createModelConfigurationSchema
   .extend({
     id: z.uuid(),
+    ownerId: z.string().min(1),
     enabled: z.boolean(),
     createdAt: z.iso.datetime(),
   })

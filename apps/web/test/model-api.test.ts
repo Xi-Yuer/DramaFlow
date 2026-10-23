@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { modelApi } from '../src/features/models/model-api';
+import { modelApi, modelKeys } from '../src/features/models/model-api';
 
-const projectId = '7ac10b00-33cc-4e50-9a2b-05ef764c44f4';
+const secondProviderId = '7ac10b00-33cc-4e50-9a2b-05ef764c44f4';
 const provider = {
   id: '7ac10b00-33cc-4e50-9a2b-05ef764c44f5',
-  projectId,
+  ownerId: 'user-a',
   name: '供应商',
   pluginId: 'custom',
   pluginVersion: 1,
@@ -21,23 +21,27 @@ function fetchResponse(body: unknown, status = 200) {
   return fetch;
 }
 describe('模型管理 HTTP 安全边界', () => {
+  it('模型缓存按 User 隔离，同一用户跨项目共享同一 key', () => {
+    expect(modelKeys.providers('user-a')).toEqual(['model-settings', 'user-a', 'providers']);
+    expect(modelKeys.models('user-a')).toEqual(['model-settings', 'user-a', 'models']);
+    expect(modelKeys.models('user-a')).not.toEqual(modelKeys.models('user-b'));
+    expect(modelKeys.providers('user-a')).not.toEqual(modelKeys.providers('user-b'));
+  });
   it('使用同源正式 API 遍历分页，不隐藏后续供应商', async () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(Response.json({ items: [provider], nextCursor: provider.id }))
       .mockResolvedValueOnce(
-        Response.json({ items: [{ ...provider, id: projectId }], nextCursor: null }),
+        Response.json({ items: [{ ...provider, id: secondProviderId }], nextCursor: null }),
       );
     vi.stubGlobal('fetch', fetch);
-    expect(await modelApi.providers(projectId)).toHaveLength(2);
-    expect(fetch.mock.calls[1][0]).toBe(
-      `/api/v1/projects/${projectId}/providers?cursor=${provider.id}`,
-    );
+    expect(await modelApi.providers()).toHaveLength(2);
+    expect(fetch.mock.calls[1][0]).toBe(`/api/v1/providers?cursor=${provider.id}`);
     expect(fetch.mock.calls[0][1].credentials).toBe('same-origin');
   });
   it('服务端重复游标明确报错，不返回假完整结果或无限请求', async () => {
     const fetch = fetchResponse({ items: [], nextCursor: provider.id });
-    await expect(modelApi.providers(projectId)).rejects.toMatchObject({ status: 200 });
+    await expect(modelApi.providers()).rejects.toMatchObject({ status: 200 });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
   it('创建只返回安全 DTO，凭证仅进入明确的 POST 请求体', async () => {
@@ -48,7 +52,7 @@ describe('模型管理 HTTP 安全边界', () => {
       pluginVersion: provider.pluginVersion,
       configuration: provider.configuration,
     };
-    const result = await modelApi.createProvider(projectId, {
+    const result = await modelApi.createProvider({
       ...body,
       credentials: { token: marker },
     });
@@ -59,14 +63,14 @@ describe('模型管理 HTTP 安全边界', () => {
   });
   it('目录创建只提交服务标识和凭证，不提交插件或地址', async () => {
     const fetch = fetchResponse({ ...provider, providerDefinitionId: 'openai' });
-    const result = await modelApi.createCatalogProvider(projectId, {
+    const result = await modelApi.createCatalogProvider({
       name: 'OpenAI',
       providerDefinitionId: 'openai',
       credentials: { apiKey: marker },
     });
     expect(result.providerDefinitionId).toBe('openai');
     expect(JSON.stringify(result)).not.toContain(marker);
-    expect(fetch.mock.calls[0][0]).toBe(`/api/v1/projects/${projectId}/providers/catalog`);
+    expect(fetch.mock.calls[0][0]).toBe(`/api/v1/providers/catalog`);
     expect(fetch.mock.calls[0][1]).toMatchObject({ method: 'POST' });
     const body = String(fetch.mock.calls[0][1].body);
     expect(body).toContain(marker);
@@ -77,12 +81,8 @@ describe('模型管理 HTTP 安全边界', () => {
   it('轮换仅接受 204，无响应体或 Secret 读取操作', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetch);
-    expect(
-      await modelApi.replaceCredentials(projectId, provider.id, { token: marker }),
-    ).toBeUndefined();
-    expect(fetch.mock.calls[0][0]).toBe(
-      `/api/v1/projects/${projectId}/providers/${provider.id}/credentials`,
-    );
+    expect(await modelApi.replaceCredentials(provider.id, { token: marker })).toBeUndefined();
+    expect(fetch.mock.calls[0][0]).toBe(`/api/v1/providers/${provider.id}/credentials`);
     expect(fetch.mock.calls[0][1].method).toBe('PUT');
   });
   it.each([400, 403, 404, 409, 500])(
@@ -90,7 +90,7 @@ describe('模型管理 HTTP 安全边界', () => {
     async (status) => {
       const fetch = fetchResponse({ message: marker, details: { credentials: marker } }, status);
       const error = await modelApi
-        .createProvider(projectId, {
+        .createProvider({
           name: '供应商',
           pluginId: 'custom',
           pluginVersion: 1,
@@ -106,14 +106,14 @@ describe('模型管理 HTTP 安全边界', () => {
   );
   it('拒绝带 credential 的错误读取响应，不能进入成功数据缓存', async () => {
     fetchResponse({ items: [{ ...provider, credentials: { token: marker } }], nextCursor: null });
-    const error = await modelApi.providers(projectId).catch((error: unknown) => error);
+    const error = await modelApi.providers().catch((error: unknown) => error);
     expect(error).toMatchObject({ status: 200, details: undefined });
     expect(JSON.stringify(error)).not.toContain(marker);
   });
   it('轮换失败也不会保留原始响应或自动重试', async () => {
     const fetch = fetchResponse({ message: marker }, 503);
     const error = await modelApi
-      .replaceCredentials(projectId, provider.id, { token: marker })
+      .replaceCredentials(provider.id, { token: marker })
       .catch((error: unknown) => error);
     expect(JSON.stringify(error)).not.toContain(marker);
     expect(error).toMatchObject({ status: 503, details: undefined });

@@ -46,7 +46,7 @@ State 只保留当前有效值，Artifact 保存内容，Checkpoint 负责恢复
 
 `ai.text_generate@1` 为普通 Action：必填 prompt、可选 system，输出 text，均为 string。config 只有必填 UUID modelConfigurationId，不保存插件、endpoint、模型名或 key。Web 的 model-selector 按 `text.generate` 读取 Model Catalog，选择结果仍只写 modelConfigurationId。已选模型展示该配置的最大输出和随机度，不在节点上另存参数。prompt 与 system 可分别插入当前节点可用的上游文本输出，写入该端口自己的 template；编辑时展示当前节点显示名和端口显示名，保存值仍是 `{{名称}}` 对应 nodeId 与 portKey。没有变量时仍是 constant。选择变量不创建 Data Edge。
 
-execute 通过 CapabilityInvoker 调用 text.generate。节点只保存 modelConfigurationId，不保存插件、厂商或 SDK。正式执行由 `text_generation@1` 完成；新增文本厂商不因此新增 NodeType、Compiler 或 Executor。保存草稿允许未完成选择，但拒绝额外配置字段；发布要求完整严格 Schema 及同项目可用模型绑定，执行时重新授权并解密，见[架构](architecture.md#文本-ai-与-provider-plugin)。
+execute 通过 CapabilityInvoker 调用 text.generate。节点只保存 modelConfigurationId，不保存插件、厂商或 SDK。正式执行由 `text_generation@1` 完成；新增文本厂商不因此新增 NodeType、Compiler 或 Executor。保存草稿允许未完成选择，但拒绝额外配置字段；发布要求完整严格 Schema 及同 Owner 可用模型绑定，执行时重新授权并解密，见[架构](architecture.md#文本-ai-与-provider-plugin)。
 
 ## 视频领域能力与厂商边界
 

@@ -15,6 +15,7 @@ import { Check } from 'lucide-react';
 import { z } from 'zod';
 import type { ManagedModelConfiguration, ModelProvider } from '@dramaflow/contracts';
 import { ApiError } from '../../../lib/http';
+import { useIdentity } from '../../auth/use-identity';
 import { modelApi, modelKeys } from '../../models/model-api';
 import { SchemaFormFields } from '../../models/schema-form';
 import { trySchemaFields } from '../../models/schema-fields';
@@ -89,6 +90,8 @@ export function ModelSelector({
   value: unknown;
 }) {
   const actions = useContext(WorkflowModelActionsContext);
+  const identity = useIdentity();
+  const userId = identity.data?.id ?? '';
   const cache = useQueryClient();
   const client = useClient();
   const hasValue = typeof value === 'string' && value.length > 0;
@@ -107,6 +110,7 @@ export function ModelSelector({
   const resumeId = resume ? `${resume.providerId}:${resume.catalogId}` : null;
   const enabled =
     Boolean(actions) &&
+    Boolean(userId) &&
     client &&
     capabilityTypes.length > 0 &&
     (open || hasValue || addTarget !== null || resume !== null);
@@ -126,14 +130,14 @@ export function ModelSelector({
   });
   const providers = useQuery({
     ...queryOptions,
-    queryKey: modelKeys.providers(actions?.projectId ?? ''),
-    queryFn: ({ signal }) => modelApi.providers(actions!.projectId, signal),
+    queryKey: modelKeys.providers(userId),
+    queryFn: ({ signal }) => modelApi.providers(signal),
     enabled: enabled && Boolean(actions),
   });
   const models = useQuery({
     ...queryOptions,
-    queryKey: modelKeys.models(actions?.projectId ?? ''),
-    queryFn: ({ signal }) => modelApi.models(actions!.projectId, signal),
+    queryKey: modelKeys.models(userId),
+    queryFn: ({ signal }) => modelApi.models(signal),
     enabled: enabled && Boolean(actions),
   });
   const resumeReady =
@@ -240,8 +244,8 @@ export function ModelSelector({
     setBusyId(configurationId);
     setActionError(null);
     try {
-      await modelApi.setModelEnabled(actions!.projectId, configurationId, true);
-      await cache.invalidateQueries({ queryKey: modelKeys.models(actions!.projectId) });
+      await modelApi.setModelEnabled(configurationId, true);
+      await cache.invalidateQueries({ queryKey: modelKeys.models(userId) });
       select(configurationId);
     } catch (error) {
       setActionError(failure(error));
@@ -285,7 +289,7 @@ export function ModelSelector({
               <Alert
                 showIcon
                 type="error"
-                title="项目模型配置读取失败"
+                title="模型配置读取失败"
                 description={failure(configurationFailed)}
                 action={
                   <Button size="small" onClick={reload}>
@@ -408,15 +412,14 @@ export function ModelSelector({
       </Popover>
       {addTarget ? (
         <AddCatalogModel
-          projectId={actions.projectId}
           target={addTarget}
           providers={providerItems}
           onClose={() => setAddTarget(null)}
           onCreated={(model) => {
-            cache.setQueryData<ManagedModelConfiguration[]>(
-              modelKeys.models(actions.projectId),
-              (current) => [model, ...(current ?? []).filter((item) => item.id !== model.id)],
-            );
+            cache.setQueryData<ManagedModelConfiguration[]>(modelKeys.models(userId), (current) => [
+              model,
+              ...(current ?? []).filter((item) => item.id !== model.id),
+            ]);
             setAddTarget(null);
             actions.onSelectModel(nodeId, model.id);
           }}
@@ -598,13 +601,11 @@ function ModelGroup({
 }
 
 function AddCatalogModel({
-  projectId,
   target,
   providers,
   onClose,
   onCreated,
 }: {
-  projectId: string;
   target: { catalogId: string; displayName: string; providerId: string; capability: string };
   providers: readonly ModelProvider[];
   onClose: () => void;
@@ -639,7 +640,7 @@ function AddCatalogModel({
       );
       sent = true;
       onCreated(
-        await modelApi.createModel(projectId, {
+        await modelApi.createModel({
           providerId: provider.id,
           capability: target.capability,
           model: target.catalogId,
@@ -699,7 +700,9 @@ function AddCatalogModel({
         </Button>,
       ]}
     >
-      <p className="model-selector-note">填写该模型在当前项目中的生成参数。节点只保存这次选择。</p>
+      <p className="model-selector-note">
+        填写该模型在我的模型配置中的生成参数。节点只保存这次选择。
+      </p>
       {body}
       {error ? <Alert showIcon type="error" title="模型配置未确认" description={error} /> : null}
     </Modal>

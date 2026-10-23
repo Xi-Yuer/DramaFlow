@@ -229,7 +229,6 @@ describe('显式启用：真实外部文本模型端到端验收', () => {
         });
         const providers = app.get(ModelProviderService);
         const provider = await providers.createProvider(ownerId, {
-          projectId: project.id,
           name: '操作员明确选择的真实 Provider',
           pluginId: 'openai_compatible',
           pluginVersion: 1,
@@ -237,7 +236,6 @@ describe('显式启用：真实外部文本模型端到端验收', () => {
           credentials: { apiKey: credential },
         });
         const model = await providers.createModelConfiguration(ownerId, {
-          projectId: project.id,
           providerId: provider.id,
           capability: 'text.generate',
           model: configuration.model,

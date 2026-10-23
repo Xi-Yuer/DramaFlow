@@ -277,7 +277,6 @@ async function project(owner = ownerId) {
   });
 }
 async function configured(
-  projectId: string,
   model = `model-${randomUUID()}`,
   providerType?: 'openai' | 'anthropic',
 ) {
@@ -286,38 +285,32 @@ async function configured(
     Origin: origin,
     'Content-Type': 'application/json',
   };
-  const providerResponse = await fetch(
-    `${apiBase}/api/v1/projects/${projectId}/providers`,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        name: '显式选择的兼容协议实例',
-        pluginId: providerType ? 'text_generation' : 'openai_compatible',
-        pluginVersion: 1,
-        configuration: {
-          baseURL: providerBase,
-          ...(providerType ? { provider: providerType } : {}),
-        },
-        credentials: { apiKey: credential },
-      }),
-    },
-  );
+  const providerResponse = await fetch(`${apiBase}/api/v1/providers`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      name: '显式选择的兼容协议实例',
+      pluginId: providerType ? 'text_generation' : 'openai_compatible',
+      pluginVersion: 1,
+      configuration: {
+        baseURL: providerBase,
+        ...(providerType ? { provider: providerType } : {}),
+      },
+      credentials: { apiKey: credential },
+    }),
+  });
   expect(providerResponse.status).toBe(201);
   const provider = modelProviderSchema.parse(await providerResponse.json());
-  const modelResponse = await fetch(
-    `${apiBase}/api/v1/projects/${projectId}/model-configurations`,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        providerId: provider.id,
-        capability: 'text.generate',
-        model,
-        settings: { temperature: 0, maxOutputTokens: 64 },
-      }),
-    },
-  );
+  const modelResponse = await fetch(`${apiBase}/api/v1/model-configurations`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      providerId: provider.id,
+      capability: 'text.generate',
+      model,
+      settings: { temperature: 0, maxOutputTokens: 64 },
+    }),
+  });
   expect(modelResponse.status).toBe(201);
   const configuration = managedModelConfigurationSchema.parse(
     await modelResponse.json(),
@@ -464,7 +457,6 @@ async function assertSafePersistence(
 
 describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Provider 协议 → NodeRun', () => {
   it('服务端 CLI 从显式环境变量创建真实加密配置，不调用模型或返回凭证', async () => {
-    const p = await project();
     const directory = await mkdtemp(join(tmpdir(), 'dramaflow-provider-e2e-'));
     const file = join(directory, 'provider.json');
     const before = calls.length;
@@ -473,7 +465,6 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
         file,
         JSON.stringify({
           ownerId,
-          projectId: p.id,
           name: 'CLI 项目模型',
           pluginId: 'openai_compatible',
           pluginVersion: 1,
@@ -513,11 +504,10 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
         where: { id: ids.providerId },
       });
       expect(provider.encryptedCredentials).not.toContain(credential);
-      expect(provider.projectId).toBe(p.id);
+      expect(provider.ownerId).toBe(ownerId);
       expect(
         await providers.getModelConfiguration(
           ownerId,
-          p.id,
           ids.modelConfigurationId,
         ),
       ).toMatchObject({
@@ -528,7 +518,6 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
       expect(
         await providers.getModelConfiguration(
           outsiderId,
-          p.id,
           ids.modelConfigurationId,
         ),
       ).toBeNull();
@@ -538,10 +527,9 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
     }
   });
 
-  it('模型与 endpoint 不可改写、同项目外键不可拼接；显式凭证轮换不改变已发布的模型绑定', async () => {
+  it('模型与 endpoint 不可改写、同用户外键不可跨 Owner 拼接；显式凭证轮换不改变已发布的模型绑定', async () => {
     const p = await project();
-    const other = await project();
-    const f = await configured(p.id);
+    const f = await configured();
     const version = await published(p.id, f.configuration.id);
     await expect(
       db.modelProvider.update({
@@ -556,8 +544,7 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
       }),
     ).rejects.toThrow();
     await expect(
-      providers.createModelConfiguration(ownerId, {
-        projectId: other.id,
+      providers.createModelConfiguration(outsiderId, {
         providerId: f.provider.id,
         capability: 'text.generate',
         model: f.model,
@@ -567,7 +554,7 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
     await expect(
       db.modelConfiguration.create({
         data: {
-          projectId: other.id,
+          ownerId: outsiderId,
           providerId: f.provider.id,
           capability: 'text.generate',
           model: f.model,
@@ -577,16 +564,16 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
     ).rejects.toThrow();
     const rotated = `rotated-test-only-${randomUUID()}`;
     await expect(
-      providers.replaceCredentials(outsiderId, p.id, f.provider.id, {
+      providers.replaceCredentials(outsiderId, f.provider.id, {
         apiKey: rotated,
       }),
     ).rejects.toThrow();
     await expect(
-      providers.replaceCredentials(ownerId, p.id, f.provider.id, {
+      providers.replaceCredentials(ownerId, f.provider.id, {
         apiKey: '',
       }),
     ).rejects.toMatchObject({ code: 'MODEL_CREDENTIALS_UNAVAILABLE' });
-    await providers.replaceCredentials(ownerId, p.id, f.provider.id, {
+    await providers.replaceCredentials(ownerId, f.provider.id, {
       apiKey: rotated,
     });
     const run = await terminal((await submit(version.id)).id, 'completed');
@@ -606,7 +593,7 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
 
   it('已发布版本引用正式模型配置；真实 Worker 完成输出，凭证仅在调用边界解密', async () => {
     const p = await project();
-    const f = await configured(p.id);
+    const f = await configured();
     const storedProvider = await db.modelProvider.findUniqueOrThrow({
       where: { id: f.provider.id },
     });
@@ -667,7 +654,7 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
       'bad_secret',
     ]) {
       const p = await project();
-      const f = await configured(p.id);
+      const f = await configured();
       if (mode === 'model_disabled')
         await db.modelConfiguration.update({
           where: { id: f.configuration.id },
@@ -705,7 +692,7 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
 
   it('模型 503 只请求一次，不由 LangChain 或 BullMQ 自动重试，供应商异常内容不持久化', async () => {
     const p = await project();
-    const f = await configured(p.id, `failure-${randomUUID()}`);
+    const f = await configured(`failure-${randomUUID()}`);
     const version = await published(p.id, f.configuration.id);
     const run = await terminal((await submit(version.id)).id, 'failed');
     expect(await assertSafePersistence(run.id)).toMatchObject([
@@ -721,54 +708,39 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
     expect(calls.filter((call) => call.body.model === f.model)).toHaveLength(1);
   });
 
-  it('配置创建与 Worker 解析都隔离项目 / 所有者；同所有者不同项目也不能拼接配置', async () => {
+  it('同一用户跨项目复用配置，跨用户在创建与 Worker 解析时拒绝', async () => {
     const source = await project();
-    const f = await configured(source.id);
+    const f = await configured();
     const otherProject = await project();
     const foreign = await project(outsiderId);
-    for (const [owner, projectId] of [
-      [ownerId, otherProject.id],
-      [outsiderId, foreign.id],
-      [outsiderId, source.id],
-    ] as const)
-      await expect(
-        providers.createModelConfiguration(owner, {
-          projectId,
-          providerId: f.provider.id,
-          capability: 'text.generate',
-          model: 'forbidden-model',
-          settings: {},
-        }),
-      ).rejects.toThrow();
     await expect(
-      providers.createProvider(outsiderId, {
-        projectId: source.id,
-        name: '禁止访问',
-        pluginId: 'openai_compatible',
-        pluginVersion: 1,
-        configuration: { baseURL: providerBase },
-        credentials: { apiKey: credential },
+      providers.createModelConfiguration(outsiderId, {
+        providerId: f.provider.id,
+        capability: 'text.generate',
+        model: 'forbidden-model',
+        settings: {},
       }),
     ).rejects.toThrow();
-    for (const [target, owner] of [
-      [otherProject, ownerId],
-      [foreign, outsiderId],
-    ] as const) {
-      const version = await published(
-        target.id,
-        f.configuration.id,
-        owner,
-        true,
-      );
-      const run = await terminal(
-        (await submit(version.id, owner)).id,
-        'failed',
-      );
-      expect(await assertSafePersistence(run.id)).toMatchObject([
-        { status: 'failed', error: { stage: 'execute' } },
-      ]);
-    }
-    expect(calls.filter((call) => call.body.model === f.model)).toHaveLength(0);
+    const ownVersion = await published(
+      otherProject.id,
+      f.configuration.id,
+      ownerId,
+    );
+    await terminal((await submit(ownVersion.id, ownerId)).id, 'completed');
+    const foreignVersion = await published(
+      foreign.id,
+      f.configuration.id,
+      outsiderId,
+      true,
+    );
+    const foreignRun = await terminal(
+      (await submit(foreignVersion.id, outsiderId)).id,
+      'failed',
+    );
+    expect(await assertSafePersistence(foreignRun.id)).toMatchObject([
+      { status: 'failed', error: { stage: 'execute' } },
+    ]);
+    expect(calls.filter((call) => call.body.model === f.model)).toHaveLength(1);
     const protectedVersion = await published(source.id, f.configuration.id);
     const protectedRun = await submit(protectedVersion.id);
     await terminal(protectedRun.id, 'completed');
@@ -795,7 +767,6 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
       it('正式管理 HTTP 配置、发布与 Worker 请求实际厂商协议；同版本下次运行使用轮换凭证', async () => {
         const p = await project();
         const f = await configured(
-          p.id,
           `sdk-${providerType}-${randomUUID()}`,
           providerType,
         );
@@ -803,7 +774,7 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
         const rotated = `sdk-rotated-${providerType}-${randomUUID()}`;
         for (const key of [credential, rotated]) {
           if (key === rotated)
-            await providers.replaceCredentials(ownerId, p.id, f.provider.id, {
+            await providers.replaceCredentials(ownerId, f.provider.id, {
               apiKey: key,
             });
           const before = calls.length;
@@ -891,7 +862,6 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
         async (status) => {
           const p = await project();
           const f = await configured(
-            p.id,
             `sdk-failure-${status}-${providerType}-${randomUUID()}`,
             providerType,
           );

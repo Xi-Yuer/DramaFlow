@@ -32,15 +32,14 @@ export class WorkflowCapabilitiesFactory {
         const model = await this.db.client.modelConfiguration.findFirst({
           where: {
             id: request.data.modelConfigurationId,
-            projectId,
-            project: { ownerId },
+            ownerId,
             enabled: true,
             capability,
           },
           include: { provider: true },
         });
         if (!model) throw new ModelConfigurationError('MODEL_CONFIGURATION_UNAVAILABLE');
-        if (!model.provider.enabled || model.provider.projectId !== projectId)
+        if (!model.provider.enabled || model.provider.ownerId !== ownerId)
           throw new ModelConfigurationError('MODEL_PROVIDER_UNAVAILABLE');
         let credentials: unknown;
         try {

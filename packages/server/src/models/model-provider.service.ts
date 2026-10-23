@@ -44,7 +44,7 @@ export class ModelConfigurationError extends Error {
 // 读取路径从数据库投影中排除密文，不依靠序列化时删除秘密字段。
 const providerSelect = {
   id: true,
-  projectId: true,
+  ownerId: true,
   name: true,
   pluginId: true,
   pluginVersion: true,
@@ -55,7 +55,7 @@ const providerSelect = {
 } satisfies Prisma.ModelProviderSelect;
 const modelSelect = {
   id: true,
-  projectId: true,
+  ownerId: true,
   providerId: true,
   capability: true,
   model: true,
@@ -69,7 +69,7 @@ type ModelRow = Prisma.ModelConfigurationGetPayload<{ select: typeof modelSelect
 function providerDto(row: ProviderRow): ModelProvider {
   return modelProviderSchema.parse({
     id: row.id,
-    projectId: row.projectId,
+    ownerId: row.ownerId,
     name: row.name,
     pluginId: row.pluginId,
     pluginVersion: row.pluginVersion,
@@ -100,19 +100,10 @@ export class ModelProviderService {
     private readonly modelCatalog: ModelCatalog,
   ) {}
 
-  private async authorize(ownerId: string, projectId: string): Promise<void> {
-    const project = await this.db.client.project.findFirst({
-      where: { id: z.uuid().parse(projectId), ownerId },
-      select: { id: true },
-    });
-    if (!project) throw new NotFoundException('项目不存在或无权访问');
-  }
-
   async createProvider(ownerId: string, input: CreateModelProvider): Promise<ModelProvider> {
     const parsed = createModelProviderSchema.safeParse(input);
     if (!parsed.success) throw new ModelConfigurationError('MODEL_PROVIDER_CONFIGURATION_INVALID');
     const value = parsed.data;
-    await this.authorize(ownerId, value.projectId);
     let configuration: z.infer<typeof jsonObject>;
     let credentials: Record<string, string>;
     try {
@@ -126,7 +117,7 @@ export class ModelProviderService {
     }
     const row = await this.db.client.modelProvider.create({
       data: {
-        projectId: value.projectId,
+        ownerId,
         name: value.name,
         pluginId: value.pluginId,
         pluginVersion: value.pluginVersion,
@@ -141,7 +132,6 @@ export class ModelProviderService {
     const parsed = createCatalogProviderSchema.safeParse(input);
     if (!parsed.success) throw new ModelConfigurationError('MODEL_PROVIDER_CONFIGURATION_INVALID');
     const value = parsed.data;
-    await this.authorize(ownerId, value.projectId);
     let materialized;
     try {
       materialized = this.catalog.materialize(value.providerDefinitionId, {
@@ -153,7 +143,7 @@ export class ModelProviderService {
     }
     const row = await this.db.client.modelProvider.create({
       data: {
-        projectId: value.projectId,
+        ownerId,
         name: value.name,
         pluginId: materialized.pluginId,
         pluginVersion: materialized.pluginVersion,
@@ -183,12 +173,10 @@ export class ModelProviderService {
     const parsed = createModelConfigurationSchema.safeParse(input);
     if (!parsed.success) throw new ModelConfigurationError('MODEL_CONFIGURATION_INVALID');
     const value = parsed.data;
-    await this.authorize(ownerId, value.projectId);
     const provider = await this.db.client.modelProvider.findFirst({
       where: {
         id: value.providerId,
-        projectId: value.projectId,
-        project: { ownerId },
+        ownerId,
       },
       select: providerSelect,
     });
@@ -206,20 +194,17 @@ export class ModelProviderService {
     } catch {
       throw new ModelConfigurationError('MODEL_CONFIGURATION_INVALID');
     }
-    const row = await this.db.client.modelConfiguration.create({ data: { ...value, settings } });
+    const row = await this.db.client.modelConfiguration.create({
+      data: { ...value, ownerId, settings },
+    });
     return modelConfigurationSchema.parse({ ...row, createdAt: row.createdAt.toISOString() });
   }
 
-  async getModelConfiguration(
-    ownerId: string,
-    projectId: string,
-    id: string,
-  ): Promise<ModelConfiguration | null> {
+  async getModelConfiguration(ownerId: string, id: string): Promise<ModelConfiguration | null> {
     const row = await this.db.client.modelConfiguration.findFirst({
       where: {
         id: z.uuid().parse(id),
-        projectId: z.uuid().parse(projectId),
-        project: { ownerId },
+        ownerId,
       },
     });
     return row
@@ -231,7 +216,6 @@ export class ModelProviderService {
   async assertPublishableConfiguration(
     tx: Prisma.TransactionClient,
     ownerId: string,
-    projectId: string,
     id: string,
     capability: string,
   ): Promise<void> {
@@ -250,11 +234,9 @@ export class ModelProviderService {
       SELECT m."enabled", m."capability", m."model", m."settings",
              p."enabled" AS "providerEnabled", p."pluginId", p."pluginVersion", p."configuration"
       FROM "model_configuration" m
-      JOIN "model_provider" p ON p."id" = m."providerId" AND p."projectId" = m."projectId"
-      JOIN "canvas_project" project ON project."id" = m."projectId"
-      WHERE m."id" = ${z.uuid().parse(id)}::uuid AND m."projectId" = ${projectId}::uuid
-        AND project."ownerId" = ${ownerId}
-      FOR SHARE OF m, p, project
+      JOIN "model_provider" p ON p."id" = m."providerId" AND p."ownerId" = m."ownerId"
+      WHERE m."id" = ${z.uuid().parse(id)}::uuid AND m."ownerId" = ${ownerId}
+      FOR SHARE OF m, p
     `;
     const model = rows[0];
     if (!model || !model.enabled || model.capability !== capability)
@@ -277,15 +259,13 @@ export class ModelProviderService {
 
   async replaceCredentials(
     ownerId: string,
-    projectId: string,
     providerId: string,
     credentials: Record<string, string>,
   ): Promise<void> {
     const provider = await this.db.client.modelProvider.findFirst({
       where: {
         id: z.uuid().parse(providerId),
-        projectId: z.uuid().parse(projectId),
-        project: { ownerId },
+        ownerId,
       },
       select: providerSelect,
     });
@@ -305,8 +285,7 @@ export class ModelProviderService {
     const changed = await this.db.client.modelProvider.updateMany({
       where: {
         id: provider.id,
-        projectId,
-        project: { ownerId },
+        ownerId,
       },
       data: { encryptedCredentials: this.secrets.encrypt(JSON.stringify(parsed), ownerId) },
     });
@@ -317,24 +296,18 @@ export class ModelProviderService {
     return providerPluginCatalogSchema.parse({ items: this.plugins.listConfigurable() });
   }
 
-  async getProvider(
-    ownerId: string,
-    projectId: string,
-    providerId: string,
-  ): Promise<ModelProvider> {
-    await this.authorize(ownerId, projectId);
+  async getProvider(ownerId: string, providerId: string): Promise<ModelProvider> {
     const row = await this.db.client.modelProvider.findFirst({
-      where: { id: z.uuid().parse(providerId), projectId, project: { ownerId } },
+      where: { id: z.uuid().parse(providerId), ownerId },
       select: providerSelect,
     });
     if (!row) throw new NotFoundException('Provider 不存在或无权访问');
     return providerDto(row);
   }
 
-  async listProviders(ownerId: string, projectId: string, query: unknown) {
-    await this.authorize(ownerId, projectId);
+  async listProviders(ownerId: string, query: unknown) {
     const { cursor } = modelManagementListQuerySchema.parse(query);
-    const where = { projectId, project: { ownerId } };
+    const where = { ownerId };
     const after = cursor
       ? await this.db.client.modelProvider.findFirst({
           where: { ...where, id: cursor },
@@ -354,20 +327,14 @@ export class ModelProviderService {
     });
   }
 
-  async setProviderEnabled(
-    ownerId: string,
-    projectId: string,
-    providerId: string,
-    enabled: boolean,
-  ) {
+  async setProviderEnabled(ownerId: string, providerId: string, enabled: boolean) {
     const value = setModelResourceEnabledRequestSchema.parse({ enabled });
-    await this.authorize(ownerId, projectId);
     const changed = await this.db.client.modelProvider.updateMany({
-      where: { id: z.uuid().parse(providerId), projectId, project: { ownerId } },
+      where: { id: z.uuid().parse(providerId), ownerId },
       data: value,
     });
     if (changed.count !== 1) throw new NotFoundException('Provider 不存在或无权访问');
-    return this.getProvider(ownerId, projectId, providerId);
+    return this.getProvider(ownerId, providerId);
   }
 
   private availability(row: ModelRow): ModelAvailability {
@@ -397,7 +364,7 @@ export class ModelProviderService {
   private managedModelDto(row: ModelRow) {
     return managedModelConfigurationSchema.parse({
       id: row.id,
-      projectId: row.projectId,
+      ownerId: row.ownerId,
       providerId: row.providerId,
       capability: row.capability,
       model: row.model,
@@ -408,20 +375,18 @@ export class ModelProviderService {
     });
   }
 
-  async getManagedModelConfiguration(ownerId: string, projectId: string, id: string) {
-    await this.authorize(ownerId, projectId);
+  async getManagedModelConfiguration(ownerId: string, id: string) {
     const row = await this.db.client.modelConfiguration.findFirst({
-      where: { id: z.uuid().parse(id), projectId, project: { ownerId } },
+      where: { id: z.uuid().parse(id), ownerId },
       select: modelSelect,
     });
     if (!row) throw new NotFoundException('模型配置不存在或无权访问');
     return this.managedModelDto(row);
   }
 
-  async listModelConfigurations(ownerId: string, projectId: string, query: unknown) {
-    await this.authorize(ownerId, projectId);
+  async listModelConfigurations(ownerId: string, query: unknown) {
     const { cursor } = modelManagementListQuerySchema.parse(query);
-    const where = { projectId, project: { ownerId } };
+    const where = { ownerId };
     const after = cursor
       ? await this.db.client.modelConfiguration.findFirst({
           where: { ...where, id: cursor },
@@ -441,14 +406,13 @@ export class ModelProviderService {
     });
   }
 
-  async setModelEnabled(ownerId: string, projectId: string, id: string, enabled: boolean) {
+  async setModelEnabled(ownerId: string, id: string, enabled: boolean) {
     const value = setModelResourceEnabledRequestSchema.parse({ enabled });
-    await this.authorize(ownerId, projectId);
     const changed = await this.db.client.modelConfiguration.updateMany({
-      where: { id: z.uuid().parse(id), projectId, project: { ownerId } },
+      where: { id: z.uuid().parse(id), ownerId },
       data: value,
     });
     if (changed.count !== 1) throw new NotFoundException('模型配置不存在或无权访问');
-    return this.getManagedModelConfiguration(ownerId, projectId, id);
+    return this.getManagedModelConfiguration(ownerId, id);
   }
 }

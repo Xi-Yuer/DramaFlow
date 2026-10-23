@@ -98,20 +98,18 @@ beforeAll(async () => {
   }
 });
 
-async function textPublication() {
-  const project = await createProject('正式发布测试');
-  const workflow = await readWorkflow(project.id);
+async function textPublication(actor = 0) {
+  const project = await createProject('正式发布测试', actor);
+  const workflow = await readWorkflow(project.id, 0, actor);
   const models = applications[0]!.app.get(ModelProviderService);
-  const provider = await models.createProvider(userIds[0]!, {
-    projectId: project.id,
+  const provider = await models.createProvider(userIds[actor]!, {
     name: '明确选择的离线测试服务',
     pluginId: 'openai_compatible',
     pluginVersion: 1,
     configuration: { baseURL: 'http://127.0.0.1:1/v1' },
     credentials: { apiKey: 'test-publish-secret-marker' },
   });
-  const model = await models.createModelConfiguration(userIds[0]!, {
-    projectId: project.id,
+  const model = await models.createModelConfiguration(userIds[actor]!, {
     providerId: provider.id,
     capability: 'text.generate',
     model: 'explicit-test-model',
@@ -377,12 +375,12 @@ describe('正式 Publish 边界与版本 HTTP', () => {
     }
   });
 
-  it('缺失、跨项目、跨所有者、停用和能力不匹配的模型配置均拒绝，不泄漏 Provider 信息', async () => {
+  it('缺失、跨所有者、停用和能力不匹配的模型配置均拒绝，不泄漏 Provider 信息', async () => {
     const f = await textPublication();
-    const other = await textPublication();
+    const other = await textPublication(1);
     const incompatible = await db.modelConfiguration.create({
       data: {
-        projectId: f.project.id,
+        ownerId: userIds[0]!,
         providerId: f.provider.id,
         capability: 'image.generate',
         model: 'incompatible',
@@ -406,10 +404,6 @@ describe('正式 Publish 边界与版本 HTTP', () => {
         code: 'MODEL_CONFIGURATION_UNAVAILABLE',
       });
     }
-    await db.project.update({
-      where: { id: other.project.id },
-      data: { ownerId: userIds[1] },
-    });
     f.draft.nodes[0]!.config.modelConfigurationId = other.model.id;
     await db.workflow.update({
       where: { id: f.workflow.id },
@@ -468,7 +462,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
     ]) {
       const provider = await db.modelProvider.create({
         data: {
-          projectId: f.project.id,
+          ownerId: userIds[0]!,
           name: '不可信导入配置',
           pluginId:
             mode === 'missing_plugin' ? 'missing_plugin' : 'openai_compatible',
@@ -482,7 +476,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
       });
       const model = await db.modelConfiguration.create({
         data: {
-          projectId: f.project.id,
+          ownerId: userIds[0]!,
           providerId: provider.id,
           capability: 'text.generate',
           model: 'explicit-model',
@@ -552,12 +546,9 @@ describe('正式 Publish 边界与版本 HTTP', () => {
       expectedRevision: 2,
       definition: f.draft,
     });
-    await f.models.replaceCredentials(
-      userIds[0]!,
-      f.project.id,
-      f.provider.id,
-      { apiKey: 'rotated-test-credential' },
-    );
+    await f.models.replaceCredentials(userIds[0]!, f.provider.id, {
+      apiKey: 'rotated-test-credential',
+    });
     await db.modelProvider.update({
       where: { id: f.provider.id },
       data: { enabled: false },
@@ -751,18 +742,18 @@ function api(
   });
 }
 
-async function createProject(name = '工作流编辑测试') {
-  const response = await api('/projects', 'POST', { name });
+async function createProject(name = '工作流编辑测试', actor = 0) {
+  const response = await api('/projects', 'POST', { name }, actor);
   expect(response.status).toBe(201);
   return projectSchema.parse(await response.json());
 }
 
-async function readWorkflow(projectId: string, instance = 0) {
+async function readWorkflow(projectId: string, instance = 0, actor = 0) {
   const response = await api(
     `/projects/${projectId}/workflow`,
     'GET',
     undefined,
-    0,
+    actor,
     instance,
   );
   expect(response.status).toBe(200);

@@ -40,12 +40,8 @@ export const providerPluginDescriptionSchema = z
 export const providerPluginCatalogSchema = z
   .object({ items: z.array(providerPluginDescriptionSchema) })
   .strict();
-export const createProjectProviderRequestSchema = createModelProviderSchema.omit({
-  projectId: true,
-});
-export const createProjectModelRequestSchema = createModelConfigurationSchema.omit({
-  projectId: true,
-});
+export const createUserProviderRequestSchema = createModelProviderSchema;
+export const createUserModelRequestSchema = createModelConfigurationSchema;
 export const setModelResourceEnabledRequestSchema = z.object({ enabled: z.boolean() }).strict();
 export const replaceProviderCredentialsRequestSchema = z
   .object({

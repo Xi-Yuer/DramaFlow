@@ -18,7 +18,15 @@ import type { Type } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
+import {
+  beforeAll,
+  beforeEach,
+  afterAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { z } from 'zod';
 import type { AuthService } from '../src/auth/auth.service.js';
 import { authBaseUrl } from '../src/auth/trusted-origin.js';
@@ -133,43 +141,38 @@ const providerBody = () => ({
   configuration: { baseURL: 'http://127.0.0.1:1/custom/v1' },
   credentials: { apiKey: marker },
 });
-async function provider(projectId: string) {
-  const response = await http(
-    `/projects/${projectId}/providers`,
-    'POST',
-    providerBody(),
-  );
+async function provider(actor = 0) {
+  const response = await http(`/providers`, 'POST', providerBody(), actor);
   expect(response.status).toBe(201);
   return modelProviderSchema.parse(await json(response));
 }
-async function model(projectId: string, providerId: string) {
-  const response = await http(
-    `/projects/${projectId}/model-configurations`,
-    'POST',
-    {
-      providerId,
-      capability: 'text.generate',
-      model: 'explicit-compatible-model',
-      settings: { temperature: 0.5, maxOutputTokens: 64 },
-    },
-  );
+async function model(providerId: string) {
+  const response = await http(`/model-configurations`, 'POST', {
+    providerId,
+    capability: 'text.generate',
+    model: 'explicit-compatible-model',
+    settings: { temperature: 0.5, maxOutputTokens: 64 },
+  });
   expect(response.status).toBe(201);
   return managedModelConfigurationSchema.parse(await json(response));
 }
 async function fixture() {
   const p = await project();
-  const v = await provider(p.id);
-  const m = await model(p.id, v.id);
+  const v = await provider();
+  const m = await model(v.id);
   return {
     p,
     v,
     m,
-    providers: `/projects/${p.id}/providers`,
-    models: `/projects/${p.id}/model-configurations`,
+    providers: `/providers`,
+    models: `/model-configurations`,
   };
 }
 
-describe('项目模型管理 HTTP', () => {
+describe('用户模型管理 HTTP', () => {
+  beforeEach(async () => {
+    await db.modelProvider.deleteMany({ where: { ownerId: { in: users } } });
+  });
   it('受鉴权的安全目录来自正式插件，包含配置 Schema 和能力参数，不返回执行实现', async () => {
     expect((await http('/provider-plugins', 'GET', undefined, -1)).status).toBe(
       401,
@@ -249,16 +252,11 @@ describe('项目模型管理 HTTP', () => {
     expect(JSON.stringify(catalog)).not.toMatch(
       /text_generation|pluginId|pluginVersion|baseURL|api\.openai\.com|api\.anthropic\.com|vercel|encryptedCredentials/,
     );
-    const owned = await project();
-    const created = await http(
-      `/projects/${owned.id}/providers/catalog`,
-      'POST',
-      {
-        name: '官方 OpenAI',
-        providerDefinitionId: 'openai',
-        credentials: { apiKey: marker },
-      },
-    );
+    const created = await http(`/providers/catalog`, 'POST', {
+      name: '官方 OpenAI',
+      providerDefinitionId: 'openai',
+      credentials: { apiKey: marker },
+    });
     expect(created.status).toBe(201);
     const openai = modelProviderSchema.parse(await json(created));
     expect(openai).toMatchObject({
@@ -273,25 +271,14 @@ describe('项目模型管理 HTTP', () => {
     });
     expect(JSON.stringify(openai)).not.toContain(marker);
     expect(
-      (
-        await http(
-          `/projects/${owned.id}/providers/${openai.id}`,
-          'GET',
-          undefined,
-          1,
-        )
-      ).status,
+      (await http(`/providers/${openai.id}`, 'GET', undefined, 1)).status,
     ).toBe(404);
-    const anthropicResponse = await http(
-      `/projects/${owned.id}/providers/catalog`,
-      'POST',
-      {
-        name: '官方 Anthropic',
-        providerDefinitionId: 'anthropic',
-        credentials: { apiKey: marker },
-        configuration: {},
-      },
-    );
+    const anthropicResponse = await http(`/providers/catalog`, 'POST', {
+      name: '官方 Anthropic',
+      providerDefinitionId: 'anthropic',
+      credentials: { apiKey: marker },
+      configuration: {},
+    });
     expect(anthropicResponse.status).toBe(201);
     expect(
       modelProviderSchema.parse(await json(anthropicResponse)),
@@ -304,16 +291,12 @@ describe('项目模型管理 HTTP', () => {
         baseURL: 'https://api.anthropic.com/v1',
       },
     });
-    const configured = await http(
-      `/projects/${owned.id}/model-configurations`,
-      'POST',
-      {
-        providerId: openai.id,
-        capability: 'text.generate',
-        model: 'gpt-4o',
-        settings: { temperature: 0.2, maxOutputTokens: 32 },
-      },
-    );
+    const configured = await http(`/model-configurations`, 'POST', {
+      providerId: openai.id,
+      capability: 'text.generate',
+      model: 'gpt-4o',
+      settings: { temperature: 0.2, maxOutputTokens: 32 },
+    });
     expect(configured.status).toBe(201);
     expect(
       managedModelConfigurationSchema.parse(await json(configured))
@@ -341,15 +324,11 @@ describe('项目模型管理 HTTP', () => {
         credentials: { apiKey: marker },
       },
     ]) {
-      const rejected = await http(
-        `/projects/${owned.id}/providers/catalog`,
-        'POST',
-        body,
-      );
+      const rejected = await http(`/providers/catalog`, 'POST', body);
       expect(rejected.status).toBe(400);
       expect(await rejected.text()).not.toContain(marker);
     }
-    expect((await provider(owned.id)).providerDefinitionId).toBeNull();
+    expect((await provider()).providerDefinitionId).toBeNull();
   });
 
   it('自定义兼容 endpoint / model 经正式 API 创建、列出和读取，无默认厂商且不解密或探活', async () => {
@@ -416,7 +395,6 @@ describe('项目模型管理 HTTP', () => {
   });
 
   it('历史配置缺少插件 / 能力或参数失效时，选择器显示安全原因，不解密坏凭证', async () => {
-    const p = await project();
     for (const reason of [
       'PLUGIN_UNAVAILABLE',
       'CAPABILITY_UNAVAILABLE',
@@ -425,7 +403,7 @@ describe('项目模型管理 HTTP', () => {
       // 模拟无法再通过当前管理 API 创建的历史绑定，不替换正式 Registry。
       const v = await db.modelProvider.create({
         data: {
-          projectId: p.id,
+          ownerId: users[0]!,
           name: '历史配置',
           pluginId:
             reason === 'PLUGIN_UNAVAILABLE'
@@ -441,7 +419,7 @@ describe('项目模型管理 HTTP', () => {
       });
       const m = await db.modelConfiguration.create({
         data: {
-          projectId: p.id,
+          ownerId: users[0]!,
           providerId: v.id,
           capability:
             reason === 'CAPABILITY_UNAVAILABLE'
@@ -452,9 +430,7 @@ describe('项目模型管理 HTTP', () => {
         },
       });
       const result = managedModelConfigurationSchema.parse(
-        await json(
-          await http(`/projects/${p.id}/model-configurations/${m.id}`),
-        ),
+        await json(await http(`/model-configurations/${m.id}`)),
       );
       expect(result.availability).toEqual({
         selectable: false,
@@ -462,22 +438,18 @@ describe('项目模型管理 HTTP', () => {
       });
       if (reason === 'CONFIGURATION_INVALID') {
         const before = await db.modelConfiguration.count({
-          where: { projectId: p.id },
+          where: { ownerId: users[0]! },
         });
-        const create = await http(
-          `/projects/${p.id}/model-configurations`,
-          'POST',
-          {
-            providerId: v.id,
-            capability: 'text.generate',
-            model: 'new-model',
-            settings: {},
-          },
-        );
+        const create = await http(`/model-configurations`, 'POST', {
+          providerId: v.id,
+          capability: 'text.generate',
+          model: 'new-model',
+          settings: {},
+        });
         expect(create.status).toBe(400);
         await json(create);
         expect(
-          await db.modelConfiguration.count({ where: { projectId: p.id } }),
+          await db.modelConfiguration.count({ where: { ownerId: users[0]! } }),
         ).toBe(before);
       }
     }
@@ -554,20 +526,26 @@ describe('项目模型管理 HTTP', () => {
     ).toBe(after.encryptedCredentials);
   });
 
-  it('所有列表、读取、创建、启停和轮换均隔离其他用户和其他项目', async () => {
+  it('列表按用户隔离，猜中 ID 也不能读取、修改或使用其他用户的资源', async () => {
     const f = await fixture();
-    const other = await project();
+    expect(
+      modelProviderListSchema.parse(
+        await json(await http(f.providers, 'GET', undefined, 1)),
+      ).items,
+    ).toEqual([]);
+    expect(
+      modelConfigurationListSchema.parse(
+        await json(await http(f.models, 'GET', undefined, 1)),
+      ).items,
+    ).toEqual([]);
     for (const [path, method, body] of [
-      [f.providers, 'GET', undefined],
       [`${f.providers}/${f.v.id}`, 'GET', undefined],
-      [f.providers, 'POST', providerBody()],
       [`${f.providers}/${f.v.id}`, 'PATCH', { enabled: false }],
       [
         `${f.providers}/${f.v.id}/credentials`,
         'PUT',
         { credentials: { apiKey: marker } },
       ],
-      [f.models, 'GET', undefined],
       [`${f.models}/${f.m.id}`, 'GET', undefined],
       [
         f.models,
@@ -585,48 +563,23 @@ describe('项目模型管理 HTTP', () => {
       expect(denied.status).toBe(404);
       await json(denied);
     }
-    for (const path of [
-      `/projects/${other.id}/providers/${f.v.id}`,
-      `/projects/${other.id}/model-configurations/${f.m.id}`,
-    ]) {
-      expect((await http(path)).status).toBe(404);
-      expect((await http(path, 'PATCH', { enabled: false })).status).toBe(404);
-    }
-    expect(
-      (
-        await http(
-          `/projects/${other.id}/providers/${f.v.id}/credentials`,
-          'PUT',
-          { credentials: { apiKey: marker } },
-        )
-      ).status,
-    ).toBe(404);
-    expect(
-      (
-        await http(`/projects/${other.id}/model-configurations`, 'POST', {
-          providerId: f.v.id,
-          capability: 'text.generate',
-          model: 'x',
-          settings: {},
-        })
-      ).status,
-    ).toBe(404);
+    const otherProject = await project();
+    expect(otherProject.id).not.toBe(f.p.id);
     expect(
       modelProviderSchema.parse(
         await json(await http(`${f.providers}/${f.v.id}`)),
-      ).enabled,
-    ).toBe(true);
-    expect((await http(`/projects/${randomUUID()}/providers`)).status).toBe(
-      404,
-    );
+      ).id,
+    ).toBe(f.v.id);
     expect(
-      (await http(`/projects/${randomUUID()}/model-configurations`)).status,
-    ).toBe(404);
+      managedModelConfigurationSchema.parse(
+        await json(await http(`${f.models}/${f.m.id}`)),
+      ).id,
+    ).toBe(f.m.id);
   });
 
   it('未知插件 / 版本、未声明能力、错误参数与 URL 凭证均拒绝，不留下记录', async () => {
     const p = await project(),
-      providers = `/projects/${p.id}/providers`;
+      providers = `/providers`;
     for (const body of [
       { ...providerBody(), pluginId: 'uninstalled' },
       { ...providerBody(), pluginVersion: 99 },
@@ -649,10 +602,10 @@ describe('项目模型管理 HTTP', () => {
       expect(response.status).toBe(400);
       await json(response);
     }
-    expect(await db.modelProvider.count({ where: { projectId: p.id } })).toBe(
-      0,
-    );
-    const v = await provider(p.id);
+    expect(
+      await db.modelProvider.count({ where: { ownerId: users[0]! } }),
+    ).toBe(0);
+    const v = await provider();
     for (const body of [
       {
         providerId: v.id,
@@ -679,16 +632,12 @@ describe('项目模型管理 HTTP', () => {
         settings: { [marker]: marker },
       },
     ]) {
-      const response = await http(
-        `/projects/${p.id}/model-configurations`,
-        'POST',
-        body,
-      );
+      const response = await http(`/model-configurations`, 'POST', body);
       expect(response.status).toBe(400);
       await json(response);
     }
     expect(
-      await db.modelConfiguration.count({ where: { projectId: p.id } }),
+      await db.modelConfiguration.count({ where: { ownerId: users[0]! } }),
     ).toBe(0);
   });
 
@@ -759,8 +708,7 @@ describe('项目模型管理 HTTP', () => {
   });
 
   it('非法 JSON、敏感未知字段和加密故障均脱敏，失败不改变数据库', async () => {
-    const p = await project(),
-      path = `/projects/${p.id}/providers`;
+    const path = `/providers`;
     const malformed = await fetch(`${base}/api/v1${path}`, {
       method: 'POST',
       headers: {
@@ -778,7 +726,7 @@ describe('项目模型管理 HTTP', () => {
     });
     expect(oversized.status).toBe(413);
     await json(oversized);
-    const v = await provider(p.id);
+    const v = await provider();
     const before = await db.modelProvider.findUniqueOrThrow({
       where: { id: v.id },
     });
@@ -803,9 +751,9 @@ describe('项目模型管理 HTTP', () => {
       (await db.modelProvider.findUniqueOrThrow({ where: { id: v.id } }))
         .encryptedCredentials,
     ).toBe(before.encryptedCredentials);
-    expect(await db.modelProvider.count({ where: { projectId: p.id } })).toBe(
-      1,
-    );
+    expect(
+      await db.modelProvider.count({ where: { ownerId: users[0]! } }),
+    ).toBe(1);
   });
 
   it('启停与轮换并发只修改各自字段，恢复后模型身份保持不变', async () => {
@@ -923,17 +871,15 @@ describe('项目模型管理 HTTP', () => {
     ).toBe(nextRevision);
   });
 
-  it('两个列表有界分页，在相同时间戳下完整遍历，不接受跨项目游标', async () => {
-    const p = await project(),
-      other = await project();
-    const v = await provider(p.id),
-      foreign = await provider(other.id);
+  it('两个列表有界分页，在相同时间戳下完整遍历，不接受跨用户游标', async () => {
+    const v = await provider(),
+      foreign = await provider(1);
     const createdAt = new Date('2026-10-21T00:00:00.000Z');
     // 分页边界用固定时间戳构造批量数据，正常产品链由前面的正式 HTTP 用例验证。
     await db.modelProvider.createMany({
       data: Array.from({ length: 51 }, (_, i) => ({
         id: randomUUID(),
-        projectId: p.id,
+        ownerId: users[0]!,
         name: `分页 ${i}`,
         pluginId: v.pluginId,
         pluginVersion: v.pluginVersion,
@@ -945,7 +891,7 @@ describe('项目模型管理 HTTP', () => {
     await db.modelConfiguration.createMany({
       data: Array.from({ length: 51 }, (_, i) => ({
         id: randomUUID(),
-        projectId: p.id,
+        ownerId: users[0]!,
         providerId: v.id,
         capability: 'text.generate',
         model: `分页 ${i}`,
@@ -957,29 +903,20 @@ describe('项目模型管理 HTTP', () => {
       ['providers', modelProviderListSchema, 52],
       ['model-configurations', modelConfigurationListSchema, 51],
     ] as const) {
-      const first = schema.parse(
-        await json(await http(`/projects/${p.id}/${resource}`)),
-      );
+      const first = schema.parse(await json(await http(`/${resource}`)));
       expect(first.items).toHaveLength(50);
       expect(first.nextCursor).not.toBeNull();
       const second = schema.parse(
-        await json(
-          await http(
-            `/projects/${p.id}/${resource}?cursor=${first.nextCursor}`,
-          ),
-        ),
+        await json(await http(`/${resource}?cursor=${first.nextCursor}`)),
       );
       expect(second.nextCursor).toBeNull();
       expect(
         new Set([...first.items, ...second.items].map((item) => item.id)).size,
       ).toBe(total);
-      expect(
-        (await http(`/projects/${p.id}/${resource}?cursor=${foreign.id}`))
-          .status,
-      ).toBe(400);
-      expect(
-        (await http(`/projects/${p.id}/${resource}?limit=10000`)).status,
-      ).toBe(400);
+      expect((await http(`/${resource}?cursor=${foreign.id}`)).status).toBe(
+        400,
+      );
+      expect((await http(`/${resource}?limit=10000`)).status).toBe(400);
     }
   });
 });

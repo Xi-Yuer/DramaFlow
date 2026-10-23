@@ -49,12 +49,8 @@ async function createProject(api: APIRequestContext) {
   return project;
 }
 
-async function createProvider(
-  api: APIRequestContext,
-  projectId: string,
-  providerDefinitionId: string,
-) {
-  const response = await api.post(`/api/v1/projects/${projectId}/providers/catalog`, {
+async function createProvider(api: APIRequestContext, providerDefinitionId: string) {
+  const response = await api.post(`/api/v1/providers/catalog`, {
     headers: { Origin: origin },
     data: {
       name: providerDefinitionId === 'openai' ? 'OpenAI' : 'Anthropic',
@@ -66,13 +62,8 @@ async function createProvider(
   return modelProviderSchema.parse(await response.json());
 }
 
-async function createTextModel(
-  api: APIRequestContext,
-  projectId: string,
-  providerId: string,
-  model: string,
-) {
-  const response = await api.post(`/api/v1/projects/${projectId}/model-configurations`, {
+async function createTextModel(api: APIRequestContext, providerId: string, model: string) {
+  const response = await api.post(`/api/v1/model-configurations`, {
     headers: { Origin: origin },
     data: {
       providerId,
@@ -95,8 +86,8 @@ const selector = (page: Page) => page.getByRole('dialog', { name: '选择模型'
 
 test('文本节点只列出 text.generate 模型，选择后保存并在刷新后恢复', async ({ page, request }) => {
   const project = await createProject(request);
-  const provider = await createProvider(request, project.id, 'openai');
-  const model = await createTextModel(request, project.id, provider.id, 'gpt-4o');
+  const provider = await createProvider(request, 'openai');
+  const model = await createTextModel(request, provider.id, 'gpt-4o');
   const catalogUrls: string[] = [];
   page.on('request', (incoming) => {
     if (incoming.url().includes('/model-catalog')) catalogUrls.push(incoming.url());
@@ -157,7 +148,7 @@ test('供应商已配置但目录模型尚无配置时，用现有创建接口�
   request,
 }) => {
   const project = await createProject(request);
-  await createProvider(request, project.id, 'openai');
+  await createProvider(request, 'openai');
   await page.goto(`/projects/${project.id}`);
   await page.getByRole('button', { name: '选择模型', exact: true }).click();
   await selector(page).getByRole('button', { name: '添加 GPT-4o', exact: true }).click();
@@ -176,7 +167,7 @@ test('供应商已配置但目录模型尚无配置时，用现有创建接口�
   const configurationId = workflow.draft.nodes[0]?.config.modelConfigurationId;
   expect(workflow.draft.nodes[0]?.config).toEqual({ modelConfigurationId: configurationId });
   const models = modelConfigurationListSchema.parse(
-    await (await request.get(`/api/v1/projects/${project.id}/model-configurations`)).json(),
+    await (await request.get(`/api/v1/model-configurations`)).json(),
   );
   expect(models.items).toEqual([
     expect.objectContaining({
@@ -234,7 +225,7 @@ test('未配置供应商时从目录模型配置，添加后自动选择并在�
   const configurationId = workflow.draft.nodes[0]?.config.modelConfigurationId;
   expect(workflow.draft.nodes[0]?.config).toEqual({ modelConfigurationId: configurationId });
   const models = modelConfigurationListSchema.parse(
-    await (await request.get(`/api/v1/projects/${project.id}/model-configurations`)).json(),
+    await (await request.get(`/api/v1/model-configurations`)).json(),
   );
   expect(models.items).toEqual([
     expect.objectContaining({
@@ -256,7 +247,7 @@ test('供应商配置完成时目录模型已有可用配置，直接选中且�
     }
     const response = await route.fetch();
     const provider = modelProviderSchema.parse(await response.json());
-    const created = await request.post(`/api/v1/projects/${project.id}/model-configurations`, {
+    const created = await request.post(`/api/v1/model-configurations`, {
       headers: { Origin: origin },
       data: {
         providerId: provider.id,

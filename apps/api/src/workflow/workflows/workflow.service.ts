@@ -267,7 +267,6 @@ export class WorkflowService {
               await this.models.assertPublishableConfiguration(
                 tx,
                 ownerId,
-                workflow.projectId,
                 modelConfigurationId,
                 capability.type,
               );

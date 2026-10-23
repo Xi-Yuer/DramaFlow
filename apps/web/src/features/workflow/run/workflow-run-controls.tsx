@@ -270,7 +270,7 @@ export function WorkflowRunControls({
           type="success"
           title="运行请求已受理"
           description={
-            <Space direction="vertical" size={0}>
+            <Space orientation="vertical" size={0}>
               <span>WorkflowRun.id：{state.accepted.id}</span>
               <span>workflowVersionId：{state.accepted.workflowVersionId}</span>
               <span>invocationKey：{state.accepted.invocationKey}</span>
@@ -286,7 +286,7 @@ export function WorkflowRunControls({
           type="error"
           title="运行请求未确认"
           description={
-            <Space direction="vertical" size={0}>
+            <Space orientation="vertical" size={0}>
               <span>{state.error.message}</span>
               {state.error.workflowRunId ? (
                 <span>WorkflowRun.id：{state.error.workflowRunId}</span>

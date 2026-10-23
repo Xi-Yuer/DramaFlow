@@ -11,7 +11,6 @@ const cli = new URL('./configure-model-provider.mjs', import.meta.url);
 function config() {
   return {
     ownerId: randomUUID(),
-    projectId: randomUUID(),
     name: 'CLI 验证',
     pluginId: 'openai_compatible',
     pluginVersion: 1,

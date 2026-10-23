@@ -12,7 +12,6 @@ async function configure() {
   const config = z
     .object({
       ownerId: z.string().min(1).max(200),
-      projectId: z.uuid(),
       name: z.string().trim().min(1).max(80),
       pluginId: z.string().min(1).max(100),
       pluginVersion: z.number().int().positive(),
@@ -38,8 +37,14 @@ async function configure() {
       return [key, value];
     }),
   );
-  const { DatabaseService, ModelProviderService, SecretsService, createProviderPluginRegistry } =
-    await import('../packages/server/dist/index.js');
+  const {
+    DatabaseService,
+    ModelProviderService,
+    SecretsService,
+    createProviderPluginRegistry,
+    createProviderCatalog,
+    createModelCatalog,
+  } = await import('../packages/server/dist/index.js');
   const plugins = createProviderPluginRegistry();
   const plugin = plugins.get(config.pluginId, config.pluginVersion);
   // 在首次写库前校验整份配置，避免明知模型配置非法仍创建 Provider。
@@ -51,9 +56,15 @@ async function configure() {
 
   const database = new DatabaseService();
   try {
-    const service = new ModelProviderService(database, new SecretsService(), plugins);
+    const catalog = createProviderCatalog(plugins);
+    const service = new ModelProviderService(
+      database,
+      new SecretsService(),
+      plugins,
+      catalog,
+      createModelCatalog(catalog),
+    );
     const provider = await service.createProvider(config.ownerId, {
-      projectId: config.projectId,
       name: config.name,
       pluginId: config.pluginId,
       pluginVersion: config.pluginVersion,
@@ -61,7 +72,6 @@ async function configure() {
       credentials,
     });
     const model = await service.createModelConfiguration(config.ownerId, {
-      projectId: config.projectId,
       providerId: provider.id,
       ...config.model,
     });
@@ -75,6 +85,6 @@ try {
   console.info(JSON.stringify(await configure()));
 } catch {
   // 不输出原异常、参数、配置路径或 cause：驱动 / SDK 错误可能携带敏感信息。
-  console.error('模型配置失败，请检查构建结果、服务器配置、环境变量和项目归属；未调用模型。');
+  console.error('模型配置失败，请检查构建结果、服务器配置、环境变量和用户归属；未调用模型。');
   process.exitCode = 1;
 }

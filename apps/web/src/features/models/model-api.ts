@@ -3,13 +3,13 @@ import {
   providerPluginCatalogSchema,
   providerCatalogSchema,
   modelCatalogSchema,
-  createProjectCatalogProviderRequestSchema,
+  createUserCatalogProviderRequestSchema,
   modelProviderListSchema,
   modelConfigurationListSchema,
   modelProviderSchema,
   managedModelConfigurationSchema,
-  createProjectProviderRequestSchema,
-  createProjectModelRequestSchema,
+  createUserProviderRequestSchema,
+  createUserModelRequestSchema,
   replaceProviderCredentialsRequestSchema,
   setModelResourceEnabledRequestSchema,
 } from '@dramaflow/contracts';
@@ -19,12 +19,12 @@ export const modelKeys = {
   catalog: ['provider-plugins'] as const,
   providerCatalog: ['provider-catalog'] as const,
   modelCatalog: (capability: string) => ['model-catalog', capability] as const,
-  providers: (projectId: string) => ['model-settings', projectId, 'providers'] as const,
-  models: (projectId: string) => ['model-settings', projectId, 'models'] as const,
+  providers: (userId: string) => ['model-settings', userId, 'providers'] as const,
+  models: (userId: string) => ['model-settings', userId, 'models'] as const,
 };
-export type CreateProviderInput = z.infer<typeof createProjectProviderRequestSchema>;
-export type CreateCatalogProviderInput = z.infer<typeof createProjectCatalogProviderRequestSchema>;
-export type CreateModelInput = z.infer<typeof createProjectModelRequestSchema>;
+export type CreateProviderInput = z.infer<typeof createUserProviderRequestSchema>;
+export type CreateCatalogProviderInput = z.infer<typeof createUserCatalogProviderRequestSchema>;
+export type CreateModelInput = z.infer<typeof createUserModelRequestSchema>;
 
 // 不保留服务器原始错误、details 或 cause，防止异常响应回显凭证后进入组件 / Query 缓存。
 async function safe<T>(action: () => Promise<T>): Promise<T> {
@@ -36,7 +36,7 @@ async function safe<T>(action: () => Promise<T>): Promise<T> {
       status === 401
         ? '登录状态已失效，请重新登录'
         : status === 403 || status === 404
-          ? '项目或配置不存在，或无权访问'
+          ? '配置不存在，或无权访问'
           : status === 400
             ? '配置未通过校验，请检查所选接入方式、地址、凭证和参数'
             : status === 409
@@ -49,8 +49,8 @@ async function safe<T>(action: () => Promise<T>): Promise<T> {
     throw new ApiError(message, status);
   }
 }
-const providersPath = (id: string) => `/projects/${encodeURIComponent(id)}/providers`;
-const modelsPath = (id: string) => `/projects/${encodeURIComponent(id)}/model-configurations`;
+const providersPath = '/providers';
+const modelsPath = '/model-configurations';
 
 async function allPages<T>(
   page: (cursor?: string) => Promise<{ items: T[]; nextCursor: string | null }>,
@@ -80,65 +80,61 @@ export const modelApi = {
         signal,
       }),
     ),
-  providers: (projectId: string, signal?: AbortSignal) =>
+  providers: (signal?: AbortSignal) =>
     safe(() =>
       allPages((cursor) =>
-        request(`${providersPath(projectId)}${cursorQuery(cursor)}`, modelProviderListSchema, {
+        request(`${providersPath}${cursorQuery(cursor)}`, modelProviderListSchema, {
           signal,
         }),
       ),
     ),
-  models: (projectId: string, signal?: AbortSignal) =>
+  models: (signal?: AbortSignal) =>
     safe(() =>
       allPages((cursor) =>
-        request(`${modelsPath(projectId)}${cursorQuery(cursor)}`, modelConfigurationListSchema, {
+        request(`${modelsPath}${cursorQuery(cursor)}`, modelConfigurationListSchema, {
           signal,
         }),
       ),
     ),
-  createProvider: (projectId: string, input: CreateProviderInput) =>
+  createProvider: (input: CreateProviderInput) =>
     safe(() =>
-      request(providersPath(projectId), modelProviderSchema, {
+      request(providersPath, modelProviderSchema, {
         method: 'POST',
-        body: jsonBody(createProjectProviderRequestSchema.parse(input)),
+        body: jsonBody(createUserProviderRequestSchema.parse(input)),
       }),
     ),
-  createCatalogProvider: (projectId: string, input: CreateCatalogProviderInput) =>
+  createCatalogProvider: (input: CreateCatalogProviderInput) =>
     safe(() =>
-      request(`${providersPath(projectId)}/catalog`, modelProviderSchema, {
+      request(`${providersPath}/catalog`, modelProviderSchema, {
         method: 'POST',
-        body: jsonBody(createProjectCatalogProviderRequestSchema.parse(input)),
+        body: jsonBody(createUserCatalogProviderRequestSchema.parse(input)),
       }),
     ),
-  createModel: (projectId: string, input: CreateModelInput) =>
+  createModel: (input: CreateModelInput) =>
     safe(() =>
-      request(modelsPath(projectId), managedModelConfigurationSchema, {
+      request(modelsPath, managedModelConfigurationSchema, {
         method: 'POST',
-        body: jsonBody(createProjectModelRequestSchema.parse(input)),
+        body: jsonBody(createUserModelRequestSchema.parse(input)),
       }),
     ),
-  setProviderEnabled: (projectId: string, id: string, enabled: boolean) =>
+  setProviderEnabled: (id: string, enabled: boolean) =>
     safe(() =>
-      request(`${providersPath(projectId)}/${encodeURIComponent(id)}`, modelProviderSchema, {
+      request(`${providersPath}/${encodeURIComponent(id)}`, modelProviderSchema, {
         method: 'PATCH',
         body: jsonBody(setModelResourceEnabledRequestSchema.parse({ enabled })),
       }),
     ),
-  setModelEnabled: (projectId: string, id: string, enabled: boolean) =>
+  setModelEnabled: (id: string, enabled: boolean) =>
     safe(() =>
-      request(
-        `${modelsPath(projectId)}/${encodeURIComponent(id)}`,
-        managedModelConfigurationSchema,
-        {
-          method: 'PATCH',
-          body: jsonBody(setModelResourceEnabledRequestSchema.parse({ enabled })),
-        },
-      ),
+      request(`${modelsPath}/${encodeURIComponent(id)}`, managedModelConfigurationSchema, {
+        method: 'PATCH',
+        body: jsonBody(setModelResourceEnabledRequestSchema.parse({ enabled })),
+      }),
     ),
-  replaceCredentials: (projectId: string, id: string, credentials: Record<string, string>) =>
+  replaceCredentials: (id: string, credentials: Record<string, string>) =>
     safe(async () => {
       const response = await fetch(
-        `/api/v1${providersPath(projectId)}/${encodeURIComponent(id)}/credentials`,
+        `/api/v1${providersPath}/${encodeURIComponent(id)}/credentials`,
         {
           method: 'PUT',
           credentials: 'same-origin',

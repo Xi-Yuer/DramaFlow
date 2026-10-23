@@ -90,7 +90,7 @@ export function WorkflowRunStatusView({
           type="error"
           title="工作流运行失败"
           description={
-            <Space direction="vertical" size={0}>
+            <Space orientation="vertical" size={0}>
               <span>{run.error.message}</span>
               <span>
                 阶段：{run.error.stage}

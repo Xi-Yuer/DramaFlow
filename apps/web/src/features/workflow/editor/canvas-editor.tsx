@@ -375,8 +375,6 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
       />
       <ModelSettings
         open={modelSettingsOpen}
-        projectId={project.id}
-        projectName={name}
         setupRequest={setupRequest}
         onIntentCancelled={() =>
           setSetupRequest((current) => (current ? { ...current, intent: null } : null))

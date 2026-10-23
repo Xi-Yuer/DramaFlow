@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { Alert, Button, Form, Input, Modal, Select } from 'antd';
 import {
   createModelProviderSchema,
-  createProjectCatalogProviderRequestSchema,
+  createUserCatalogProviderRequestSchema,
   createModelConfigurationSchema,
   type ModelProvider,
   type ProviderCatalogItem,
@@ -40,12 +40,10 @@ function blankConfiguration(schema: unknown) {
 }
 
 export function ConfigureCatalogProviderForm({
-  projectId,
   provider,
   onClose,
   onCreated,
 }: {
-  projectId: string;
   provider: ProviderCatalogItem;
   onClose: () => void;
   onCreated: (provider: ModelProvider) => void | Promise<void>;
@@ -70,7 +68,7 @@ export function ConfigureCatalogProviderForm({
     let sent = false;
     try {
       const values: unknown = compiled.form?.fields.length ? await form.validateFields() : {};
-      const name = createProjectCatalogProviderRequestSchema.shape.name.parse(provider.displayName);
+      const name = createUserCatalogProviderRequestSchema.shape.name.parse(provider.displayName);
       const userConfiguration = compiled.form?.fields.length
         ? compiled.form.validate(
             z.object({ configuration: z.unknown() }).parse(values).configuration,
@@ -85,7 +83,7 @@ export function ConfigureCatalogProviderForm({
       setCredentials({});
       sent = true;
       await onCreated(
-        await modelApi.createCatalogProvider(projectId, {
+        await modelApi.createCatalogProvider({
           name,
           providerDefinitionId: provider.id,
           credentials: submitted,
@@ -169,12 +167,10 @@ export function ConfigureCatalogProviderForm({
 }
 
 export function ProviderCreateForm({
-  projectId,
   plugins,
   onClose,
   onCreated,
 }: {
-  projectId: string;
   plugins: ProviderPluginDescription[];
   onClose: () => void;
   onCreated: (provider: ModelProvider) => void;
@@ -207,7 +203,7 @@ export function ProviderCreateForm({
       const submitted = { ...credentials };
       setCredentials({}); // 提交即清空，失败也不恢复，不进入 Query mutation variables。
       sent = true;
-      const provider = await modelApi.createProvider(projectId, {
+      const provider = await modelApi.createProvider({
         name: input.name,
         pluginId: plugin.id,
         pluginVersion: plugin.version,
@@ -336,13 +332,11 @@ export function ProviderCreateForm({
 }
 
 export function CredentialRotationForm({
-  projectId,
   provider,
   fields,
   onClose,
   onRotated,
 }: {
-  projectId: string;
   provider: ModelProvider;
   fields: ProviderCatalogItem['credentialFields'];
   onClose: () => void;
@@ -365,7 +359,7 @@ export function CredentialRotationForm({
     setBusy(true);
     setError(null);
     try {
-      await modelApi.replaceCredentials(projectId, provider.id, submitted);
+      await modelApi.replaceCredentials(provider.id, submitted);
       onRotated();
     } catch (error) {
       setError(`${failure(error)}。输入已清空，请重新输入需要保存的完整凭证。`);
@@ -412,14 +406,12 @@ export function CredentialRotationForm({
 }
 
 export function ModelCreateForm({
-  projectId,
   providers,
   plugins,
   initialProviderId,
   onClose,
   onCreated,
 }: {
-  projectId: string;
   providers: ModelProvider[];
   plugins: ProviderPluginDescription[];
   initialProviderId?: string;
@@ -450,7 +442,7 @@ export function ModelCreateForm({
       const settings = compiled.form.validate(input.settings);
       sent = true;
       onCreated(
-        await modelApi.createModel(projectId, {
+        await modelApi.createModel({
           providerId: provider.id,
           capability: selected.type,
           model: input.model,

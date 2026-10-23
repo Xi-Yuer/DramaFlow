@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test';
-import { projectSchema } from '@dramaflow/contracts';
+import { createDatabase } from '../../../packages/database/dist/index.js';
+import { currentUserSchema, projectSchema } from '@dramaflow/contracts';
 export { expect };
 export const origin = 'http://127.0.0.1:3200';
 const loginHeaders = {
@@ -54,7 +55,22 @@ export const test = base.extend<object, { session: Session; foreignId: string }>
 });
 
 const pageErrors = new WeakMap<Page, string[]>();
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, request }) => {
+  const url = new URL(process.env.DATABASE_URL ?? 'http://invalid');
+  if (
+    process.env.DRAMAFLOW_INTEGRATION !== '1' ||
+    url.pathname !== '/dramaflow_test' ||
+    !['localhost', '127.0.0.1'].includes(url.hostname)
+  )
+    throw new Error('Web 测试只允许隔离开发库');
+  const owner = currentUserSchema.parse(await (await request.get('/api/v1/users/me')).json());
+  if (owner.email !== process.env.WEB_TEST_OWNER_EMAIL) throw new Error('拒绝清理非本轮测试用户');
+  const db = createDatabase();
+  try {
+    await db.modelProvider.deleteMany({ where: { ownerId: owner.id } });
+  } finally {
+    await db.$disconnect();
+  }
   const errors: string[] = [];
   pageErrors.set(page, errors);
   page.on('pageerror', (error) => errors.push(error.message));

@@ -34,7 +34,7 @@
 
 所有业务读写在服务端校验资源权限。当前项目按所有者隔离。将来的工作空间成员关系独立建模，不能用平台 role 代替。
 
-Provider 凭证由服务端用 AES-256-GCM 加密，当前项目 ownerId 作为 AAD，数据库只保存密文。CREDENTIAL_ENCRYPTION_KEY 是 32 字节密钥的 64 字符十六进制，只放在服务端，并与数据库备份分开保管。丢失或更换后，既有密文不可解密，不自动切换凭证或 Provider。
+Provider 凭证由服务端用 AES-256-GCM 加密，Provider 所有者的用户 ID 作为 AAD，数据库只保存密文。CREDENTIAL_ENCRYPTION_KEY 是 32 字节密钥的 64 字符十六进制，只放在服务端，并与数据库备份分开保管。丢失或更换后，既有密文不可解密，不自动切换凭证或 Provider。
 
 Workflow / Version 只引用模型配置 UUID。NodeRun、Outbox、checkpoint 和自动 tracing 不保存 Provider 凭证。读取接口不回填明文或密文；Web 不把 Secret 放入表单存储、Query 缓存、URL 或浏览器存储。模型管理、轮换和调用时的授权见 [架构](architecture.md#plugin--provider--模型配置管理-http)。
 

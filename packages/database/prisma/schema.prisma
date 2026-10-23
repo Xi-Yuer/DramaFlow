@@ -13,21 +13,23 @@ datasource db {
 // 业务模型由用户逐步指导后添加。
 
 model User {
-  id            String       @id
-  name          String       @db.VarChar(80)
-  email         String       @unique @db.VarChar(254)
-  emailVerified Boolean      @default(false)
-  image         String?
-  role          String       @default("user") @db.VarChar(32)
-  banned        Boolean      @default(false)
-  banReason     String?
-  banExpires    DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  sessions      Session[]
-  accounts      Account[]
-  profile       UserProfile?
-  projects      Project[]
+  id                  String               @id
+  name                String               @db.VarChar(80)
+  email               String               @unique @db.VarChar(254)
+  emailVerified       Boolean              @default(false)
+  image               String?
+  role                String               @default("user") @db.VarChar(32)
+  banned              Boolean              @default(false)
+  banReason           String?
+  banExpires          DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  sessions            Session[]
+  accounts            Account[]
+  profile             UserProfile?
+  projects            Project[]
+  modelProviders      ModelProvider[]
+  modelConfigurations ModelConfiguration[]
 
   @@map("auth_user")
 }
@@ -105,20 +107,18 @@ model RateLimit {
 
 // 项目保存基础画布信息；Workflow 定义与运行入口独立接入。
 model Project {
-  id                  String               @id @default(uuid()) @db.Uuid
-  ownerId             String
-  name                String               @db.VarChar(80)
-  revision            Int                  @default(1)
-  viewport            Json
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  owner               User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  workflow            Workflow?
-  nodeRuns            NodeRun[]
-  workflowRuns        WorkflowRun[]
-  artifacts           Artifact[]
-  modelProviders      ModelProvider[]
-  modelConfigurations ModelConfiguration[]
+  id           String        @id @default(uuid()) @db.Uuid
+  ownerId      String
+  name         String        @db.VarChar(80)
+  revision     Int           @default(1)
+  viewport     Json
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  workflow     Workflow?
+  nodeRuns     NodeRun[]
+  workflowRuns WorkflowRun[]
+  artifacts    Artifact[]
 
   @@index([ownerId, updatedAt, id])
   @@map("canvas_project")
@@ -238,11 +238,11 @@ model Artifact {
   @@map("artifact")
 }
 
-// 项目内的 Provider Instance。plugin 与 configuration 是执行配置；
+// 用户所有的 Provider Instance。plugin 与 configuration 是执行配置；
 // providerDefinitionId 指向代码中的官方定义，直接插件配置时为空。凭证只保存密文。
 model ModelProvider {
   id                   String               @id @default(uuid()) @db.Uuid
-  projectId            String               @db.Uuid
+  ownerId              String
   name                 String               @db.VarChar(80)
   pluginId             String               @db.VarChar(100)
   pluginVersion        Int
@@ -251,28 +251,28 @@ model ModelProvider {
   encryptedCredentials String
   enabled              Boolean              @default(true)
   createdAt            DateTime             @default(now())
-  project              Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner                User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   models               ModelConfiguration[]
 
-  @@unique([id, projectId])
-  @@index([projectId])
+  @@unique([id, ownerId])
+  @@index([ownerId])
   @@map("model_provider")
 }
 
 // 不可变能力 / 模型绑定；Workflow 只保存此 ID，不保存 endpoint 或凭证。
 model ModelConfiguration {
   id         String        @id @default(uuid()) @db.Uuid
-  projectId  String        @db.Uuid
+  ownerId    String
   providerId String        @db.Uuid
   capability String        @db.VarChar(100)
   model      String        @db.VarChar(200)
   settings   Json
   enabled    Boolean       @default(true)
   createdAt  DateTime      @default(now())
-  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  provider   ModelProvider @relation(fields: [providerId, projectId], references: [id, projectId], onDelete: Cascade)
+  owner      User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  provider   ModelProvider @relation(fields: [providerId, ownerId], references: [id, ownerId], onDelete: Cascade)
 
-  @@index([projectId])
+  @@index([ownerId])
   @@index([providerId])
   @@map("model_configuration")
 }

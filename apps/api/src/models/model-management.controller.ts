@@ -1,7 +1,7 @@
 import {
-  createProjectProviderRequestSchema,
-  createProjectCatalogProviderRequestSchema,
-  createProjectModelRequestSchema,
+  createUserProviderRequestSchema,
+  createUserCatalogProviderRequestSchema,
+  createUserModelRequestSchema,
   replaceProviderCredentialsRequestSchema,
   setModelResourceEnabledRequestSchema,
   modelManagementListQuerySchema,
@@ -57,7 +57,7 @@ async function safe<T>(action: () => Promise<T> | T): Promise<T> {
     if (error instanceof NotFoundException)
       throw new NotFoundException({
         code: 'MODEL_RESOURCE_NOT_FOUND',
-        message: '项目或模型资源不存在或无权访问',
+        message: '模型资源不存在或无权访问',
       });
     if (error instanceof BadRequestException)
       throw new BadRequestException({
@@ -98,169 +98,124 @@ export class ModelManagementController {
     );
   }
 
-  @Get('projects/:projectId/providers')
+  @Get('providers')
   @Header('Cache-Control', 'no-store')
-  listProviders(
-    @Actor() actor: AuthActor,
-    @Param('projectId') projectId: string,
-    @Query() query: unknown,
-  ) {
+  listProviders(@Actor() actor: AuthActor, @Query() query: unknown) {
     return safe(() =>
       this.models.listProviders(
         actor.user.id,
-        parse(z.uuid(), projectId),
         parse(modelManagementListQuerySchema, query),
       ),
     );
   }
 
-  @Get('projects/:projectId/providers/:providerId')
+  @Get('providers/:providerId')
   @Header('Cache-Control', 'no-store')
   getProvider(
     @Actor() actor: AuthActor,
-    @Param('projectId') projectId: string,
     @Param('providerId') providerId: string,
   ) {
     return safe(() =>
-      this.models.getProvider(
-        actor.user.id,
-        parse(z.uuid(), projectId),
-        parse(z.uuid(), providerId),
-      ),
+      this.models.getProvider(actor.user.id, parse(z.uuid(), providerId)),
     );
   }
 
-  @Post('projects/:projectId/providers/catalog')
+  @Post('providers/catalog')
   @Header('Cache-Control', 'no-store')
-  createCatalogProvider(
-    @Actor() actor: AuthActor,
-    @Param('projectId') projectId: string,
-    @Body() body: unknown,
-  ) {
+  createCatalogProvider(@Actor() actor: AuthActor, @Body() body: unknown) {
     return safe(() =>
       this.models.createProviderFromCatalog(actor.user.id, {
-        ...parse(createProjectCatalogProviderRequestSchema, body),
-        projectId: parse(z.uuid(), projectId),
+        ...parse(createUserCatalogProviderRequestSchema, body),
       }),
     );
   }
 
-  @Post('projects/:projectId/providers')
+  @Post('providers')
   @Header('Cache-Control', 'no-store')
-  createProvider(
-    @Actor() actor: AuthActor,
-    @Param('projectId') projectId: string,
-    @Body() body: unknown,
-  ) {
+  createProvider(@Actor() actor: AuthActor, @Body() body: unknown) {
     return safe(() =>
       this.models.createProvider(actor.user.id, {
-        ...parse(createProjectProviderRequestSchema, body),
-        projectId: parse(z.uuid(), projectId),
+        ...parse(createUserProviderRequestSchema, body),
       }),
     );
   }
 
-  @Patch('projects/:projectId/providers/:providerId')
+  @Patch('providers/:providerId')
   @Header('Cache-Control', 'no-store')
   setProviderEnabled(
     @Actor() actor: AuthActor,
-    @Param('projectId') projectId: string,
     @Param('providerId') providerId: string,
     @Body() body: unknown,
   ) {
     return safe(() =>
       this.models.setProviderEnabled(
         actor.user.id,
-        parse(z.uuid(), projectId),
         parse(z.uuid(), providerId),
         parse(setModelResourceEnabledRequestSchema, body).enabled,
       ),
     );
   }
 
-  @Put('projects/:projectId/providers/:providerId/credentials')
+  @Put('providers/:providerId/credentials')
   @HttpCode(204)
   @Header('Cache-Control', 'no-store')
   replaceCredentials(
     @Actor() actor: AuthActor,
-    @Param('projectId') projectId: string,
     @Param('providerId') providerId: string,
     @Body() body: unknown,
   ) {
     return safe(() =>
       this.models.replaceCredentials(
         actor.user.id,
-        parse(z.uuid(), projectId),
         parse(z.uuid(), providerId),
         parse(replaceProviderCredentialsRequestSchema, body).credentials,
       ),
     );
   }
 
-  @Get('projects/:projectId/model-configurations')
+  @Get('model-configurations')
   @Header('Cache-Control', 'no-store')
-  listModels(
-    @Actor() actor: AuthActor,
-    @Param('projectId') projectId: string,
-    @Query() query: unknown,
-  ) {
+  listModels(@Actor() actor: AuthActor, @Query() query: unknown) {
     return safe(() =>
       this.models.listModelConfigurations(
         actor.user.id,
-        parse(z.uuid(), projectId),
         parse(modelManagementListQuerySchema, query),
       ),
     );
   }
 
-  @Get('projects/:projectId/model-configurations/:modelId')
+  @Get('model-configurations/:modelId')
   @Header('Cache-Control', 'no-store')
-  getModel(
-    @Actor() actor: AuthActor,
-    @Param('projectId') projectId: string,
-    @Param('modelId') modelId: string,
-  ) {
+  getModel(@Actor() actor: AuthActor, @Param('modelId') modelId: string) {
     return safe(() =>
       this.models.getManagedModelConfiguration(
         actor.user.id,
-        parse(z.uuid(), projectId),
         parse(z.uuid(), modelId),
       ),
     );
   }
 
-  @Post('projects/:projectId/model-configurations')
+  @Post('model-configurations')
   @Header('Cache-Control', 'no-store')
-  createModel(
-    @Actor() actor: AuthActor,
-    @Param('projectId') projectId: string,
-    @Body() body: unknown,
-  ) {
+  createModel(@Actor() actor: AuthActor, @Body() body: unknown) {
     return safe(async () => {
       const model = await this.models.createModelConfiguration(actor.user.id, {
-        ...parse(createProjectModelRequestSchema, body),
-        projectId: parse(z.uuid(), projectId),
+        ...parse(createUserModelRequestSchema, body),
       });
-      return this.models.getManagedModelConfiguration(
-        actor.user.id,
-        model.projectId,
-        model.id,
-      );
+      return this.models.getManagedModelConfiguration(actor.user.id, model.id);
     });
   }
 
-  @Patch('projects/:projectId/model-configurations/:modelId')
+  @Patch('model-configurations/:modelId')
   @Header('Cache-Control', 'no-store')
   setModelEnabled(
     @Actor() actor: AuthActor,
-    @Param('projectId') projectId: string,
     @Param('modelId') modelId: string,
     @Body() body: unknown,
   ) {
     return safe(() =>
       this.models.setModelEnabled(
         actor.user.id,
-        parse(z.uuid(), projectId),
         parse(z.uuid(), modelId),
         parse(setModelResourceEnabledRequestSchema, body).enabled,
       ),

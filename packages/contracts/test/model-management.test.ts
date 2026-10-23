@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  createProjectProviderRequestSchema,
-  createProjectCatalogProviderRequestSchema,
-  createProjectModelRequestSchema,
+  createUserProviderRequestSchema,
+  createUserCatalogProviderRequestSchema,
+  createUserModelRequestSchema,
   setModelResourceEnabledRequestSchema,
   replaceProviderCredentialsRequestSchema,
   modelAvailabilitySchema,
@@ -10,7 +10,7 @@ import {
 } from '../src/index.js';
 
 describe('模型管理协议', () => {
-  it('项目身份仅来自路由，创建和启停严格拒绝额外字段', () => {
+  it('Owner 仅来自认证会话，创建和启停严格拒绝额外字段', () => {
     const provider = {
       name: '自选服务',
       pluginId: 'openai_compatible',
@@ -18,24 +18,25 @@ describe('模型管理协议', () => {
       configuration: { baseURL: 'http://localhost:8080/v1' },
       credentials: { apiKey: 'test-only' },
     };
-    expect(createProjectProviderRequestSchema.parse(provider)).toEqual(provider);
+    expect(createUserProviderRequestSchema.parse(provider)).toEqual(provider);
     const catalogProvider = {
       name: 'OpenAI',
       providerDefinitionId: 'openai',
       credentials: { apiKey: 'test-only' },
     };
-    expect(createProjectCatalogProviderRequestSchema.parse(catalogProvider)).toEqual(
-      catalogProvider,
-    );
+    expect(createUserCatalogProviderRequestSchema.parse(catalogProvider)).toEqual(catalogProvider);
     expect(
-      createProjectCatalogProviderRequestSchema.safeParse({
+      createUserCatalogProviderRequestSchema.safeParse({
         ...catalogProvider,
         pluginId: 'text_generation',
         projectId: '00000000-0000-4000-8000-000000000001',
       }).success,
     ).toBe(false);
     expect(
-      createProjectProviderRequestSchema.safeParse({ ...provider, projectId: 'spoof' }).success,
+      createUserProviderRequestSchema.safeParse({ ...provider, projectId: 'spoof' }).success,
+    ).toBe(false);
+    expect(
+      createUserProviderRequestSchema.safeParse({ ...provider, ownerId: 'spoof' }).success,
     ).toBe(false);
     const model = {
       providerId: '00000000-0000-4000-8000-000000000001',
@@ -43,8 +44,8 @@ describe('模型管理协议', () => {
       model: 'my-model',
       settings: {},
     };
-    expect(createProjectModelRequestSchema.parse(model)).toEqual(model);
-    expect(createProjectModelRequestSchema.safeParse({ ...model, enabled: false }).success).toBe(
+    expect(createUserModelRequestSchema.parse(model)).toEqual(model);
+    expect(createUserModelRequestSchema.safeParse({ ...model, enabled: false }).success).toBe(
       false,
     );
     expect(setModelResourceEnabledRequestSchema.parse({ enabled: false })).toEqual({
