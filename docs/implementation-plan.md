@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-If Branch successor 进入交付验收，能力见[当前架构](architecture.md)。浏览器分支串行 / 并行与分支内 ALL join、不同深度输出候选、非法汇合提示、Save / reload / Publish / Run 待人工验收，本轮不运行浏览器 E2E 或真实 Provider。后续条件类型或拓扑扩展须单独授权。
+If Branch successor 已完成人工验证。Merge 当前仅交付领域声明与静态边界分析，生产 Publish / Compile gate 保持关闭。下一步须单独实现并验证 LangGraph 汇聚编译、选中分支完成 barrier、START / END 与预算后才能开放执行；Web Merge 编辑与候选输入绑定分别独立推进，未获本轮实施授权。已实现能力见[当前架构](architecture.md)与 [Runtime](runtime-architecture.md#merge-静态边界尚不可执行)。
 
 ## 待决策与后续边界
 

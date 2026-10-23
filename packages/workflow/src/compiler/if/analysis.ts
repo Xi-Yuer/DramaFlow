@@ -1,4 +1,6 @@
 import type { WorkflowDefinition } from '@dramaflow/contracts';
+import { mergeConfigSchema } from '../../node/merge.js';
+import { analyzeMergeBoundaries, type AnalyzedMergeBoundary } from './merge-boundaries.js';
 import { collectNodeDependencies, type NodeDependency } from '../dependency.compiler.js';
 
 import {
@@ -9,6 +11,10 @@ import {
 export type { SimpleIfRoute } from './branch-regions.js';
 
 export type IfCapabilityIssueCode =
+  | 'MERGE_OPENER_INVALID'
+  | 'MERGE_BRANCH_COVERAGE_INVALID'
+  | 'MERGE_BYPASS_UNSUPPORTED'
+  | 'MERGE_EXECUTION_UNSUPPORTED'
   | 'IF_TOPOLOGY_UNSUPPORTED'
   | 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED'
   | 'IF_CONVERGENCE_UNSUPPORTED'
@@ -16,6 +22,16 @@ export type IfCapabilityIssueCode =
   | 'IF_REGION_INTERSECTION_UNSUPPORTED'
   | 'IF_BRANCH_DEPENDENCY_UNSUPPORTED';
 const messages = new Map<string, string>([
+  ['MERGE_OPENER_INVALID', 'Merge 必须唯一配对当前支持的 flow.if@1 控制入口'],
+  [
+    'MERGE_BRANCH_COVERAGE_INVALID',
+    'Merge 必须完整接入配对 true / false 分支的所有末端，且不得混入其他来源',
+  ],
+  ['MERGE_BYPASS_UNSUPPORTED', '分支依赖不能绕过 Merge 进入汇聚后的流程'],
+  [
+    'MERGE_EXECUTION_UNSUPPORTED',
+    'Merge 静态声明已支持，但当前 Compiler 尚无执行策略，不能发布执行',
+  ],
   ['IF_TOPOLOGY_UNSUPPORTED', '当前 Compiler 要求 If 的 true / false 各有一个 Action 入口'],
   [
     'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',
@@ -38,9 +54,13 @@ export class SimpleIfCapabilityError extends Error {
     this.name = 'SimpleIfCapabilityError';
   }
 }
-export interface SimpleIfExecutionAnalysis {
+export interface IfTopologyAnalysis {
   routes: SimpleIfRoute[];
   branchRegions: BranchRegionAnalysis;
+  mergeBoundaries: AnalyzedMergeBoundary[];
+  ordinaryDependencies: NodeDependency[];
+}
+export interface SimpleIfExecutionAnalysis extends IfTopologyAnalysis {
   staticDependencies: NodeDependency[];
   roots: string[];
   leaves: string[];
@@ -48,12 +68,12 @@ export interface SimpleIfExecutionAnalysis {
   recursionLimit: number;
 }
 
-// 仅适用于已通过 Definition / Manifest 静态校验的 Action + flow.if@1 图。
+// 仅适用于已通过 Definition / Manifest 静态校验的 Action + flow.if@1 + flow.merge@1 图。
 // 这是当前 Compiler 的能力边界，不是永久 Workflow Contract 或自定义调度器。
-export function analyzeSimpleIfExecution(
+export function analyzeIfTopology(
   definition: WorkflowDefinition,
   ifNodeIds: ReadonlySet<string>,
-): SimpleIfExecutionAnalysis {
+): IfTopologyAnalysis {
   const reject = (nodeId: string): never => {
     throw new SimpleIfCapabilityError('IF_TOPOLOGY_UNSUPPORTED', nodeId);
   };
@@ -78,10 +98,33 @@ export function analyzeSimpleIfExecution(
   }
   const ordinaryEdges = definition.edges.filter((edge) => !ifNodeIds.has(edge.source.nodeId));
   const ordinaryDependencies = collectNodeDependencies(ordinaryEdges, definition.nodes);
+  const mergePairs = definition.nodes
+    .filter((node) => node.type === 'flow.merge' && node.typeVersion === 1)
+    .map((node) => {
+      const config = mergeConfigSchema.safeParse(node.config);
+      const opener =
+        config.success &&
+        definition.nodes.find((candidate) => candidate.id === config.data.openerNodeId);
+      if (
+        !opener ||
+        opener.type !== 'flow.if' ||
+        opener.typeVersion !== 1 ||
+        !ifNodeIds.has(opener.id)
+      )
+        throw new SimpleIfCapabilityError('MERGE_OPENER_INVALID', node.id);
+      return { nodeId: node.id, openerNodeId: opener.id };
+    });
+  const openers = new Set<string>();
+  for (const pair of mergePairs) {
+    if (openers.has(pair.openerNodeId))
+      throw new SimpleIfCapabilityError('MERGE_OPENER_INVALID', pair.nodeId);
+    openers.add(pair.openerNodeId);
+  }
   const branchRegions = analyzeBranchRegions(
     definition.nodes.map((node) => node.id),
     routes,
     ordinaryDependencies,
+    mergePairs,
   );
   for (const id of ifNodeIds)
     if (branchRegions.memberships.get(id)?.length)
@@ -96,6 +139,14 @@ export function analyzeSimpleIfExecution(
       'IF_REGION_INTERSECTION_UNSUPPORTED',
       branchRegions.intersections[0]!,
     );
+  const mergeBoundaries = analyzeMergeBoundaries(
+    mergePairs,
+    branchRegions,
+    ordinaryDependencies,
+    (code, nodeId) => {
+      throw new SimpleIfCapabilityError(code, nodeId);
+    },
+  );
   const parents = new Map(
     ordinaryDependencies.map((dependency) => [dependency.targetNodeId, dependency.sourceNodeIds]),
   );
@@ -136,6 +187,24 @@ export function analyzeSimpleIfExecution(
         output.source.nodeId,
       );
   }
+  return { routes, branchRegions, mergeBoundaries, ordinaryDependencies };
+}
+
+// 执行投影只支持已实现的策略；静态认识 Merge 不代表可以套用普通 ALL 编译。
+export function analyzeSimpleIfExecution(
+  definition: WorkflowDefinition,
+  ifNodeIds: ReadonlySet<string>,
+): SimpleIfExecutionAnalysis {
+  const topology = analyzeIfTopology(definition, ifNodeIds);
+  if (topology.mergeBoundaries.length)
+    throw new SimpleIfCapabilityError(
+      'MERGE_EXECUTION_UNSUPPORTED',
+      topology.mergeBoundaries[0]!.nodeId,
+    );
+  const { routes, ordinaryDependencies } = topology;
+  const reject = (nodeId: string): never => {
+    throw new SimpleIfCapabilityError('IF_TOPOLOGY_UNSUPPORTED', nodeId);
+  };
   // 只移除 entry 的静态触发；successor 的 ALL 依赖和原始 Binding 均保留。
   const entries = new Set(routes.flatMap((route) => [route.true, route.false]));
   const staticDependencies = ordinaryDependencies.filter(
@@ -179,8 +248,7 @@ export function analyzeSimpleIfExecution(
   // 此拓扑每节点至多执行一次，If 路由写入属于 If 本身的 superstep；两支取潜在最长路径。
   // 再加一次终止检测，与纯 Action 分析独立维护并用真实 LangGraph 边界测试证明。
   return {
-    routes,
-    branchRegions,
+    ...topology,
     staticDependencies,
     roots,
     leaves: definition.nodes.filter((node) => !downstream.has(node.id)).map((node) => node.id),

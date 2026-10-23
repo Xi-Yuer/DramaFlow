@@ -10,6 +10,7 @@ import {
 } from '@langchain/langgraph';
 import { validateWorkflowDefinitionSemantics } from '../definition/validate-publish.js';
 import { createWorkflowDefinitionSnapshot } from '../definition/version.js';
+import { isMergeManifest } from '../node/merge.js';
 import { NodeRegistry } from '../node/registry.js';
 import type { NodeExecutor } from '../runtime/node-executor.js';
 import { WorkflowStateAnnotation, type WorkflowState } from '../runtime/state.js';
@@ -52,7 +53,7 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     const ifStrategy = new IfNodeCompilationStrategy();
     const entries = definition.nodes.map((node) => {
       const declaration = this.registry.get(node.type, node.typeVersion);
-      if (!ifStrategy.supports(declaration.manifest))
+      if (!ifStrategy.supports(declaration.manifest) && !isMergeManifest(declaration.manifest))
         this.registry.getAction(node.type, node.typeVersion);
       return { node, declaration };
     });
@@ -61,8 +62,10 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
         .filter((entry) => ifStrategy.supports(entry.declaration.manifest))
         .map((entry) => entry.node.id),
     );
+    const hasMerge = entries.some((entry) => isMergeManifest(entry.declaration.manifest));
     // 所有能力 / 拓扑 / 输出证明均在创建服务或执行节点前完成。
     if (
+      hasMerge ||
       ifNodeIds.size ||
       definition.outputs.some((output) => output.sources !== undefined) ||
       definition.edges.some(
@@ -74,7 +77,9 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       validateWorkflowDefinitionSemantics(definition, this.registry);
     }
     const ifAnalysis =
-      ifNodeIds.size || definition.outputs.some((output) => output.sources !== undefined)
+      hasMerge ||
+      ifNodeIds.size ||
+      definition.outputs.some((output) => output.sources !== undefined)
         ? analyzeSimpleIfExecution(definition, ifNodeIds)
         : undefined;
     const { recursionLimit } = ifAnalysis ?? analyzeActionDagExecution(definition);

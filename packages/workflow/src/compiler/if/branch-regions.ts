@@ -5,6 +5,10 @@ export interface SimpleIfRoute {
   true: string;
   false: string;
 }
+export interface MergeBoundary {
+  nodeId: string;
+  openerNodeId: string;
+}
 export interface BranchRegion {
   ifNodeId: string;
   branch: 'true' | 'false';
@@ -28,6 +32,7 @@ export function analyzeBranchRegions(
   nodeIds: readonly string[],
   routes: readonly SimpleIfRoute[],
   ordinaryDependencies: readonly NodeDependency[],
+  mergeBoundaries: readonly MergeBoundary[] = [],
 ): BranchRegionAnalysis {
   const children = new Map<string, string[]>();
   const parents = new Map<string, readonly string[]>();
@@ -42,12 +47,13 @@ export function analyzeBranchRegions(
   function reachable(
     seeds: readonly string[],
     adjacency: ReadonlyMap<string, readonly string[]>,
+    boundaryId?: string,
   ): Set<string> {
     const result = new Set<string>();
     const pending = [...seeds];
     for (let index = 0; index < pending.length; index++) {
       const id = pending[index]!;
-      if (result.has(id)) continue;
+      if (id === boundaryId || result.has(id)) continue;
       result.add(id);
       pending.push(...(adjacency.get(id) ?? []));
     }
@@ -59,7 +65,8 @@ export function analyzeBranchRegions(
     const guaranteedBefore = reachable(parents.get(route.nodeId) ?? [], parents);
     for (const branch of ['true', 'false'] as const) {
       const entryNodeId = route[branch];
-      const members = reachable([entryNodeId], children);
+      const boundary = mergeBoundaries.find((boundary) => boundary.openerNodeId === route.nodeId);
+      const members = reachable([entryNodeId], children, boundary?.nodeId);
       const region: BranchRegion = {
         ifNodeId: route.nodeId,
         branch,
