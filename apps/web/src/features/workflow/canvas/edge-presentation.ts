@@ -9,12 +9,7 @@ export function getWorkflowEdgePresentation(data: WorkflowEdgeData) {
   return {
     flowing: true,
     color: '#729d99',
-    projectionLabel:
-      data.projection === 'template-input'
-        ? '模板'
-        : data.projection === 'candidate-input'
-          ? '候选'
-          : undefined,
+    projectionLabel: data.projection === 'candidate-input' ? '候选' : undefined,
   };
 }
 

@@ -29,6 +29,7 @@ function renderEdge(edge: WorkflowEdge, geometry = points, selected = false) {
     deletable: edge.deletable ?? true,
     sourceHandleId: edge.sourceHandle,
     targetHandleId: edge.targetHandle,
+    markerStart: undefined,
     markerEnd: 'url(#direction)',
   };
   return renderToStaticMarkup(
@@ -84,13 +85,13 @@ describe('Data / Control / Projection Edge Presentation', () => {
       expect(html).toContain('data-edge-kind="control"');
       expect(html).toContain('marker-end="url(#direction)"');
       expect(html).not.toContain('stroke-dasharray');
-      expect(html).not.toMatch(/class="[^"]*flow[^"]*"/);
+      expect(html).not.toContain('aria-hidden="true"');
     }
     expect(fromReactFlowEdge(edge)).toEqual(definitions.control);
   });
 
   it.each([
-    ['template-input', '模板', templateWorkflow, false],
+    ['template-input', undefined, templateWorkflow, false],
     ['candidate-input', '候选', candidateWorkflow, true],
   ] as const)(
     '%s 保留流动、投影标识、交互权限和纯视图身份',
@@ -107,9 +108,10 @@ describe('Data / Control / Projection Edge Presentation', () => {
         expect(edge.deletable ?? true).toBe(deletable);
         const html = renderEdge(edge);
         expect(html).toContain(`data-projection="${projection}"`);
-        expect(html).toContain(`>${label}</text>`);
+        if (label) expect(html).toContain(`>${label}</text>`);
+        else expect(html).not.toContain('<text');
         expect(html).toContain('stroke-dasharray:3 5');
-        expect(html).toMatch(/class="[^"]*flow[^"]*"/);
+        expect(html).toContain('aria-hidden="true"');
         expect(() => fromReactFlowEdge(edge)).toThrow('不能导出为 DataEdge');
       }
       expect(workflow).toEqual(snapshot);
