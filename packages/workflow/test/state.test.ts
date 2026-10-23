@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import {
   DuplicateNodeOutputWriteError,
   mergeNodeOutputs,
+  mergeWorkflowExecution,
+  workflowStateSchema,
   WorkflowStateAnnotation,
   type WorkflowState,
 } from '../src/index.js';
@@ -97,5 +99,24 @@ describe('真实 WorkflowState 通道', () => {
       code: 'DUPLICATE_NODE_OUTPUT_WRITE',
       nodeId: 'same',
     });
+  });
+});
+
+describe('内部 control results State', () => {
+  it('按 nodeId 合并多个 If，false 保留、重复写入拒绝；旧空 execution 仍合法', () => {
+    const first = Object.freeze({ controlResults: Object.freeze({ first: false }) });
+    const second = Object.freeze({ controlResults: Object.freeze({ second: true }) });
+    expect(mergeWorkflowExecution(first, second)).toEqual({
+      controlResults: { first: false, second: true },
+    });
+    expect(first).toEqual({ controlResults: { first: false } });
+    expect(() => mergeWorkflowExecution(first, first)).toThrow('重复写入');
+    expect(workflowStateSchema.parse(initialState).execution).toEqual({});
+    expect(
+      workflowStateSchema.safeParse({
+        ...initialState,
+        execution: { controlResults: { first: 'false' } },
+      }).success,
+    ).toBe(false);
   });
 });

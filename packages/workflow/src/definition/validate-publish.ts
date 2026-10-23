@@ -6,8 +6,9 @@ import {
 } from '@dramaflow/contracts';
 import { StateGraph } from '@langchain/langgraph';
 import { NodeRegistry } from '../node/registry.js';
-import type { NodeDeclaration, NodeType } from '../node/type.js';
+import type { NodeDeclaration } from '../node/type.js';
 import { DefaultDataStoragePolicyResolver } from '../runtime/values/data-storage-policy-resolver.js';
+import { analyzeSimpleIfExecution, SimpleIfCapabilityError } from '../compiler/if/analysis.js';
 import { WorkflowStateAnnotation } from '../runtime/state.js';
 
 export type WorkflowPublishIssueCode =
@@ -26,7 +27,9 @@ export type WorkflowPublishIssueCode =
   | 'CONTROL_OUTPUT_PORT_REQUIRED'
   | 'CONTROL_OUTPUT_BRANCH_MISSING'
   | 'ASSET_BINDING_UNSUPPORTED'
-  | 'OUTPUT_STORAGE_UNSUPPORTED';
+  | 'OUTPUT_STORAGE_UNSUPPORTED'
+  | 'IF_TOPOLOGY_UNSUPPORTED'
+  | 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED';
 
 export class WorkflowPublishValidationError extends Error {
   constructor(
@@ -35,9 +38,11 @@ export class WorkflowPublishValidationError extends Error {
     readonly portKey?: string,
   ) {
     super(
-      code === 'NODE_EXECUTION_KIND_UNSUPPORTED'
-        ? '当前 Compiler 尚不支持该节点执行种类，不能发布执行'
-        : '工作流不满足静态发布条件',
+      code === 'IF_TOPOLOGY_UNSUPPORTED' || code === 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED'
+        ? '当前 Compiler 不支持该 If 拓扑或可能缺失的最终输出'
+        : code === 'NODE_EXECUTION_KIND_UNSUPPORTED'
+          ? '当前 Compiler 尚不支持该节点执行种类，不能发布执行'
+          : '工作流不满足静态发布条件',
     );
     this.name = 'WorkflowPublishValidationError';
   }
@@ -49,9 +54,7 @@ export interface ValidatedDefinitionNode {
   readonly config: unknown;
 }
 
-export interface ValidatedPublishNode extends ValidatedDefinitionNode {
-  readonly nodeType: NodeType;
-}
+export type ValidatedPublishNode = ValidatedDefinitionNode;
 
 function isSupportedIf(nodeType: NodeDeclaration): boolean {
   const { manifest } = nodeType;
@@ -230,16 +233,22 @@ export function validateWorkflowDefinitionSemantics(
   return entries;
 }
 
-// 生产发布必须经过此入口。静态语义合法不等于当前 Compiler 已支持执行。
-// 阶段性门禁涵盖全部 If 拓扑和分支最终输出，不向 Contract 注入永久限制。
+// 生产 Publish 与 Compiler 使用同一简单 If 能力分析，不能只按 executionKind 放行。
 export function validateWorkflowForPublish(
   definition: WorkflowDefinition,
   registry: NodeRegistry,
 ): ValidatedPublishNode[] {
   const entries = validateWorkflowDefinitionSemantics(definition, registry);
-  return entries.map((entry) => {
-    if (entry.nodeType.manifest.executionKind !== 'action')
-      invalid('NODE_EXECUTION_KIND_UNSUPPORTED', entry.node.id);
-    return { ...entry, nodeType: registry.getAction(entry.node.type, entry.node.typeVersion) };
-  });
+  const ifNodeIds = new Set(
+    entries.filter((entry) => isSupportedIf(entry.nodeType)).map((entry) => entry.node.id),
+  );
+  if (ifNodeIds.size) {
+    try {
+      analyzeSimpleIfExecution(definition, ifNodeIds);
+    } catch (error) {
+      if (error instanceof SimpleIfCapabilityError) invalid(error.code, error.nodeId);
+      throw error;
+    }
+  }
+  return entries;
 }

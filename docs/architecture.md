@@ -11,7 +11,7 @@
 | Publish    | 静态语义、同 Owner 模型绑定校验、不可变版本；保存和发布独立                                                  |
 | Run        | 已发布版本提交、幂等身份、状态查询、离开保护和 invocation identity recovery                                  |
 | Result     | completed Run 展示 declared outputs；支持 inline 与 reference 身份，尚无 Artifact 内容 HTTP API              |
-| 执行       | 普通 Action DAG；API 提交，独立 Worker 执行；其他 executionKind 只有声明边界                                 |
+| 执行       | 普通 Action DAG 与简单 If 终端分支；独立 Worker 执行；其他结构未支持                                         |
 | 基础设施   | PostgreSQL / Prisma、Redis / BullMQ、RustFS、官方 PostgreSQL Checkpointer                                    |
 
 End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 `nodes`、Registry 或执行链。拖动业务输出端口到 End 自动添加 `result` / `result_2` 等唯一名称；End 内可添加、编辑名称与来源、删除输出，类型取所选精确版本 Manifest 的 output port。边界连线不写入 `edges`，删除连线删除对应 output；删除业务节点同步清理关联边和 output。End 位置仅保留在当前页面，重载使用默认位置；已有声明从 Definition 恢复。名称沿用 Contract 规则，保存与发布仍分开；Start Boundary 和 Workflow Input 编辑器尚未实现。
@@ -28,7 +28,7 @@ Project 使用 `GET / POST /projects`、`GET / PUT /projects/:id`；Workflow 使
 
 ## Workflow 发布与版本 HTTP API
 
-发布入口 `POST /workflows/:workflowId/publish`；版本摘要 `GET /workflows/:workflowId/versions`；固定版本 `GET /workflow-versions/:versionId`。发布锁定来源修订并原子分配版本号，失败不写版本；不解密凭证或调用模型。当前拒绝 Asset 绑定与非 Action 的生产发布。Registry 已注册 flow.if@1 control 声明；静态语义验证 condition 安全子集与 true / false 控制出口；独立 evaluator 已封装解释执行，但 Compiler 尚未支持，生产发布仍统一拒绝含 If 的图。声明与阶段性门禁见 [Node](node-model.md#if-声明与阶段性发布门禁)。
+发布入口 `POST /workflows/:workflowId/publish`；版本摘要 `GET /workflows/:workflowId/versions`；固定版本 `GET /workflow-versions/:versionId`。发布锁定来源修订并原子分配版本号，失败不写版本；不解密凭证或调用模型。当前拒绝 Asset 绑定及未支持执行种类。精确 flow.if@1 已支持原生条件路由；Publish 与 Compiler 共享简单拓扑分析，只放行分支指向终端 Action 且输入已就绪、最终输出必定存在的图。协议与能力限制见 [Node](node-model.md#if-条件节点与编译能力边界)，Web If 编辑尚未交付。
 
 ## 生产 Runtime 装配
 

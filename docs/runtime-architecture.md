@@ -28,6 +28,18 @@ Compiler 在创建 Executor / 图节点前确认全图均为受支持的 Action 
 
 这只覆盖当前策略首次正常执行的技术预算，不是费用、节点数量或 thread 累计额度。Runner 不分析拓扑；interrupt / resume 语义不变，未来执行种类必须独立定义预算。
 
+### 简单 If 的条件路由与预算
+
+当前仅开放精确 `flow.if@1`，由独立 IfNodeCompilationStrategy 编译；普通 Action strategy / NodeExecutor 不变。If 复用 BindingResolver 与本次 Run 已授权的 Codec，校验 RuntimeValue 和解码后的 string，再调用 evaluateCondition 一次。它不创建 Action NodeRun，也不返回公开 Data Output。条件结果写入内部 `execution.controlResults[nodeId]`，boolean map reducer 合并并行 If、拒绝重复写入；旧空 execution 仍有效，checkpoint / resume 保存该结果。
+
+Compiler 使用 LangGraph 原生 addConditionalEdges，callback 只读取该 If 已写入的 boolean，不再 Binding / decode / 求值。当前 true / false 各指向一个不同的终端 Action；支持多个分支互不重叠的独立 If，以及 If 前的普通 Action DAG / ALL join。分支的每个 Data / Control / Template 来源必须是所属 If 的严格祖先，保证路由发生时已经完成。
+
+`compiler/if/analysis.ts` 复用 collectNodeDependencies，同时验证当前拓扑并产生编译投影。If 的命名 ControlEdge 不进入普通静态依赖；分支目标的其他依赖只用于就绪证明和 Binding，不编译成无条件触发边，避免 DataEdge / Template 绕过条件。其他普通依赖仍由 DependencyCompiler 编译为原生 ALL。START 排除所有条件目标；END 连接可执行叶子，不等待未选分支。
+
+预算按实际编译后的静态依赖与两条潜在条件路径计算最长节点深度（包含 If），再加 1 次终止检测；If 路由 callback 不额外占 superstep。这是独立的简单 If 分析，不调用 Action 专用分析。真实边界为 A=1、If=2、leaf=3，recursionLimit=4；100 个上游并行节点仍为 4，100 层串行上游加 If 和 leaf 为 103。预算属于单次 invocation，不是 thread 累计额度。
+
+Publish 与 Compiler 共用同一个能力分析：拒绝分支后继链、merge / nested、跨支依赖、共享分支目标、一出口多目标、来源未被 If 前置保证就绪的分支输入，以及条件分支来源的 Workflow output；不新增长期 Contract 限制或 optional output。不通过能力检查时，在创建执行服务 / 执行任何节点前失败。只允许声明必定执行的无条件节点输出，OutputResolver 不变。Web If 编辑尚未交付。
+
 ## Submission 与 Runner
 
 Submission 校验固定版本的调用契约，再原子创建 / 复用 Run 与 Outbox；不编译、claim 或解析引用内容。Repository 持续按项目 / 所有者授权，身份、版本、thread 和 inputs 不可改写。幂等规则见 [Workflow](workflow-model.md#start-invocation-身份)。
@@ -52,7 +64,7 @@ resume 只传不透明 value；单 interrupt 的 false / 0 / null 使用原生 i
 | inputs    | 本次 RuntimeValue 输入，不可变                                     |
 | outputs   | nodeId → outputKey → RuntimeValue，当前有效结果                    |
 | variables | 显式变量，不开放节点任意读写                                       |
-| execution | 图控制状态，当前为空                                               |
+| execution | 内部 controlResults boolean map，按 If nodeId 保存条件结果         |
 
 State 与 Annotation 共处 runtime/state.ts。run / inputs / variables / execution 为单值通道，Action wrapper 只返回当前 nodeId 的 outputs 增量，不展开旧 State。非变异 reducer 合并不同节点；重复 nodeId 即报 DUPLICATE_NODE_OUTPUT_WRITE，不合并端口片段或静默覆盖。
 

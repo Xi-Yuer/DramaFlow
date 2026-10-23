@@ -13,7 +13,7 @@ export function createIfNodeType(): NodeDeclaration {
       metadata: {
         name: '条件分支',
         category: 'flow',
-        description: '按字符串精确比较选择 true 或 false 分支（暂不可发布运行）',
+        description: '按字符串条件选择 true 或 false 分支',
       },
       inputs: [{ key: 'value', name: '输入值', dataType: StringType, required: true }],
       outputs: [],

@@ -165,10 +165,16 @@ export function workflowRunnerFixture() {
     { write: vi.fn() },
     new DefaultDataStoragePolicyResolver(),
   );
-  const executor = new DefaultNodeExecutor(registry, createBindingResolver(), codec, nodeRuns);
+  const bindings = createBindingResolver();
+  const executor = new DefaultNodeExecutor(registry, bindings, codec, nodeRuns);
   const checkpointer = new MemorySaver(); // 仅测试，生产调用必须明确注入持久 Checkpointer。
   const executorFactory = vi.fn(async (_run: WorkflowRun) => executor);
-  const compiler = new DefaultWorkflowCompiler(registry, executorFactory, checkpointer);
+  const compiler = new DefaultWorkflowCompiler(
+    registry,
+    executorFactory,
+    checkpointer,
+    async () => ({ bindings, codec }),
+  );
   const graphs: CompiledWorkflow[] = [];
   const compile = vi
     .fn<WorkflowCompiler['compile']>()
@@ -230,6 +236,8 @@ export function workflowRunnerFixture() {
     compile,
     execute,
     executor,
+    bindings,
+    codec,
     executorFactory,
     graphs,
     checkpointer,

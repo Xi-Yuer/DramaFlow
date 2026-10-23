@@ -143,9 +143,7 @@ describe('flow.if@1 协议与发布阶段门禁', () => {
         const graph = definition();
         graph.nodes[0]!.config = { condition };
         expect(check(graph)).toHaveLength(3);
-        expect(() => validateWorkflowForPublish(graph, registry())).toThrow(
-          expect.objectContaining({ code: 'NODE_EXECUTION_KIND_UNSUPPORTED' }),
-        );
+        expect(validateWorkflowForPublish(graph, registry())).toHaveLength(3);
       }
       let deep: WorkflowDefinition['nodes'][number]['config'][string] = {
         in: ['x', { var: 'value' }],
@@ -245,22 +243,16 @@ describe('flow.if@1 协议与发布阶段门禁', () => {
       );
     }
   });
-  it('静态合法也不能通过生产 Publish，不调用业务 execute；错误只给安全定位', () => {
+  it('简单 If 可通过生产 Publish，但发布不调用业务 execute 或条件求值', () => {
     const text = createTextGenerationNodeType();
     const execute = vi.spyOn(text, 'execute');
     const types = new NodeRegistry([text, createIfNodeType()]);
     const graph = definition();
     expect(check(graph, types)).toHaveLength(3);
-    expect(() => validateWorkflowForPublish(graph, types)).toThrow(
-      expect.objectContaining({
-        code: 'NODE_EXECUTION_KIND_UNSUPPORTED',
-        nodeId: 'if_1',
-        message: expect.stringContaining('Compiler'),
-      }),
-    );
+    expect(validateWorkflowForPublish(graph, types)).toHaveLength(3);
     expect(execute).not.toHaveBeenCalled();
   });
-  it('阶段性门禁同样覆盖汇合、跨分支依赖和分支最终输出，不新增永久 Contract 限制', () => {
+  it('Compiler 能力边界拒绝汇合与跨分支依赖，不新增永久 Contract 限制', () => {
     const graph = definition();
     graph.nodes.push({ ...graph.nodes[1]!, id: 'D' });
     graph.edges.push(
@@ -274,7 +266,7 @@ describe('flow.if@1 协议与发布阶段门禁', () => {
     expect(() => workflowDefinitionSchema.parse(graph)).not.toThrow();
     expect(check(graph)).toHaveLength(4);
     expect(() => validateWorkflowForPublish(graph, registry())).toThrow(
-      expect.objectContaining({ code: 'NODE_EXECUTION_KIND_UNSUPPORTED' }),
+      expect.objectContaining({ code: 'IF_TOPOLOGY_UNSUPPORTED' }),
     );
   });
 });

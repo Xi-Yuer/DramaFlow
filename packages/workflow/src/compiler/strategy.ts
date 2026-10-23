@@ -22,9 +22,9 @@ export interface NodeCompilationContext {
   ): Omit<NodeExecutionContext, 'state' | 'projectId' | 'workflowRunId'>;
   addNode(id: string, node: LangGraphNode): void;
 }
-export interface NodeCompilationStrategy {
+export interface NodeCompilationStrategy<Context = NodeCompilationContext> {
   supports(manifest: NodeTypeManifest): boolean;
-  compile(context: NodeCompilationContext): void;
+  compile(context: Context): void;
 }
 export class ActionNodeCompilationStrategy implements NodeCompilationStrategy {
   supports(manifest: NodeTypeManifest): boolean {

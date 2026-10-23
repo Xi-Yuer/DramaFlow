@@ -4,10 +4,10 @@
 
 ## 当前阶段
 
-If 条件协议调整与安全 evaluator 边界已完成自动验证：condition 替换 operator / expected，仅支持 string 单条件，生产发布仍保留 Compiler 未支持门禁。后续 If conditional routing 与 Web 编辑必须分别授权，不自动开始 Task 2。
+If Task 2 已完成自动验证：专用编译策略、原生条件路由、内部 State、简单拓扑准入与执行预算；仅支持终端 Action 分支。Task 3 Web 编辑尚未授权，不自动开始。
 
 ## 待决策与后续边界
 
 - Runtime 运维：recovery_required 人工处理、业务记录 / checkpoint 对账、运行删除与保留策略；maxConcurrency=1 的已知宽并行异常需独立调查。
-- Human Review、Iteration、Batch、SubWorkflow、conditional 各自定义执行语义，不能沿用普通 Action DAG 的技术预算公式。
+- Human Review、Iteration、Batch、SubWorkflow 及简单 If 之外的条件拓扑各自定义执行语义，不能直接沿用当前技术预算公式。
 - Artifact 内容 HTTP、Asset / Promote、媒体能力、Tool / Agent 和上下文构建均待独立任务；声明或测试夹具不代表产品已交付。

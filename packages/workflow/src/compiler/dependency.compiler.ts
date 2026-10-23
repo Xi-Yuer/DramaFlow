@@ -12,6 +12,7 @@ export interface NodeDependency {
 export interface DependencyCompilationContext {
   edges: readonly WorkflowEdge[];
   nodes?: readonly Pick<NodeDefinition, 'id' | 'inputs'>[];
+  dependencies?: readonly NodeDependency[];
   addEdge(sourceNodeId: string | string[], targetNodeId: string): void;
 }
 
@@ -44,10 +45,8 @@ export function collectNodeDependencies(
 
 export class DependencyCompiler {
   compile(context: DependencyCompilationContext): void {
-    for (const { targetNodeId, sourceNodeIds } of collectNodeDependencies(
-      context.edges,
-      context.nodes ?? [],
-    )) {
+    for (const { targetNodeId, sourceNodeIds } of context.dependencies ??
+      collectNodeDependencies(context.edges, context.nodes ?? [])) {
       // collectNodeDependencies 只为实际出现的依赖创建分组，因此每组至少有一个上游。
       const source = sourceNodeIds.length === 1 ? sourceNodeIds[0]! : sourceNodeIds;
       context.addEdge(source, targetNodeId);
