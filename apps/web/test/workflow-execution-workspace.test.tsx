@@ -60,7 +60,14 @@ function fixture(): WorkflowExecutionWorkspaceProps {
       versionError: false,
       draftDirty: false,
       state: { phase: 'idle', accepted: null, request: null, error: null },
-      runStatus: { phase: 'idle', runId: null, run: null, error: null, refreshing: false },
+      runStatus: {
+        phase: 'idle',
+        runId: null,
+        run: null,
+        error: null,
+        refreshing: false,
+        review: null,
+      },
       onSelectVersion: vi.fn(),
       onChangeInput: vi.fn(),
       onRun: vi.fn(),
@@ -91,6 +98,7 @@ function tracked(props: WorkflowExecutionWorkspaceProps) {
         run: completed,
         error: null,
         refreshing: false,
+        review: null,
       },
     },
   };

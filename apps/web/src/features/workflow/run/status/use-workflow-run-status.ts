@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { workflowApi } from '../../workflow-api';
+import type { HumanReviewActions } from './workflow-run-status';
 import { WorkflowRunStatusController } from './workflow-run-status';
 
 export function useWorkflowRunStatus(runId: string | null) {
@@ -8,6 +9,8 @@ export function useWorkflowRunStatus(runId: string | null) {
     () =>
       new WorkflowRunStatusController({
         get: (target, signal) => workflowApi.getRun(target, signal),
+        getPending: (target, signal) => workflowApi.getPendingHumanReviews(target, signal),
+        resume: (target, input) => workflowApi.resumeRun(target, input),
       }),
     [],
   );
@@ -27,5 +30,9 @@ export function useWorkflowRunStatus(runId: string | null) {
   return {
     state,
     refresh: () => controller.refresh(),
+    reviewActions: {
+      onFeedback: (identity, feedback) => controller.setFeedback(identity, feedback),
+      onDecision: (identity, action) => void controller.submit(identity, action),
+    } satisfies HumanReviewActions,
   };
 }

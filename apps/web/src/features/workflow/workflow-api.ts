@@ -1,5 +1,8 @@
 import {
   publishWorkflowRequestSchema,
+  pendingHumanReviewsResponseSchema,
+  resumeWorkflowRunRequestSchema,
+  type ResumeWorkflowRunRequest,
   startWorkflowRunRequestSchema,
   workflowRunResponseSchema,
   workflowInvocationLookupResponseSchema,
@@ -31,6 +34,17 @@ export const workflowApi = {
   getRun: (runId: string, signal?: AbortSignal) =>
     request(`/workflow-runs/${encodeURIComponent(runId)}`, workflowRunResponseSchema, {
       signal,
+    }),
+  getPendingHumanReviews: (runId: string, signal?: AbortSignal) =>
+    request(
+      `/workflow-runs/${encodeURIComponent(runId)}/pending-human-reviews`,
+      pendingHumanReviewsResponseSchema,
+      { signal },
+    ),
+  resumeRun: (runId: string, input: ResumeWorkflowRunRequest) =>
+    request(`/workflow-runs/${encodeURIComponent(runId)}/resume`, workflowRunResponseSchema, {
+      method: 'POST',
+      body: jsonBody(resumeWorkflowRunRequestSchema.parse(input)),
     }),
   startRun: (input: StartWorkflowRunRequest) =>
     request('/workflow-runs', workflowRunResponseSchema, {

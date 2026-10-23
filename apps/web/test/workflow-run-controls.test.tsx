@@ -50,6 +50,7 @@ const props: Parameters<typeof WorkflowRunControls>[0] = {
     run: null,
     error: null,
     refreshing: false,
+    review: null,
   },
   onSelectVersion: () => undefined,
   onChangeInput: () => undefined,

@@ -1,4 +1,9 @@
-import type { WorkflowRunResponse } from '@dramaflow/contracts';
+import type {
+  PendingHumanReview,
+  PendingHumanReviewsResponse,
+  ResumeWorkflowRunRequest,
+  WorkflowRunResponse,
+} from '@dramaflow/contracts';
 import { ApiError } from '../../../../lib/http';
 import type { WorkflowRunState } from '../workflow-run';
 
@@ -9,16 +14,31 @@ export interface WorkflowRunStatusError {
   status: number;
 }
 
+export interface HumanReviewState {
+  phase: 'ready' | 'submitting' | 'reconciling';
+  item: PendingHumanReview;
+  feedback: string;
+  notice: string | null;
+}
+
+export interface HumanReviewActions {
+  onFeedback: (identity: PendingHumanReview, feedback: string) => void;
+  onDecision: (identity: PendingHumanReview, action: 'approve' | 'reject') => void;
+}
+
 export interface WorkflowRunStatusState {
   phase: 'idle' | 'loading' | 'ready' | 'error';
   runId: string | null;
   run: WorkflowRunResponse | null;
   error: WorkflowRunStatusError | null;
   refreshing: boolean;
+  review: HumanReviewState | null;
 }
 
 interface WorkflowRunStatusOperations {
   get(runId: string, signal: AbortSignal): Promise<WorkflowRunResponse>;
+  getPending(runId: string, signal: AbortSignal): Promise<PendingHumanReviewsResponse>;
+  resume(runId: string, input: ResumeWorkflowRunRequest): Promise<WorkflowRunResponse>;
 }
 
 function statusError(error: unknown): WorkflowRunStatusError {
@@ -28,8 +48,8 @@ function statusError(error: unknown): WorkflowRunStatusError {
   };
 }
 
-function continuesPolling(run: WorkflowRunResponse): boolean {
-  return run.status === 'pending' || run.status === 'running';
+function sameReview(a: PendingHumanReview, b: PendingHumanReview) {
+  return a.interruptId === b.interruptId && a.waitingRevision === b.waitingRevision;
 }
 
 export function workflowRunTrackingId(state: WorkflowRunState): string | null {
@@ -45,6 +65,7 @@ export class WorkflowRunStatusController {
     run: null,
     error: null,
     refreshing: false,
+    review: null,
   };
   private readonly listeners = new Set<() => void>();
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -72,42 +93,65 @@ export class WorkflowRunStatusController {
     if (runId === this.state.runId) return;
     this.cancelActive();
     this.targetGeneration++;
-    if (!runId) {
-      this.update({
-        phase: 'idle',
-        runId: null,
-        run: null,
-        error: null,
-        refreshing: false,
-      });
-      return;
-    }
     this.update({
-      phase: 'loading',
+      phase: runId ? 'loading' : 'idle',
       runId,
       run: null,
       error: null,
-      refreshing: true,
+      refreshing: !!runId,
+      review: null,
     });
-    void this.load(runId, this.targetGeneration);
+    if (runId) void this.load(runId, this.targetGeneration);
   }
 
   stop(runId: string): void {
-    if (this.state.runId !== runId) return;
-    this.cancelActive();
-    this.targetGeneration++;
-    this.update({
-      phase: 'idle',
-      runId: null,
-      run: null,
-      error: null,
-      refreshing: false,
-    });
+    if (this.state.runId === runId) this.watch(null);
   }
 
   async refresh(): Promise<void> {
-    if (!this.state.runId) return;
+    if (!this.state.runId || this.state.review?.phase === 'submitting') return;
     await this.load(this.state.runId, this.targetGeneration);
+  }
+
+  setFeedback(identity: PendingHumanReview, feedback: string): void {
+    const review = this.state.review;
+    if (!review || !sameReview(review.item, identity) || !this.canSubmit()) return;
+    this.update({ review: { ...review, feedback } });
+  }
+
+  private canSubmit() {
+    return (
+      this.state.phase === 'ready' &&
+      !this.state.refreshing &&
+      this.state.run?.status === 'waiting' &&
+      this.state.review?.phase === 'ready' &&
+      this.state.review.item.submissionStatus === 'pending'
+    );
+  }
+
+  async submit(identity: PendingHumanReview, action: 'approve' | 'reject'): Promise<void> {
+    const { runId, review } = this.state;
+    if (!runId || !review || !sameReview(review.item, identity) || !this.canSubmit()) return;
+    const generation = this.targetGeneration;
+    this.cancelActive();
+    this.update({ review: { ...review, phase: 'submitting', notice: null } });
+    let notice: string | null = null;
+    try {
+      // 不自动重放 POST；即使响应丢失，后续也只查询服务端事实。
+      await this.operations.resume(runId, {
+        interruptId: review.item.interruptId,
+        expectedWaitingRevision: review.item.waitingRevision,
+        value: { action, ...(review.feedback ? { feedback: review.feedback } : {}) },
+      });
+    } catch (error) {
+      notice =
+        error instanceof ApiError && error.status === 409
+          ? '审批状态已变化，已重新读取当前审批，请核对后操作。'
+          : '未能确认审批提交结果，已重新查询服务器状态；请核对当前审批后再操作。';
+    }
+    if (generation !== this.targetGeneration || this.state.runId !== runId) return;
+    this.update({ review: { ...review, phase: 'reconciling', notice } });
+    await this.load(runId, generation, notice);
   }
 
   private cancelActive() {
@@ -117,14 +161,21 @@ export class WorkflowRunStatusController {
     this.request = null;
   }
 
-  private async load(runId: string, targetGeneration: number): Promise<void> {
+  private async load(
+    runId: string,
+    targetGeneration: number,
+    notice: string | null = null,
+  ): Promise<void> {
     if (this.state.runId !== runId || this.targetGeneration !== targetGeneration) return;
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = null;
-    this.request?.abort();
+    this.cancelActive();
     const request = new AbortController();
     this.request = request;
     const requestGeneration = ++this.requestGeneration;
+    const isCurrent = () =>
+      !request.signal.aborted &&
+      this.state.runId === runId &&
+      this.targetGeneration === targetGeneration &&
+      this.requestGeneration === requestGeneration;
     this.update({
       ...(this.state.run ? {} : { phase: 'loading' as const }),
       error: null,
@@ -132,41 +183,43 @@ export class WorkflowRunStatusController {
     });
     try {
       const run = await this.operations.get(runId, request.signal);
-      if (
-        request.signal.aborted ||
-        this.state.runId !== runId ||
-        this.targetGeneration !== targetGeneration ||
-        this.requestGeneration !== requestGeneration
-      )
-        return;
+      if (!isCurrent()) return;
       if (run.id !== runId) throw new ApiError('返回的运行身份与查询目标不匹配', 200);
+      this.update({ run });
+      let review: HumanReviewState | null = null;
+      if (run.status === 'waiting') {
+        const pending = await this.operations.getPending(runId, request.signal);
+        if (!isCurrent()) return;
+        if (pending.items.length > 1) throw new ApiError('当前暂不支持同时处理多个待审批节点', 200);
+        const item = pending.items[0];
+        if (item) {
+          const previous = this.state.review;
+          review = {
+            phase: 'ready',
+            item,
+            feedback: previous && sameReview(previous.item, item) ? previous.feedback : '',
+            notice,
+          };
+        }
+      }
       this.request = null;
-      this.update({
-        phase: 'ready',
-        run,
-        error: null,
-        refreshing: false,
-      });
-      if (continuesPolling(run)) {
+      this.update({ phase: 'ready', run, review, error: null, refreshing: false });
+      // 普通待审批不频繁查询；已提交或状态切换间隙沿用同一 Run timer 跟踪。
+      if (
+        run.status === 'pending' ||
+        run.status === 'running' ||
+        (run.status === 'waiting' && (!review || review.item.submissionStatus === 'submitted'))
+      ) {
         this.timer = setTimeout(() => {
           this.timer = null;
           void this.load(runId, targetGeneration);
         }, POLL_INTERVAL_MS);
       }
     } catch (error) {
-      if (
-        request.signal.aborted ||
-        this.state.runId !== runId ||
-        this.targetGeneration !== targetGeneration ||
-        this.requestGeneration !== requestGeneration
-      )
-        return;
+      if (!isCurrent()) return;
       this.request = null;
-      this.update({
-        phase: 'error',
-        error: statusError(error),
-        refreshing: false,
-      });
+      // 查询失败后撤下旧审批，避免旧 token/revision 继续可提交。
+      this.update({ phase: 'error', error: statusError(error), refreshing: false, review: null });
     }
   }
 }

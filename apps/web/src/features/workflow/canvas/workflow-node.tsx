@@ -3,6 +3,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { Handle, Position, type NodeProps, type NodeTypes } from '@xyflow/react';
 import type { DataType, NodeTypeManifest } from '@dramaflow/contracts';
+import { HumanReviewSettings } from '../node-catalog/human-review-settings';
 import { NodeTypeIcon } from '../node-catalog/node-type-icon';
 import { ModelSelector } from '../model-selection/model-selector';
 import type { WorkflowNode } from './react-flow-adapter';
@@ -74,10 +75,16 @@ export function GenericWorkflowNode({
   const isIf =
     data.nodeType === 'flow.if' && data.typeVersion === 1 && manifest?.executionKind === 'control';
 
+  const isHumanReview =
+    data.nodeType === 'flow.human_review' &&
+    data.typeVersion === 1 &&
+    manifest?.executionKind === 'interaction';
+
   const inputPorts =
     manifest?.inputs.filter(
       (port) =>
         data.inputs[port.key]?.type === 'candidate' ||
+        (isHumanReview && port.key === 'content') ||
         (isIf
           ? port.key === 'value'
           : data.nodeType === 'ai.text_generate' &&
@@ -178,6 +185,13 @@ export function GenericWorkflowNode({
               ))}
             </div>
           </div>
+          {isHumanReview ? (
+            <HumanReviewSettings
+              nodeId={id}
+              name={data.name}
+              instruction={data.config.instruction}
+            />
+          ) : null}
           {inputActions && inputPorts.length > 0 ? (
             <div className={styles.inputs}>
               {inputPorts.map((port) => {
@@ -217,7 +231,7 @@ export function GenericWorkflowNode({
             </div>
           ) : null}
           {isIf ? <IfConditionEditor nodeId={id} condition={data.config.condition} /> : null}
-          {!isIf && manifest.config.length ? (
+          {!isIf && !isHumanReview && manifest.config.length ? (
             <dl className={styles.config}>
               {manifest.config.slice(0, 3).map((field) => (
                 <div

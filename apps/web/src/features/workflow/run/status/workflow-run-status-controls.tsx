@@ -1,6 +1,7 @@
 import { Alert, Button, Collapse, Descriptions, Space, Tag, Typography } from 'antd';
 import type { WorkflowRunStatus } from '@dramaflow/contracts';
-import type { WorkflowRunStatusState } from './workflow-run-status';
+import { HumanReviewCard } from './human-review-card';
+import type { HumanReviewActions, WorkflowRunStatusState } from './workflow-run-status';
 import { WorkflowRunResult } from '../result/workflow-run-result';
 import styles from '../workflow-run.module.css';
 
@@ -24,9 +25,11 @@ function formatTime(value: string) {
 export function WorkflowRunStatusView({
   state,
   onRefresh,
+  reviewActions,
 }: {
   state: WorkflowRunStatusState;
   onRefresh: () => void;
+  reviewActions?: HumanReviewActions;
 }) {
   if (state.phase === 'idle') return null;
   const run = state.run;
@@ -44,7 +47,7 @@ export function WorkflowRunStatusView({
         <Button
           size="small"
           loading={state.refreshing}
-          disabled={state.refreshing}
+          disabled={state.refreshing || state.review?.phase === 'submitting'}
           onClick={onRefresh}
         >
           手动刷新
@@ -74,12 +77,26 @@ export function WorkflowRunStatusView({
       ) : null}
 
       {run?.status === 'waiting' ? (
-        <Alert
-          showIcon
-          type="warning"
-          title="工作流正在等待外部/人工继续"
-          description="本阶段仅展示等待状态，不提供恢复操作。"
-        />
+        state.review && reviewActions ? (
+          <HumanReviewCard
+            review={state.review}
+            actions={reviewActions}
+            refreshing={state.refreshing}
+          />
+        ) : (
+          <Alert
+            showIcon
+            type="warning"
+            title="工作流正在等待继续"
+            description={
+              state.refreshing
+                ? '正在读取待审批内容…'
+                : state.error
+                  ? '待审批状态未确认，请手动刷新。'
+                  : '当前没有可处理的人工审核，正在确认运行状态。'
+            }
+          />
+        )
       ) : null}
 
       {run?.status === 'failed' && run.error ? (
@@ -111,7 +128,7 @@ export function WorkflowRunStatusView({
             <Button
               size="small"
               loading={state.refreshing}
-              disabled={state.refreshing}
+              disabled={state.refreshing || state.review?.phase === 'submitting'}
               onClick={onRefresh}
             >
               手动刷新

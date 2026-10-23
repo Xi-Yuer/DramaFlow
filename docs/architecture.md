@@ -34,7 +34,7 @@ Human Review 已有正式 NodeRun 审计：首次进入创建 attempt 1 running�
 
 [审核专用 Repository](../packages/server/src/workflow/runtime/node-run-repository.ts)在原有事务 advisory lock 内获取 / 创建记录，核对 Owner / Project / Run、已 claim 的 running Run、固定 WorkflowVersion 中的精确 Human Review node，以及唯一 attempt 1 running 历史；终态、多 attempt 或错误节点 / 版本明确拒绝，不按 latest running 猜测，也不自动新建 attempt 2。inputs 仍受原有一次写约束保护，完整执行的串行性依赖 Run / Outbox 的数据库 claim，获取 / 创建本身的唯一性由节点锁与既有唯一约束保证。Action createRunning 继续原子分配新 attempt。
 
-该复用键仅适用于当前无环、每节点每 Run 一次逻辑审核的能力边界。未来 Loop / Iteration 必须增加显式 execution occurrence identity；本轮没有新增发生次数模型、NodeRun waiting、数据库字段或约束。审计 completed 与 Graph checkpoint 不构成跨系统原子提交；异常中断后的对账 / recovery_required 仍沿用既有边界，不重放终态记录。待审批查询与 targeted resume HTTP 已接入，Web 审批与 Artifact 预览待后续任务。
+该复用键仅适用于当前无环、每节点每 Run 一次逻辑审核的能力边界。未来 Loop / Iteration 必须增加显式 execution occurrence identity；本轮没有新增发生次数模型、NodeRun waiting、数据库字段或约束。审计 completed 与 Graph checkpoint 不构成跨系统原子提交；异常中断后的对账 / recovery_required 仍沿用既有边界，不重放终态记录。待审批查询与 targeted resume HTTP 已接入，Web 已提供单个文本审批闭环，Artifact 预览待后续任务。
 
 ## Workflow 编辑 HTTP API
 
@@ -142,6 +142,14 @@ unsafe 注册标准 beforeunload，safe / 卸载时解除。不改写 Router / h
 页面重进只读 lookup，核对 workflow / version / key / 已知 Run ID 后复用 Status tracking。未找到、冲突或查询失败时保留身份，可重新查询，不自动 POST / 换 key；存在未确认身份时，用户确认新旧请求可能同时执行后才发起独立 Run。accepted / queue uncertainty 补写失败不重发，旧 uncertainty 不被后续一次 4xx 消除。
 
 确认 completed / failed / cancelled 后先由页面持有 Run，再自动清理 receipt；waiting 保留。清理不清空当前页面，但下次重进不依赖已删除的终态 receipt 自动发现历史。多 Run 不覆盖，storage event 只同步集合，不当锁或跨 Tab 自动提交。Logout 成功清本用户并失效晚到写回，失败保留；存储清理失败明确提示。离开保护仍保留，找到当前错误请求的 Run 后解除旧 uncertainty。
+
+### Web Human Review
+
+正式目录中的 `flow.human_review@1` 沿用通用节点选择器与 Manifest Handle，不过滤 interaction。节点内设置支持名称（失焦或回车提交）、静态 instruction；content 复用现有文本 / Template / Candidate / DataEdge 输入机制，三个业务输出可连接下游，没有审批专属控制出口。设计配置只写 Draft，执行审批只在 Run 面板进行。
+
+[Run 状态控制器](../apps/web/src/features/workflow/run/status/workflow-run-status.ts)在 waiting 时读取 Pending API，仅展示单条审核。卡片展示节点名称、审核说明、纯文本内容和可选反馈；通过 / 拒绝提交当前 opaque token、waitingRevision 与 decision，不展示这些内部身份。合法 reject 不被前端解释为运行失败。
+
+提交中和 submissionStatus=submitted 禁止再次决策。POST 后只重读同一 Run / Pending，不创建新 Run；网络结果不明或 409 不自动 replay，按服务端 pending / submitted 恢复操作能力。查询失败撤下旧卡片，手动刷新后再确认；旧查询 / POST 响应受 Run generation 隔离，旧审核回调必须匹配当前 token 与 revision。新审核清空旧反馈。普通 pending 审核停止高频 Run 轮询；submitted 或 waiting 查询暂时返回空 items 时沿用原有单一 timer 确认进展，running 恢复常规跟踪，completed / failed 进入既有结果 / 失败视图。面板关闭不卸载页面级状态与请求。多个 Pending 或后端 capability 错误明确展示，不在前端猜测拓扑。
 
 ### Web Workflow Run Result
 

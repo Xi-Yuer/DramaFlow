@@ -33,3 +33,11 @@ true / false Handle 来自精确 Manifest 的 controlOutputs，保存为 Control
 ## Workflow 输出编辑
 
 画布的「结束」边界投影 `WorkflowDefinition.outputs`，不作为业务节点执行。节点输出端口拖到结束边界可创建输出；边界内统一配置名称、来源节点和输出端口，DataType 自动取 Manifest。多项输出分别声明，名称遵守 Contract 且唯一。拖线遇到已有输出时，明确选择「新建独立输出」或「加入某项的候选」；同一输出可投影多条来源线，不写入业务 edges。单来源删线删除声明；候选模式删线或删节点只移除对应 candidate，保留名称、类型及零/单候选 Draft，并提示补齐，不自动转换成 source。候选表单保留 sources 模式，最终互斥与覆盖由 Publish 校验。结束边界可移动但不可删除，位置只在当前页面保留，不扩展领域布局协议。
+
+## Human Review
+
+`flow.human_review@1` 复用节点目录和端口展示，设计时在节点设置中编辑名称、静态审核说明，content 使用现有输入编辑与连线。审批操作放在 Run 的状态与结果面板，不混入节点配置。
+
+waiting Run 查询 Pending Human Review；单条卡片依次显示等待提示、节点名称、审核说明（可选）、纯文本内容、可选反馈和「拒绝」「通过」。不渲染 RuntimeValue JSON 或 interrupt / revision / checkpoint 身份，不执行内容中的 HTML。reject 是正常业务决策，后续流程由图决定。
+
+提交中禁用反馈与决策，submitted 显示「审批结果已提交，等待工作流继续执行……」。POST 后继续跟踪原 Run；网络不确定和 409 只重新查询，不自动重试 POST。查询失败不得保留旧审批操作；新审核清空旧反馈。普通待审批停止高频 Run 查询，已提交时沿用 Run timer 确认恢复；串行下一条审核更新卡片，终态复用现有结果与失败 UI。关闭面板不停止页面级状态跟踪。并行 pending 暂不提供审批 UI，显示能力错误。

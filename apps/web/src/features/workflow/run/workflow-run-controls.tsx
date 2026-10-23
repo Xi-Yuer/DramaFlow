@@ -20,7 +20,7 @@ import {
   type WorkflowRunState,
 } from './workflow-run';
 import { WorkflowRunStatusView } from './status/workflow-run-status-controls';
-import type { WorkflowRunStatusState } from './status/workflow-run-status';
+import type { HumanReviewActions, WorkflowRunStatusState } from './status/workflow-run-status';
 import styles from './workflow-run.module.css';
 
 type PublishedVersion = WorkflowVersionListResponse['items'][number];
@@ -44,6 +44,7 @@ export function WorkflowRunControls({
   onRetryVersions,
   onRetryVersion,
   onRefreshRunStatus,
+  reviewActions,
   submissionDisabled = false,
   showStatus = true,
 }: {
@@ -65,6 +66,7 @@ export function WorkflowRunControls({
   onRetryVersions: () => void;
   onRetryVersion: () => void;
   onRefreshRunStatus: () => void;
+  reviewActions?: HumanReviewActions;
   submissionDisabled?: boolean;
   showStatus?: boolean;
 }) {
@@ -295,7 +297,11 @@ export function WorkflowRunControls({
         />
       ) : null}
       {showStatus ? (
-        <WorkflowRunStatusView state={runStatus} onRefresh={onRefreshRunStatus} />
+        <WorkflowRunStatusView
+          state={runStatus}
+          onRefresh={onRefreshRunStatus}
+          reviewActions={reviewActions}
+        />
       ) : null}
     </section>
   );

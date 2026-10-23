@@ -188,6 +188,7 @@ export function useWorkflowRun(
     values,
     state,
     runStatus: runStatus.state,
+    reviewActions: runStatus.reviewActions,
     selectVersion,
     changeInput,
     run,

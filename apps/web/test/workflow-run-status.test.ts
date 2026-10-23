@@ -1,5 +1,6 @@
 import { StringType, type WorkflowRunResponse, type WorkflowRunStatus } from '@dramaflow/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { pendingReview } from './fixtures/human-review';
 import { workflowApi } from '../src/features/workflow/workflow-api';
 import {
   WorkflowRunStatusController,
@@ -25,6 +26,16 @@ function run(
   };
 }
 
+function statusController(
+  get: (runId: string, signal: AbortSignal) => Promise<WorkflowRunResponse>,
+) {
+  return new WorkflowRunStatusController({
+    get,
+    getPending: vi.fn().mockResolvedValue({ items: [pendingReview] }),
+    resume: vi.fn(),
+  });
+}
+
 const flush = async () => {
   await Promise.resolve();
   await Promise.resolve();
@@ -38,7 +49,7 @@ afterEach(() => {
 describe('WorkflowRunStatusController', () => {
   it('accepted 后按 WorkflowRun.id 查询，响应与查询均不依赖 threadId', async () => {
     const get = vi.fn().mockResolvedValue(run('run-1', 'completed'));
-    const controller = new WorkflowRunStatusController({ get });
+    const controller = statusController(get);
     controller.watch('run-1');
     await flush();
     expect(get).toHaveBeenCalledExactlyOnceWith('run-1', expect.any(AbortSignal));
@@ -59,7 +70,7 @@ describe('WorkflowRunStatusController', () => {
     async (status) => {
       vi.useFakeTimers();
       const get = vi.fn().mockResolvedValue(run('run-1', status));
-      const controller = new WorkflowRunStatusController({ get });
+      const controller = statusController(get);
       controller.watch('run-1');
       await flush();
       expect(get).toHaveBeenCalledOnce();
@@ -77,7 +88,7 @@ describe('WorkflowRunStatusController', () => {
     async (status) => {
       vi.useFakeTimers();
       const get = vi.fn().mockResolvedValue(run('run-1', status));
-      const controller = new WorkflowRunStatusController({ get });
+      const controller = statusController(get);
       controller.watch('run-1');
       await flush();
       await vi.advanceTimersByTimeAsync(6_000);
@@ -97,7 +108,7 @@ describe('WorkflowRunStatusController', () => {
         else resolveNew = resolve;
       });
     });
-    const controller = new WorkflowRunStatusController({ get });
+    const controller = statusController(get);
     controller.watch('run-old');
     controller.watch('run-new');
     expect(signals[0]?.aborted).toBe(true);
@@ -116,7 +127,7 @@ describe('WorkflowRunStatusController', () => {
   it('unmount/stop 取消请求和 timer，不再 polling', async () => {
     vi.useFakeTimers();
     const get = vi.fn().mockResolvedValue(run('run-1', 'pending'));
-    const controller = new WorkflowRunStatusController({ get });
+    const controller = statusController(get);
     controller.watch('run-1');
     await flush();
     controller.stop('run-1');
@@ -134,7 +145,7 @@ describe('WorkflowRunStatusController', () => {
           completedAt: '2026-10-22T01:01:00.000Z',
         }),
       );
-    const controller = new WorkflowRunStatusController({ get });
+    const controller = statusController(get);
     controller.watch('run-1');
     await flush();
     await controller.refresh();

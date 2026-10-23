@@ -162,6 +162,7 @@ export function WorkflowExecutionWorkspace({
                         <WorkflowRunStatusView
                           state={run.runStatus}
                           onRefresh={run.onRefreshRunStatus}
+                          reviewActions={run.reviewActions}
                         />
                       ),
                   },

@@ -32,6 +32,7 @@ const state = (status: WorkflowRunStatus): WorkflowRunStatusState => ({
   run: run(status),
   error: null,
   refreshing: false,
+  review: null,
 });
 
 describe('Workflow Run Status 基础界面（静态组件测试）', () => {
@@ -52,11 +53,11 @@ describe('Workflow Run Status 基础界面（静态组件测试）', () => {
     expect(html).not.toContain('invocation-1');
   });
 
-  it('waiting 明确提示等待外部或人工继续，但不提供 Resume', () => {
+  it('waiting 尚未取得审批时显示等待并继续确认状态', () => {
     const html = renderToStaticMarkup(
       <WorkflowRunStatusView state={state('waiting')} onRefresh={() => undefined} />,
     );
-    expect(html).toContain('工作流正在等待外部/人工继续');
+    expect(html).toContain('工作流正在等待继续');
     expect(html).not.toContain('Resume');
     expect(html).not.toContain('继续运行');
   });
@@ -98,6 +99,7 @@ describe('Workflow Run Status 基础界面（静态组件测试）', () => {
           run: null,
           error: { message: '状态读取失败', status: 503 },
           refreshing: false,
+          review: null,
         }}
         onRefresh={() => undefined}
       />,

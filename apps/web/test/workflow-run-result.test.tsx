@@ -25,7 +25,7 @@ function showRun(overrides: Partial<WorkflowRunResponse> = {}) {
   };
   return render(
     <WorkflowRunStatusView
-      state={{ phase: 'ready', runId: run.id, run, error: null, refreshing: false }}
+      state={{ phase: 'ready', runId: run.id, run, error: null, refreshing: false, review: null }}
       onRefresh={() => undefined}
     />,
   );
