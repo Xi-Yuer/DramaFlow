@@ -46,7 +46,7 @@ Compiler 内部以 `IfConvergence { ifNodeId, targetNodeId, completionGroups: { 
 
 静态分析将汇聚目标的原始父依赖拆成两组：本支完成依赖 + 全部 ordinary 必需上游。每组成为一条 NodeDependency 记录，同一 target 可以重复；DependencyCompiler 原样逐组调用 LangGraph addEdge，单来源用字符串、多来源用数组 ALL barrier。两支是互斥 alternatives，组内是 ALL。共同依赖 X 必须进入两组，不能另外生成独立 X → target 激活边。普通 collector 仍每目标一组 ALL，不因 convergence 改变原始 DataEdge / ControlEdge / template 来源或普通 join 语义。
 
-只开放控制汇聚。目标直接以 DataEdge 或 template 读取分支值时，Publish / Compiler 以 IF_CONVERGENCE_INPUT_UNSUPPORTED 拒绝；ordinary 来源仍按原有 Binding 处理。没有 candidate input binding，也不依靠 BindingResolver 的运行时 missing 兜底。汇聚后确定执行的节点可声明单来源 Workflow Output；汇聚前分支候选仍遵守现有互斥覆盖规则。
+汇聚输入支持 candidate binding，且其来源本身参与统一依赖收集，无需额外添加 B / C → 汇聚目标的 ControlEdge。当前每个候选输入须恰有两个来源，分别来自同一 If 的 true / false region，并通过直接汇聚证明；不满足时 Publish / Compiler 以 IF_CONVERGENCE_INPUT_UNSUPPORTED 拒绝。普通 DataEdge 或 template 仍不能直接读取互斥分支值；ordinary 来源按原有 Binding 处理，不依靠运行时 missing 兜底。BindingResolver 从实际已有输出中读取唯一候选值，多个值报 CANDIDATE_INPUT_AMBIGUOUS，缺值报原有输入缺失错误。汇聚后确定执行的节点可声明单来源 Workflow Output；汇聚前分支候选仍遵守现有互斥覆盖规则。
 
 START / END 与预算使用完成组全部潜在父关系的并集，仅供静态 root / leaf 和最长路径计算，不将并集编译成跨支 ALL。没有额外汇聚节点 / superstep；recursionLimit 仍为潜在最长节点路径 + 1。真实边界 A=1、If=2、B/C=3、汇聚目标=4，limit=4 失败而 5 完成；100 层分支再接 30 层普通后继的深度为 132、limit=133。Publish 和 Compiler 继续共用能力分析，在创建服务或执行节点前拒绝非法图。
 

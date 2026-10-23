@@ -23,7 +23,7 @@ type NodeOutputVariables = {
 export type TextBindingDraft =
   { status: 'clear' } | { status: 'ready'; binding: StaticInputBinding } | { status: 'invalid' };
 
-// 自身以及沿边或模板引用能够到达的节点都是下游。其余节点都可以成为新的上游，不会形成环。
+// 自身以及沿边、候选或模板引用能够到达的节点都是下游。其余节点都可以成为新的上游，不会形成环。
 export function downstreamNodeIds(
   definition: Pick<WorkflowDefinition, 'nodes' | 'edges'>,
   nodeId: string,
@@ -37,6 +37,9 @@ export function downstreamNodeIds(
   for (const edge of definition.edges) add(edge.source.nodeId, edge.target.nodeId);
   for (const node of definition.nodes) {
     for (const binding of Object.values(node.inputs)) {
+      if (binding.type === 'candidate') {
+        for (const source of binding.sources) add(source.nodeId, node.id);
+      }
       if (binding.type !== 'template') continue;
       for (const source of Object.values(binding.variables)) {
         if (source.type === 'node_output') add(source.nodeId, node.id);
@@ -208,6 +211,25 @@ export function replaceNodeInput(
       return { ...node, inputs };
     }),
   };
+}
+
+// 删除来源节点时同步移除相关 alias 和正文 token，保留其他变量及原有文本。
+export function removeTemplateNodeSources(
+  binding: TemplateBinding,
+  removedNodeIds: ReadonlySet<string>,
+): StaticInputBinding | null {
+  let value = binding.value;
+  const variables = { ...binding.variables };
+  let changed = false;
+  for (const [name, source] of Object.entries(variables)) {
+    if (source.type !== 'node_output' || !removedNodeIds.has(source.nodeId)) continue;
+    value = removeVariable(value, name);
+    delete variables[name];
+    changed = true;
+  }
+  if (!changed) return binding;
+  if (Object.keys(variables).length) return { ...binding, value, variables };
+  return value.length ? { type: 'constant', value } : null;
 }
 
 export function describeNodeOutput(

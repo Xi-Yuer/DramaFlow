@@ -31,6 +31,7 @@ const props = {
 describe('Publish 基础界面（静态组件测试）', () => {
   it.each([
     ['IF_TOPOLOGY_UNSUPPORTED', '分支入口'],
+    ['IF_CONVERGENCE_INPUT_UNSUPPORTED', '候选输入须分别来自同一条件节点'],
     ['CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED', '保证执行的节点作为候选来源'],
     ['NODE_EXECUTION_KIND_UNSUPPORTED', '暂不支持运行此类节点'],
     ['CONTROL_OUTPUT_BRANCH_MISSING', '连接 true 和 false 两个分支'],

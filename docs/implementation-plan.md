@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-If direct convergence 已进入自动验证：当前范围为同一 If 的唯一完整汇聚边界，不包含 candidate input binding 或 Web 改造，也未创建人工测试 Workflow。本轮不运行浏览器 E2E 或真实 Provider；人工交互验收待后续独立任务。已实现能力见[当前架构](architecture.md)与 [Runtime](runtime-architecture.md#if-的直接汇聚)。
+Workflow Web 数据依赖可视化的自动化测试、类型检查、lint 和生产构建已完成，当前等待人工 Canvas 验收。本轮不运行浏览器 E2E 或真实 Provider。已实现能力与限制见[当前架构](architecture.md#react-flow-数据适配)；Template variable candidate、Switch / N-way 和 Nested If 均不在本轮范围。
 
 ## 待决策与后续边界
 

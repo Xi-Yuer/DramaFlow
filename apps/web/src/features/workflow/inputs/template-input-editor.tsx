@@ -22,6 +22,7 @@ import {
   type TemplateSegment,
 } from './template-input';
 import styles from './template-input-editor.module.css';
+import { CandidateInputSummary } from './candidate-input-summary';
 
 function draftFrom(binding: StaticInputBinding | undefined) {
   return {
@@ -87,6 +88,16 @@ export function TemplateInputEditor({
     element.setSelectionRange(offset, offset);
   }, [pendingFocus]);
 
+  if (binding?.type === 'candidate') {
+    return (
+      <CandidateInputSummary
+        portName={portName}
+        binding={binding}
+        definition={definition}
+        manifests={manifests}
+      />
+    );
+  }
   const reason = readOnlyReason(binding, connected);
   if (reason) {
     return (

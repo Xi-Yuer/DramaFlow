@@ -4,11 +4,11 @@ NodeDefinition 是实例，NodeTypeManifest 是可传输说明书，NodeType 是
 
 ## 实例与编辑视图
 
-实例固定 id、type、typeVersion、name、config、inputs 和 ui.position。inputs 保存 constant、workflow_input、asset 和 template；asset 固定 assetId + versionId。整段上游连接仍只保存在 Workflow.edges，一个目标端口一条数据边。template 是该端口的唯一来源，正文用 `{{名称}}` 引用 node_output 或 workflow_input。
+实例固定 id、type、typeVersion、name、config、inputs 和 ui.position。inputs 保存 constant、workflow_input、asset、template 和 candidate；asset 固定 assetId + versionId。普通整段上游连接保存在 Workflow.edges，一个目标端口一条数据边。template / candidate 各自是该端口的唯一来源；template 正文用 `{{名称}}` 引用 node_output 或 workflow_input，candidate 保存候选节点输出来源。
 
 React Flow 的 type 选择通用 renderer，真实节点身份保存在 data.nodeType / typeVersion；selected、dragging、measured 不持久化。两类边保留 ID、种类、节点及可选端口；断连 / 重连必须核对完整旧边快照，防止过期事件修改现有连接。
 
-Data Edge 提供输入值来源，Control Edge 提供先后关系，不自动相互创建。数据输入单连接，且不能与静态绑定并存；编辑器在替换已有绑定前要求确认。数组不隐含多连接聚合。template 的 node_output 也是确定性依赖，但不另存为 Data Edge。控制边不占输入，边与模板引用按节点对去重，普通 fan-in 采用 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join)。
+Data Edge 提供输入值来源，Control Edge 提供先后关系，不自动相互创建。数据输入单连接，且不能与静态绑定并存；编辑器在替换已有绑定前要求确认。数组不隐含多连接聚合。template 的 node_output 和 candidate 都是显式数据依赖，Web 从绑定投影连线，不另存为 Data Edge；展示与编辑行为见[当前架构](architecture.md#react-flow-数据适配)。控制边不占输入，边与模板引用按节点对去重，普通 fan-in 采用 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join)。
 
 ## Manifest 与端口
 
@@ -62,7 +62,7 @@ Workflow 的 `runtime/condition-evaluator.ts` 封装精确版本 json-logic-engi
 
 If CompilationStrategy 不经 Action NodeExecutor，不提供 matched Data Output；内部条件结果按 nodeId 写入 execution.controlResults，LangGraph 原生 conditional edges 读取结果后只激活一支。分支输入依赖不再编译成无条件触发，原始 Binding 数据来源保持不变。执行预算、START / END、checkpoint / resume 和阶段性拓扑限制见 [Runtime](runtime-architecture.md#简单-if-的条件路由与预算)。
 
-生产执行支持静态证明安全的直接汇聚：同一 If 的唯一共同目标完整覆盖两侧末端，目标之后恢复普通 DAG；不新增汇聚领域节点。仍拒绝不安全汇聚、nested If、不同 If region 交叉与跨支依赖；这些属于 Compiler 能力限制，不是永久 Workflow Contract。条件最终输出仅允许同一 If 的两个 region 中保证执行的节点以 sources 声明，详见 [Workflow](workflow-model.md#输入与输出)，不引入 optional output；汇聚后保证执行的节点可以声明单来源输出。汇聚目标不得直接读取分支业务值，完成组与共同上游处理见 [Runtime](runtime-architecture.md#if-的直接汇聚)。Web 在 Generic Node 内复用 string Binding 编辑 value，通过等于 / 不等于 / 包含 / 不包含表单读写 condition；控制连线保存对应 source.portKey。未配置完整的 If 可以保存 Draft，Publish 仍以服务端校验为准；未知条件表达式保留，需用户明确替换后才能转为可编辑条件。
+生产执行支持静态证明安全的直接汇聚：同一 If 的唯一共同目标完整覆盖两侧末端，目标之后恢复普通 DAG；不新增汇聚领域节点。仍拒绝不安全汇聚、nested If、不同 If region 交叉与跨支依赖；这些属于 Compiler 能力限制，不是永久 Workflow Contract。条件最终输出仅允许同一 If 的两个 region 中保证执行的节点以 sources 声明，详见 [Workflow](workflow-model.md#输入与输出)，不引入 optional output；汇聚后保证执行的节点可以声明单来源输出。汇聚目标通过候选输入读取实际执行分支的业务值；普通 DataEdge / template 仍不能直接读取互斥分支。候选证明、完成组与共同上游处理见 [Runtime](runtime-architecture.md#if-的直接汇聚)。Web 在 Generic Node 内复用 string Binding 编辑 value，通过等于 / 不等于 / 包含 / 不包含表单读写 condition；控制连线保存对应 source.portKey。未配置完整的 If 可以保存 Draft，Publish 仍以服务端校验为准；未知条件表达式保留，需用户明确替换后才能转为可编辑条件。
 
 ## 视频领域能力与厂商边界
 

@@ -8,6 +8,7 @@ import {
   type WorkflowOutputSource,
 } from '@dramaflow/contracts';
 import type { Edge, Node, XYPosition } from '@xyflow/react';
+import { removeTemplateNodeSources } from '../inputs/template-input';
 
 export const END_INPUT_HANDLE = 'workflow-output';
 export type WorkflowOutputEdge = Edge<{ kind: 'workflow-output'; outputName: string }>;
@@ -181,7 +182,7 @@ export function removeWorkflowOutputCandidate(
   };
 }
 
-// 删除节点时同步清除关联连线与 Workflow outputs，避免保存悬空输出。
+// 删除节点时同步清除关联连线、输入引用与 Workflow outputs，避免保存悬空引用。
 export function removeWorkflowNodes(
   definition: WorkflowDefinition,
   ids: readonly string[],
@@ -189,7 +190,28 @@ export function removeWorkflowNodes(
   const removed = new Set(ids);
   return workflowDraftDefinitionSchema.parse({
     ...definition,
-    nodes: definition.nodes.filter((node) => !removed.has(node.id)),
+    nodes: definition.nodes
+      .filter((node) => !removed.has(node.id))
+      .map((node) => {
+        const inputs = { ...node.inputs };
+        for (const [key, binding] of Object.entries(inputs)) {
+          if (binding.type === 'template') {
+            const remaining = removeTemplateNodeSources(binding, removed);
+            if (remaining) inputs[key] = remaining;
+            else delete inputs[key];
+            continue;
+          }
+          if (
+            binding.type !== 'candidate' ||
+            !binding.sources.some((source) => removed.has(source.nodeId))
+          )
+            continue;
+          const sources = binding.sources.filter((source) => !removed.has(source.nodeId));
+          if (sources.length) inputs[key] = { type: 'candidate', sources };
+          else delete inputs[key];
+        }
+        return { ...node, inputs };
+      }),
     edges: definition.edges.filter(
       (edge) => !removed.has(edge.source.nodeId) && !removed.has(edge.target.nodeId),
     ),

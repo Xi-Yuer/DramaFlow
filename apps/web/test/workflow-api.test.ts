@@ -9,7 +9,13 @@ import {
 import { definition, manifest } from './fixtures/workflow-output';
 import { ApiError } from '../src/lib/http';
 import { ifWorkflow, ifCatalog } from './fixtures/workflow-if';
-import { connectWorkflowNodes } from '../src/features/workflow/canvas/react-flow-adapter';
+import { candidateWorkflow } from './fixtures/candidate-input';
+import { templateWorkflow } from './fixtures/template-input';
+import {
+  toReactFlowEdges,
+  disconnectWorkflowEdge,
+  connectWorkflowNodes,
+} from '../src/features/workflow/canvas/react-flow-adapter';
 import {
   conditionFromFields,
   conditionToFields,
@@ -34,6 +40,49 @@ function mockResponse(body: unknown, status = 200) {
 }
 
 describe('Workflow 编辑 HTTP 边界', () => {
+  it('Template Save → reload → Save 保留正文与 alias，投影不进入真实 DataEdge', async () => {
+    const draft = templateWorkflow();
+    const binding = draft.nodes[2]!.inputs.prompt!;
+    if (binding.type !== 'template') throw new Error('fixture');
+    binding.value += ' {{again}}';
+    binding.variables.again = { ...binding.variables.outline! };
+    const before = structuredClone(draft);
+    const edges = toReactFlowEdges(draft);
+    expect(edges).toHaveLength(2);
+    const save = mockResponse({ revision: 4 });
+    await workflowApi.saveDraft(workflow.id, { expectedRevision: 3, definition: draft });
+    const request = JSON.parse(save.mock.calls[0]![1].body as string);
+    expect(request.definition).toEqual(before);
+    expect(request.definition.edges).toEqual([]);
+    mockResponse({ ...workflow, revision: 4, draft: request.definition });
+    const loaded = (await workflowApi.get(workflow.projectId)).draft;
+    expect(loaded).toEqual(before);
+    expect(toReactFlowEdges(loaded)).toEqual(edges);
+    const resave = mockResponse({ revision: 5 });
+    await workflowApi.saveDraft(workflow.id, { expectedRevision: 4, definition: loaded });
+    expect(JSON.parse(resave.mock.calls[0]![1].body as string).definition).toEqual(
+      request.definition,
+    );
+    expect(draft).toEqual(before);
+  });
+  it('候选输入 Save/reload 保留完整与单候选 binding，投影不进入保存请求', async () => {
+    const multiple = candidateWorkflow();
+    const projections = toReactFlowEdges(multiple).filter((edge) => edge.data?.projection);
+    for (const draft of [multiple, disconnectWorkflowEdge(multiple, projections[0])]) {
+      const fetch = mockResponse({ revision: 4 });
+      await workflowApi.saveDraft(workflow.id, { expectedRevision: 3, definition: draft });
+      const request = JSON.parse(fetch.mock.calls[0]![1].body as string);
+      expect(request.definition).toEqual(draft);
+      expect(
+        request.definition.edges.every((edge: { kind: string }) => edge.kind === 'control'),
+      ).toBe(true);
+      mockResponse({ ...workflow, revision: 4, draft: request.definition });
+      const loaded = (await workflowApi.get(workflow.projectId)).draft;
+      expect(loaded).toEqual(draft);
+      expect(JSON.stringify(loaded)).toBe(JSON.stringify(draft));
+      expect(toReactFlowEdges(loaded)).toEqual(toReactFlowEdges(draft));
+    }
+  });
   it('多候选与候选不足的 Draft 都能 Save/reload，保留 sources 模式及输出类型', async () => {
     const multiple = appendWorkflowOutputCandidate(
       addWorkflowOutput(definition(), { nodeId: 'b', outputKey: 'text' }, [manifest]),

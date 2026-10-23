@@ -11,6 +11,7 @@ import {
   type NodeDefinition,
   type NodeTypeManifest,
   type StaticInputBinding,
+  type CandidateBinding,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
 import type { Edge, Node, NodeChange } from '@xyflow/react';
@@ -27,7 +28,9 @@ export type WorkflowNodeData = {
 };
 
 export type WorkflowNode = Node<WorkflowNodeData, 'workflowNode'>;
-export type WorkflowEdgeData = { kind: 'data' | 'control' };
+export type WorkflowEdgeData =
+  | { kind: 'data' | 'control'; projection?: never }
+  | { kind: 'data'; projection: 'candidate-input' | 'template-input' };
 export type WorkflowEdge = Edge<WorkflowEdgeData>;
 
 const reactFlowNodeSchema = z.object({
@@ -55,7 +58,10 @@ const reactFlowEdgeSchema = connectionSchema.extend({
   id: workflowIdentifierSchema,
   sourceHandle: z.string().nullish(),
   targetHandle: z.string().nullish(),
-  data: z.object({ kind: z.enum(['data', 'control']) }),
+  data: z.object({
+    kind: z.enum(['data', 'control']),
+    projection: z.enum(['candidate-input', 'template-input']).optional(),
+  }),
 });
 
 type WorkflowConnection = z.infer<typeof connectionSchema>;
@@ -128,7 +134,7 @@ export function controlEdgeToReactFlowEdge(input: unknown): WorkflowEdge {
   };
 }
 
-// 领域 edges 是两类连接的唯一来源；数据端口仍直接使用 portKey。
+// 真实领域边保留原 ID；输入绑定由 toReactFlowEdges 另外投影，不写入领域 edges。
 export function toReactFlowEdge(input: unknown): WorkflowEdge {
   const edge = workflowEdgeSchema.parse(input);
   if (edge.kind === 'control') return controlEdgeToReactFlowEdge(edge);
@@ -144,6 +150,7 @@ export function toReactFlowEdge(input: unknown): WorkflowEdge {
 
 export function fromReactFlowEdge(input: unknown): WorkflowEdgeDefinition {
   const edge = reactFlowEdgeSchema.parse(input);
+  if (edge.data.projection) throw new Error('输入绑定展示连线不能导出为 DataEdge');
   if (edge.data.kind === 'control') {
     const source = parseWorkflowHandle(edge.sourceHandle ?? controlHandleId('source'), 'source');
     const target = parseWorkflowHandle(edge.targetHandle ?? controlHandleId('target'), 'target');
@@ -172,14 +179,85 @@ export function fromReactFlowEdge(input: unknown): WorkflowEdgeDefinition {
 }
 
 export function toReactFlowEdges(input: unknown): WorkflowEdge[] {
-  return workflowDraftDefinitionSchema.parse(input).edges.map(toReactFlowEdge);
+  const workflow = workflowDraftDefinitionSchema.parse(input);
+  const usedIds = new Set(workflow.edges.map((edge) => edge.id));
+  const dependencies = new Set(
+    workflow.edges.flatMap((edge) =>
+      edge.kind === 'data'
+        ? [
+            JSON.stringify([
+              edge.target.nodeId,
+              edge.target.portKey,
+              edge.source.nodeId,
+              edge.source.portKey,
+            ]),
+          ]
+        : [],
+    ),
+  );
+  const projections: WorkflowEdge[] = [];
+  for (const node of workflow.nodes) {
+    for (const [portKey, binding] of Object.entries(node.inputs)) {
+      if (binding.type !== 'candidate' && binding.type !== 'template') continue;
+      const projection = binding.type === 'candidate' ? 'candidate-input' : 'template-input';
+      const sources =
+        binding.type === 'candidate' ? binding.sources : Object.values(binding.variables);
+      for (const source of sources) {
+        if (source.type !== 'node_output') continue;
+        const dependency = JSON.stringify([node.id, portKey, source.nodeId, source.portKey]);
+        // 按完整端点去重，保留 Template 中所有 alias 及来源定义。
+        if (dependencies.has(dependency)) continue;
+        dependencies.add(dependency);
+        // JSON tuple 避免端点中分隔符碰撞；仍避让外部 Draft 已有的领域 edge ID。
+        let id = `${projection}:${dependency}`;
+        while (usedIds.has(id)) id += ':';
+        usedIds.add(id);
+        projections.push({
+          id,
+          source: source.nodeId,
+          sourceHandle: source.portKey,
+          target: node.id,
+          targetHandle: portKey,
+          data: { kind: 'data', projection },
+          reconnectable: false,
+          ...(projection === 'template-input' ? { deletable: false } : {}),
+          ariaLabel:
+            projection === 'candidate-input'
+              ? '候选输入数据连接'
+              : '模板输入数据连接，请在输入中删除变量',
+        });
+      }
+    }
+  }
+  return [...workflow.edges.map(toReactFlowEdge), ...projections];
 }
 
 function manifestFor(manifests: readonly NodeTypeManifest[], type: string, version: number) {
   return manifests.find((manifest) => manifest.type === type && manifest.version === version);
 }
 
-export type ConnectWorkflowOptions = { replaceBinding?: boolean };
+export type ConnectWorkflowOptions = { replaceBinding?: boolean; addCandidate?: boolean };
+
+// 仅识别整个输入的节点输出来源，不把 Template variables 当成候选输入。
+export function sourcesForDataConnection(
+  definition: WorkflowDefinition,
+  connection: Parameters<typeof staticBindingForDataConnection>[1],
+): CandidateBinding['sources'] {
+  const binding = staticBindingForDataConnection(definition, connection);
+  if (binding?.type === 'candidate') return binding.sources;
+  if (
+    parseWorkflowHandle(connection.sourceHandle, 'source').kind !== 'data' ||
+    parseWorkflowHandle(connection.targetHandle, 'target').kind !== 'data'
+  )
+    return [];
+  return definition.edges.flatMap((edge) =>
+    edge.kind === 'data' &&
+    edge.target.nodeId === connection.target &&
+    edge.target.portKey === connection.targetHandle
+      ? [{ type: 'node_output' as const, ...edge.source }]
+      : [],
+  );
+}
 
 // 只识别会落到数据输入端口的连接。控制连线不读取 inputs。
 export function staticBindingForDataConnection(
@@ -266,22 +344,43 @@ function addWorkflowEdge(
   if (!isTypeAssignable(output.dataType, inputPort.dataType)) {
     throw new Error('端口类型不兼容');
   }
-  if (
-    workflow.edges.some(
-      (edge) =>
-        edge.kind === 'data' &&
-        edge.target.nodeId === connection.target &&
-        edge.target.portKey === connection.targetHandle,
-    )
-  ) {
-    throw new Error('目标输入端口已经存在连接');
-  }
-  // 一个数据输入只有一个来源。已有静态绑定时必须由调用方明确确认，才能改由 Data Edge 提供。
+  const sources = sourcesForDataConnection(workflow, connection);
   const binding = target.inputs[connection.targetHandle];
-  if (binding && !options?.replaceBinding) {
-    throw new Error('目标输入已有内容，连接前需要确认替换');
+  if (
+    (binding?.type === 'candidate' || options?.addCandidate || options?.replaceBinding) &&
+    sources.some((item) => item.nodeId === source.id && item.portKey === output.key)
+  )
+    return workflow;
+  if (options?.addCandidate) {
+    if (sources.length >= 2) throw new Error('当前候选输入最多支持两个来源，请先删除一个来源');
+    if (binding && binding.type !== 'candidate')
+      throw new Error('当前输入内容不能直接添加为候选来源');
+    target.inputs[connection.targetHandle] = {
+      type: 'candidate',
+      sources: [...sources, { type: 'node_output', nodeId: source.id, portKey: output.key }],
+    };
+    workflow.edges = workflow.edges.filter(
+      (edge) =>
+        !(
+          edge.kind === 'data' &&
+          edge.target.nodeId === target.id &&
+          edge.target.portKey === connection.targetHandle
+        ),
+    );
+    return workflowDraftDefinitionSchema.parse(workflow);
   }
+  if (sources.length && !options?.replaceBinding)
+    throw new Error('目标输入端口已经存在连接，连接前需要确认替换');
+  if (binding && !options?.replaceBinding) throw new Error('目标输入已有内容，连接前需要确认替换');
   if (binding) delete target.inputs[connection.targetHandle];
+  workflow.edges = workflow.edges.filter(
+    (edge) =>
+      !(
+        edge.kind === 'data' &&
+        edge.target.nodeId === target.id &&
+        edge.target.portKey === connection.targetHandle
+      ),
+  );
   workflow.edges.push({
     id,
     kind: 'data',
@@ -321,6 +420,24 @@ function matchesWorkflowEdge(edge: WorkflowEdgeDefinition, snapshot: WorkflowEdg
 // 删除事件可能来自旧视图；只删除 ID 与完整端点仍匹配的那条关系。
 export function disconnectWorkflowEdge(input: unknown, edgeInput: unknown): WorkflowDefinition {
   const workflow = workflowDraftDefinitionSchema.parse(input);
+  const projection = reactFlowEdgeSchema.parse(edgeInput);
+  // Template 只通过输入编辑器修改；删线事件不隐式删除正文或 alias。
+  if (projection.data.projection === 'template-input') return workflow;
+  if (projection.data.projection === 'candidate-input') {
+    const node = workflow.nodes.find((node) => node.id === projection.target);
+    const key = projection.targetHandle;
+    const binding = key ? node?.inputs[key] : undefined;
+    // 仅清理仍存在的候选端点；旧投影不能删除随后创建的普通 DataEdge。
+    if (node && key && binding?.type === 'candidate') {
+      const remaining = binding.sources.filter(
+        (source) =>
+          source.nodeId !== projection.source || source.portKey !== projection.sourceHandle,
+      );
+      if (remaining.length) node.inputs[key] = { type: 'candidate', sources: remaining };
+      else delete node.inputs[key];
+    }
+    return workflow;
+  }
   const snapshot = fromReactFlowEdge(edgeInput);
   workflow.edges = workflow.edges.filter((edge) => !matchesWorkflowEdge(edge, snapshot));
   return workflow;

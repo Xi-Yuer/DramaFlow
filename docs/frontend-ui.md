@@ -5,9 +5,9 @@
 ## 交互边界
 
 - 节点只读 JSON Manifest；config[].ui / ui.inputs 指定控件，不重复维护数值范围、默认值或厂商列表。Data Handle 使用端口 key，Control Handle 使用 control:source / control:target，命名出口追加 Manifest 的 key；连接语义见 [Node](node-model.md)。
-- 新 Data Edge 替换已有静态输入须确认，取消保持定义不变；selected / dragging / measured 不持久化。保存失败不得显示已保存，短暂会话检查故障保留 Editor，明确拒绝访问则隐藏内容。
+- 新 Data Edge 替换已有静态输入须确认，取消保持定义不变；已有节点输出来源时明确选择替换或添加候选。候选以绑定投影多条数据线，共用输入 Handle，不写入真实 edges；详细能力见[当前架构](architecture.md#react-flow-数据适配)。selected / dragging / measured 不持久化。保存失败不得显示已保存，短暂会话检查故障保留 Editor，明确拒绝访问则隐藏内容。
 - 模型选择只写 modelConfigurationId，配置从 Schema / Catalog 得到；不静默替换失效配置。供应商配置意图只在当前界面保留，取消不继续。Secret 不回填、不进 Form / Query / 浏览器存储，请求发出及退出表单时清空。
-- prompt / system 独立保存 constant 或 template；变量展示当前节点 / 端口名称，保存 nodeId / portKey，不额外创建 Data Edge。禁止自身和下游来源。
+- prompt / system 独立保存 constant 或 template；变量展示当前节点 / 端口名称，保存 nodeId / portKey。引用节点输出即自动显示数据依赖投影，不额外创建 Data Edge；重复 alias 共用一条依赖线，变量通过输入编辑器删除。禁止自身和下游来源。
 - Save 与 Publish 分离，发布锁定 Draft，不隐式保存或运行；当前保存修订与最新版本分别展示。Run 始终明确选择已发布版本。
 - 主动离开统一使用 Editor guard；Logout 先确认再退出。invocation recovery 不自动重放请求，具体行为见[当前架构](architecture.md#web-invocation-identity-recovery)。
 

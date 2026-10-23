@@ -11,7 +11,7 @@ import {
   type XYPosition,
 } from '@xyflow/react';
 import { useQuery } from '@tanstack/react-query';
-import { App, Button } from 'antd';
+import { App, Button, Radio, Space } from 'antd';
 import {
   workflowOutputSources,
   type NodeTypeManifest,
@@ -53,6 +53,8 @@ import {
   disconnectWorkflowEdge,
   reconnectWorkflowEdge,
   staticBindingForDataConnection,
+  sourcesForDataConnection,
+  type ConnectWorkflowOptions,
   toReactFlowEdges,
   toReactFlowNodes,
   type WorkflowEdge,
@@ -148,10 +150,59 @@ export function WorkflowCanvas({
 
   function commitDataConnection(
     connection: Connection,
-    apply: (current: WorkflowDefinition, replaceBinding: boolean) => WorkflowDefinition,
+    apply: (current: WorkflowDefinition, options: ConnectWorkflowOptions) => WorkflowDefinition,
+    previousEdge?: CanvasEdge,
   ) {
-    if (!staticBindingForDataConnection(workflow, connection)) {
-      onEdit((current) => apply(current, false));
+    // 重连的原关系不属于新目标的占用来源，确认与提交基于相同的断连后视图。
+    const available = previousEdge ? disconnectWorkflowEdge(workflow, previousEdge) : workflow;
+    const sources = sourcesForDataConnection(available, connection);
+    if (
+      sources.some(
+        (source) =>
+          source.nodeId === connection.source && source.portKey === connection.sourceHandle,
+      )
+    )
+      return;
+    if (
+      sources.length ||
+      staticBindingForDataConnection(available, connection)?.type === 'candidate'
+    ) {
+      let addCandidate = false;
+      modal.confirm({
+        title: '该输入已有数据来源',
+        content: (
+          <Space orientation="vertical">
+            <Radio.Group
+              defaultValue="replace"
+              onChange={(event) => {
+                addCandidate = event.target.value === 'candidate';
+              }}
+            >
+              <Space orientation="vertical">
+                <Radio value="replace">替换现有来源</Radio>
+                <Radio value="candidate" disabled={sources.length >= 2}>
+                  添加为候选来源
+                </Radio>
+              </Space>
+            </Radio.Group>
+            <span>
+              {sources.length >= 2
+                ? '当前候选输入最多支持两个来源，请先删除一个来源再添加。'
+                : '候选输入使用实际执行分支产生的值，分支是否合法由发布时验证。'}
+            </span>
+          </Space>
+        ),
+        okText: '确认',
+        cancelText: '取消',
+        onOk: () =>
+          onEdit((current) =>
+            apply(current, addCandidate ? { addCandidate: true } : { replaceBinding: true }),
+          ),
+      });
+      return;
+    }
+    if (!staticBindingForDataConnection(available, connection)) {
+      onEdit((current) => apply(current, {}));
       return;
     }
     modal.confirm({
@@ -160,7 +211,7 @@ export function WorkflowCanvas({
       cancelText: '取消',
       okButtonProps: { autoInsertSpace: false },
       cancelButtonProps: { autoInsertSpace: false },
-      onOk: () => onEdit((current) => apply(current, true)),
+      onOk: () => onEdit((current) => apply(current, { replaceBinding: true })),
     });
   }
 
@@ -303,24 +354,30 @@ export function WorkflowCanvas({
                       );
                       return;
                     }
-                    commitDataConnection(connection, (current, replaceBinding) =>
-                      connectWorkflowNodes(current, connection, nodeTypes.data ?? [], {
-                        replaceBinding,
-                      }),
+                    commitDataConnection(connection, (current, options) =>
+                      connectWorkflowNodes(current, connection, nodeTypes.data ?? [], options),
                     );
                   }}
                   onReconnect={(edge, connection) => {
                     if (
                       locked ||
                       edge.data?.kind === 'workflow-output' ||
+                      edge.data?.projection !== undefined ||
                       connection.target === end.node.id ||
                       connection.source === end.node.id
                     )
                       return;
-                    commitDataConnection(connection, (current, replaceBinding) =>
-                      reconnectWorkflowEdge(current, edge, connection, nodeTypes.data ?? [], {
-                        replaceBinding,
-                      }),
+                    commitDataConnection(
+                      connection,
+                      (current, options) =>
+                        reconnectWorkflowEdge(
+                          current,
+                          edge,
+                          connection,
+                          nodeTypes.data ?? [],
+                          options,
+                        ),
+                      edge,
                     );
                   }}
                   onEdgesDelete={(deleted) => {

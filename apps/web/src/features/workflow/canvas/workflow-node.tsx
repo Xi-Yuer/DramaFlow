@@ -6,6 +6,7 @@ import type { DataType, NodeTypeManifest } from '@dramaflow/contracts';
 import { NodeTypeIcon } from '../node-catalog/node-type-icon';
 import { ModelSelector } from '../model-selection/model-selector';
 import type { WorkflowNode } from './react-flow-adapter';
+import { CandidateInputSummary } from '../inputs/candidate-input-summary';
 import { TemplateInputEditor } from '../inputs/template-input-editor';
 import { availableStringOutputs } from '../inputs/template-input';
 import { WorkflowInputContext } from '../inputs/workflow-input-context';
@@ -72,6 +73,16 @@ export function GenericWorkflowNode({
   const manifest = findNodeManifest(manifests, data.nodeType, data.typeVersion);
   const isIf =
     data.nodeType === 'flow.if' && data.typeVersion === 1 && manifest?.executionKind === 'control';
+
+  const inputPorts =
+    manifest?.inputs.filter(
+      (port) =>
+        data.inputs[port.key]?.type === 'candidate' ||
+        (isIf
+          ? port.key === 'value'
+          : data.nodeType === 'ai.text_generate' &&
+            (port.key === 'prompt' || port.key === 'system')),
+    ) ?? [];
 
   return (
     <article
@@ -167,13 +178,19 @@ export function GenericWorkflowNode({
               ))}
             </div>
           </div>
-          {inputActions && (data.nodeType === 'ai.text_generate' || isIf) ? (
+          {inputActions && inputPorts.length > 0 ? (
             <div className={styles.inputs}>
-              {manifest.inputs
-                .filter((port) =>
-                  isIf ? port.key === 'value' : port.key === 'prompt' || port.key === 'system',
-                )
-                .map((port) => (
+              {inputPorts.map((port) => {
+                const binding = data.inputs[port.key];
+                return binding?.type === 'candidate' ? (
+                  <CandidateInputSummary
+                    key={port.key}
+                    portName={port.name}
+                    binding={binding}
+                    definition={inputActions.definition}
+                    manifests={inputActions.manifests}
+                  />
+                ) : (
                   <TemplateInputEditor
                     key={port.key}
                     portName={port.name}
@@ -195,7 +212,8 @@ export function GenericWorkflowNode({
                     disabled={inputActions.disabled}
                     onChange={(binding) => inputActions.onReplaceInput(id, port.key, binding)}
                   />
-                ))}
+                );
+              })}
             </div>
           ) : null}
           {isIf ? <IfConditionEditor nodeId={id} condition={data.config.condition} /> : null}

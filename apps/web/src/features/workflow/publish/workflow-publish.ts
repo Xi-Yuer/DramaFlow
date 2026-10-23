@@ -41,6 +41,10 @@ const errorSchema = z.object({
 });
 
 const publishIssueMessages = new Map([
+  [
+    'IF_CONVERGENCE_INPUT_UNSUPPORTED',
+    '候选输入须分别来自同一条件节点的 true / false 两侧，并满足直接汇聚限制；请调整来源后重新发布。',
+  ],
   ['IF_TOPOLOGY_UNSUPPORTED', 'true / false 每个出口须恰好连接一个不同的操作节点作为分支入口。'],
   [
     'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',

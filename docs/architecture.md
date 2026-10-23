@@ -4,15 +4,15 @@
 
 ## 已实现的基础工程
 
-| 领域       | 当前能力与边界                                                                                               |
-| ---------- | ------------------------------------------------------------------------------------------------------------ |
-| 身份与项目 | 登录、账户中心、项目所有者隔离；每项目一张画布、一个逻辑 Workflow                                            |
-| Editor     | 草稿加载 / 保存、节点创建 / 移动 / 删除、Data / Control Edge、文本变量与模型选择、End 输出配置；无节点重命名 |
-| Publish    | 静态语义、同 Owner 模型绑定校验、不可变版本；保存和发布独立                                                  |
-| Run        | 已发布版本提交、幂等身份、状态查询、离开保护和 invocation identity recovery                                  |
-| Result     | completed Run 展示 declared outputs；支持 inline 与 reference 身份，尚无 Artifact 内容 HTTP API              |
-| 执行       | 普通 Action DAG 与 If 分支内 Action DAG；独立 Worker 执行；其他结构未支持                                    |
-| 基础设施   | PostgreSQL / Prisma、Redis / BullMQ、RustFS、官方 PostgreSQL Checkpointer                                    |
+| 领域       | 当前能力与边界                                                                                                         |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 身份与项目 | 登录、账户中心、项目所有者隔离；每项目一张画布、一个逻辑 Workflow                                                      |
+| Editor     | 草稿加载 / 保存、节点创建 / 移动 / 删除、Data / Control Edge、候选输入、文本变量与模型选择、End 输出配置；无节点重命名 |
+| Publish    | 静态语义、同 Owner 模型绑定校验、不可变版本；保存和发布独立                                                            |
+| Run        | 已发布版本提交、幂等身份、状态查询、离开保护和 invocation identity recovery                                            |
+| Result     | completed Run 展示 declared outputs；支持 inline 与 reference 身份，尚无 Artifact 内容 HTTP API                        |
+| 执行       | 普通 Action DAG 与 If 分支内 Action DAG；独立 Worker 执行；其他结构未支持                                              |
+| 基础设施   | PostgreSQL / Prisma、Redis / BullMQ、RustFS、官方 PostgreSQL Checkpointer                                              |
 
 End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 nodes、Registry 或执行链。首条业务输出拖到 End 创建独立输出；已有输出时明确选择新建或加入某项候选。候选共用一个输出名称，分别投影连线，删除连线或节点仅清理对应候选；不足时保留可修复 Draft，不转换成单 source。单 source 仍保留原编辑与删除行为，类型按精确版本 Manifest 校验。End 位置仅在当前页面保留，声明从 Definition 恢复；保存与发布分开。协议与准入见 [Workflow](workflow-model.md#输入与输出)。Start Boundary 和 Workflow Input 编辑器尚未实现。
 
@@ -28,7 +28,7 @@ Project 使用 `GET / POST /projects`、`GET / PUT /projects/:id`；Workflow 使
 
 ## Workflow 发布与版本 HTTP API
 
-发布入口 `POST /workflows/:workflowId/publish`；版本摘要 `GET /workflows/:workflowId/versions`；固定版本 `GET /workflow-versions/:versionId`。发布锁定来源修订并原子分配版本号，失败不写版本；不解密凭证或调用模型。当前拒绝 Asset 绑定及未支持执行种类。精确 flow.if@1 已支持原生条件路由；Publish 与 Compiler 共享简单拓扑分析，放行分支内串行 / 并行 / ALL join 和静态证明安全的直接汇聚；汇聚按互斥 completion groups 编译为原生 edges / barriers，共同必需上游进入每一组，不新增领域汇聚节点或执行 step。仍拒绝不安全汇聚、分支值直接输入汇聚目标、嵌套 If 与不同 If region 交叉。Web 复用 Generic Node 编辑 string value、四种单条件和 true / false 命名控制出口；允许保存不完整 Draft，未知条件不静默改写。协议与能力限制见 [Node](node-model.md#if-条件节点与编译能力边界)。
+发布入口 `POST /workflows/:workflowId/publish`；版本摘要 `GET /workflows/:workflowId/versions`；固定版本 `GET /workflow-versions/:versionId`。发布锁定来源修订并原子分配版本号，失败不写版本；不解密凭证或调用模型。当前拒绝 Asset 绑定及未支持执行种类。精确 flow.if@1 已支持原生条件路由；Publish 与 Compiler 共享简单拓扑分析，放行分支内串行 / 并行 / ALL join 和静态证明安全的直接汇聚；汇聚按互斥 completion groups 编译为原生 edges / barriers，共同必需上游进入每一组，不新增领域汇聚节点或执行 step。候选输入可独立形成汇聚依赖，无需额外 ControlEdge；仅允许同一 If 两侧各一个来源并满足直接汇聚证明。仍拒绝不安全汇聚、普通单来源绑定直接读取互斥分支、嵌套 If 与不同 If region 交叉。Web 复用 Generic Node 编辑 string value、四种单条件和 true / false 命名控制出口；允许保存不完整 Draft，未知条件不静默改写。协议与能力限制见 [Node](node-model.md#if-条件节点与编译能力边界)。
 
 ## 生产 Runtime 装配
 
@@ -87,6 +87,14 @@ PostgreSQL 保存身份与元数据，内容写 RustFS；只有 ready Artifact �
 ## React Flow 数据适配
 
 WorkflowDefinition 是唯一持久来源，React Flow 只管理视图；导出不保留 selected / dragging / measured。节点目录、创建与连接行为见 [Node](node-model.md)，界面约束见[前端规范](frontend-ui.md)。
+
+候选输入以 `node.inputs[portKey]` 为唯一持久来源。[适配层](../apps/web/src/features/workflow/canvas/react-flow-adapter.ts)把每个来源投影为数据线，共用目标输入 Handle；通过 `data.projection = 'candidate-input'` 与真实 DataEdge 区分，禁止作为 DataEdge 导出。第二条数据连接复用确认弹窗，明确选择替换现有来源或添加候选；添加时移除原 DataEdge 并写入候选绑定。候选线通过删除后重新连接修改，不支持拖动重连端点。
+
+删除候选线或来源节点只清理对应来源，剩余一个时保留候选 Draft，删光移除该 input binding。Save 直接发送 Definition，reload 从绑定重新投影，不生成真实 DataEdge。输入区域展示来源节点 / 输出端口名称及实际执行分支取值说明，不显示 JSON；候选不足提示补齐。Web 去重并限制新增至两个候选，只校验端点、Manifest 端口与基础类型；互斥和汇聚拓扑由 Publish / Compiler 权威验证，错误沿用发布面板展示。Template variable candidate、任意 N-way 和嵌套 If 编辑不在本版范围。
+
+Template 的 `node_output` 变量也由同一适配层投影为数据线，以 `data.projection = 'template-input'` 标识；真实 DataEdge 不带 projection 标记。投影沿用数据线样式，按 source node / source port / target node / target port 去重，alias 及正文不改写。用户直接插入变量即可建立可见依赖，删除最后一个对应 alias 后连线消失；投影不可直接删除或重连，须在输入编辑器中修改变量。Save / reload 仍只读写原有 Definition，所有输入投影均禁止导出为 DataEdge。
+
+删除来源节点时统一清理相关 Template alias 及其正文 token，保留其他节点和 workflow_input 变量；无变量时保留剩余文字为 constant，文字也为空则移除绑定。此清理与 Candidate / 真实边及 Workflow 输出共用节点删除入口，不维护独立投影状态。当前 inputs 中只有 Template 与 Candidate 绑定可引用节点输出；constant、workflow_input 和 asset 不产生跨节点引用。依赖合法性继续由 Contract / Publish / Compiler 校验。
 
 ### Web Workflow Draft 持久化
 
