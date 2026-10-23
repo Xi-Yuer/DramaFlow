@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { workflowApi } from '../src/features/workflow/workflow-api';
+import {
+  addWorkflowOutput,
+  projectWorkflowEnd,
+} from '../src/features/workflow/outputs/workflow-outputs';
+import { definition, manifest } from './fixtures/workflow-output';
 import { ApiError } from '../src/lib/http';
 
 const draft = { inputs: [], nodes: [], edges: [], outputs: [] };
@@ -67,5 +72,28 @@ describe('Workflow 编辑 HTTP 边界', () => {
   it('网络失败不转为成功或空草稿', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('网络中断')));
     await expect(workflowApi.get(workflow.projectId)).rejects.toThrow('网络中断');
+  });
+  it('End output 保存后重新读取无损，boundary node / edge 不进入请求', async () => {
+    const definitionWithOutput = addWorkflowOutput(
+      definition(),
+      { nodeId: 'b', outputKey: 'text' },
+      [manifest],
+    );
+    const boundary = projectWorkflowEnd(definitionWithOutput);
+    const fetch = mockResponse({ revision: 4 });
+    await workflowApi.saveDraft(workflow.id, {
+      expectedRevision: 3,
+      definition: definitionWithOutput,
+    });
+    const request = JSON.parse(fetch.mock.calls[0]![1].body as string);
+    expect(request.definition.outputs).toEqual(definitionWithOutput.outputs);
+    expect(
+      request.definition.nodes.some((node: { id: string }) => node.id === boundary.node.id),
+    ).toBe(false);
+    expect(request.definition.edges).toEqual([]);
+    mockResponse({ ...workflow, revision: 4, draft: request.definition });
+    const reloaded = await workflowApi.get(workflow.projectId);
+    expect(reloaded.draft.outputs).toEqual(definitionWithOutput.outputs);
+    expect(projectWorkflowEnd(reloaded.draft).edges).toHaveLength(1);
   });
 });

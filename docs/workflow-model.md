@@ -8,7 +8,7 @@ Workflow（身份、元数据、draft）
   → Start → WorkflowRun（绑定指定版本）
 ```
 
-每项目一张画布、一个逻辑 Workflow。Definition 为 inputs / nodes / edges / outputs；edges 是连线的唯一来源，Node.inputs 保存 constant / workflow_input / template / asset。ui.position 只管布局，React Flow 临时状态不进入定义。Project.revision、Workflow.revision 和发布 version 分别管理项目、草稿与版本，不得混用。
+每项目一张画布、一个逻辑 Workflow。Definition 为 inputs / nodes / edges / outputs；edges 是业务节点间 Data / Control 连线的唯一来源，Node.inputs 保存 constant / workflow_input / template / asset。ui.position 只管布局，React Flow 临时状态不进入定义。Project.revision、Workflow.revision 和发布 version 分别管理项目、草稿与版本，不得混用。
 
 ## 输入与输出
 

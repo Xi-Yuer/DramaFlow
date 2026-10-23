@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前授权的 Workflow 执行与结果布局调整已完成自动验证，浏览器宽 / 窄屏交互待人工验收。下一步需明确授权；不自动开始 Artifact 内容读取、Run History 或其他功能。
+当前授权的 Workflow Output 编辑已完成自动验证：End Boundary 投影、输出配置及数据一致性；仅改 Web，不扩展后端协议。拖线、保存重载与键盘删除的浏览器交互待人工验收。下一步需明确授权；不自动开始 Start Boundary、Artifact 内容读取、Run History 或其他功能。
 
 ## 待决策与后续边界
 

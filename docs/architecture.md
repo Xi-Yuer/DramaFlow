@@ -4,15 +4,17 @@
 
 ## 已实现的基础工程
 
-| 领域       | 当前能力与边界                                                                                  |
-| ---------- | ----------------------------------------------------------------------------------------------- |
-| 身份与项目 | 登录、账户中心、项目所有者隔离；每项目一张画布、一个逻辑 Workflow                               |
-| Editor     | 草稿加载 / 保存、节点创建和移动、Data / Control Edge、文本变量与模型选择；无节点删除 / 重命名   |
-| Publish    | 静态语义、同 Owner 模型绑定校验、不可变版本；保存和发布独立                                     |
-| Run        | 已发布版本提交、幂等身份、状态查询、离开保护和 invocation identity recovery                     |
-| Result     | completed Run 展示 declared outputs；支持 inline 与 reference 身份，尚无 Artifact 内容 HTTP API |
-| 执行       | 普通 Action DAG；API 提交，独立 Worker 执行；其他 executionKind 只有声明边界                    |
-| 基础设施   | PostgreSQL / Prisma、Redis / BullMQ、RustFS、官方 PostgreSQL Checkpointer                       |
+| 领域       | 当前能力与边界                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------------ |
+| 身份与项目 | 登录、账户中心、项目所有者隔离；每项目一张画布、一个逻辑 Workflow                                            |
+| Editor     | 草稿加载 / 保存、节点创建 / 移动 / 删除、Data / Control Edge、文本变量与模型选择、End 输出配置；无节点重命名 |
+| Publish    | 静态语义、同 Owner 模型绑定校验、不可变版本；保存和发布独立                                                  |
+| Run        | 已发布版本提交、幂等身份、状态查询、离开保护和 invocation identity recovery                                  |
+| Result     | completed Run 展示 declared outputs；支持 inline 与 reference 身份，尚无 Artifact 内容 HTTP API              |
+| 执行       | 普通 Action DAG；API 提交，独立 Worker 执行；其他 executionKind 只有声明边界                                 |
+| 基础设施   | PostgreSQL / Prisma、Redis / BullMQ、RustFS、官方 PostgreSQL Checkpointer                                    |
+
+End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 `nodes`、Registry 或执行链。拖动业务输出端口到 End 自动添加 `result` / `result_2` 等唯一名称；End 内可添加、编辑名称与来源、删除输出，类型取所选精确版本 Manifest 的 output port。边界连线不写入 `edges`，删除连线删除对应 output；删除业务节点同步清理关联边和 output。End 位置仅保留在当前页面，重载使用默认位置；已有声明从 Definition 恢复。名称沿用 Contract 规则，保存与发布仍分开；Start Boundary 和 Workflow Input 编辑器尚未实现。
 
 ## Workflow 基础库
 
