@@ -14,7 +14,7 @@
 | 执行       | 普通 Action DAG 与简单 If 终端分支；独立 Worker 执行；其他结构未支持                                         |
 | 基础设施   | PostgreSQL / Prisma、Redis / BullMQ、RustFS、官方 PostgreSQL Checkpointer                                    |
 
-End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 `nodes`、Registry 或执行链。拖动业务输出端口到 End 自动添加 `result` / `result_2` 等唯一名称；End 内可添加、编辑名称与来源、删除输出，类型取所选精确版本 Manifest 的 output port。边界连线不写入 `edges`，删除连线删除对应 output；删除业务节点同步清理关联边和 output。End 位置仅保留在当前页面，重载使用默认位置；已有声明从 Definition 恢复。名称沿用 Contract 规则，保存与发布仍分开；Start Boundary 和 Workflow Input 编辑器尚未实现。
+End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 nodes、Registry 或执行链。首条业务输出拖到 End 创建独立输出；已有输出时明确选择新建或加入某项候选。候选共用一个输出名称，分别投影连线，删除连线或节点仅清理对应候选；不足时保留可修复 Draft，不转换成单 source。单 source 仍保留原编辑与删除行为，类型按精确版本 Manifest 校验。End 位置仅在当前页面保留，声明从 Definition 恢复；保存与发布分开。协议与准入见 [Workflow](workflow-model.md#输入与输出)。Start Boundary 和 Workflow Input 编辑器尚未实现。
 
 ## Workflow 基础库
 

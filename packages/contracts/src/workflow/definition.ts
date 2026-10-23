@@ -14,7 +14,7 @@ export const workflowInputDefinitionSchema = schemas.inputSchema;
 export type WorkflowInputDefinition = z.infer<typeof workflowInputDefinitionSchema>;
 
 // 仅校验静态引用与控制 / 数据联合 DAG，不解释运行值、不查询资产，也不推断声明端口。
-export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
+export const workflowDraftDefinitionSchema = schemas.draftDefinitionSchema.superRefine(
   (definition, context) => {
     const nodes = new Set(definition.nodes.map((node) => node.id));
     const nodeDefinitions = new Map(definition.nodes.map((node) => [node.id, node]));
@@ -151,4 +151,17 @@ export const workflowDefinitionSchema = schemas.definitionSchema.superRefine(
   },
 );
 
+export const workflowOutputDefinitionSchema = schemas.outputSchema;
+export type WorkflowOutputDefinition = z.infer<typeof workflowOutputDefinitionSchema>;
+// 编辑态允许候选不足；不可变版本及执行边界必须通过最终输出协议。
+export const workflowDefinitionSchema = workflowDraftDefinitionSchema.superRefine(
+  (definition, context) => {
+    definition.outputs.forEach((output, index) => {
+      const result = workflowOutputDefinitionSchema.safeParse(output);
+      if (!result.success)
+        for (const issue of result.error.issues)
+          context.addIssue({ ...issue, path: ['outputs', index, ...issue.path] });
+    });
+  },
+);
 export type WorkflowDefinition = z.infer<typeof workflowDefinitionSchema>;

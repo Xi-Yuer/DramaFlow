@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LogicEngine } from 'json-logic-engine';
+import { z } from 'zod';
 import {
   NumberType,
   StringType,
@@ -68,6 +69,92 @@ function rejects(mutate: (definition: WorkflowDefinition) => void, code: string)
 }
 
 describe('flow.if@1 协议与发布阶段门禁', () => {
+  it('候选精确覆盖同一 If 的两个终端分支，顺序无优先级', () => {
+    for (const ids of [
+      ['B', 'C'],
+      ['C', 'B'],
+    ]) {
+      const d = definition();
+      d.outputs = [
+        {
+          name: 'result',
+          type: StringType,
+          sources: ids.map((nodeId) => ({ nodeId, outputKey: 'text' })),
+        },
+      ];
+      expect(
+        validateWorkflowForPublish(workflowDefinitionSchema.parse(d), registry()),
+      ).toHaveLength(3);
+    }
+  });
+  it.each(['single', 'unrelated', 'same-branch', 'other-if', 'missing-port', 'type', 'no-if'])(
+    '拒绝不安全候选：%s',
+    (kind) => {
+      const d = definition();
+      d.nodes.push({ ...d.nodes[1]!, id: 'D' });
+      const sources = [
+        { nodeId: 'B', outputKey: 'text' },
+        { nodeId: 'C', outputKey: 'text' },
+      ];
+      d.outputs = [{ name: 'result', type: StringType, sources }];
+      let types = registry();
+      let code = 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED';
+      if (kind === 'single')
+        d.outputs = [{ name: 'result', type: StringType, source: sources[0]! }];
+      if (kind === 'unrelated') sources[1]!.nodeId = 'D';
+      if (kind === 'same-branch') {
+        const text = createTextGenerationNodeType();
+        types = new NodeRegistry([
+          createIfNodeType(),
+          {
+            ...text,
+            manifest: {
+              ...text.manifest,
+              outputs: [
+                ...text.manifest.outputs,
+                { key: 'other', name: '另一输出', dataType: StringType },
+              ],
+            },
+            outputSchema: z.object({ text: z.string(), other: z.string() }),
+          },
+        ]);
+        sources[1] = { nodeId: 'B', outputKey: 'other' };
+      }
+      if (kind === 'other-if') {
+        d.nodes.push({ ...d.nodes[0]!, id: 'if_2' }, { ...d.nodes[1]!, id: 'E' });
+        d.edges.push(
+          {
+            id: 'other-true',
+            kind: 'control',
+            source: { nodeId: 'if_2', portKey: 'true' },
+            target: { nodeId: 'D' },
+          },
+          {
+            id: 'other-false',
+            kind: 'control',
+            source: { nodeId: 'if_2', portKey: 'false' },
+            target: { nodeId: 'E' },
+          },
+        );
+        sources[1]!.nodeId = 'D';
+      }
+      if (kind === 'missing-port') {
+        sources[1]!.outputKey = 'missing';
+        code = 'OUTPUT_PORT_NOT_FOUND';
+      }
+      if (kind === 'type') {
+        d.outputs[0]!.type = NumberType;
+        code = 'WORKFLOW_OUTPUT_TYPE_MISMATCH';
+      }
+      if (kind === 'no-if') {
+        d.nodes = d.nodes.filter((node) => node.id !== 'if_1');
+        d.edges = [];
+      }
+      expect(() => validateWorkflowForPublish(workflowDefinitionSchema.parse(d), types)).toThrow(
+        expect.objectContaining({ code }),
+      );
+    },
+  );
   it('精确注册 control，无 Action execute、无 matched 或其他业务输出', () => {
     const entry = registry().get('flow.if', 1);
     expect(entry.manifest).toMatchObject({

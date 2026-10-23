@@ -31,7 +31,7 @@ const props = {
 describe('Publish 基础界面（静态组件测试）', () => {
   it.each([
     ['IF_TOPOLOGY_UNSUPPORTED', '末端操作节点'],
-    ['CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED', '可能不执行的条件分支'],
+    ['CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED', '两个末端节点作为候选来源'],
     ['NODE_EXECUTION_KIND_UNSUPPORTED', '暂不支持运行此类节点'],
     ['CONTROL_OUTPUT_BRANCH_MISSING', '连接 true 和 false 两个分支'],
   ])('If 发布拒绝 %s 使用用户文案并保留安全定位', (code, message) => {

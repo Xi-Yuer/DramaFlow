@@ -4,17 +4,24 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Button, Form, Input, Modal, Select } from 'antd';
 import {
   workflowPortNameSchema,
+  workflowOutputSources,
   type NodeTypeManifest,
   type WorkflowDefinition,
   type WorkflowOutputSource,
 } from '@dramaflow/contracts';
-import { END_INPUT_HANDLE, nextWorkflowOutputName, type WorkflowEndNode } from './workflow-outputs';
+import {
+  END_INPUT_HANDLE,
+  nextWorkflowOutputName,
+  type WorkflowEndNode,
+  type WorkflowOutputEdit,
+} from './workflow-outputs';
 import styles from './workflow-end.module.css';
 
 export const WorkflowOutputActions = createContext<{
   disabled: boolean;
   onConfigure: (name?: string) => void;
   onRemove: (name: string) => void;
+  onRemoveCandidate?: (name: string, source: WorkflowOutputSource) => void;
 } | null>(null);
 
 export function WorkflowEnd({ data, selected, isConnectable }: NodeProps<WorkflowEndNode>) {
@@ -44,9 +51,25 @@ export function WorkflowEnd({ data, selected, isConnectable }: NodeProps<Workflo
             <li key={output.name}>
               <div>
                 <strong>{output.name}</strong>
-                <span>
-                  {output.source.nodeId}.{output.source.outputKey}
-                </span>
+                {workflowOutputSources(output).map((source) => (
+                  <span key={JSON.stringify(source)}>
+                    {source.nodeId}.{source.outputKey}
+                    {output.sources !== undefined ? (
+                      <Button
+                        size="small"
+                        type="text"
+                        disabled={actions.disabled}
+                        aria-label={`移除候选 ${output.name} ${source.nodeId}.${source.outputKey}`}
+                        onClick={() => actions.onRemoveCandidate?.(output.name, source)}
+                      >
+                        移除
+                      </Button>
+                    ) : null}
+                  </span>
+                ))}
+                {output.sources !== undefined && output.sources.length < 2 ? (
+                  <span role="status">候选来源不足，请补齐后再发布</span>
+                ) : null}
               </div>
               <Button
                 type="text"
@@ -97,7 +120,7 @@ export function WorkflowOutputDialog({
   previousName?: string;
   disabled: boolean;
   onCancel: () => void;
-  onSave: (value: { name: string; source: WorkflowOutputSource }) => void;
+  onSave: (value: WorkflowOutputEdit) => void;
 }) {
   const [form] = Form.useForm<OutputForm>();
   const nodeId = Form.useWatch('nodeId', form);
@@ -127,13 +150,17 @@ export function WorkflowOutputDialog({
           previous
             ? {
                 name: previous.name,
-                nodeId: previous.source.nodeId,
-                outputKey: previous.source.outputKey,
+                nodeId: previous.source?.nodeId,
+                outputKey: previous.source?.outputKey,
               }
             : { name: nextWorkflowOutputName(definition) }
         }
         onFinish={(value: OutputForm) =>
-          onSave({ name: value.name, source: { nodeId: value.nodeId, outputKey: value.outputKey } })
+          onSave(
+            previous?.sources !== undefined
+              ? { name: value.name, sources: previous.sources }
+              : { name: value.name, source: { nodeId: value.nodeId, outputKey: value.outputKey } },
+          )
         }
       >
         <Form.Item
@@ -159,40 +186,54 @@ export function WorkflowOutputDialog({
         >
           <Input placeholder="例如 result、summary" />
         </Form.Item>
-        <Form.Item
-          name="nodeId"
-          label="来源节点"
-          rules={[{ required: true, message: '请选择来源节点' }]}
-        >
-          <Select
-            options={nodes.map(({ node, manifest }) => ({
-              value: node.id,
-              label: `${node.name} · ${node.id}`,
-              disabled: !manifest?.outputs.length,
-            }))}
-            onChange={() => form.setFieldValue('outputKey', undefined)}
-          />
-        </Form.Item>
-        <Form.Item
-          name="outputKey"
-          label="来源输出端口"
-          rules={[
-            { required: true, message: '请选择输出端口' },
-            {
-              validator: async (_, value: unknown) => {
-                if (value && !ports.some((port) => port.key === value))
-                  throw new Error('来源端口不可用，请重新选择节点和端口');
-              },
-            },
-          ]}
-        >
-          <Select
-            options={ports.map((port) => ({
-              value: port.key,
-              label: `${port.name} · ${port.key}`,
-            }))}
-          />
-        </Form.Item>
+        {previous?.sources !== undefined ? (
+          <div>
+            <p>候选来源（恰好一个产生结果）</p>
+            {previous.sources.map((source) => (
+              <p key={JSON.stringify(source)}>
+                {source.nodeId}.{source.outputKey}
+              </p>
+            ))}
+            <p>从业务输出拖线到结束边界可加入候选；在结束边界移除单条来源。</p>
+          </div>
+        ) : (
+          <>
+            <Form.Item
+              name="nodeId"
+              label="来源节点"
+              rules={[{ required: true, message: '请选择来源节点' }]}
+            >
+              <Select
+                options={nodes.map(({ node, manifest }) => ({
+                  value: node.id,
+                  label: `${node.name} · ${node.id}`,
+                  disabled: !manifest?.outputs.length,
+                }))}
+                onChange={() => form.setFieldValue('outputKey', undefined)}
+              />
+            </Form.Item>
+            <Form.Item
+              name="outputKey"
+              label="来源输出端口"
+              rules={[
+                { required: true, message: '请选择输出端口' },
+                {
+                  validator: async (_, value: unknown) => {
+                    if (value && !ports.some((port) => port.key === value))
+                      throw new Error('来源端口不可用，请重新选择节点和端口');
+                  },
+                },
+              ]}
+            >
+              <Select
+                options={ports.map((port) => ({
+                  value: port.key,
+                  label: `${port.name} · ${port.key}`,
+                }))}
+              />
+            </Form.Item>
+          </>
+        )}
         <p className={styles.hint}>
           输出类型由所选端口自动确定。保存草稿后，需单独发布才会用于新运行。
         </p>

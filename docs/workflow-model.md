@@ -18,9 +18,11 @@ Workflow Input 为 `{ name, type, required }`。required 缺省读取为 true，
 
 Submission 在创建 Run / Outbox 前调用独立 WorkflowInvocationContractValidator，按固定版本拒绝 missing、未知 key、类型标签不兼容和非法 inline 内容，不用转换 / 默认值改写输入。inline 同时检查实际标签和声明类型，named 必须注册真实 Schema；reference 只校验类型兼容，内容与授权留给执行时 Resolver。
 
-Workflow Output 为 `{ name, type, source: { nodeId, outputKey } }`，没有 required，也不直接引用 workflow_input。Definition Schema 拒绝不存在的节点；Publish 按精确 Manifest 检查 port 和 `isTypeAssignable(port.dataType, output.type)`。最后节点不自动成为结果。
+Workflow Output 保留 `{ name, type, source: { nodeId, outputKey } }`，新增互斥的 `{ name, type, sources: [{ nodeId, outputKey }, ...] }`。没有 required，不直接引用 workflow_input，不自动选择最后节点。候选不可重复、顺序无优先级；正式 Definition 至少两个候选。`workflowDraftDefinitionSchema` 允许 sources 为零或一个以保存可修复状态，但仍检查重复、名称和节点引用；正式 Definition / 不可变版本继续使用严格 Schema，不迁移或重写旧版本。
 
-完成时按声明名称收集 RuntimeValue，缺失或类型不符失败，不能用其他结果补齐；`outputs: []` 合法并得到 `{}`。保存 Draft 的新 output 声明不会改变已发布版本或既有 Run。持久化和查询行为见 [Runtime 最终输出](runtime-architecture.md#最终输出)。
+Publish 逐来源按精确 Manifest 检查 port 和 `isTypeAssignable(port.dataType, output.type)`；多候选仅允许同一 flow.if@1 的 true / false 各一个终端 Action，复用 Compiler 的简单 If 能力分析证明互斥和覆盖。单 source 不得引用条件分支，不开放跨 If、遗漏分支或额外无条件候选。
+
+完成时按声明名称收集 RuntimeValue。单来源缺失或类型不符失败；多候选只检查最终 State 中自身来源属性，恰好一个存在才原样返回，零个或多个都失败，不比较值、不读取 route、不 decode reference。空字符串、0、false、null 均是存在的值；`outputs: []` 合法并得到 `{}`。保存 Draft 的新 output 声明不会改变已发布版本或既有 Run。持久化和查询行为见 [Runtime 最终输出](runtime-architecture.md#最终输出)。
 
 ## Start invocation 身份
 
@@ -46,4 +48,4 @@ inputs / outputs 为 RuntimeValue map，error 仅含安全 stage / 可选 code /
 
 Data Edge 提供值，Control Edge 提供先后，不自动互相补齐。每个数据输入至多一条 Data Edge，且不能与静态绑定并存；数组不表示多连接聚合。控制边不占输入，可有多个上游。Data / Control / Template node_output 合并后必须无环，普通上游按节点对去重后 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join)。
 
-条件、Batch、SubWorkflow 和 Human Review 待独立任务。子流程应绑定对方固定版本，不隐式获得其他项目权限或以调用递归绕过无环约束；不据协议声明预建实现。
+除当前简单 If 外的条件拓扑、Batch、SubWorkflow 和 Human Review 待独立任务。子流程应绑定对方固定版本，不隐式获得其他项目权限或以调用递归绕过无环约束；不据协议声明预建实现。

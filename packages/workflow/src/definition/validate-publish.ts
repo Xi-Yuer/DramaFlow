@@ -1,5 +1,6 @@
 import {
   isTypeAssignable,
+  workflowOutputSources,
   StringType,
   type NodeDefinition,
   type WorkflowDefinition,
@@ -222,13 +223,15 @@ export function validateWorkflowDefinitionSemantics(
   }
 
   for (const output of definition.outputs) {
-    const source = nodes.get(output.source.nodeId)!;
-    const port = source.nodeType.manifest.outputs.find(
-      (port) => port.key === output.source.outputKey,
-    );
-    if (!port) invalid('OUTPUT_PORT_NOT_FOUND', source.node.id, output.source.outputKey);
-    if (!isTypeAssignable(port.dataType, output.type))
-      invalid('WORKFLOW_OUTPUT_TYPE_MISMATCH', source.node.id, output.source.outputKey);
+    for (const candidate of workflowOutputSources(output)) {
+      const source = nodes.get(candidate.nodeId)!;
+      const port = source.nodeType.manifest.outputs.find(
+        (port) => port.key === candidate.outputKey,
+      );
+      if (!port) invalid('OUTPUT_PORT_NOT_FOUND', source.node.id, candidate.outputKey);
+      if (!isTypeAssignable(port.dataType, output.type))
+        invalid('WORKFLOW_OUTPUT_TYPE_MISMATCH', source.node.id, candidate.outputKey);
+    }
   }
   return entries;
 }
@@ -242,7 +245,7 @@ export function validateWorkflowForPublish(
   const ifNodeIds = new Set(
     entries.filter((entry) => isSupportedIf(entry.nodeType)).map((entry) => entry.node.id),
   );
-  if (ifNodeIds.size) {
+  if (ifNodeIds.size || definition.outputs.some((output) => output.sources !== undefined)) {
     try {
       analyzeSimpleIfExecution(definition, ifNodeIds);
     } catch (error) {

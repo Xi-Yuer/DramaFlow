@@ -366,7 +366,7 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 首次启动', () => {
 
   it('最终输出来源缺失时 NodeRun completed 与 WorkflowRun failed 保持独立', async () => {
     const f = await fixture((definition) => {
-      definition.outputs[0]!.source.outputKey = 'missing';
+      definition.outputs[0]!.source!.outputKey = 'missing';
     });
     await expect(f.start(f.input)).rejects.toMatchObject({
       code: 'WORKFLOW_OUTPUT_MISSING',

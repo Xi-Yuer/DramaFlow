@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { App, ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Node, Edge, ReactFlowProps } from '@xyflow/react';
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkflowCanvas } from '../src/features/workflow/canvas/workflow-canvas';
 import { nodeTypeKeys } from '../src/features/workflow/node-catalog/node-type-api';
@@ -68,6 +68,41 @@ function connectEnd() {
 }
 
 describe('Canvas 的 End Boundary 路由', () => {
+  it('第二次拖线可取消或明确加入 result，删除线仅移除其候选', () => {
+    setup();
+    connectEnd();
+    act(() =>
+      flow.onConnect!({
+        source: 'a',
+        sourceHandle: 'text',
+        target: endNode().id,
+        targetHandle: END_INPUT_HANDLE,
+      }),
+    );
+    expect(saved.outputs[0]!.source).toEqual({ nodeId: 'b', outputKey: 'text' });
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(saved.outputs).toHaveLength(1);
+    act(() =>
+      flow.onConnect!({
+        source: 'a',
+        sourceHandle: 'text',
+        target: endNode().id,
+        targetHandle: END_INPUT_HANDLE,
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '加入 result 的候选' }));
+    expect(saved.outputs[0]!.sources).toEqual([
+      { nodeId: 'b', outputKey: 'text' },
+      { nodeId: 'a', outputKey: 'text' },
+    ]);
+    expect(flow.edges).toHaveLength(2);
+    expect(saved.edges).toEqual([]);
+    act(() => flow.onEdgesDelete!([flow.edges!.find((edge) => edge.source === 'b')!]));
+    expect(saved.outputs[0]!.sources).toEqual([{ nodeId: 'a', outputKey: 'text' }]);
+    act(() => flow.onNodesChange!([{ type: 'remove', id: 'a' }]));
+    expect(saved.outputs[0]!.sources).toEqual([]);
+    expect(flow.edges).toEqual([]);
+  });
   it('始终显示 End，移动仅改变视图；业务输出拖到 End 只修改 outputs', async () => {
     setup();
     await waitFor(() => expect(flow.nodesConnectable).toBe(true));
@@ -89,6 +124,7 @@ describe('Canvas 的 End Boundary 路由', () => {
     expect(saved.edges).toEqual([]);
     expect(flow.edges).toHaveLength(1);
     connectEnd();
+    fireEvent.click(screen.getByRole('button', { name: '新建独立输出' }));
     expect(saved.outputs.map((output) => output.name)).toEqual(['result', 'result_2']);
     act(() => flow.onEdgesDelete!([flow.edges![0]!]));
     expect(saved.outputs.map((output) => output.name)).toEqual(['result_2']);

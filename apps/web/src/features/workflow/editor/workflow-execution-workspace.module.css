@@ -42,6 +42,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   border-left: 1px solid #ffffff12;
   background: #151517;
 }
@@ -57,10 +58,11 @@
 }
 
 .panelBody {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   padding: 0 16px 16px;
 }
 
@@ -76,9 +78,10 @@
 }
 
 .tabs {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .tabs :global(.ant-tabs-nav) {
@@ -86,10 +89,13 @@
   flex-shrink: 0;
 }
 
-.tabs :global(.ant-tabs-content-holder) {
+/* antd 6 的 body-holder 默认按内容撑高，且运行时样式优先级更高，长内容会被面板裁掉。 */
+.tabs:global(.ant-tabs.ant-tabs-top) :global(.ant-tabs-body-holder) {
+  flex: 1 1 0;
+  height: 0;
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  min-height: 0;
 }
 
 @media (max-width: 900px) {

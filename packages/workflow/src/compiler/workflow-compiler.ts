@@ -64,6 +64,7 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     // 所有能力 / 拓扑 / 输出证明均在创建服务或执行节点前完成。
     if (
       ifNodeIds.size ||
+      definition.outputs.some((output) => output.sources !== undefined) ||
       definition.edges.some(
         (edge) =>
           edge.kind === 'control' &&
@@ -72,7 +73,10 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     ) {
       validateWorkflowDefinitionSemantics(definition, this.registry);
     }
-    const ifAnalysis = ifNodeIds.size ? analyzeSimpleIfExecution(definition, ifNodeIds) : undefined;
+    const ifAnalysis =
+      ifNodeIds.size || definition.outputs.some((output) => output.sources !== undefined)
+        ? analyzeSimpleIfExecution(definition, ifNodeIds)
+        : undefined;
     const { recursionLimit } = ifAnalysis ?? analyzeActionDagExecution(definition);
     if (ifAnalysis && !this.createIfServices)
       throw new Error('If 编译必须显式注入 BindingResolver / Codec');

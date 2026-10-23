@@ -32,4 +32,4 @@ true / false Handle 来自精确 Manifest 的 controlOutputs，保存为 Control
 
 ## Workflow 输出编辑
 
-画布的「结束」边界投影 `WorkflowDefinition.outputs`，不作为业务节点执行。节点输出端口拖到结束边界可创建输出；边界内统一配置名称、来源节点和输出端口，DataType 自动取 Manifest。多项输出分别声明，名称遵守 Contract 且唯一。删除边界连线即删除对应声明，删除来源节点同步清理声明。结束边界可移动但不可删除，位置只在当前页面保留，不扩展领域布局协议。
+画布的「结束」边界投影 `WorkflowDefinition.outputs`，不作为业务节点执行。节点输出端口拖到结束边界可创建输出；边界内统一配置名称、来源节点和输出端口，DataType 自动取 Manifest。多项输出分别声明，名称遵守 Contract 且唯一。拖线遇到已有输出时，明确选择「新建独立输出」或「加入某项的候选」；同一输出可投影多条来源线，不写入业务 edges。单来源删线删除声明；候选模式删线或删节点只移除对应 candidate，保留名称、类型及零/单候选 Draft，并提示补齐，不自动转换成 source。候选表单保留 sources 模式，最终互斥与覆盖由 Publish 校验。结束边界可移动但不可删除，位置只在当前页面保留，不扩展领域布局协议。

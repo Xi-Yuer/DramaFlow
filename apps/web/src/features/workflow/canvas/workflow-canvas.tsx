@@ -12,7 +12,14 @@ import {
 } from '@xyflow/react';
 import { useQuery } from '@tanstack/react-query';
 import { App, Button } from 'antd';
-import type { NodeTypeManifest, Project, WorkflowDefinition } from '@dramaflow/contracts';
+import {
+  workflowOutputSources,
+  type NodeTypeManifest,
+  type Project,
+  type WorkflowDefinition,
+  type WorkflowOutputSource,
+} from '@dramaflow/contracts';
+import { WorkflowOutputTargetDialog } from '../outputs/workflow-output-target-dialog';
 import { createWorkflowNode } from '../node-catalog/create-workflow-node';
 import { NodePicker } from '../node-catalog/node-picker';
 import { nodeTypeApi, nodeTypeKeys } from '../node-catalog/node-type-api';
@@ -26,6 +33,8 @@ import {
   addWorkflowOutput,
   setWorkflowOutput,
   removeWorkflowOutput,
+  appendWorkflowOutputCandidate,
+  removeWorkflowOutputCandidate,
   removeWorkflowNodes,
   projectWorkflowEnd,
   END_INPUT_HANDLE,
@@ -93,6 +102,7 @@ export function WorkflowCanvas({
     () => projectWorkflowEnd(workflow).node.position,
   );
   const [outputEditor, setOutputEditor] = useState<{ name?: string } | null>(null);
+  const [pendingOutputSource, setPendingOutputSource] = useState<WorkflowOutputSource | null>(null);
   const end = useMemo(() => projectWorkflowEnd(workflow, endPosition), [workflow, endPosition]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<ReadonlySet<string>>(new Set());
   const nodes = useMemo(
@@ -195,6 +205,10 @@ export function WorkflowCanvas({
               onRemove: (name) => {
                 if (!locked) onEdit((current) => removeWorkflowOutput(current, name));
               },
+              onRemoveCandidate: (name, source) => {
+                if (!locked)
+                  onEdit((current) => removeWorkflowOutputCandidate(current, name, source));
+              },
             }}
           >
             <WorkflowConditionActions.Provider
@@ -273,6 +287,13 @@ export function WorkflowCanvas({
                     if (connection.target === end.node.id) {
                       const sourceHandle = connection.sourceHandle;
                       if (connection.targetHandle !== END_INPUT_HANDLE || !sourceHandle) return;
+                      if (workflow.outputs.length) {
+                        setPendingOutputSource({
+                          nodeId: connection.source,
+                          outputKey: sourceHandle,
+                        });
+                        return;
+                      }
                       onEdit((current) =>
                         addWorkflowOutput(
                           current,
@@ -312,9 +333,16 @@ export function WorkflowCanvas({
                         const output = definition.outputs.find(
                           (output) => output.name === outputName,
                         );
-                        return output?.source.nodeId === edge.source &&
-                          output.source.outputKey === edge.sourceHandle
-                          ? removeWorkflowOutput(definition, output.name)
+                        return output &&
+                          workflowOutputSources(output).some(
+                            (source) =>
+                              source.nodeId === edge.source &&
+                              source.outputKey === edge.sourceHandle,
+                          )
+                          ? removeWorkflowOutputCandidate(definition, output.name, {
+                              nodeId: edge.source,
+                              outputKey: edge.sourceHandle!,
+                            })
                           : definition;
                       }, current),
                     );
@@ -371,6 +399,32 @@ export function WorkflowCanvas({
           </WorkflowOutputActions.Provider>
         </WorkflowInputContext.Provider>
       </WorkflowModelActionsContext.Provider>
+      {pendingOutputSource ? (
+        <WorkflowOutputTargetDialog
+          outputs={workflow.outputs}
+          disabled={locked || nodeTypes.isPending || nodeTypes.isError}
+          onCancel={() => setPendingOutputSource(null)}
+          onCreate={() => {
+            if (locked) return;
+            onEdit((current) =>
+              addWorkflowOutput(current, pendingOutputSource, nodeTypes.data ?? []),
+            );
+            setPendingOutputSource(null);
+          }}
+          onAppend={(name) => {
+            if (locked) return;
+            onEdit((current) =>
+              appendWorkflowOutputCandidate(
+                current,
+                name,
+                pendingOutputSource,
+                nodeTypes.data ?? [],
+              ),
+            );
+            setPendingOutputSource(null);
+          }}
+        />
+      ) : null}
       {outputEditor && (
         <WorkflowOutputDialog
           definition={workflow}

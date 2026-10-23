@@ -257,7 +257,7 @@ describe('正式 Registry 的静态发布校验', () => {
     [
       'OUTPUT_PORT_NOT_FOUND',
       (g: WorkflowDefinition) => {
-        g.outputs[0]!.source.outputKey = 'missing';
+        g.outputs[0]!.source!.outputKey = 'missing';
       },
     ],
     [

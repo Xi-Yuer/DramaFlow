@@ -9,7 +9,7 @@ import {
 } from '@dramaflow/workflow';
 import { WorkflowService } from './workflow.service.js';
 
-it.each([false, true])(
+it.each([false, true, 'candidates'] as const)(
   '生产 Publish 仅放行安全 If：条件分支最终输出=%s',
   async (conditionalOutput) => {
     const draft: WorkflowDefinition = {
@@ -50,15 +50,27 @@ it.each([false, true])(
           target: { nodeId: 'C' },
         },
       ],
-      outputs: conditionalOutput
-        ? [
-            {
-              name: 'result',
-              type: { kind: 'primitive', name: 'string' },
-              source: { nodeId: 'B', outputKey: 'text' },
-            },
-          ]
-        : [],
+      outputs:
+        conditionalOutput === 'candidates'
+          ? [
+              {
+                name: 'result',
+                type: { kind: 'primitive', name: 'string' },
+                sources: [
+                  { nodeId: 'B', outputKey: 'text' },
+                  { nodeId: 'C', outputKey: 'text' },
+                ],
+              },
+            ]
+          : conditionalOutput
+            ? [
+                {
+                  name: 'result',
+                  type: { kind: 'primitive', name: 'string' },
+                  source: { nodeId: 'B', outputKey: 'text' },
+                },
+              ]
+            : [],
     };
     const createVersion = vi.fn(
       async ({
@@ -108,7 +120,7 @@ it.each([false, true])(
       new NodeRegistry([createTextGenerationNodeType(), createIfNodeType()]),
       models,
     );
-    if (conditionalOutput) {
+    if (conditionalOutput === true) {
       await expect(
         service.publish('owner', {
           workflowId: 'workflow',

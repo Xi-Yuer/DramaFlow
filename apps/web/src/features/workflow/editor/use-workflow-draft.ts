@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useReducer, useRef } from 'react';
 import {
-  workflowDefinitionSchema,
+  workflowDraftDefinitionSchema,
   type WorkflowDefinition,
   type WorkflowResponse,
 } from '@dramaflow/contracts';
@@ -32,7 +32,7 @@ export function useWorkflowDraft(initial: WorkflowResponse) {
       try {
         send({
           type: 'edit',
-          definition: workflowDefinitionSchema.parse(apply(current.current.definition)),
+          definition: workflowDraftDefinitionSchema.parse(apply(current.current.definition)),
         });
       } catch (error) {
         send({

@@ -219,7 +219,7 @@ describe('WorkflowRunner 首次启动', () => {
 
   it('缺少声明的最终输出时，NodeRun 可已完成，WorkflowRun 必须失败', async () => {
     const f = workflowRunnerFixture();
-    f.version.definition.outputs[0]!.source.outputKey = 'missing';
+    f.version.definition.outputs[0]!.source!.outputKey = 'missing';
     await expect(f.start(f.input)).rejects.toMatchObject({
       code: 'WORKFLOW_OUTPUT_MISSING',
     });

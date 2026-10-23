@@ -80,6 +80,22 @@ export function analyzeSimpleIfExecution(
     for (const source of parents.get(target) ?? []) if (!ancestors.has(source)) reject(target);
   }
   for (const output of definition.outputs) {
+    if (output.sources !== undefined) {
+      const candidates = output.sources;
+      const owner = candidates[0] && branchOwners.get(candidates[0].nodeId);
+      const route = routes.find((route) => route.nodeId === owner);
+      if (
+        candidates.length === 2 &&
+        route &&
+        new Set(candidates.map((source) => source.nodeId)).size === 2 &&
+        candidates.every((source) => source.nodeId === route.true || source.nodeId === route.false)
+      )
+        continue;
+      throw new SimpleIfCapabilityError(
+        'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',
+        candidates[0]?.nodeId ?? 'workflow',
+      );
+    }
     if (branchOwners.has(output.source.nodeId))
       throw new SimpleIfCapabilityError(
         'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',

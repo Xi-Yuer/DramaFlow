@@ -68,6 +68,15 @@ export type WorkflowRunMetadata = z.infer<typeof workflowRunMetadataSchema>;
 export type WorkflowRunStatus = z.infer<typeof workflowRunStatusSchema>;
 export type WorkflowOutputSource = z.infer<typeof workflowOutputSourceSchema>;
 
+// 只统一来源枚举，不包含路由、优先级或值选择语义。
+export function workflowOutputSources(
+  output:
+    | { source: WorkflowOutputSource; sources?: never }
+    | { source?: never; sources: readonly WorkflowOutputSource[] },
+): readonly WorkflowOutputSource[] {
+  return output.source === undefined ? output.sources : [output.source];
+}
+
 // Node、Edge、DataType 必须由调用方提供真实 Schema，没有宽松的默认协议。
 export function createWorkflowSchemas<
   DataTypeSchema extends z.ZodType,
@@ -77,13 +86,50 @@ export function createWorkflowSchemas<
   const portFields = { name: workflowPortNameSchema, type: schemas.dataType };
   // 旧定义读取时补齐存在性语义；解析结果显式携带 required，不回写原始版本。
   const inputSchema = z.object({ ...portFields, required: z.boolean().default(true) }).strict();
-  const outputSchema = z.object({ ...portFields, source: workflowOutputSourceSchema }).strict();
-  const definitionSchema = z
+  const draftOutputSchema = z
+    .union([
+      z
+        .object({
+          ...portFields,
+          source: workflowOutputSourceSchema,
+          sources: z.never().optional(),
+        })
+        .strict(),
+      z
+        .object({
+          ...portFields,
+          source: z.never().optional(),
+          sources: z.array(workflowOutputSourceSchema),
+        })
+        .strict(),
+    ])
+    .superRefine((output, context) => {
+      const seen = new Set<string>();
+      workflowOutputSources(output).forEach((source, index) => {
+        const key = JSON.stringify([source.nodeId, source.outputKey]);
+        if (seen.has(key))
+          context.addIssue({
+            code: 'custom',
+            path: ['sources', index],
+            message: '工作流输出候选来源不能重复',
+          });
+        seen.add(key);
+      });
+    });
+  const outputSchema = draftOutputSchema.superRefine((output, context) => {
+    if (output.sources !== undefined && output.sources.length < 2)
+      context.addIssue({
+        code: 'custom',
+        path: ['sources'],
+        message: '多候选工作流输出至少需要两个来源',
+      });
+  });
+  const draftDefinitionSchema = z
     .object({
       inputs: z.array(inputSchema),
       nodes: z.array(schemas.node),
       edges: z.array(schemas.edge),
-      outputs: z.array(outputSchema),
+      outputs: z.array(draftOutputSchema),
     })
     .strict()
     .superRefine((definition, context) => {
@@ -106,20 +152,36 @@ export function createWorkflowSchemas<
       }
       const nodeIds = new Set(definition.nodes.map((node) => node.id));
       definition.outputs.forEach((output, index) => {
-        if (!nodeIds.has(output.source.nodeId)) {
-          context.addIssue({
-            code: 'custom',
-            path: ['outputs', index, 'source', 'nodeId'],
-            message: '工作流输出引用了不存在的节点',
-          });
-        }
+        workflowOutputSources(output).forEach((source, sourceIndex) => {
+          if (!nodeIds.has(source.nodeId)) {
+            context.addIssue({
+              code: 'custom',
+              path: [
+                'outputs',
+                index,
+                ...(output.sources === undefined ? ['source'] : ['sources', sourceIndex]),
+                'nodeId',
+              ],
+              message: '工作流输出引用了不存在的节点',
+            });
+          }
+        });
       });
     });
+  const definitionSchema = draftDefinitionSchema.superRefine((definition, context) => {
+    definition.outputs.forEach((output, index) => {
+      const parsed = outputSchema.safeParse(output);
+      if (!parsed.success)
+        for (const issue of parsed.error.issues)
+          context.addIssue({ ...issue, path: ['outputs', index, ...issue.path] });
+    });
+  });
   return {
     inputSchema,
     outputSchema,
     definitionSchema,
-    workflowSchema: workflowMetadataSchema.extend({ draft: definitionSchema }),
+    draftDefinitionSchema,
+    workflowSchema: workflowMetadataSchema.extend({ draft: draftDefinitionSchema }),
     versionSchema: workflowVersionMetadataSchema.extend({ definition: definitionSchema }),
   };
 }

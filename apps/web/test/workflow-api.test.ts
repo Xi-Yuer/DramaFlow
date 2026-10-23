@@ -3,6 +3,8 @@ import { workflowApi } from '../src/features/workflow/workflow-api';
 import {
   addWorkflowOutput,
   projectWorkflowEnd,
+  appendWorkflowOutputCandidate,
+  removeWorkflowOutputCandidate,
 } from '../src/features/workflow/outputs/workflow-outputs';
 import { definition, manifest } from './fixtures/workflow-output';
 import { ApiError } from '../src/lib/http';
@@ -32,6 +34,26 @@ function mockResponse(body: unknown, status = 200) {
 }
 
 describe('Workflow 编辑 HTTP 边界', () => {
+  it('多候选与候选不足的 Draft 都能 Save/reload，保留 sources 模式及输出类型', async () => {
+    const multiple = appendWorkflowOutputCandidate(
+      addWorkflowOutput(definition(), { nodeId: 'b', outputKey: 'text' }, [manifest]),
+      'result',
+      { nodeId: 'a', outputKey: 'text' },
+      [manifest],
+    );
+    for (const draft of [
+      multiple,
+      removeWorkflowOutputCandidate(multiple, 'result', { nodeId: 'a', outputKey: 'text' }),
+    ]) {
+      const fetch = mockResponse({ revision: 4 });
+      await workflowApi.saveDraft(workflow.id, { expectedRevision: 3, definition: draft });
+      const request = JSON.parse(fetch.mock.calls[0]![1].body as string);
+      expect(request.definition).toEqual(draft);
+      mockResponse({ ...workflow, revision: 4, draft: request.definition });
+      expect((await workflowApi.get(workflow.projectId)).draft).toEqual(draft);
+      expect(projectWorkflowEnd(draft).edges).toHaveLength(draft.outputs[0]!.sources!.length);
+    }
+  });
   it('If 缺少条件、输入或分支仍可保存；完整定义保存/读取保留条件和 named port', async () => {
     const incomplete = ifWorkflow();
     let fetch = mockResponse({ revision: 4 });

@@ -142,10 +142,10 @@ describe('Workflow 版本快照与运行绑定', () => {
     });
     draft.nodes[0]!.config.prompt = '新提示词';
     draft.inputs[0]!.name = 'changed';
-    draft.outputs[0]!.source.nodeId = 'changed';
+    draft.outputs[0]!.source!.nodeId = 'changed';
     expect(snapshot.definition.nodes[0]?.config.prompt).toBe('原始提示词');
     expect(snapshot.definition.inputs[0]?.name).toBe('novel');
-    expect(snapshot.definition.outputs[0]?.source.nodeId).toBe('script');
+    expect(snapshot.definition.outputs[0]?.source?.nodeId).toBe('script');
     expect(Object.isFrozen(snapshot.definition.nodes[0]?.config)).toBe(true);
     expect(Reflect.set(snapshot.definition.nodes[0]!.config, 'prompt', '修改')).toBe(false);
     expect(Reflect.set(snapshot.definition.nodes, '0', {})).toBe(false);

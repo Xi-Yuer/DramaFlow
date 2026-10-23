@@ -229,7 +229,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
       [
         'OUTPUT_PORT_NOT_FOUND',
         (g) => {
-          g.outputs[0]!.source.outputKey = 'missing';
+          g.outputs[0]!.source!.outputKey = 'missing';
         },
       ],
       [
@@ -286,7 +286,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
     }
     // 直接存储的未可信定义也必须经过发布边界重新验证。
     const corrupt = structuredClone(f.draft);
-    corrupt.outputs[0]!.source.nodeId = 'missing';
+    corrupt.outputs[0]!.source!.nodeId = 'missing';
     await db.workflow.update({
       where: { id: f.workflow.id },
       data: { draft: z.record(z.string(), z.json()).parse(corrupt) },

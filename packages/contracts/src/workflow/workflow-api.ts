@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { workflowDefinitionSchema } from './definition.js';
+import { workflowDefinitionSchema, workflowDraftDefinitionSchema } from './definition.js';
 import { workflowMetadataSchema, workflowVersionMetadataSchema } from './metadata.js';
 
 // 项目默认工作流是应用访问入口；身份、草稿和修订仍属于独立 Workflow。
@@ -8,13 +8,13 @@ export const workflowResponseSchema = workflowMetadataSchema
   .extend({
     projectId: z.uuid(),
     revision: z.number().int().positive(),
-    draft: workflowDefinitionSchema,
+    draft: workflowDraftDefinitionSchema,
   })
   .strict();
 export const saveWorkflowDraftRequestSchema = z
   .object({
     expectedRevision: z.number().int().positive(),
-    definition: workflowDefinitionSchema,
+    definition: workflowDraftDefinitionSchema,
   })
   .strict();
 export const saveWorkflowDraftResponseSchema = z

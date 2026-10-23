@@ -4,7 +4,7 @@ import {
   isTypeAssignable,
   nodeDefinitionSchema,
   nodeTypeManifestListSchema,
-  workflowDefinitionSchema,
+  workflowDraftDefinitionSchema,
   workflowEdgeSchema,
   workflowIdentifierSchema,
   type WorkflowEdge as WorkflowEdgeDefinition,
@@ -94,7 +94,7 @@ export function fromReactFlowNode(input: unknown): NodeDefinition {
 }
 
 export function toReactFlowNodes(input: unknown): WorkflowNode[] {
-  return workflowDefinitionSchema.parse(input).nodes.map(toReactFlowNode);
+  return workflowDraftDefinitionSchema.parse(input).nodes.map(toReactFlowNode);
 }
 
 // 位置变更只更新领域布局；选择、测量、拖动标记及内部增删事件不进入 Definition。
@@ -102,7 +102,7 @@ export function applyWorkflowNodePositions(
   input: unknown,
   changes: readonly NodeChange<WorkflowNode>[],
 ): WorkflowDefinition {
-  const workflow = workflowDefinitionSchema.parse(input);
+  const workflow = workflowDraftDefinitionSchema.parse(input);
   for (const change of changes) {
     if (change.type !== 'position' || !change.position) continue;
     const node = workflow.nodes.find((node) => node.id === change.id);
@@ -172,7 +172,7 @@ export function fromReactFlowEdge(input: unknown): WorkflowEdgeDefinition {
 }
 
 export function toReactFlowEdges(input: unknown): WorkflowEdge[] {
-  return workflowDefinitionSchema.parse(input).edges.map(toReactFlowEdge);
+  return workflowDraftDefinitionSchema.parse(input).edges.map(toReactFlowEdge);
 }
 
 function manifestFor(manifests: readonly NodeTypeManifest[], type: string, version: number) {
@@ -257,7 +257,7 @@ function addWorkflowEdge(
       },
       target: { nodeId: target.id },
     });
-    return workflowDefinitionSchema.parse(workflow);
+    return workflowDraftDefinitionSchema.parse(workflow);
   }
   const output = sourceManifest.outputs.find((port) => port.key === connection.sourceHandle);
   if (!output) throw new Error('来源端口不存在');
@@ -288,7 +288,7 @@ function addWorkflowEdge(
     source: { nodeId: connection.source, portKey: connection.sourceHandle },
     target: { nodeId: connection.target, portKey: connection.targetHandle },
   });
-  return workflowDefinitionSchema.parse(workflow);
+  return workflowDraftDefinitionSchema.parse(workflow);
 }
 
 export function connectWorkflowNodes(
@@ -298,7 +298,7 @@ export function connectWorkflowNodes(
   options?: ConnectWorkflowOptions,
 ): WorkflowDefinition {
   return addWorkflowEdge(
-    workflowDefinitionSchema.parse(input),
+    workflowDraftDefinitionSchema.parse(input),
     connectionSchema.parse(connectionInput),
     nodeTypeManifestListSchema.parse(manifestsInput),
     `edge_${globalThis.crypto.randomUUID()}`,
@@ -320,7 +320,7 @@ function matchesWorkflowEdge(edge: WorkflowEdgeDefinition, snapshot: WorkflowEdg
 
 // 删除事件可能来自旧视图；只删除 ID 与完整端点仍匹配的那条关系。
 export function disconnectWorkflowEdge(input: unknown, edgeInput: unknown): WorkflowDefinition {
-  const workflow = workflowDefinitionSchema.parse(input);
+  const workflow = workflowDraftDefinitionSchema.parse(input);
   const snapshot = fromReactFlowEdge(edgeInput);
   workflow.edges = workflow.edges.filter((edge) => !matchesWorkflowEdge(edge, snapshot));
   return workflow;
@@ -334,7 +334,7 @@ export function reconnectWorkflowEdge(
   manifestsInput: unknown,
   options?: ConnectWorkflowOptions,
 ): WorkflowDefinition {
-  const workflow = workflowDefinitionSchema.parse(input);
+  const workflow = workflowDraftDefinitionSchema.parse(input);
   const snapshot = fromReactFlowEdge(edgeInput);
   const index = workflow.edges.findIndex((edge) => matchesWorkflowEdge(edge, snapshot));
   if (index === -1) return workflow;

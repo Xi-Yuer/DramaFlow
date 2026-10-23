@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { StringType, type NodeDefinition, type WorkflowDefinition } from '@dramaflow/contracts';
+import {
+  StringType,
+  type NodeDefinition,
+  type WorkflowDefinition,
+  type NodeOutputMap,
+} from '@dramaflow/contracts';
 import { z } from 'zod';
 import { interrupt } from '@langchain/langgraph';
 import {
@@ -7,6 +12,7 @@ import {
   createWorkflowDefinitionSnapshot,
   validateWorkflowForPublish,
   workflowStateSchema,
+  DefaultWorkflowOutputResolver,
 } from '../src/index.js';
 import * as condition from '../src/runtime/condition-evaluator.js';
 import { analyzeSimpleIfExecution } from '../src/compiler/if/analysis.js';
@@ -104,6 +110,84 @@ async function snapshot(f: ReturnType<typeof fixture>) {
 }
 
 describe('真实 LangGraph 简单 If 路由', () => {
+  it.each(['missing', 'ambiguous', 'type'])(
+    '最终 State 候选异常 %s 在 resolve_output 标记 failed',
+    async (kind) => {
+      const d = definition();
+      d.outputs = [
+        {
+          name: 'result',
+          type: StringType,
+          sources: [
+            { nodeId: 'B', outputKey: 'text' },
+            { nodeId: 'C', outputKey: 'text' },
+          ],
+        },
+      ];
+      const f = fixture(d);
+      f.resolve.mockImplementation((definition, state) => {
+        const outputs: NodeOutputMap =
+          kind === 'missing'
+            ? {}
+            : kind === 'ambiguous'
+              ? {
+                  B: { text: { storage: 'inline' as const, type: StringType, value: 'same' } },
+                  C: { text: { storage: 'inline' as const, type: StringType, value: 'same' } },
+                }
+              : {
+                  B: {
+                    text: {
+                      storage: 'inline' as const,
+                      type: { kind: 'primitive' as const, name: 'number' as const },
+                      value: 0,
+                    },
+                  },
+                };
+        return new DefaultWorkflowOutputResolver().resolve(definition, { ...state, outputs });
+      });
+      await expect(f.start({ ...f.input, inputs: {} })).rejects.toMatchObject({
+        code:
+          kind === 'missing'
+            ? 'WORKFLOW_OUTPUT_MISSING'
+            : kind === 'ambiguous'
+              ? 'WORKFLOW_OUTPUT_AMBIGUOUS'
+              : 'WORKFLOW_OUTPUT_TYPE_MISMATCH',
+      });
+      expect(f.runs.markFailed).toHaveBeenCalledWith(
+        'run-1',
+        expect.objectContaining({
+          stage: 'resolve_output',
+          code: 'WORKFLOW_OUTPUT_RESOLUTION_FAILED',
+        }),
+      );
+      expect(f.runs.markCompleted).not.toHaveBeenCalled();
+    },
+  );
+  it.each([true, false])('多候选最终输出：%s 只执行一支并持久化同名 result', async (choice) => {
+    const d = definition();
+    d.nodes[0]!.inputs.text = { type: 'constant', value: choice ? 'approved' : 'denied' };
+    d.outputs = [
+      {
+        name: 'result',
+        type: StringType,
+        sources: [
+          { nodeId: 'B', outputKey: 'text' },
+          { nodeId: 'C', outputKey: 'text' },
+        ],
+      },
+    ];
+    const f = fixture(d);
+    validateWorkflowForPublish(f.version.definition, f.registry);
+    expect(await f.start({ ...f.input, inputs: {} })).toMatchObject({
+      status: 'completed',
+      outputs: { result: { storage: 'inline', value: choice ? 'approved' : 'denied' } },
+    });
+    expect(f.executeNode.mock.calls.map(([node]) => node.id)).toEqual(['A', choice ? 'B' : 'C']);
+    expect(f.runs.markCompleted).toHaveBeenCalledWith(
+      'run-1',
+      expect.objectContaining({ result: expect.objectContaining({ storage: 'inline' }) }),
+    );
+  });
   it.each([true, false])(
     '条件 %s：只执行一支，DataEdge/Template 不绕过路由，不等待未选 leaf',
     async (choice) => {
@@ -339,7 +423,7 @@ describe('真实 LangGraph 简单 If 路由', () => {
     'unknown-port',
   ] as const)('%s 在 Publish 和 Compiler 执行节点前共同拒绝', async (kind) => {
     const d = definition();
-    if (kind === 'branch-output') d.outputs[0]!.source.nodeId = 'B';
+    if (kind === 'branch-output') d.outputs[0]!.source!.nodeId = 'B';
     else if (kind === 'unknown-port') d.edges[2]!.source.portKey = 'maybe';
     else if (kind === 'same-target') d.edges[3]!.target.nodeId = 'B';
     else if (kind === 'multi-target')

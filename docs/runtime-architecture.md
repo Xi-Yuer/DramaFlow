@@ -38,7 +38,7 @@ Compiler 使用 LangGraph 原生 addConditionalEdges，callback 只读取该 If 
 
 预算按实际编译后的静态依赖与两条潜在条件路径计算最长节点深度（包含 If），再加 1 次终止检测；If 路由 callback 不额外占 superstep。这是独立的简单 If 分析，不调用 Action 专用分析。真实边界为 A=1、If=2、leaf=3，recursionLimit=4；100 个上游并行节点仍为 4，100 层串行上游加 If 和 leaf 为 103。预算属于单次 invocation，不是 thread 累计额度。
 
-Publish 与 Compiler 共用同一个能力分析：拒绝分支后继链、merge / nested、跨支依赖、共享分支目标、一出口多目标、来源未被 If 前置保证就绪的分支输入，以及条件分支来源的 Workflow output；不新增长期 Contract 限制或 optional output。不通过能力检查时，在创建执行服务 / 执行任何节点前失败。只允许声明必定执行的无条件节点输出，OutputResolver 不变。Web 的四种 string 条件与命名控制出口只编辑 Definition，不扩展这些运行能力。
+Publish 与 Compiler 共用同一个能力分析：拒绝分支后继链、merge / nested、跨支依赖、共享分支目标、一出口多目标、来源未被 If 前置保证就绪的分支输入，以及不满足同一 If 双分支覆盖的条件最终输出；不新增长期 Contract 限制或 optional output。不通过能力检查时，在创建执行服务 / 执行任何节点前失败。单 source 只允许必定执行的节点；sources 仅允许同一 If 的两个终端分支各一个候选，不改变调度、叶子或执行预算。Web 的四种 string 条件与命名控制出口只编辑 Definition，不扩展这些运行能力。
 
 ## Submission 与 Runner
 
@@ -52,7 +52,9 @@ resume 只传不透明 value；单 interrupt 的 false / 0 / null 使用原生 i
 
 ### 最终输出
 
-`DefaultWorkflowOutputResolver` 只按 Definition.outputs 的声明名称收集 RuntimeValue；inline / reference 原样保留，不返回整份 State、不 materialize Artifact、不生成临时 URL。来源缺失或实际类型不兼容使 Run 在 resolve_output 阶段失败；空声明得到 `{}`。
+OutputResolver 仅按最终 State 解析声明：单 source 维持原行为；sources 恰好一个自身来源存在才返回原 RuntimeValue，零个报 WORKFLOW_OUTPUT_MISSING，多个报 WORKFLOW_OUTPUT_AMBIGUOUS，类型不符报 WORKFLOW_OUTPUT_TYPE_MISMATCH。不读取条件、ControlEdge 或 controlResults，不做优先选择、内容合并或 Artifact materialization。这些异常沿现有 resolve_output 失败路径记录 WORKFLOW_OUTPUT_RESOLUTION_FAILED，不返回部分结果。
+
+Resolver 不返回整份 State，不生成临时 URL；空声明得到 `{}`。
 
 生产 Runner 调用 `markCompleted`，同一次数据库更新写 completed、outputs 与 completedAt；Graph checkpoint、Run、Outbox 不承诺跨存储原子完成。Run 查询与 invocation lookup 返回同一安全输出投影；Web 展示边界见[当前架构](architecture.md#web-workflow-run-result)，尚无引用内容接口。
 

@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-If Web 编辑进入交付验收，能力见[当前架构](architecture.md)。浏览器真实拖线、Save / reload / Publish / Run 待人工验收，本轮不运行浏览器 E2E 或真实 Provider。后续条件类型或拓扑扩展须单独授权。
+终端 If 多候选最终输出进入交付验收，能力见[当前架构](architecture.md)。浏览器候选拖线 / 删除 / 节点删除、Save / reload / Publish / Run 待人工验收，本轮不运行浏览器 E2E 或真实 Provider。后续条件类型或拓扑扩展须单独授权。
 
 ## 待决策与后续边界
 

@@ -47,7 +47,7 @@ const publishIssueMessages = new Map([
   ],
   [
     'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',
-    '工作流输出不能引用可能不执行的条件分支，请选择必定执行的节点输出。',
+    '条件分支最终输出须使用同一 If 的 true / false 两个末端节点作为候选来源；单来源输出须来自必定执行的节点。',
   ],
   ['NODE_EXECUTION_KIND_UNSUPPORTED', '当前暂不支持运行此类节点，请调整工作流后再发布。'],
   ['CONTROL_OUTPUT_PORT_REQUIRED', '请从条件节点的 true / false 出口连接分支。'],

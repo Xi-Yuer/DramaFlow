@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { workflowDefinitionSchema } from '@dramaflow/contracts';
+import { workflowDefinitionSchema, workflowDraftDefinitionSchema } from '@dramaflow/contracts';
 import {
   addWorkflowOutput,
   setWorkflowOutput,
   removeWorkflowOutput,
   projectWorkflowEnd,
   removeWorkflowNodes,
+  appendWorkflowOutputCandidate,
+  removeWorkflowOutputCandidate,
 } from '../src/features/workflow/outputs/workflow-outputs';
 import {
   toReactFlowNodes,
@@ -17,6 +19,61 @@ import { manifest, definition } from './fixtures/workflow-output';
 const source = { nodeId: 'b', outputKey: 'text' };
 
 describe('Workflow outputs 与 End UI 投影', () => {
+  it('两条候选投影为同名输出；删除来源或节点只清理对应候选，空候选可保存修复', () => {
+    const single = addWorkflowOutput(definition(), source, [manifest]);
+    const multiple = appendWorkflowOutputCandidate(
+      single,
+      'result',
+      { nodeId: 'a', outputKey: 'text' },
+      [manifest],
+    );
+    expect(multiple.outputs).toEqual([
+      {
+        name: 'result',
+        type: manifest.outputs[0]!.dataType,
+        sources: [source, { nodeId: 'a', outputKey: 'text' }],
+      },
+    ]);
+    expect(multiple.edges).toEqual([]);
+    expect(multiple.nodes).toEqual(single.nodes);
+    expect(projectWorkflowEnd(multiple).edges.map((edge) => [edge.label, edge.source])).toEqual([
+      ['result', 'b'],
+      ['result', 'a'],
+    ]);
+    expect(new Set(projectWorkflowEnd(multiple).edges.map((edge) => edge.id)).size).toBe(2);
+    const removed = removeWorkflowOutputCandidate(multiple, 'result', source);
+    expect(removed.outputs[0]!.sources).toEqual([{ nodeId: 'a', outputKey: 'text' }]);
+    expect(removed.outputs[0]!.source).toBeUndefined();
+    expect(workflowDraftDefinitionSchema.parse(JSON.parse(JSON.stringify(removed)))).toEqual(
+      removed,
+    );
+    expect(workflowDefinitionSchema.safeParse(removed).success).toBe(false);
+    expect(removeWorkflowNodes(multiple, ['b']).outputs).toEqual(removed.outputs);
+    const empty = removeWorkflowNodes(removed, ['a']);
+    expect(empty.outputs[0]!.sources).toEqual([]);
+    expect(workflowDraftDefinitionSchema.parse(empty)).toEqual(empty);
+    expect(
+      appendWorkflowOutputCandidate(empty, 'result', source, [manifest]).outputs[0]!.sources,
+    ).toEqual([source]);
+  });
+  it('候选不兼容、重复或失效时拒绝，保留原定义', () => {
+    const single = addWorkflowOutput(definition(), source, [manifest]);
+    const snapshot = structuredClone(single);
+    expect(() => appendWorkflowOutputCandidate(single, 'result', source, [manifest])).toThrow(
+      '重复',
+    );
+    expect(() =>
+      appendWorkflowOutputCandidate(single, 'result', { nodeId: 'a', outputKey: 'video' }, [
+        manifest,
+      ]),
+    ).toThrow('类型不兼容');
+    expect(() =>
+      appendWorkflowOutputCandidate(single, 'result', { nodeId: 'missing', outputKey: 'text' }, [
+        manifest,
+      ]),
+    ).toThrow();
+    expect(single).toEqual(snapshot);
+  });
   it('空 outputs 仍有 End，投影不进入可保存的 Definition', () => {
     const workflow = definition();
     const end = projectWorkflowEnd(workflow);
