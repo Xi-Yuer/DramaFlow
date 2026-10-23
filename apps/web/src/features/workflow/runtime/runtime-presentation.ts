@@ -10,6 +10,10 @@ export interface RuntimeStatusPresentation {
   tone: RuntimeVisualTone;
   tagColor: 'default' | 'processing' | 'warning' | 'success' | 'error';
   badgeStatus: 'default' | 'processing' | 'warning' | 'success' | 'error';
+  canvas: {
+    icon: 'clock' | 'loader' | 'review' | 'check' | 'alert';
+    display: 'hidden' | 'icon' | 'label';
+  };
 }
 
 const BASE_PRESENTATION: Record<RuntimeNodeStatus, RuntimeStatusPresentation> = {
@@ -21,6 +25,7 @@ const BASE_PRESENTATION: Record<RuntimeNodeStatus, RuntimeStatusPresentation> = 
     tone: 'idle',
     tagColor: 'default',
     badgeStatus: 'default',
+    canvas: { icon: 'clock', display: 'hidden' },
   },
   pending: {
     status: 'pending',
@@ -30,6 +35,7 @@ const BASE_PRESENTATION: Record<RuntimeNodeStatus, RuntimeStatusPresentation> = 
     tone: 'pending',
     tagColor: 'default',
     badgeStatus: 'default',
+    canvas: { icon: 'clock', display: 'icon' },
   },
   running: {
     status: 'running',
@@ -39,6 +45,7 @@ const BASE_PRESENTATION: Record<RuntimeNodeStatus, RuntimeStatusPresentation> = 
     tone: 'running',
     tagColor: 'processing',
     badgeStatus: 'processing',
+    canvas: { icon: 'loader', display: 'label' },
   },
   waiting: {
     status: 'waiting',
@@ -48,6 +55,7 @@ const BASE_PRESENTATION: Record<RuntimeNodeStatus, RuntimeStatusPresentation> = 
     tone: 'waiting',
     tagColor: 'warning',
     badgeStatus: 'warning',
+    canvas: { icon: 'review', display: 'label' },
   },
   completed: {
     status: 'completed',
@@ -57,6 +65,7 @@ const BASE_PRESENTATION: Record<RuntimeNodeStatus, RuntimeStatusPresentation> = 
     tone: 'completed',
     tagColor: 'success',
     badgeStatus: 'success',
+    canvas: { icon: 'check', display: 'icon' },
   },
   failed: {
     status: 'failed',
@@ -66,6 +75,7 @@ const BASE_PRESENTATION: Record<RuntimeNodeStatus, RuntimeStatusPresentation> = 
     tone: 'failed',
     tagColor: 'error',
     badgeStatus: 'error',
+    canvas: { icon: 'alert', display: 'label' },
   },
 };
 

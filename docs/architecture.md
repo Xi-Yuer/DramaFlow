@@ -121,9 +121,15 @@ WorkflowDefinition 是唯一持久来源，React Flow 只管理视图；导出�
 
 删除候选线或来源节点只清理对应来源，剩余一个时保留候选 Draft，删光移除该 input binding。Save 直接发送 Definition，reload 从绑定重新投影，不生成真实 DataEdge。输入区域展示来源节点 / 输出端口名称及实际执行分支取值说明，不显示 JSON；候选不足提示补齐。Web 去重并限制新增至两个候选，只校验端点、Manifest 端口与基础类型；互斥和汇聚拓扑由 Publish / Compiler 权威验证，错误沿用发布面板展示。Template variable candidate、任意 N-way 和嵌套 If 编辑不在本版范围。
 
-Template 的 `node_output` 变量也由同一适配层投影为数据线，以 `data.projection = 'template-input'` 标识；真实 DataEdge 不带 projection 标记。投影沿用数据线样式，按 source node / source port / target node / target port 去重，alias 及正文不改写。用户直接插入变量即可建立可见依赖，删除最后一个对应 alias 后连线消失；投影不可直接删除或重连，须在输入编辑器中修改变量。Save / reload 仍只读写原有 Definition，所有输入投影均禁止导出为 DataEdge。
+Template 的 `node_output` 变量也由同一适配层投影为数据线，以 `data.projection = 'template-input'` 标识；真实 DataEdge 不带 projection 标记。投影按 source node / source port / target node / target port 去重，alias 及正文不改写。用户直接插入变量即可建立可见依赖，删除最后一个对应 alias 后连线消失；投影不可直接删除或重连，须在输入编辑器中修改变量。Save / reload 仍只读写原有 Definition，所有输入投影均禁止导出为 DataEdge。
 
 删除来源节点时统一清理相关 Template alias 及其正文 token，保留其他节点和 workflow_input 变量；无变量时保留剩余文字为 constant，文字也为空则移除绑定。此清理与 Candidate / 真实边及 Workflow 输出共用节点删除入口，不维护独立投影状态。当前 inputs 中只有 Template 与 Candidate 绑定可引用节点输出；constant、workflow_input 和 asset 不产生跨节点引用。依赖合法性继续由 Contract / Publish / Compiler 校验。
+
+### Canvas 运行态与连线表现
+
+节点状态仍由真实 NodeRun / PendingHumanReview 合成，经集中式 [runtime-presentation](../apps/web/src/features/workflow/runtime/runtime-presentation.ts)映射到 Canvas；不修改 Runtime Status 数据模型。画布不再显示状态胶囊或独立状态行，改为整节点边框、轻底色和标题区图标。running 使用青色边框、细 ring 与缓慢旋转图标及「正在执行」；waiting 使用琥珀色边框与手形图标、人工操作文字，待审内容摘要及现有 CTA 保留；failed 使用红色边框、轻底色和错误图标 / 文字；completed 仅保留低对比边框与小勾；idle 无可见状态标记，pending 仅有低权重时钟。选中轮廓与运行态边框独立，选中不覆盖等待 / 失败等语义色；Inspector 保留原有状态展示。
+
+[连线渲染器](../apps/web/src/features/workflow/canvas/workflow-edge.tsx)复用 React Flow 的 getBezierPath / BaseEdge 和命中区域。DataEdge 在低对比底线上叠加 SVG 短划线，以 2.8 秒周期的负 stroke-dashoffset 表达 source → target；ControlEdge 使用低权重静态实线箭头。Template / Candidate 投影共用低强度数据流，以虚线底线和「模板」/「候选」标识区分，原有删除、重连与持久化规则不变。动画仅表达数据依赖，不表示实际传输或选中分支，不根据 DAG 猜测 Active Edge；Workflow 输出边界连线沿用原展示。减少动态效果偏好下关闭数据流 overlay 和运行图标旋转，静态边框、图标和箭头仍可识别。
 
 ### Web Workflow Draft 持久化
 

@@ -60,6 +60,7 @@ import {
   workflowNodeTypes,
 } from './workflow-node';
 import { areWorkflowHandlesCompatible } from './workflow-handles';
+import { workflowEdgeTypes } from './workflow-edge';
 import {
   applyWorkflowNodePositions,
   connectWorkflowNodes,
@@ -403,6 +404,7 @@ export function WorkflowCanvas({
                         />
                         <ReactFlow<CanvasNode, CanvasEdge>
                           nodeTypes={canvasNodeTypes}
+                          edgeTypes={workflowEdgeTypes}
                           nodes={nodes}
                           edges={edges}
                           nodesDraggable={!locked}

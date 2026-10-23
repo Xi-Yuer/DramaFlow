@@ -17,6 +17,10 @@ import type { WorkflowNodeData } from '../src/features/workflow/canvas/react-flo
 import { nodeTypeKeys } from '../src/features/workflow/node-catalog/node-type-api';
 import { useWorkflowDraft } from '../src/features/workflow/editor/use-workflow-draft';
 import { useWorkflowRunStatus } from '../src/features/workflow/run/status/use-workflow-run-status';
+import {
+  CaretFloatingVariablePicker,
+  computeCaretFloatingPosition,
+} from '../src/features/workflow/inputs/variable-picker';
 import type {
   HumanReviewActions,
   WorkflowRunStatusState,
@@ -336,9 +340,12 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
       value: '你是资深漫剧编剧',
     });
 
-    // 在 System Prompt 中输入 / 触发 Variable Picker 并插入审核意见变量
+    // 在 System Prompt 中输入 / 触发 Caret Floating Suggestion（不打开按钮 Popover）并插入审核意见变量
     fireEvent.keyDown(systemEditor, { key: '/' });
+    expect(screen.getByTestId('caret-variable-suggestion')).toBeTruthy();
+    expect(screen.queryByTestId('button-variable-popover')).toBeNull();
     fireEvent.click(await screen.findByRole('option', { name: '角色设定审核 修改意见' }));
+    expect(screen.queryByTestId('caret-variable-suggestion')).toBeNull();
     expect(
       currentDraft.definition.nodes.find((n) => n.id === 'node-downstream')?.inputs.system,
     ).toEqual({
@@ -358,8 +365,10 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
         .modelConfigurationId,
     ).toBe('00000000-0000-4000-8000-000000000031');
 
-    // 通过显式按钮向 Prompt 插入上游变量并验证 Template Projection
+    // 通过显式按钮向 Prompt 插入上游变量（打开 Button Popover，不打开 Caret Floating Suggestion）并验证 Template Projection
     fireEvent.click(within(inspector).getByRole('button', { name: '向提示词插入变量' }));
+    expect(screen.getByTestId('button-variable-popover')).toBeTruthy();
+    expect(screen.queryByTestId('caret-variable-suggestion')).toBeNull();
     fireEvent.click(await screen.findByRole('option', { name: '生成大纲 生成文本' }));
 
     const downstreamNode = currentDraft.definition.nodes.find((n) => n.id === 'node-downstream')!;
@@ -501,11 +510,9 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
         '节点状态：执行失败',
       ),
     ).toBeTruthy();
-    expect(
-      within(screen.getByRole('article', { name: '审批分流' })).getByLabelText(
-        '节点状态：尚未执行',
-      ),
-    ).toBeTruthy();
+    const ifArticle = screen.getByRole('article', { name: '审批分流' });
+    expect(ifArticle.getAttribute('data-runtime-status')).toBe('idle');
+    expect(within(ifArticle).queryByLabelText(/节点状态：/)).toBeNull();
 
     // 点击“生成大纲”并切换到“运行状态”：默认展示最新 Attempt 2 的真实 inputs / outputs
     fireEvent.click(screen.getByRole('article', { name: '生成大纲' }));
@@ -799,5 +806,82 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
         '设定达标，准予通过',
       ),
     ).toBeTruthy();
+  });
+
+  it('CaretFloatingVariablePicker 锚定当前 caret 虚拟引用，支持滚动跟随以及底部 flip / 右侧 shift', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1000 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    Object.defineProperty(document.documentElement, 'clientWidth', {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(document.documentElement, 'clientHeight', {
+      configurable: true,
+      value: 800,
+    });
+
+    const scrollContainer = document.createElement('div');
+    scrollContainer.style.overflowY = 'auto';
+    const editorEl = document.createElement('div');
+    scrollContainer.appendChild(editorEl);
+    document.body.appendChild(scrollContainer);
+
+    let caretTop = 180;
+    const caretLeft = 240;
+    const getCaretRect = () => new DOMRect(caretLeft, caretTop, 8, 20);
+
+    const view = render(
+      <CaretFloatingVariablePicker
+        portName="提示词"
+        open={true}
+        onClose={() => {}}
+        outputs={[
+          { nodeId: 'node-outline', nodeName: '生成大纲', portKey: 'text', portName: '生成文本' },
+        ]}
+        variables={{}}
+        slashQuery=""
+        slashRange={{ from: 1, to: 2 }}
+        getReferenceClientRect={getCaretRect}
+        contextElement={editorEl}
+        onSelect={() => {}}
+      />,
+    );
+
+    const floatingEl = screen.getByTestId('caret-variable-suggestion');
+    vi.spyOn(floatingEl, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, 0, 288, 220),
+    );
+    Object.defineProperty(floatingEl, 'offsetWidth', { configurable: true, value: 288 });
+    Object.defineProperty(floatingEl, 'offsetHeight', { configurable: true, value: 220 });
+
+    // 1. 常规位置：位于光标下方 (bottom-start)，带 6px offset
+    await waitFor(() => {
+      expect(floatingEl.style.left).toBe('240px');
+      expect(floatingEl.style.top).toBe('206px');
+      expect(floatingEl.dataset.placement).toBe('bottom-start');
+    });
+
+    // 2. Inspector 滚动容器发生滚动，光标上移，Popup 自动跟随
+    caretTop = 120;
+    fireEvent.scroll(scrollContainer);
+    await waitFor(() => {
+      expect(floatingEl.style.top).toBe('146px');
+      expect(floatingEl.dataset.placement).toBe('bottom-start');
+    });
+
+    // 3. 当光标接近视口底部（下方空间不足 220px）且靠近右边缘时，自动 flip 到上方并向左 shift
+    const bottomRightPos = await computeCaretFloatingPosition(
+      {
+        contextElement: editorEl,
+        getBoundingClientRect: () => new DOMRect(850, 720, 8, 20),
+      },
+      floatingEl,
+    );
+    expect(bottomRightPos.placement).toBe('top-start');
+    expect(bottomRightPos.y).toBe(720 - 220 - 6);
+    expect(bottomRightPos.x).toBe(1000 - 288 - 8);
+
+    view.unmount();
+    scrollContainer.remove();
   });
 });

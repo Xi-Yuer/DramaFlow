@@ -6,7 +6,8 @@ import type { DataType, NodeTypeManifest } from '@dramaflow/contracts';
 import { conditionToFields, ifConditionOperators } from '../conditions/if-condition';
 import { NodeTypeIcon } from '../node-catalog/node-type-icon';
 import { useWorkflowNodeRuntime } from '../runtime/runtime-status';
-import { runtimeNodeBorderClass, RuntimeStatusBadge } from '../runtime/runtime-status-badge';
+import { runtimeNodeBorderClass } from '../runtime/runtime-status-badge';
+import { RuntimeCanvasStatus } from '../runtime/runtime-canvas-status';
 import type { WorkflowNode } from './react-flow-adapter';
 import { controlHandleId } from './workflow-handles';
 import styles from './workflow-node.module.css';
@@ -159,13 +160,11 @@ export function GenericWorkflowNode({
             {manifest?.metadata.name ?? data.nodeType} · v{data.typeVersion}
           </span>
         </div>
-      </header>
-      <div className={styles.statusRow}>
-        <RuntimeStatusBadge
+        <RuntimeCanvasStatus
           status={runtime.status}
           isHumanReview={isHumanReview || runtime.isWaitingHumanReview}
         />
-      </div>
+      </header>
       {manifest ? (
         <>
           <div className={styles.ports}>

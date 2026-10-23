@@ -1,0 +1,26 @@
+.base {
+  fill: none;
+}
+
+.flow {
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-dasharray: 6 22;
+  opacity: 0.65;
+  pointer-events: none;
+  /* 负 offset 沿 SVG path 起点（source）到终点（target）移动。 */
+  animation: data-flow 2.8s linear infinite;
+}
+
+@keyframes data-flow {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow {
+    display: none;
+    animation: none;
+  }
+}

@@ -26,8 +26,10 @@ import {
   type AvailableOutput,
   type NodeOutputVariables,
 } from './template-input';
-import { VariablePicker } from './variable-picker';
+import { CaretFloatingVariablePicker, VariablePicker } from './variable-picker';
 import {
+  exitVariableSlashSuggestion,
+  resolveSuggestionClientRect,
   syncVariableEditorStorage,
   VariableSlashSuggestionExtension,
   VariableTokenExtension,
@@ -152,12 +154,18 @@ function EditableTemplateInput({
   onChange: (binding: StaticInputBinding | null) => void;
 }) {
   const bindingSignature = JSON.stringify(binding ?? null);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [buttonPickerOpen, setButtonPickerOpen] = useState(false);
+  const [slashPickerOpen, setSlashPickerOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
-  if (disabled && pickerOpen) setPickerOpen(false);
+  const [slashRange, setSlashRange] = useState<{ from: number; to: number } | null>(null);
+
+  if (disabled && buttonPickerOpen) setButtonPickerOpen(false);
+  if (disabled && slashPickerOpen) setSlashPickerOpen(false);
 
   const slashRangeRef = useRef<{ from: number; to: number } | null>(null);
-  const pickerOpenRef = useRef(false);
+  const slashClientRectRef = useRef<(() => DOMRect | null) | null>(null);
+  const slashPickerOpenRef = useRef(false);
+  const slashCommandRef = useRef<HTMLDivElement | null>(null);
 
   const draftRef = useRef<{
     signature: string;
@@ -214,6 +222,30 @@ function EditableTemplateInput({
     [],
   );
 
+  const forwardSlashKeyToCommand = useCallback((event: KeyboardEvent): boolean => {
+    if (
+      event.key === 'ArrowDown' ||
+      event.key === 'ArrowUp' ||
+      event.key === 'Enter' ||
+      event.key === 'Home' ||
+      event.key === 'End'
+    ) {
+      const commandEl = slashCommandRef.current;
+      if (commandEl) {
+        event.preventDefault();
+        commandEl.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: event.key,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        return true;
+      }
+    }
+    return false;
+  }, []);
+
   const editorProps = useMemo(
     () => ({
       attributes: {
@@ -229,22 +261,31 @@ function EditableTemplateInput({
         event: KeyboardEvent,
       ) => {
         if (disabledRef.current) return false;
-        if (event.key === 'Escape' && pickerOpenRef.current) {
-          slashRangeRef.current = null;
-          setSlashQuery('');
-          setPickerOpen(false);
-          return true;
+        if (slashPickerOpenRef.current) {
+          if (event.key === 'Escape') {
+            slashRangeRef.current = null;
+            slashClientRectRef.current = null;
+            setSlashRange(null);
+            setSlashQuery('');
+            setSlashPickerOpen(false);
+            return true;
+          }
+          if (forwardSlashKeyToCommand(event)) {
+            return true;
+          }
         }
         if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey) {
           const { from, to } = view.state.selection;
           slashRangeRef.current = { from, to };
+          setSlashRange({ from, to });
           setSlashQuery('');
-          setPickerOpen(true);
+          setButtonPickerOpen(false);
+          setSlashPickerOpen(true);
         }
         return false;
       },
     }),
-    [portName, disabled],
+    [portName, disabled, forwardSlashKeyToCommand],
   );
 
   const editor = useEditor({
@@ -258,8 +299,17 @@ function EditableTemplateInput({
     },
   });
 
+  const closeSlashPicker = useCallback(() => {
+    slashRangeRef.current = null;
+    slashClientRectRef.current = null;
+    setSlashRange(null);
+    setSlashQuery('');
+    setSlashPickerOpen(false);
+    exitVariableSlashSuggestion(editor);
+  }, [editor]);
+
   useLayoutEffect(() => {
-    pickerOpenRef.current = pickerOpen;
+    slashPickerOpenRef.current = slashPickerOpen;
     onChangeRef.current = onChange;
     bindingSignatureRef.current = bindingSignature;
     disabledRef.current = disabled;
@@ -275,22 +325,32 @@ function EditableTemplateInput({
         chipRemoveClassName: styles.chipRemove ?? '',
       },
       {
-        onOpenSlash: (range, query) => {
+        onOpenSlash: ({ range, query, clientRect }) => {
           if (disabledRef.current) return;
           slashRangeRef.current = range;
+          slashClientRectRef.current = clientRect;
+          setSlashRange(range);
           setSlashQuery(query);
-          setPickerOpen(true);
+          setButtonPickerOpen(false);
+          setSlashPickerOpen(true);
         },
-        onUpdateSlash: (range, query) => {
+        onUpdateSlash: ({ range, query, clientRect }) => {
           if (disabledRef.current) return;
           slashRangeRef.current = range;
+          slashClientRectRef.current = clientRect;
+          setSlashRange(range);
           setSlashQuery(query);
-          setPickerOpen(true);
+          setButtonPickerOpen(false);
+          setSlashPickerOpen(true);
         },
         onCloseSlash: () => {
           slashRangeRef.current = null;
+          slashClientRectRef.current = null;
+          setSlashRange(null);
           setSlashQuery('');
+          setSlashPickerOpen(false);
         },
+        onKeyDownSlash: (event) => forwardSlashKeyToCommand(event),
       },
     );
     attachDomValueBridge(
@@ -324,10 +384,11 @@ function EditableTemplateInput({
     editor.view.dispatch(editor.state.tr.setMeta('refreshVariableMetadata', true));
     if (disabled) {
       slashRangeRef.current = null;
+      slashClientRectRef.current = null;
     }
   }, [editor, binding, bindingSignature, disabled, definition, manifests, portName]);
 
-  function handleInsertVariable(output: AvailableOutput) {
+  function handleInsertVariable(output: AvailableOutput, sourceMode: 'slash' | 'button') {
     if (disabled || !editor || editor.isDestroyed) return;
     const current = templateEditorDocumentToDraft(editor.getJSON(), draftRef.current.variables);
     const alias = variableNameForPort(output.portKey, current.variables, output);
@@ -355,11 +416,11 @@ function EditableTemplateInput({
       },
     };
 
-    const slashRange = slashRangeRef.current;
-    if (slashRange) {
+    const activeSlashRange = sourceMode === 'slash' ? slashRangeRef.current : null;
+    if (activeSlashRange) {
       const docSize = editor.state.doc.content.size;
-      const from = Math.max(1, Math.min(slashRange.from, docSize));
-      const to = Math.max(from, Math.min(slashRange.to, docSize));
+      const from = Math.max(1, Math.min(activeSlashRange.from, docSize));
+      const to = Math.max(from, Math.min(activeSlashRange.to, docSize));
       const textInRange = editor.state.doc.textBetween(from, to, '');
       if (textInRange.startsWith('/')) {
         editor.chain().focus().insertContentAt({ from, to }, tokenContent).run();
@@ -371,8 +432,12 @@ function EditableTemplateInput({
     }
 
     slashRangeRef.current = null;
+    slashClientRectRef.current = null;
+    setSlashRange(null);
     setSlashQuery('');
-    setPickerOpen(false);
+    setSlashPickerOpen(false);
+    setButtonPickerOpen(false);
+    exitVariableSlashSuggestion(editor);
   }
 
   const staticDoc = bindingToTemplateEditorDocument(binding);
@@ -441,24 +506,37 @@ function EditableTemplateInput({
           </div>
         )}
       </div>
+      <CaretFloatingVariablePicker
+        portName={portName}
+        open={slashPickerOpen && !disabled}
+        onClose={closeSlashPicker}
+        outputs={outputs}
+        variables={currentVariables}
+        slashQuery={slashQuery}
+        slashRange={slashRange}
+        getReferenceClientRect={() =>
+          resolveSuggestionClientRect(editor, slashRangeRef.current, slashClientRectRef.current)
+        }
+        contextElement={editor && !editor.isDestroyed ? editor.view.dom : null}
+        commandRef={slashCommandRef}
+        onSelect={(output) => handleInsertVariable(output, 'slash')}
+      />
       <div className={styles.footer}>
         <VariablePicker
           portName={portName}
-          open={pickerOpen && !disabled}
+          open={buttonPickerOpen && !disabled}
           onOpenChange={(next) => {
             if (!disabled) {
-              setPickerOpen(next);
-              if (!next) {
-                slashRangeRef.current = null;
-                setSlashQuery('');
+              if (next) {
+                closeSlashPicker();
               }
+              setButtonPickerOpen(next);
             }
           }}
           outputs={outputs}
           variables={currentVariables}
           disabled={disabled}
-          slashQuery={slashQuery}
-          onSelect={handleInsertVariable}
+          onSelect={(output) => handleInsertVariable(output, 'button')}
         />
       </div>
     </div>

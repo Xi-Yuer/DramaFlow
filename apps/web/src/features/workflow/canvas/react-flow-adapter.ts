@@ -17,6 +17,7 @@ import {
 import type { Edge, Node, NodeChange } from '@xyflow/react';
 import { z } from 'zod';
 import { controlHandleId, parseWorkflowHandle } from './workflow-handles';
+import { workflowEdgeViewOptions } from './edge-presentation';
 
 export type WorkflowNodeData = {
   nodeType: NodeDefinition['type'];
@@ -130,7 +131,7 @@ export function controlEdgeToReactFlowEdge(input: unknown): WorkflowEdge {
     target: edge.target.nodeId,
     targetHandle: controlHandleId('target', edge.target.portKey),
     data: { kind: 'control' },
-    style: { strokeDasharray: '5 4' },
+    ...workflowEdgeViewOptions({ kind: 'control' }),
   };
 }
 
@@ -145,6 +146,7 @@ export function toReactFlowEdge(input: unknown): WorkflowEdge {
     target: edge.target.nodeId,
     targetHandle: edge.target.portKey,
     data: { kind: edge.kind },
+    ...workflowEdgeViewOptions({ kind: edge.kind }),
   };
 }
 
@@ -219,6 +221,7 @@ export function toReactFlowEdges(input: unknown): WorkflowEdge[] {
           target: node.id,
           targetHandle: portKey,
           data: { kind: 'data', projection },
+          ...workflowEdgeViewOptions({ kind: 'data', projection }),
           reconnectable: false,
           ...(projection === 'template-input' ? { deletable: false } : {}),
           ariaLabel:
