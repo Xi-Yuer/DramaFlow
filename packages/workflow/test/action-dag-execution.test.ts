@@ -164,7 +164,10 @@ describe('生产 Action DAG 的 LangGraph 执行预算', () => {
       const d = definition(2);
       d.nodes[1]!.type = 'test.unsupported';
       f.version.definition = d;
-      await expect(f.start({ ...f.input, inputs: {} })).rejects.toThrow('不是普通操作节点');
+      await expect(f.start({ ...f.input, inputs: {} })).rejects.toMatchObject({
+        code: 'NODE_EXECUTION_KIND_UNSUPPORTED',
+        nodeId: d.nodes[1]!.id,
+      });
       expect(f.executorFactory).not.toHaveBeenCalled();
       expect(f.executeNode).not.toHaveBeenCalled();
       expect(f.nodeRuns.createRunning).not.toHaveBeenCalled();

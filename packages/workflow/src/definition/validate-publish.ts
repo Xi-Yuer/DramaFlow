@@ -15,9 +15,12 @@ import {
   ifCapabilityMessage,
   type IfCapabilityIssueCode,
 } from '../compiler/if/analysis.js';
+import { isHumanReviewNodeManifest } from '../node/human-review.js';
+import { findUnsupportedHumanReviewTopology } from '../compiler/human-review/analysis.js';
 import { WorkflowStateAnnotation } from '../runtime/state.js';
 
 export type WorkflowPublishIssueCode =
+  | 'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED'
   | 'NODE_TYPE_UNAVAILABLE'
   | 'NODE_EXECUTION_KIND_UNSUPPORTED'
   | 'NODE_ID_INVALID'
@@ -44,9 +47,11 @@ export class WorkflowPublishValidationError extends Error {
   ) {
     super(
       ifCapabilityMessage(code) ??
-        (code === 'NODE_EXECUTION_KIND_UNSUPPORTED'
-          ? '当前 Compiler 尚不支持该节点执行种类，不能发布执行'
-          : '工作流不满足静态发布条件'),
+        (code === 'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED'
+          ? '当前 Human Review 仅支持分支区域外的串行审核，不支持并行待审批'
+          : code === 'NODE_EXECUTION_KIND_UNSUPPORTED'
+            ? '当前 Compiler 尚不支持该节点执行种类，不能发布执行'
+            : '工作流不满足静态发布条件'),
     );
     this.name = 'WorkflowPublishValidationError';
   }
@@ -94,6 +99,7 @@ export function validateWorkflowDefinitionSemantics(
     }
     if (
       !isSupportedIf(declaration) &&
+      !isHumanReviewNodeManifest(declaration.manifest) &&
       (declaration.manifest.executionKind !== 'action' || !declaration.execute)
     )
       return invalid('NODE_EXECUTION_KIND_UNSUPPORTED', node.id);
@@ -260,6 +266,7 @@ export function validateWorkflowForPublish(
   const ifNodeIds = new Set(
     entries.filter((entry) => isSupportedIf(entry.nodeType)).map((entry) => entry.node.id),
   );
+  let ifAnalysis: ReturnType<typeof analyzeSimpleIfExecution> | undefined;
   if (
     ifNodeIds.size ||
     definition.nodes.some((node) =>
@@ -268,11 +275,21 @@ export function validateWorkflowForPublish(
     definition.outputs.some((output) => output.sources !== undefined)
   ) {
     try {
-      analyzeSimpleIfExecution(definition, ifNodeIds);
+      ifAnalysis = analyzeSimpleIfExecution(definition, ifNodeIds);
     } catch (error) {
       if (error instanceof SimpleIfCapabilityError) invalid(error.code, error.nodeId);
       throw error;
     }
   }
+  const unsupportedReview = findUnsupportedHumanReviewTopology(
+    definition,
+    new Set(
+      entries
+        .filter((entry) => isHumanReviewNodeManifest(entry.nodeType.manifest))
+        .map((entry) => entry.node.id),
+    ),
+    ifAnalysis?.branchRegions,
+  );
+  if (unsupportedReview) invalid('HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED', unsupportedReview);
   return entries;
 }

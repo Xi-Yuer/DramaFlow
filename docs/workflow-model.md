@@ -48,4 +48,4 @@ inputs / outputs 为 RuntimeValue map，error 仅含安全 stage / 可选 code /
 
 Data Edge 提供值，Control Edge 提供先后，不自动互相补齐。每个数据输入至多一条 Data Edge，且不能与静态绑定并存；数组不表示多连接聚合。控制边不占输入，可有多个上游。Data / Control / Template node_output 合并后必须无环，普通上游按节点对去重后 [ALL Join](runtime-architecture.md#普通确定性依赖的-all-join)。
 
-除当前简单 If 外的条件拓扑、Batch、SubWorkflow 和 Human Review 待独立任务。子流程应绑定对方固定版本，不隐式获得其他项目权限或以调用递归绕过无环约束；不据协议声明预建实现。
+Human Review 支持分支区域外的串行文本审核，运行与能力边界见[当前架构](architecture.md#human-review-声明与纯业务边界)。除当前简单 If 外的条件拓扑、Batch 与 SubWorkflow 待独立任务。子流程应绑定对方固定版本，不隐式获得其他项目权限或以调用递归绕过无环约束；不据协议声明预建实现。

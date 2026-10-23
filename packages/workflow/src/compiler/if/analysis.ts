@@ -65,7 +65,8 @@ export interface SimpleIfExecutionAnalysis extends IfTopologyAnalysis {
   recursionLimit: number;
 }
 
-// 仅适用于已通过 Definition / Manifest 静态校验的 Action + flow.if@1 图。
+// 仅适用于已通过 Definition / Manifest 静态校验与 execution kind 门禁的图。
+// Human Review 只能在分支区域外串行执行，由单独能力门禁确认。
 // 这是当前 Compiler 的能力边界，不是永久 Workflow Contract 或自定义调度器。
 export function analyzeIfTopology(
   definition: WorkflowDefinition,

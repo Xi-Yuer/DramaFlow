@@ -6,16 +6,11 @@ import {
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
 import type { NodeDeclaration } from '../../node/type.js';
-import type { BindingResolver } from '../../runtime/binding-resolver.js';
-import type { RuntimeValueCodec } from '../../runtime/values/runtime-value-codec.js';
 import { evaluateCondition } from '../../runtime/condition-evaluator.js';
-import type { LangGraphNode, NodeCompilationStrategy } from '../strategy.js';
+import type { LangGraphNode, NodeCompilationStrategy, WorkflowValueServices } from '../strategy.js';
 import type { WorkflowState } from '../../runtime/state.js';
 
-export interface IfExecutionServices {
-  bindings: BindingResolver;
-  codec: RuntimeValueCodec;
-}
+export type IfExecutionServices = WorkflowValueServices;
 interface IfCompilationContext {
   node: NodeDefinition;
   declaration: NodeDeclaration;

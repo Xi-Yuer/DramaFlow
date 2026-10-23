@@ -11,7 +11,7 @@
 | Publish    | 静态语义、同 Owner 模型绑定校验、不可变版本；保存和发布独立                                                            |
 | Run        | 已发布版本提交、幂等身份、状态查询、离开保护和 invocation identity recovery                                            |
 | Result     | completed Run 展示 declared outputs；支持 inline 与 reference 身份，尚无 Artifact 内容 HTTP API                        |
-| 执行       | 普通 Action DAG 与 If 分支内 Action DAG；独立 Worker 执行；其他结构未支持                                              |
+| 执行       | Action DAG、简单 If 与分支区域外的串行 Human Review；独立 Worker 执行                                                  |
 | 基础设施   | PostgreSQL / Prisma、Redis / BullMQ、RustFS、官方 PostgreSQL Checkpointer                                              |
 
 End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 nodes、Registry 或执行链。首条业务输出拖到 End 创建独立输出；已有输出时明确选择新建或加入某项候选。候选共用一个输出名称，分别投影连线，删除连线或节点仅清理对应候选；不足时保留可修复 Draft，不转换成单 source。单 source 仍保留原编辑与删除行为，类型按精确版本 Manifest 校验。End 位置仅在当前页面保留，声明从 Definition 恢复；保存与发布分开。协议与准入见 [Workflow](workflow-model.md#输入与输出)。Start Boundary 和 Workflow Input 编辑器尚未实现。
@@ -22,11 +22,15 @@ End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 nodes
 
 ## Human Review 声明与纯业务边界
 
-`flow.human_review@1` 已进入生产 Registry / 节点目录，执行种类为 interaction，不提供 Action execute 或审批控制出口；Draft 可以创建、保存，Publish / Compile 仍以 NODE_EXECUTION_KIND_UNSUPPORTED 拒绝，未接入执行策略。节点标题使用 NodeDefinition.name，不另加 title config。
+`flow.human_review@1` 已进入生产 Registry / 节点目录，执行种类为 interaction，不提供 Action execute 或审批控制出口；Draft、Publish / Compile / Run 已接入独立 HumanReviewNodeCompilationStrategy；其他未知 interaction 仍以 NODE_EXECUTION_KIND_UNSUPPORTED 拒绝。节点标题使用 NodeDefinition.name，不另加 title config。
 
 [Human Review V1 协议](../packages/contracts/src/workflow/human-review.ts)定义严格文本 input、可选静态 instruction、approve / reject decision 与稳定业务 output。合法 reject 是正常业务结果；content 原样透传，缺省 feedback 归一化为空字符串。payload 固定 human_review / schemaVersion 1，保留 RuntimeValue 结构及未来 reference 表达；[纯转换函数](../packages/workflow/src/node/human-review.ts)只接受 string 业务输入，构造 inline string payload，不解释 instruction 模板、不读取 Artifact，也不调用 interrupt。payload 不含 Run / thread / NodeRun / interrupt 身份；Decision 的版本由 V1 Schema/type 名称明确。
 
-NodeRun 状态、Repository 和数据库未因节点声明而扩展。interaction 执行、原生 interrupt/resume 接入、待审批查询与 Web 操作均未交付；现有暂停测试夹具不代表 Human Review 运行能力。
+[专用策略](../packages/workflow/src/compiler/human-review/strategy.ts)复用 BindingResolver、Codec 和节点 Schema，解码前拒绝 reference content，再调用官方 interrupt(payload)。恢复值经 V1 decision Schema 校验后输出三个 RuntimeValue；缺省 feedback 为空，reject 正常完成，可把 action DataEdge 接入 If.value 控制后续分支。Runner 继续负责 checkpoint 检测、WorkflowRun waiting 与 Command.resume，HTTP Resume Contract 和 Outbox 不变。
+
+Publish / Compile 共用 Human Review 能力门禁：支持分支区域外有明确依赖先后的串行审核，包括审核后进入 If、已证明 Direct Convergence 的 Candidate 输入进入审核；拒绝 If branch region 内审核和彼此无先后依赖的并行待审批（HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED）。静态 DAG 与 If execution projection 的最长路径仍提供每次调用的技术预算，原生 MemorySaver 测试覆盖初次暂停、resume 和两次串行审核。恢复只重入当前审核函数，interrupt 前无外部副作用，上游已完成 Action 不重跑。
+
+Human Review 暂不创建 NodeRun，状态、Repository 和数据库均未扩展。interaction NodeRun 审计、待审批查询、targeted resume HTTP、Web 审批与 Artifact 预览均待后续任务。
 
 ## Workflow 编辑 HTTP API
 

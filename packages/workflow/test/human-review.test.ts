@@ -193,29 +193,38 @@ describe('正式 Human Review 声明与纯业务转换', () => {
       );
     }
   });
-  it('Publish / Compile 明确拒绝 Human Review，且不创建 Executor 或其他执行服务', async () => {
-    const types = registry();
-    const definition = workflow();
-    expect(() => validateWorkflowForPublish(definition, types)).toThrow(
-      expect.objectContaining({ code: 'NODE_EXECUTION_KIND_UNSUPPORTED', nodeId: 'review' }),
-    );
-    const createExecutor = vi.fn(async () => {
-      throw new Error('不能创建执行服务');
-    });
-    const createIfServices = vi.fn(async () => {
-      throw new Error('不能创建条件执行服务');
-    });
-    const compiler = new DefaultWorkflowCompiler(
-      types,
-      createExecutor,
-      new MemorySaver(),
-      createIfServices,
-    );
-    await expect(compiler.compile(definition, run)).rejects.toMatchObject({
-      code: 'NODE_EXECUTION_KIND_UNSUPPORTED',
-      nodeId: 'review',
-    });
-    expect(createExecutor).not.toHaveBeenCalled();
-    expect(createIfServices).not.toHaveBeenCalled();
-  });
+  it.each(['type', 'version', 'kind'] as const)(
+    '未知 interaction %s 仍在创建服务前拒绝',
+    async (variant) => {
+      const declaration = createHumanReviewNodeType();
+      if (variant === 'type') declaration.manifest.type = 'test.interaction';
+      if (variant === 'version') declaration.manifest.version = 2;
+      if (variant === 'kind') declaration.manifest.executionKind = 'composite';
+      const types = new NodeRegistry([declaration]);
+      const definition = workflow();
+      definition.nodes[0]!.type = declaration.manifest.type;
+      definition.nodes[0]!.typeVersion = declaration.manifest.version;
+      expect(() => validateWorkflowForPublish(definition, types)).toThrow(
+        expect.objectContaining({ code: 'NODE_EXECUTION_KIND_UNSUPPORTED', nodeId: 'review' }),
+      );
+      const createExecutor = vi.fn(async () => {
+        throw new Error('不能创建执行服务');
+      });
+      const createValueServices = vi.fn(async () => {
+        throw new Error('不能创建值服务');
+      });
+      const compiler = new DefaultWorkflowCompiler(
+        types,
+        createExecutor,
+        new MemorySaver(),
+        createValueServices,
+      );
+      await expect(compiler.compile(definition, run)).rejects.toMatchObject({
+        code: 'NODE_EXECUTION_KIND_UNSUPPORTED',
+        nodeId: 'review',
+      });
+      expect(createExecutor).not.toHaveBeenCalled();
+      expect(createValueServices).not.toHaveBeenCalled();
+    },
+  );
 });

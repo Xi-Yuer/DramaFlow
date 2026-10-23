@@ -6,7 +6,14 @@ import {
 } from '@dramaflow/contracts';
 import type { LangGraphRunnableConfig } from '@langchain/langgraph';
 import type { NodeExecutor, NodeExecutionContext } from '../runtime/node-executor.js';
+import type { BindingResolver } from '../runtime/binding-resolver.js';
+import type { RuntimeValueCodec } from '../runtime/values/runtime-value-codec.js';
 import type { WorkflowState, WorkflowStateUpdate } from '../runtime/state.js';
+
+export interface WorkflowValueServices {
+  bindings: BindingResolver;
+  codec: RuntimeValueCodec;
+}
 
 // 每个节点只返回自己的输出增量，合并与冲突检查交给 State 通道。
 export type LangGraphNode = (

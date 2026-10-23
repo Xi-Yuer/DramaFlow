@@ -40,11 +40,11 @@ export class WorkflowRuntimeFactory {
     const runs = await this.runs.forProject(ownerId, projectId, executionId);
     const compiler = new DefaultWorkflowCompiler(
       this.registry,
-      async (run, ifServices) =>
+      async (run, valueServices) =>
         new DefaultNodeExecutor(
           this.registry,
           this.bindings,
-          ifServices?.codec ?? (await this.artifacts.forRun(ownerId, projectId, run.id)),
+          valueServices?.codec ?? (await this.artifacts.forRun(ownerId, projectId, run.id)),
           await this.nodeRuns.forRun(ownerId, projectId, run.id),
           this.capabilities.forRun(ownerId, projectId, run.id),
         ),

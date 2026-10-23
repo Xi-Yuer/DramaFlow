@@ -7,10 +7,19 @@ import {
   humanReviewInterruptPayloadV1Schema,
   type HumanReviewInterruptPayloadV1,
   type HumanReviewOutputV1,
+  type NodeTypeManifest,
 } from '@dramaflow/contracts';
 import type { NodeDeclaration } from './type.js';
 
-// 正式目录声明，不提供 Action execute；Publish / Compiler 在 interaction 策略接入前继续拒绝。
+export function isHumanReviewNodeManifest(manifest: NodeTypeManifest): boolean {
+  return (
+    manifest.type === 'flow.human_review' &&
+    manifest.version === 1 &&
+    manifest.executionKind === 'interaction'
+  );
+}
+
+// 正式 interaction 声明，不提供 Action execute 或控制出口。
 export function createHumanReviewNodeType(): NodeDeclaration {
   return {
     manifest: {

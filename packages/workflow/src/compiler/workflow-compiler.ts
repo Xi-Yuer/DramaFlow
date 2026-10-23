@@ -17,10 +17,12 @@ import { NodeRegistry } from '../node/registry.js';
 import type { NodeExecutor } from '../runtime/node-executor.js';
 import { WorkflowStateAnnotation, type WorkflowState } from '../runtime/state.js';
 import { collectNodeDependencies, DependencyCompiler } from './dependency.compiler.js';
-import { ActionNodeCompilationStrategy } from './strategy.js';
-import { IfNodeCompilationStrategy, readIfRoute, type IfExecutionServices } from './if/strategy.js';
+import { ActionNodeCompilationStrategy, type WorkflowValueServices } from './strategy.js';
+import { IfNodeCompilationStrategy, readIfRoute } from './if/strategy.js';
 import { analyzeSimpleIfExecution } from './if/analysis.js';
-import { analyzeActionDagExecution } from './action-dag-execution-analysis.js';
+import { HumanReviewNodeCompilationStrategy } from './human-review/strategy.js';
+import { findUnsupportedHumanReviewTopology } from './human-review/analysis.js';
+import { analyzeStaticDagExecution } from './action-dag-execution-analysis.js';
 
 // Runner 仅发送 resume，不开放 Command.update / goto 的状态写入或路由能力。
 export type WorkflowResumeCommand = Command<unknown, never, never>;
@@ -36,16 +38,17 @@ export interface WorkflowCompiler {
 // 显式创建限定本次运行权限的 Executor，不在 Compiler 中读写运行状态或选择 thread。
 export type NodeExecutorFactory = (
   run: WorkflowRun,
-  ifServices?: IfExecutionServices,
+  valueServices?: WorkflowValueServices,
 ) => Promise<NodeExecutor>;
-export type IfExecutionServicesFactory = (run: WorkflowRun) => Promise<IfExecutionServices>;
+export type WorkflowValueServicesFactory = (run: WorkflowRun) => Promise<WorkflowValueServices>;
+export type IfExecutionServicesFactory = WorkflowValueServicesFactory;
 
 export class DefaultWorkflowCompiler implements WorkflowCompiler {
   constructor(
     private readonly registry: NodeRegistry,
     private readonly createExecutor: NodeExecutorFactory,
     private readonly checkpointer: BaseCheckpointSaver,
-    private readonly createIfServices?: IfExecutionServicesFactory,
+    private readonly createValueServices?: WorkflowValueServicesFactory,
   ) {}
 
   async compile(input: WorkflowDefinition, run: WorkflowRun): Promise<CompiledWorkflow> {
@@ -53,9 +56,13 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     if (!this.checkpointer) throw new Error('WorkflowCompiler 必须显式注入 Checkpointer');
     const actionStrategy = new ActionNodeCompilationStrategy();
     const ifStrategy = new IfNodeCompilationStrategy();
+    const reviewStrategy = new HumanReviewNodeCompilationStrategy();
     const entries = definition.nodes.map((node) => {
       const declaration = this.registry.get(node.type, node.typeVersion);
-      if (!ifStrategy.supports(declaration.manifest)) {
+      if (
+        !ifStrategy.supports(declaration.manifest) &&
+        !reviewStrategy.supports(declaration.manifest)
+      ) {
         // 目录声明不代表已有执行策略；非 Action 必须在创建执行服务前明确拒绝。
         if (declaration.manifest.executionKind !== 'action')
           throw new WorkflowPublishValidationError('NODE_EXECUTION_KIND_UNSUPPORTED', node.id);
@@ -68,8 +75,14 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
         .filter((entry) => ifStrategy.supports(entry.declaration.manifest))
         .map((entry) => entry.node.id),
     );
+    const reviewNodeIds = new Set(
+      entries
+        .filter((entry) => reviewStrategy.supports(entry.declaration.manifest))
+        .map((entry) => entry.node.id),
+    );
     // 所有能力 / 拓扑 / 输出证明均在创建服务或执行节点前完成。
     if (
+      reviewNodeIds.size ||
       ifNodeIds.size ||
       definition.nodes.some((node) =>
         Object.values(node.inputs).some((binding) => binding.type === 'candidate'),
@@ -91,13 +104,26 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       definition.outputs.some((output) => output.sources !== undefined)
         ? analyzeSimpleIfExecution(definition, ifNodeIds)
         : undefined;
-    const { recursionLimit } = ifAnalysis ?? analyzeActionDagExecution(definition);
-    if (ifAnalysis && !this.createIfServices)
-      throw new Error('If 编译必须显式注入 BindingResolver / Codec');
-    const ifServices = ifAnalysis ? await this.createIfServices!(run) : undefined;
-    const executor = ifServices
-      ? await this.createExecutor(run, ifServices)
-      : await this.createExecutor(run);
+    const unsupportedReview = findUnsupportedHumanReviewTopology(
+      definition,
+      reviewNodeIds,
+      ifAnalysis?.branchRegions,
+    );
+    if (unsupportedReview)
+      throw new WorkflowPublishValidationError(
+        'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED',
+        unsupportedReview,
+      );
+    const { recursionLimit } = ifAnalysis ?? analyzeStaticDagExecution(definition);
+    const needsValueServices = ifAnalysis !== undefined || reviewNodeIds.size > 0;
+    if (needsValueServices && !this.createValueServices)
+      throw new Error('If / Human Review 编译必须显式注入 BindingResolver / Codec');
+    const valueServices = needsValueServices ? await this.createValueServices!(run) : undefined;
+    const executor = entries.some((entry) => actionStrategy.supports(entry.declaration.manifest))
+      ? valueServices
+        ? await this.createExecutor(run, valueServices)
+        : await this.createExecutor(run)
+      : undefined;
     // 动态节点名由已校验的领域定义提供；调度、barrier 与持久化继续由 LangGraph 承担。
     const graph = new StateGraph<
       typeof WorkflowStateAnnotation.spec,
@@ -107,17 +133,29 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     >(WorkflowStateAnnotation);
     for (const { node, declaration } of entries) {
       if (ifStrategy.supports(declaration.manifest)) {
-        if (!ifServices) throw new Error('If 执行服务未配置');
+        if (!valueServices) throw new Error('If 执行服务未配置');
         ifStrategy.compile({
           node,
           declaration,
           workflow: definition,
-          services: ifServices,
+          services: valueServices,
+          addNode: (id, action) => {
+            graph.addNode(id, action);
+          },
+        });
+      } else if (reviewStrategy.supports(declaration.manifest)) {
+        if (!valueServices) throw new Error('Human Review 执行服务未配置');
+        reviewStrategy.compile({
+          node,
+          declaration,
+          workflow: definition,
+          services: valueServices,
           addNode: (id, action) => {
             graph.addNode(id, action);
           },
         });
       } else {
+        if (!executor) throw new Error('Action 执行服务未配置');
         actionStrategy.compile({
           node,
           manifest: declaration.manifest,
