@@ -18,8 +18,7 @@ import { useWorkflowPublish } from '@/features/workflow/publish/use-workflow-pub
 import { useWorkflowRun } from '@/features/workflow/run/use-workflow-run';
 import { useEditorLeaveGuard } from '@/features/workflow/editor/use-editor-leave-guard';
 import { WorkflowPublishControls } from '@/features/workflow/publish/workflow-publish-controls';
-import { InvocationRecoveryControls } from '@/features/workflow/run/recovery/invocation-recovery-controls';
-import { WorkflowRunControls } from '@/features/workflow/run/workflow-run-controls';
+import { WorkflowExecutionWorkspace } from './workflow-execution-workspace';
 import { workflowPublishDisabledReason } from '@/features/workflow/editor/workflow-draft-state';
 import { useWorkflowDraft } from '@/features/workflow/editor/use-workflow-draft';
 import { projectApi } from '../../projects/project-api';
@@ -328,51 +327,6 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
           }
         />
       ) : null}
-      <WorkflowPublishControls
-        revision={draft.revision}
-        revisionConflict={draft.conflict}
-        dirty={draft.dirty}
-        disabledReason={publishDisabledReason}
-        publishing={publication.publishing}
-        current={publication.currentSavedRevisionPublished}
-        latest={publication.latestPublishedVersion}
-        error={publication.error}
-        versionsError={publication.versions.isError || publication.refreshError !== null}
-        versionsLoading={publication.versions.isPending || publication.versions.isFetching}
-        onPublish={() => {
-          if (!publishDisabledReason) void publication.publish();
-        }}
-        onRetryVersions={() => void publication.versions.refetch()}
-      />
-      <InvocationRecoveryControls
-        state={workflowRun.recovery}
-        onRetry={() => void workflowRun.retryRecovery()}
-        onSelect={workflowRun.selectRecovered}
-      />
-      <WorkflowRunControls
-        versions={workflowRun.versions}
-        selectedVersionId={workflowRun.selectedVersionId}
-        version={workflowRun.version}
-        versionsLoading={workflowRun.versionsLoading}
-        versionLoading={workflowRun.versionLoading}
-        submissionDisabled={workflowRun.recovery.checking || workflowRun.recovery.storageError}
-        versionsError={workflowRun.versionsError}
-        versionError={workflowRun.versionError}
-        draftDirty={
-          draft.dirty ||
-          (publication.versions.isSuccess && !publication.currentSavedRevisionPublished)
-        }
-        values={workflowRun.values}
-        state={workflowRun.state}
-        runStatus={workflowRun.runStatus}
-        onSelectVersion={workflowRun.selectVersion}
-        onChangeInput={workflowRun.changeInput}
-        onRun={() => void workflowRun.run()}
-        onRetry={() => void workflowRun.retry()}
-        onRetryVersions={() => void workflowRun.retryVersions()}
-        onRetryVersion={() => void workflowRun.retryVersion()}
-        onRefreshRunStatus={() => void workflowRun.refreshRunStatus()}
-      />
       <ModelSettings
         open={modelSettingsOpen}
         setupRequest={setupRequest}
@@ -392,22 +346,70 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
           setSetupRequest(null);
         }}
       />
-      <WorkflowCanvas
-        key={draft.workflowId}
-        projectId={project.id}
-        workflow={draft.definition}
-        onEdit={draft.edit}
-        onOpenProvider={(definitionId, mode, intent) => {
-          setSetupRequest({ definitionId, mode, intent: intent ?? null });
-          setModelSettingsOpen(true);
+      <WorkflowExecutionWorkspace
+        publication={
+          <WorkflowPublishControls
+            compact
+            revision={draft.revision}
+            revisionConflict={draft.conflict}
+            dirty={draft.dirty}
+            disabledReason={publishDisabledReason}
+            publishing={publication.publishing}
+            current={publication.currentSavedRevisionPublished}
+            latest={publication.latestPublishedVersion}
+            error={publication.error}
+            versionsError={publication.versions.isError || publication.refreshError !== null}
+            versionsLoading={publication.versions.isPending || publication.versions.isFetching}
+            onPublish={() => {
+              if (!publishDisabledReason) void publication.publish();
+            }}
+            onRetryVersions={() => void publication.versions.refetch()}
+          />
+        }
+        run={{
+          versions: workflowRun.versions,
+          selectedVersionId: workflowRun.selectedVersionId,
+          version: workflowRun.version,
+          versionsLoading: workflowRun.versionsLoading,
+          versionLoading: workflowRun.versionLoading,
+          submissionDisabled: workflowRun.recovery.checking || workflowRun.recovery.storageError,
+          versionsError: workflowRun.versionsError,
+          versionError: workflowRun.versionError,
+          draftDirty:
+            draft.dirty ||
+            (publication.versions.isSuccess && !publication.currentSavedRevisionPublished),
+          values: workflowRun.values,
+          state: workflowRun.state,
+          runStatus: workflowRun.runStatus,
+          onSelectVersion: workflowRun.selectVersion,
+          onChangeInput: workflowRun.changeInput,
+          onRun: () => void workflowRun.run(),
+          onRetry: () => void workflowRun.retry(),
+          onRetryVersions: () => void workflowRun.retryVersions(),
+          onRetryVersion: () => void workflowRun.retryVersion(),
+          onRefreshRunStatus: () => void workflowRun.refreshRunStatus(),
         }}
-        modelResume={modelResume}
-        onModelResumeConsumed={() => setModelResume(null)}
-        reloading={draft.operation === 'reloading'}
-        interactionLocked={modelSettingsOpen || publication.publishing}
-        defaultViewport={project.viewport}
-        onMoveEnd={onMoveEnd}
-      />
+        recovery={workflowRun.recovery}
+        onRetryRecovery={() => void workflowRun.retryRecovery()}
+        onSelectRecovered={workflowRun.selectRecovered}
+      >
+        <WorkflowCanvas
+          key={draft.workflowId}
+          projectId={project.id}
+          workflow={draft.definition}
+          onEdit={draft.edit}
+          onOpenProvider={(definitionId, mode, intent) => {
+            setSetupRequest({ definitionId, mode, intent: intent ?? null });
+            setModelSettingsOpen(true);
+          }}
+          modelResume={modelResume}
+          onModelResumeConsumed={() => setModelResume(null)}
+          reloading={draft.operation === 'reloading'}
+          interactionLocked={modelSettingsOpen || publication.publishing}
+          defaultViewport={project.viewport}
+          onMoveEnd={onMoveEnd}
+        />
+      </WorkflowExecutionWorkspace>
     </main>
   );
 }

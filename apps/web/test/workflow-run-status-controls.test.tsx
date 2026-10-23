@@ -47,9 +47,9 @@ describe('Workflow Run Status 基础界面（静态组件测试）', () => {
       <WorkflowRunStatusView state={state(status)} onRefresh={() => undefined} />,
     );
     expect(html).toContain(label);
-    expect(html).toContain('run-1');
-    expect(html).toContain('version-3');
-    expect(html).toContain('invocation-1');
+    expect(html).toContain('运行详情');
+    expect(html).not.toContain('version-3');
+    expect(html).not.toContain('invocation-1');
   });
 
   it('waiting 明确提示等待外部或人工继续，但不提供 Resume', () => {

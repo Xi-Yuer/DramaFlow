@@ -1,4 +1,5 @@
 import { Alert, Button, Select, Space } from 'antd';
+import { workflowRunStatusDisplay } from '../status/workflow-run-status-controls';
 import type { InvocationRecoveryState } from './invocation-recovery';
 export function InvocationRecoveryControls({
   state,
@@ -12,7 +13,9 @@ export function InvocationRecoveryControls({
   if (!state) return null;
   const unresolved = state.entries.filter((entry) => entry.phase !== 'found');
   const found = state.entries.filter((entry) => entry.run);
-  if (!state.checking && !state.notice && !unresolved.length && !found.length) return null;
+  const canSwitchRun =
+    found.length > 1 || found.some((entry) => entry.run?.id !== state.selected?.id);
+  if (!state.checking && !state.notice && !unresolved.length && !canSwitchRun) return null;
   return (
     <section aria-label="运行身份恢复">
       <Space orientation="vertical">
@@ -32,11 +35,17 @@ export function InvocationRecoveryControls({
         {found.length ? (
           <Select
             aria-label="选择恢复的运行"
-            value={state.selected?.invocationKey}
+            placeholder="选择恢复的运行"
+            value={
+              found.some(({ receipt }) => receipt.invocationKey === state.selected?.invocationKey)
+                ? state.selected?.invocationKey
+                : undefined
+            }
             onChange={onSelect}
             options={found.map(({ receipt, run }) => ({
               value: receipt.invocationKey,
-              label: `${run!.id} · ${run!.status}`,
+              label: `运行 ${run!.id.slice(0, 8)} · ${workflowRunStatusDisplay[run!.status].label}`,
+              title: run!.id,
             }))}
           />
         ) : null}

@@ -15,7 +15,9 @@ export function WorkflowPublishControls({
   versionsLoading,
   onPublish,
   onRetryVersions,
+  compact = false,
 }: {
+  compact?: boolean;
   revision: number;
   revisionConflict: boolean;
   dirty: boolean;
@@ -30,7 +32,7 @@ export function WorkflowPublishControls({
   onRetryVersions: () => void;
 }) {
   return (
-    <section className={styles.panel} aria-label="工作流发布">
+    <section className={`${styles.panel} ${compact ? styles.compact : ''}`} aria-label="工作流发布">
       <div className={styles.row}>
         <Tooltip title={disabledReason ?? '发布当前已保存的草稿，不会自动保存或运行'}>
           <span>
@@ -57,10 +59,10 @@ export function WorkflowPublishControls({
                     ? '当前修订的发布状态待核对'
                     : `保存修订 ${revision} 尚未发布`}
         </span>
-        {latest ? (
+        {latest && (!compact || latest.id !== current?.id) ? (
           <span className={styles.status} title={`发布时间：${latest.publishedAt}`}>
             最新发布 v{latest.version}
-            <time dateTime={latest.publishedAt}>
+            <time dateTime={latest.publishedAt} hidden={compact}>
               {' '}
               ·{' '}
               {new Date(latest.publishedAt).toLocaleString('zh-CN', {
@@ -69,10 +71,10 @@ export function WorkflowPublishControls({
               })}
             </time>
           </span>
-        ) : !versionsLoading && !versionsError ? (
+        ) : !latest && !versionsLoading && !versionsError ? (
           <span className={styles.status}>暂无已发布版本</span>
         ) : null}
-        {disabledReason && !publishing ? (
+        {disabledReason && !publishing && !compact ? (
           <span className={styles.reason}>{disabledReason}</span>
         ) : null}
       </div>

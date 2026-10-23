@@ -27,3 +27,8 @@
 .reason {
   color: #c6b984;
 }
+
+.compact {
+  padding: 0;
+  border-bottom: 0;
+}

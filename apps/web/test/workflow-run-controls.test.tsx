@@ -103,7 +103,7 @@ describe('Workflow Run 基础界面（静态组件测试）', () => {
     expect(html).toContain('disabled=');
   });
 
-  it('submitting 禁止重复，accepted 展示保存的 WorkflowRun identity', () => {
+  it('submitting 禁止重复，accepted 仅显示简短受理提示，不重复技术 identity', () => {
     const submitting = renderToStaticMarkup(
       <WorkflowRunControls
         {...props}
@@ -143,8 +143,8 @@ describe('Workflow Run 基础界面（静态组件测试）', () => {
       />,
     );
     expect(accepted).toContain('运行请求已受理');
-    expect(accepted).toContain('run-1');
-    expect(accepted).toContain('invocation-1');
+    expect(accepted).not.toContain('run-1');
+    expect(accepted).not.toContain('invocation-1');
   });
 
   it('queue confirmation 不确定错误保留服务端身份并提供同请求重试', () => {

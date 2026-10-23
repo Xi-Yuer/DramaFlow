@@ -45,6 +45,7 @@ export function WorkflowRunControls({
   onRetryVersion,
   onRefreshRunStatus,
   submissionDisabled = false,
+  showStatus = true,
 }: {
   versions: PublishedVersion[];
   selectedVersionId: string | null;
@@ -65,6 +66,7 @@ export function WorkflowRunControls({
   onRetryVersion: () => void;
   onRefreshRunStatus: () => void;
   submissionDisabled?: boolean;
+  showStatus?: boolean;
 }) {
   const submitting = state.phase === 'submitting';
   const build = version ? buildWorkflowRunInputs(version.definition.inputs, values) : null;
@@ -80,7 +82,7 @@ export function WorkflowRunControls({
     <section className={styles.panel} aria-label="工作流运行">
       <div className={styles.header}>
         <Space wrap>
-          <Typography.Text strong>运行 Workflow</Typography.Text>
+          <Typography.Text strong>运行版本</Typography.Text>
           <Select
             aria-label="选择已发布版本"
             size="small"
@@ -98,7 +100,7 @@ export function WorkflowRunControls({
         </Space>
         {version ? (
           <Typography.Text className={styles.versionStatus}>
-            运行已发布版本 v{version.version}（{version.id}），不是当前 Draft
+            运行已发布版本 v{version.version}（保存修订 {version.sourceRevision}），不是当前 Draft
           </Typography.Text>
         ) : null}
       </div>
@@ -264,20 +266,8 @@ export function WorkflowRunControls({
         </Button>
       </div>
 
-      {state.phase === 'accepted' && state.accepted ? (
-        <Alert
-          showIcon
-          type="success"
-          title="运行请求已受理"
-          description={
-            <Space orientation="vertical" size={0}>
-              <span>WorkflowRun.id：{state.accepted.id}</span>
-              <span>workflowVersionId：{state.accepted.workflowVersionId}</span>
-              <span>invocationKey：{state.accepted.invocationKey}</span>
-              <span>status：{state.accepted.status}</span>
-            </Space>
-          }
-        />
+      {state.phase === 'accepted' && state.accepted && !runStatus.run ? (
+        <Alert showIcon type="success" title="运行请求已受理" />
       ) : null}
 
       {state.phase === 'error' && state.error ? (
@@ -304,7 +294,9 @@ export function WorkflowRunControls({
           }
         />
       ) : null}
-      <WorkflowRunStatusView state={runStatus} onRefresh={onRefreshRunStatus} />
+      {showStatus ? (
+        <WorkflowRunStatusView state={runStatus} onRefresh={onRefreshRunStatus} />
+      ) : null}
     </section>
   );
 }

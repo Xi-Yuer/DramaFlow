@@ -1,17 +1,18 @@
-import { Alert, Button, Descriptions, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Collapse, Descriptions, Space, Tag, Typography } from 'antd';
 import type { WorkflowRunStatus } from '@dramaflow/contracts';
 import type { WorkflowRunStatusState } from './workflow-run-status';
 import { WorkflowRunResult } from '../result/workflow-run-result';
 import styles from '../workflow-run.module.css';
 
-const statusDisplay: Record<WorkflowRunStatus, { label: string; color: string }> = {
-  pending: { label: '等待执行', color: 'default' },
-  running: { label: '运行中', color: 'processing' },
-  waiting: { label: '等待继续', color: 'warning' },
-  completed: { label: '已完成', color: 'success' },
-  failed: { label: '失败', color: 'error' },
-  cancelled: { label: '已取消', color: 'default' },
-};
+export const workflowRunStatusDisplay: Record<WorkflowRunStatus, { label: string; color: string }> =
+  {
+    pending: { label: '等待执行', color: 'default' },
+    running: { label: '运行中', color: 'processing' },
+    waiting: { label: '等待继续', color: 'warning' },
+    completed: { label: '已完成', color: 'success' },
+    failed: { label: '失败', color: 'error' },
+    cancelled: { label: '已取消', color: 'default' },
+  };
 
 function formatTime(value: string) {
   return new Date(value).toLocaleString('zh-CN', {
@@ -33,9 +34,11 @@ export function WorkflowRunStatusView({
     <section className={styles.statusPanel} aria-label="Workflow Run 状态">
       <div className={styles.header}>
         <Space wrap>
-          <Typography.Text strong>Run 状态</Typography.Text>
+          <Typography.Text strong>运行状态</Typography.Text>
           {run ? (
-            <Tag color={statusDisplay[run.status].color}>{statusDisplay[run.status].label}</Tag>
+            <Tag color={workflowRunStatusDisplay[run.status].color}>
+              {workflowRunStatusDisplay[run.status].label}
+            </Tag>
           ) : null}
         </Space>
         <Button
@@ -49,16 +52,11 @@ export function WorkflowRunStatusView({
       </div>
 
       {state.phase === 'loading' && !run ? (
-        <Typography.Text className={styles.secondary}>
-          正在查询 WorkflowRun {state.runId}…
-        </Typography.Text>
+        <Typography.Text className={styles.secondary}>正在读取运行状态…</Typography.Text>
       ) : null}
 
       {run ? (
-        <Descriptions size="small" column={{ xs: 1, sm: 2, lg: 3 }}>
-          <Descriptions.Item label="Run ID">{run.id}</Descriptions.Item>
-          <Descriptions.Item label="WorkflowVersion">{run.workflowVersionId}</Descriptions.Item>
-          <Descriptions.Item label="invocationKey">{run.invocationKey}</Descriptions.Item>
+        <Descriptions size="small" column={1}>
           <Descriptions.Item label="创建时间">
             <time dateTime={run.createdAt}>{formatTime(run.createdAt)}</time>
           </Descriptions.Item>
@@ -119,6 +117,27 @@ export function WorkflowRunStatusView({
               手动刷新
             </Button>
           }
+        />
+      ) : null}
+      {run ? (
+        <Collapse
+          size="small"
+          ghost
+          items={[
+            {
+              key: 'identity',
+              label: '运行详情',
+              children: (
+                <Descriptions size="small" column={1}>
+                  <Descriptions.Item label="Run ID">{run.id}</Descriptions.Item>
+                  <Descriptions.Item label="WorkflowVersion">
+                    {run.workflowVersionId}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="invocationKey">{run.invocationKey}</Descriptions.Item>
+                </Descriptions>
+              ),
+            },
+          ]}
         />
       ) : null}
     </section>

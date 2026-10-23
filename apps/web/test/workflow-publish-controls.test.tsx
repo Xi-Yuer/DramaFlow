@@ -27,6 +27,14 @@ const props = {
 };
 
 describe('Publish 基础界面（静态组件测试）', () => {
+  it('紧凑工具栏不把已发布版本误报为无版本，也不重复显示相同最新版本', () => {
+    const html = renderToStaticMarkup(
+      <WorkflowPublishControls {...props} compact current={identity} latest={identity} />,
+    );
+    expect(html).toContain('保存修订 7 已发布 · v3');
+    expect(html).not.toContain('暂无已发布版本');
+    expect(html).not.toContain('最新发布 v3');
+  });
   it('clean 空草稿提供发布入口，不引入 Run 或历史管理入口', () => {
     const html = renderToStaticMarkup(<WorkflowPublishControls {...props} />);
     expect(html).toContain('保存修订 7 尚未发布');

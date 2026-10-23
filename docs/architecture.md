@@ -106,6 +106,8 @@ unsafe 注册标准 beforeunload，safe / 卸载时解除。不改写 Router / h
 
 ### Web Workflow Run Result
 
+Editor 的[执行工作区](../apps/web/src/features/workflow/editor/workflow-execution-workspace.tsx)以紧凑工具栏和可收起的右侧面板承载运行；宽屏并排、窄屏覆盖，配置与状态 / 结果分标签，长内容在面板内滚动。打开面板不会发起运行，关闭不清空输入或停止状态跟踪；受理后切到状态页，正常响应不强制重开已关闭面板。技术 ID 按需展开；保留未确认请求与其他可恢复 Run 的入口。
+
 现有状态面板仅在 completed 时从 `runStatus.run.outputs` 逐项展示结果；不读取 Draft、Node 中间输出或另发 Result 请求。字符串保留换行并按普通文本显示，number / boolean / null 原值展示，array / object 使用格式化 JSON。空字符串有独立提示；`{}` 显示「此运行没有工作流输出」，缺失 outputs 显示「运行结果不可用」。
 
 reference 只展示类型、kind 与 ID（Asset 包含版本），提示暂不支持预览，不生成 URL 或读取内容。Recovery 复用同一状态与 Result 展示；终态 receipt 清理不清空当前页面结果。其他 Run 状态不展示最终结果，failed 保留安全错误。

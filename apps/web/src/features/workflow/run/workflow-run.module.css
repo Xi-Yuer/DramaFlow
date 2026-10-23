@@ -3,17 +3,15 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid #ffffff0c;
+  gap: 16px;
 }
 
 .statusPanel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding-top: 10px;
-  border-top: 1px solid #ffffff0c;
+  min-width: 0;
+  gap: 16px;
+  overflow-wrap: anywhere;
 }
 
 .header,
@@ -28,6 +26,7 @@
 
 .versionSelect {
   min-width: 168px;
+  flex: 1;
 }
 
 .versionStatus,
@@ -56,4 +55,9 @@
 
 .actions {
   justify-content: flex-end;
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding: 10px 0;
+  background: #151517;
 }

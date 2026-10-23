@@ -49,6 +49,7 @@ vi.mock('../src/features/workflow/publish/use-workflow-publish', () => ({
 vi.mock('../src/features/workflow/run/use-workflow-run', () => ({
   useWorkflowRun: () => ({
     state: editor.run,
+    runStatus: { phase: 'idle', runId: null, run: null, error: null, refreshing: false },
     recovery: { checking: false, entries: [], selected: null, notice: null, storageError: false },
   }),
 }));
