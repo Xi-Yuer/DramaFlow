@@ -279,6 +279,35 @@ describe('普通确定性依赖编译', () => {
     ]);
   });
 
+  it('candidate 的 node_output 来源进入静态依赖收集，与边去重且不读取端口', () => {
+    const nodes: Pick<NodeDefinition, 'id' | 'inputs'>[] = [
+      {
+        id: 'D',
+        inputs: {
+          prompt: {
+            type: 'candidate',
+            sources: [
+              { type: 'node_output', nodeId: 'B', portKey: 'text' },
+              {
+                type: 'node_output',
+                nodeId: 'C',
+                get portKey(): string {
+                  throw new Error('依赖收集不得读取候选端口');
+                },
+              },
+            ],
+          },
+        },
+      },
+    ];
+    expect(collectNodeDependencies([], nodes)).toEqual([
+      { targetNodeId: 'D', sourceNodeIds: ['B', 'C'] },
+    ]);
+    expect(collectNodeDependencies([controlEdge('C', 'D')], nodes)).toEqual([
+      { targetNodeId: 'D', sourceNodeIds: ['C', 'B'] },
+    ]);
+  });
+
   it('真实 LangGraph：模板引用的多个上游全部完成后才执行一次', async () => {
     const gates = { outline: deferred(), characters: deferred() };
     const started = { outline: deferred(), characters: deferred() };

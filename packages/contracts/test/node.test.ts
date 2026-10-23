@@ -152,6 +152,41 @@ describe('Node 定义与绑定协议', () => {
       expect(nodeDefinitionSchema.safeParse({ ...node(), inputs: { prompt } }).success).toBe(false);
   });
 
+  it('candidate 绑定保存显式 node_output 候选列表，并拒绝重复来源或非 node_output 来源', () => {
+    const candidate = {
+      type: 'candidate' as const,
+      sources: [
+        { type: 'node_output' as const, nodeId: 'B', portKey: 'text' },
+        { type: 'node_output' as const, nodeId: 'C', portKey: 'text' },
+      ],
+    };
+    expect(staticInputBindingSchema.parse(candidate)).toEqual(candidate);
+    expect(
+      nodeDefinitionSchema.parse({ ...node(), inputs: { prompt: candidate } }).inputs.prompt,
+    ).toEqual(candidate);
+    for (const invalid of [
+      {
+        type: 'candidate',
+        sources: [
+          { type: 'node_output', nodeId: 'B', portKey: 'text' },
+          { type: 'node_output', nodeId: 'B', portKey: 'text' },
+        ],
+      },
+      {
+        type: 'candidate',
+        sources: [{ type: 'workflow_input', key: 'novel' }],
+      },
+      {
+        type: 'candidate',
+        sources: [{ nodeId: 'B', portKey: 'text' }],
+      },
+    ]) {
+      expect(
+        nodeDefinitionSchema.safeParse({ ...node(), inputs: { prompt: invalid } }).success,
+      ).toBe(false);
+    }
+  });
+
   it('拒绝运行状态、旧式不明确的来源字段及非 JSON 配置', () => {
     for (const value of [
       { ...node(), status: 'running' },

@@ -392,7 +392,7 @@ describe('direct convergence：生产 Compiler / Runner + 真实 LangGraph', () 
     ).resolves.toBeDefined();
   });
   it.each(['data', 'template'])(
-    '汇聚点读取分支业务数据 %s：Publish / Compile 执行前拒绝',
+    '汇聚点单来源读取分支业务数据 %s：Publish / Compile 执行前拒绝',
     async (kind) => {
       const d = definition(),
         target = d.nodes.find((n) => n.id === 'D')!;
@@ -416,6 +416,231 @@ describe('direct convergence：生产 Compiler / Runner + 真实 LangGraph', () 
       expect(f.executorFactory).not.toHaveBeenCalled();
     },
   );
+  it.each([
+    [true, false],
+    [false, false],
+    [true, true],
+    [false, true],
+  ])(
+    'candidate input convergence choice=%s, withControlEdges=%s：D 读取选中分支输出且只执行一次',
+    async (choice, withControlEdges) => {
+      const d = definition(choice);
+      if (!withControlEdges) {
+        d.edges = d.edges.filter((e) => e.id !== 'B-D' && e.id !== 'C-D');
+      }
+      d.nodes.find((n) => n.id === 'B')!.inputs.text = { type: 'constant', value: 'TRUE' };
+      d.nodes.find((n) => n.id === 'C')!.inputs.text = { type: 'constant', value: 'FALSE' };
+      d.nodes.find((n) => n.id === 'D')!.inputs.text = {
+        type: 'candidate',
+        sources: [
+          { type: 'node_output', nodeId: 'B', portKey: 'text' },
+          { type: 'node_output', nodeId: 'C', portKey: 'text' },
+        ],
+      };
+      const f = fixture(d);
+      validateWorkflowForPublish(d, f.registry);
+      const a = analysis(d);
+      expect(a.convergences).toEqual([
+        { ifNodeId: 'If', targetNodeId: 'D', completionGroups: { true: ['B'], false: ['C'] } },
+      ]);
+      expect(a.branchRegions.memberships.get('D')).toEqual([]);
+      expect(a).toMatchObject({ roots: ['A'], leaves: ['D'], maxDepth: 4, recursionLimit: 5 });
+      const addEdge = vi.fn();
+      new DependencyCompiler().compile({
+        edges: d.edges,
+        dependencies: a.staticDependencies,
+        addEdge,
+      });
+      expect(addEdge.mock.calls.filter(([, target]) => target === 'D')).toEqual([
+        ['B', 'D'],
+        ['C', 'D'],
+      ]);
+      expect(await f.run()).toMatchObject({
+        status: 'completed',
+        outputs: { result: { value: choice ? 'TRUE' : 'FALSE' } },
+      });
+      expect(f.finished).toEqual([
+        { id: 'A', step: 1 },
+        { id: choice ? 'B' : 'C', step: 3 },
+        { id: 'D', step: 4 },
+      ]);
+    },
+  );
+  it.each([true, false])(
+    'candidate-only convergence + 普通依赖 X（choice=%s）：X 并入两组且等待选中分支与 X 均完成',
+    async (choice) => {
+      const d = definition(choice);
+      d.edges = d.edges.filter((e) => e.id !== 'B-D' && e.id !== 'C-D');
+      d.nodes.push(action('X1'), action('X2'), action('X'));
+      d.edges.push(edge('X1', 'X2'), edge('X2', 'X'), edge('X', 'D'));
+      d.nodes.find((n) => n.id === 'B')!.inputs.text = { type: 'constant', value: 'TRUE' };
+      d.nodes.find((n) => n.id === 'C')!.inputs.text = { type: 'constant', value: 'FALSE' };
+      d.nodes.find((n) => n.id === 'D')!.inputs.text = {
+        type: 'candidate',
+        sources: [
+          { type: 'node_output', nodeId: 'B', portKey: 'text' },
+          { type: 'node_output', nodeId: 'C', portKey: 'text' },
+        ],
+      };
+      const f = fixture(d),
+        a = analysis(d);
+      expect(a.convergences[0]?.completionGroups).toEqual({
+        true: ['X', 'B'],
+        false: ['X', 'C'],
+      });
+      expect(a).toMatchObject({ maxDepth: 4, recursionLimit: 5 });
+      const addEdge = vi.fn();
+      new DependencyCompiler().compile({
+        edges: d.edges,
+        dependencies: a.staticDependencies,
+        addEdge,
+      });
+      expect(addEdge.mock.calls.filter(([, target]) => target === 'D')).toEqual([
+        [['X', 'B'], 'D'],
+        [['X', 'C'], 'D'],
+      ]);
+      expect(await f.run()).toMatchObject({
+        status: 'completed',
+        outputs: { result: { value: choice ? 'TRUE' : 'FALSE' } },
+      });
+      expect(ids(f).filter((id) => id === 'D')).toHaveLength(1);
+      expect(f.finished.find((n) => n.id === 'D')?.step).toBe(4);
+    },
+  );
+  it.each([
+    'same-branch',
+    'ordinary-mixed',
+    'different-if',
+    'non-convergence-after',
+    'non-convergence-plain',
+    'three-sources',
+  ] as const)('非法 candidate 拓扑 %s 在 Publish 与 Compile 前拒绝', async (kind) => {
+    const d = definition();
+    let expectedNodeId = 'D';
+    if (kind === 'same-branch') {
+      d.nodes.push(action('B2'));
+      d.edges = d.edges.filter((e) => e.id !== 'B-D');
+      d.edges.push(edge('B', 'B2'), edge('B2', 'D'));
+      d.nodes.find((n) => n.id === 'D')!.inputs.text = {
+        type: 'candidate',
+        sources: [
+          { type: 'node_output', nodeId: 'B', portKey: 'text' },
+          { type: 'node_output', nodeId: 'B2', portKey: 'text' },
+        ],
+      };
+    } else if (kind === 'ordinary-mixed') {
+      d.nodes.find((n) => n.id === 'D')!.inputs.text = {
+        type: 'candidate',
+        sources: [
+          { type: 'node_output', nodeId: 'A', portKey: 'text' },
+          { type: 'node_output', nodeId: 'B', portKey: 'text' },
+        ],
+      };
+    } else if (kind === 'different-if') {
+      d.nodes.push(
+        { ...d.nodes[1]!, id: 'If2', inputs: { value: { type: 'constant', value: 'hello' } } },
+        action('X'),
+        action('Y'),
+      );
+      d.edges.push(
+        {
+          id: 'true2',
+          kind: 'control',
+          source: { nodeId: 'If2', portKey: 'true' },
+          target: { nodeId: 'X' },
+        },
+        {
+          id: 'false2',
+          kind: 'control',
+          source: { nodeId: 'If2', portKey: 'false' },
+          target: { nodeId: 'Y' },
+        },
+      );
+      d.nodes.find((n) => n.id === 'D')!.inputs.text = {
+        type: 'candidate',
+        sources: [
+          { type: 'node_output', nodeId: 'B', portKey: 'text' },
+          { type: 'node_output', nodeId: 'X', portKey: 'text' },
+        ],
+      };
+    } else if (kind === 'non-convergence-after') {
+      expectedNodeId = 'After';
+      d.nodes.push({
+        ...action('After'),
+        inputs: {
+          text: {
+            type: 'candidate',
+            sources: [
+              { type: 'node_output', nodeId: 'A', portKey: 'text' },
+              { type: 'node_output', nodeId: 'D', portKey: 'text' },
+            ],
+          },
+        },
+      });
+      d.outputs = [
+        { name: 'result', type: StringType, source: { nodeId: 'After', outputKey: 'text' } },
+      ];
+    } else if (kind === 'non-convergence-plain') {
+      expectedNodeId = 'Join';
+      const plain: WorkflowDefinition = {
+        inputs: [],
+        nodes: [
+          action('P1'),
+          action('P2'),
+          {
+            ...action('Join'),
+            inputs: {
+              text: {
+                type: 'candidate',
+                sources: [
+                  { type: 'node_output', nodeId: 'P1', portKey: 'text' },
+                  { type: 'node_output', nodeId: 'P2', portKey: 'text' },
+                ],
+              },
+            },
+          },
+        ],
+        edges: [],
+        outputs: [
+          { name: 'result', type: StringType, source: { nodeId: 'Join', outputKey: 'text' } },
+        ],
+      };
+      const f = fixture(plain);
+      expect(() => validateWorkflowForPublish(plain, f.registry)).toThrow(
+        expect.objectContaining({
+          code: 'IF_CONVERGENCE_INPUT_UNSUPPORTED',
+          nodeId: expectedNodeId,
+        }),
+      );
+      await expect(f.run()).rejects.toMatchObject({
+        code: 'IF_CONVERGENCE_INPUT_UNSUPPORTED',
+        nodeId: expectedNodeId,
+      });
+      expect(f.executorFactory).not.toHaveBeenCalled();
+      return;
+    } else {
+      d.nodes.push(action('B2'));
+      d.edges = d.edges.filter((e) => e.id !== 'B-D');
+      d.edges.push(edge('B', 'B2'), edge('B2', 'D'));
+      d.nodes.find((n) => n.id === 'D')!.inputs.text = {
+        type: 'candidate',
+        sources: [
+          { type: 'node_output', nodeId: 'B', portKey: 'text' },
+          { type: 'node_output', nodeId: 'B2', portKey: 'text' },
+          { type: 'node_output', nodeId: 'C', portKey: 'text' },
+        ],
+      };
+    }
+    const f = fixture(d);
+    expect(() => validateWorkflowForPublish(d, f.registry)).toThrow(
+      expect.objectContaining({ code: 'IF_CONVERGENCE_INPUT_UNSUPPORTED', nodeId: expectedNodeId }),
+    );
+    await expect(f.run()).rejects.toMatchObject({
+      code: 'IF_CONVERGENCE_INPUT_UNSUPPORTED',
+      nodeId: expectedNodeId,
+    });
+    expect(f.executorFactory).not.toHaveBeenCalled();
+  });
   it.each(['entry', 'partial', 'multiple', 'bypass'])(
     '不安全 convergence %s 继续拒绝',
     async (kind) => {

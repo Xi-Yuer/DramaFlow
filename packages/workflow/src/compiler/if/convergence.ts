@@ -1,4 +1,4 @@
-import { templateNodeOutputDependencies, type WorkflowDefinition } from '@dramaflow/contracts';
+import type { WorkflowDefinition } from '@dramaflow/contracts';
 import type { NodeDependency } from '../dependency.compiler.js';
 import type { BranchRegionAnalysis, SimpleIfRoute } from './branch-regions.js';
 import type { IfCapabilityIssueCode } from './analysis.js';
@@ -8,6 +8,22 @@ export interface IfConvergence {
   ifNodeId: string;
   targetNodeId: string;
   completionGroups: { true: string[]; false: string[] };
+}
+
+function singleBranchValueDependencies(definition: WorkflowDefinition) {
+  const dependencies = definition.edges
+    .filter((edge) => edge.kind === 'data')
+    .map((edge) => ({ sourceNodeId: edge.source.nodeId, targetNodeId: edge.target.nodeId }));
+  for (const node of definition.nodes) {
+    for (const binding of Object.values(node.inputs)) {
+      if (binding.type !== 'template') continue;
+      for (const source of Object.values(binding.variables)) {
+        if (source.type === 'node_output')
+          dependencies.push({ sourceNodeId: source.nodeId, targetNodeId: node.id });
+      }
+    }
+  }
+  return dependencies;
 }
 
 // 从原始双分支可达证据找第一个共同目标。暂仅接受一个完整关闭 region 的边界，
@@ -50,12 +66,29 @@ export function analyzeConvergenceDependencies(
   reject: Reject,
 ): IfConvergence[] {
   const parents = new Map(dependencies.map((d) => [d.targetNodeId, d.sourceNodeIds]));
-  const valueDependencies = [
-    ...definition.edges
-      .filter((edge) => edge.kind === 'data')
-      .map((edge) => ({ sourceNodeId: edge.source.nodeId, targetNodeId: edge.target.nodeId })),
-    ...templateNodeOutputDependencies(definition.nodes),
-  ];
+  const valueDependencies = singleBranchValueDependencies(definition);
+  const convergenceIfByTarget = new Map<string, string>();
+  for (const [ifNodeId, targetNodeId] of boundaries) {
+    convergenceIfByTarget.set(targetNodeId, ifNodeId);
+  }
+  for (const node of definition.nodes) {
+    for (const binding of Object.values(node.inputs)) {
+      if (binding.type !== 'candidate') continue;
+      const ifNodeId = convergenceIfByTarget.get(node.id);
+      if (!ifNodeId || binding.sources.length !== 2)
+        reject('IF_CONVERGENCE_INPUT_UNSUPPORTED', node.id);
+      const yes = regions.regions.find(
+        (region) => region.ifNodeId === ifNodeId && region.branch === 'true',
+      )!;
+      const no = regions.regions.find(
+        (region) => region.ifNodeId === ifNodeId && region.branch === 'false',
+      )!;
+      const trueMatches = binding.sources.filter((s) => yes.nodeIds.has(s.nodeId));
+      const falseMatches = binding.sources.filter((s) => no.nodeIds.has(s.nodeId));
+      if (trueMatches.length !== 1 || falseMatches.length !== 1)
+        reject('IF_CONVERGENCE_INPUT_UNSUPPORTED', node.id);
+    }
+  }
   return [...boundaries].map(([ifNodeId, targetNodeId]) => {
     if (regions.memberships.get(targetNodeId)?.length)
       reject('IF_REGION_INTERSECTION_UNSUPPORTED', targetNodeId);
@@ -78,8 +111,7 @@ export function analyzeConvergenceDependencies(
     const common = sources.filter((id) => !yes.nodeIds.has(id) && !no.nodeIds.has(id));
     if (common.some((id) => regions.memberships.get(id)?.length))
       reject('IF_REGION_INTERSECTION_UNSUPPORTED', targetNodeId);
-    // 只支持控制汇聚。分支值在另一条路径中可能缺失，不能靠 alternatives
-    // 掩盖 Binding 的固定来源语义；ordinary 值仍照常由现有 BindingResolver 读取。
+    // 单来源分支值在另一条路径中缺失；汇聚节点读取互斥分支值只能通过已证明覆盖两侧的 candidate 绑定。
     if (
       valueDependencies.some(
         (d) =>

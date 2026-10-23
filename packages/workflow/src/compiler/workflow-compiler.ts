@@ -64,6 +64,9 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     // 所有能力 / 拓扑 / 输出证明均在创建服务或执行节点前完成。
     if (
       ifNodeIds.size ||
+      definition.nodes.some((node) =>
+        Object.values(node.inputs).some((binding) => binding.type === 'candidate'),
+      ) ||
       definition.outputs.some((output) => output.sources !== undefined) ||
       definition.edges.some(
         (edge) =>
@@ -74,7 +77,11 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       validateWorkflowDefinitionSemantics(definition, this.registry);
     }
     const ifAnalysis =
-      ifNodeIds.size || definition.outputs.some((output) => output.sources !== undefined)
+      ifNodeIds.size ||
+      definition.nodes.some((node) =>
+        Object.values(node.inputs).some((binding) => binding.type === 'candidate'),
+      ) ||
+      definition.outputs.some((output) => output.sources !== undefined)
         ? analyzeSimpleIfExecution(definition, ifNodeIds)
         : undefined;
     const { recursionLimit } = ifAnalysis ?? analyzeActionDagExecution(definition);

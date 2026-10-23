@@ -42,6 +42,27 @@ export const workflowDraftDefinitionSchema = schemas.draftDefinitionSchema.super
             message: '绑定引用了不存在的工作流输入',
           });
         }
+        if (binding.type === 'candidate') {
+          binding.sources.forEach((source, sourceIndex) => {
+            if (!nodes.has(source.nodeId)) {
+              context.addIssue({
+                code: 'custom',
+                path: ['nodes', index, 'inputs', key, 'sources', sourceIndex, 'nodeId'],
+                message: '候选输入引用了不存在的节点',
+              });
+              return;
+            }
+            if (source.nodeId === node.id) {
+              context.addIssue({
+                code: 'custom',
+                path: ['nodes', index, 'inputs', key, 'sources', sourceIndex, 'nodeId'],
+                message: '候选输入不能引用自身',
+              });
+            }
+            addDependency(source.nodeId, node.id);
+          });
+          continue;
+        }
         if (binding.type !== 'template') continue;
         for (const [name, source] of Object.entries(binding.variables)) {
           if (source.type === 'workflow_input') {
@@ -156,6 +177,17 @@ export type WorkflowOutputDefinition = z.infer<typeof workflowOutputDefinitionSc
 // 编辑态允许候选不足；不可变版本及执行边界必须通过最终输出协议。
 export const workflowDefinitionSchema = workflowDraftDefinitionSchema.superRefine(
   (definition, context) => {
+    definition.nodes.forEach((node, index) => {
+      for (const [key, binding] of Object.entries(node.inputs)) {
+        if (binding.type === 'candidate' && binding.sources.length < 2) {
+          context.addIssue({
+            code: 'custom',
+            path: ['nodes', index, 'inputs', key, 'sources'],
+            message: '候选输入绑定至少需要两个来源',
+          });
+        }
+      }
+    });
     definition.outputs.forEach((output, index) => {
       const result = workflowOutputDefinitionSchema.safeParse(output);
       if (!result.success)

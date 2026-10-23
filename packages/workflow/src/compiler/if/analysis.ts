@@ -33,7 +33,7 @@ const messages = new Map<string, string>([
   ],
   [
     'IF_CONVERGENCE_INPUT_UNSUPPORTED',
-    '汇聚节点不能直接读取互斥分支的业务值；当前尚无候选输入绑定',
+    '汇聚输入须由候选绑定分别覆盖同一 If 的 true / false 分支；单来源不能直接读取互斥分支',
   ],
   ['IF_NESTED_UNSUPPORTED', '当前版本暂不支持嵌套 If'],
   ['IF_REGION_INTERSECTION_UNSUPPORTED', '当前版本暂不支持不同 If 的分支区域交叉'],

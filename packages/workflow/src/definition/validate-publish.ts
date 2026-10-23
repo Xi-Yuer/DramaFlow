@@ -175,7 +175,19 @@ export function validateWorkflowDefinitionSemantics(
       const port = ports.get(key);
       if (!port) invalid('INPUT_PORT_NOT_FOUND', node.id, key);
       if (binding.type === 'asset') invalid('ASSET_BINDING_UNSUPPORTED', node.id, key);
-      else if (binding.type === 'workflow_input') {
+      else if (binding.type === 'candidate') {
+        dynamic = true;
+        for (const source of binding.sources) {
+          const sourceNode = nodes.get(source.nodeId);
+          if (!sourceNode) invalid('NODE_TYPE_UNAVAILABLE', source.nodeId);
+          const output = sourceNode.nodeType.manifest.outputs.find(
+            (outputPort) => outputPort.key === source.portKey,
+          );
+          if (!output) invalid('OUTPUT_PORT_NOT_FOUND', sourceNode.node.id, source.portKey);
+          if (!isTypeAssignable(output.dataType, port.dataType))
+            invalid('INPUT_TYPE_MISMATCH', node.id, key);
+        }
+      } else if (binding.type === 'workflow_input') {
         dynamic = true;
         const source = workflowInputs.get(binding.key)!;
         if (
@@ -248,7 +260,13 @@ export function validateWorkflowForPublish(
   const ifNodeIds = new Set(
     entries.filter((entry) => isSupportedIf(entry.nodeType)).map((entry) => entry.node.id),
   );
-  if (ifNodeIds.size || definition.outputs.some((output) => output.sources !== undefined)) {
+  if (
+    ifNodeIds.size ||
+    definition.nodes.some((node) =>
+      Object.values(node.inputs).some((binding) => binding.type === 'candidate'),
+    ) ||
+    definition.outputs.some((output) => output.sources !== undefined)
+  ) {
     try {
       analyzeSimpleIfExecution(definition, ifNodeIds);
     } catch (error) {

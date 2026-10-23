@@ -503,4 +503,106 @@ describe('正式 Registry 的静态发布校验', () => {
       }),
     );
   });
+
+  it('candidate 校验来源输出端口存在与 DataType 兼容，并视为动态输入跳过常量预检', () => {
+    const text = createTextGenerationNodeType();
+    const registry = new NodeRegistry([
+      {
+        ...text,
+        inputSchema: z.object({
+          prompt: z.string().min(1),
+          system: z.string().optional(),
+        }),
+      },
+      {
+        manifest: {
+          type: 'test.image',
+          version: 1,
+          executionKind: 'action',
+          metadata: { name: '图片', category: 'image' },
+          inputs: [],
+          outputs: [{ key: 'image', name: '图片', dataType: ImageType }],
+          config: [],
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ image: z.string() }),
+        configSchema: z.object({}).strict(),
+        execute: async () => ({ image: 'unused' }),
+      },
+    ]);
+    const makeGraph = (
+      first: { nodeId: string; portKey: string },
+      second: { nodeId: string; portKey: string },
+    ): WorkflowDefinition => ({
+      inputs: [],
+      nodes: [
+        {
+          id: 'picture',
+          type: 'test.image',
+          typeVersion: 1,
+          name: '图片',
+          inputs: {},
+          config: {},
+          ui: { position: { x: 0, y: 0 } },
+        },
+        {
+          id: 'writerA',
+          type: 'ai.text_generate',
+          typeVersion: 1,
+          name: '文本A',
+          inputs: { prompt: { type: 'constant', value: 'hello' } },
+          config: { modelConfigurationId },
+          ui: { position: { x: 0, y: 0 } },
+        },
+        {
+          id: 'target',
+          type: 'ai.text_generate',
+          typeVersion: 1,
+          name: '目标',
+          inputs: {
+            prompt: {
+              type: 'candidate',
+              sources: [
+                { type: 'node_output', ...first },
+                { type: 'node_output', ...second },
+              ],
+            },
+          },
+          config: { modelConfigurationId },
+          ui: { position: { x: 0, y: 0 } },
+        },
+      ],
+      edges: [],
+      outputs: [],
+    });
+
+    expect(() =>
+      check(
+        makeGraph(
+          { nodeId: 'writerA', portKey: 'missing' },
+          { nodeId: 'picture', portKey: 'image' },
+        ),
+        registry,
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'OUTPUT_PORT_NOT_FOUND',
+        nodeId: 'writerA',
+        portKey: 'missing',
+      }),
+    );
+
+    expect(() =>
+      check(
+        makeGraph({ nodeId: 'writerA', portKey: 'text' }, { nodeId: 'picture', portKey: 'image' }),
+        registry,
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        code: 'INPUT_TYPE_MISMATCH',
+        nodeId: 'target',
+        portKey: 'prompt',
+      }),
+    );
+  });
 });

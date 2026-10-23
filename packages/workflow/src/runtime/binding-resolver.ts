@@ -1,5 +1,6 @@
 import {
   templateBindingMatches,
+  type CandidateBinding,
   type DataEdgeDefinition,
   type InputPortDefinition,
   type NodeDefinition,
@@ -180,6 +181,35 @@ function inlineString(value: RuntimeValue, key: string, nodeId: string, variable
   return value.value;
 }
 
+function resolveCandidateBinding(
+  binding: CandidateBinding,
+  nodeOutputs: NodeOutputMap,
+  key: string,
+  nodeId: string,
+): RuntimeValue {
+  const present: RuntimeValue[] = [];
+  for (const source of binding.sources) {
+    const output = nodeOutput(nodeOutputs, source.nodeId, source.portKey);
+    if (output !== undefined) present.push(output);
+  }
+  if (present.length > 1) {
+    throw new BindingResolutionError(
+      'CANDIDATE_INPUT_AMBIGUOUS',
+      `候选输入 ${nodeId}.${key} 存在多个来源输出`,
+      { nodeId, inputKey: key },
+    );
+  }
+  const value = present[0];
+  if (value === undefined) {
+    throw new BindingResolutionError(
+      'SOURCE_NODE_OUTPUT_MISSING',
+      `候选输入 ${nodeId}.${key} 缺少来源输出`,
+      { nodeId, inputKey: key },
+    );
+  }
+  return value;
+}
+
 function resolveStaticBinding(
   binding: StaticInputBinding,
   port: InputPortDefinition,
@@ -217,6 +247,8 @@ function resolveStaticBinding(
         context.node.id,
         port,
       );
+    case 'candidate':
+      return resolveCandidateBinding(binding, context.state.outputs, port.key, context.node.id);
   }
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   workflowDefinitionSchema,
+  workflowDraftDefinitionSchema,
   workflowInputDefinitionSchema,
   workflowEdgeSchema,
   type ControlEdgeDefinition,
@@ -306,6 +307,129 @@ describe('正式 WorkflowDefinition 静态校验', () => {
     ).toThrow('控制关系与数据依赖联合必须无环');
   });
 
+  it('candidate 遵循 Draft 与正式 Definition 边界，并校验节点存在、自引用、去重与无环', () => {
+    const candidateSource = (nodeId: string, portKey = 'text') => ({
+      type: 'node_output' as const,
+      nodeId,
+      portKey,
+    });
+    for (const sources of [[], [candidateSource('b')]]) {
+      const draft = {
+        inputs: [],
+        nodes: [
+          node('b'),
+          node('c'),
+          node('d', { prompt: { type: 'candidate' as const, sources } }),
+        ],
+        edges: [],
+        outputs: [],
+      };
+      expect(workflowDraftDefinitionSchema.parse(draft)).toEqual(draft);
+      expect(workflowDefinitionSchema.safeParse(draft).error?.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ['nodes', 2, 'inputs', 'prompt', 'sources'],
+            message: '候选输入绑定至少需要两个来源',
+          }),
+        ]),
+      );
+    }
+
+    const valid = {
+      inputs: [],
+      nodes: [
+        node('b'),
+        node('c'),
+        node('d', {
+          prompt: {
+            type: 'candidate' as const,
+            sources: [candidateSource('b'), candidateSource('c')],
+          },
+        }),
+      ],
+      edges: [],
+      outputs: [],
+    };
+    expect(workflowDefinitionSchema.parse(valid)).toEqual(valid);
+
+    expect(
+      workflowDraftDefinitionSchema.safeParse({
+        ...valid,
+        nodes: [
+          node('b'),
+          node('d', {
+            prompt: {
+              type: 'candidate',
+              sources: [candidateSource('missing'), candidateSource('b')],
+            },
+          }),
+        ],
+      }).error?.issues,
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ message: '候选输入引用了不存在的节点' })]),
+    );
+
+    expect(
+      workflowDraftDefinitionSchema.safeParse({
+        ...valid,
+        nodes: [
+          node('b'),
+          node('d', {
+            prompt: {
+              type: 'candidate',
+              sources: [candidateSource('d'), candidateSource('b')],
+            },
+          }),
+        ],
+      }).error?.issues,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: '候选输入不能引用自身' }),
+        expect.objectContaining({ message: '控制关系与数据依赖联合必须无环' }),
+      ]),
+    );
+
+    expect(
+      workflowDraftDefinitionSchema.safeParse({
+        ...valid,
+        nodes: [
+          node('b'),
+          node('d', {
+            prompt: {
+              type: 'candidate',
+              sources: [candidateSource('b'), candidateSource('b')],
+            },
+          }),
+        ],
+      }).error?.issues,
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ message: '候选输入来源不能重复' })]),
+    );
+
+    expect(() =>
+      workflowDraftDefinitionSchema.parse({
+        inputs: [],
+        nodes: [
+          node('b', {
+            prompt: {
+              type: 'candidate',
+              sources: [candidateSource('d'), candidateSource('c')],
+            },
+          }),
+          node('c'),
+          node('d', {
+            prompt: {
+              type: 'candidate',
+              sources: [candidateSource('b'), candidateSource('c')],
+            },
+          }),
+        ],
+        edges: [],
+        outputs: [],
+      }),
+    ).toThrow('控制关系与数据依赖联合必须无环');
+  });
+
   it('拒绝数据或控制自连、纯数据环、纯控制环与混合环', () => {
     const source = definition();
     for (const self of [edge('self', 'a', 'a'), controlEdge('self', 'a', 'a')])
@@ -347,6 +471,13 @@ describe('正式 WorkflowDefinition 静态校验', () => {
         type: 'template',
         value: '{{novel}}',
         variables: { novel: { type: 'workflow_input', key: 'novel' } },
+      },
+      {
+        type: 'candidate',
+        sources: [
+          { type: 'node_output', nodeId: 'a', portKey: 'text' },
+          { type: 'node_output', nodeId: 'a', portKey: 'other' },
+        ],
       },
     ];
     for (const binding of bindings) {

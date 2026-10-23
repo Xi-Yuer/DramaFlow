@@ -48,11 +48,19 @@ export const templateBindingSchema = z
   })
   .strict();
 
+export const candidateBindingSchema = z
+  .object({
+    type: z.literal('candidate'),
+    sources: z.array(nodeOutputVariableSourceSchema),
+  })
+  .strict();
+
 export const staticInputBindingSchema = z.discriminatedUnion('type', [
   constantBindingSchema,
   workflowInputBindingSchema,
   assetBindingSchema,
   templateBindingSchema,
+  candidateBindingSchema,
 ]);
 
 export function templateVariableNames(value: string): string[] {
@@ -104,6 +112,21 @@ export const nodeDefinitionSchema = z
   .strict()
   .superRefine((node, context) => {
     for (const [key, binding] of Object.entries(node.inputs)) {
+      if (binding.type === 'candidate') {
+        const seen = new Set<string>();
+        binding.sources.forEach((source, index) => {
+          const itemKey = JSON.stringify([source.nodeId, source.portKey]);
+          if (seen.has(itemKey)) {
+            context.addIssue({
+              code: 'custom',
+              path: ['inputs', key, 'sources', index],
+              message: '候选输入来源不能重复',
+            });
+          }
+          seen.add(itemKey);
+        });
+        continue;
+      }
       if (binding.type !== 'template') continue;
       if (!templateBindingMatches(binding.value, binding.variables)) {
         context.addIssue({
@@ -129,8 +152,10 @@ export const nodePresetSchema = z
 export type ConstantBinding = z.infer<typeof constantBindingSchema>;
 export type WorkflowInputBinding = z.infer<typeof workflowInputBindingSchema>;
 export type AssetBinding = z.infer<typeof assetBindingSchema>;
+export type NodeOutputVariableSource = z.infer<typeof nodeOutputVariableSourceSchema>;
 export type TemplateVariableSource = z.infer<typeof templateVariableSourceSchema>;
 export type TemplateBinding = z.infer<typeof templateBindingSchema>;
+export type CandidateBinding = z.infer<typeof candidateBindingSchema>;
 export type StaticInputBinding = z.infer<typeof staticInputBindingSchema>;
 export type NodeDefinition = z.infer<typeof nodeDefinitionSchema>;
 export type NodePreset = z.infer<typeof nodePresetSchema>;
@@ -141,6 +166,12 @@ export function templateNodeOutputDependencies(
   const dependencies: { sourceNodeId: string; targetNodeId: string }[] = [];
   for (const node of nodes) {
     for (const binding of Object.values(node.inputs)) {
+      if (binding.type === 'candidate') {
+        for (const source of binding.sources) {
+          dependencies.push({ sourceNodeId: source.nodeId, targetNodeId: node.id });
+        }
+        continue;
+      }
       if (binding.type !== 'template') continue;
       for (const source of Object.values(binding.variables)) {
         if (source.type === 'node_output')

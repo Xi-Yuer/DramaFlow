@@ -402,6 +402,13 @@ describe('BindingResolver 完整输入组装', () => {
       value: '{{novel}}',
       variables: { novel: { type: 'workflow_input', key: 'novel' } },
     },
+    {
+      type: 'candidate',
+      sources: [
+        { type: 'node_output', nodeId: 'A', portKey: 'generatedImage' },
+        { type: 'node_output', nodeId: 'C', portKey: 'generatedImage' },
+      ],
+    },
   ])(
     '任意静态绑定与 Data Edge 冲突时，在取值前抛 INPUT_SOURCE_CONFLICT：$type',
     async (binding) => {
@@ -666,5 +673,99 @@ describe('BindingResolver 完整输入组装', () => {
       code: 'TEMPLATE_VARIABLE_INVALID',
       details: { variableName: 'count' },
     });
+  });
+
+  it('candidate：0 个来源存在抛 SOURCE_NODE_OUTPUT_MISSING，>1 个存在抛 CANDIDATE_INPUT_AMBIGUOUS，不按顺序取第一个', async () => {
+    const candidate: StaticInputBinding = {
+      type: 'candidate',
+      sources: [
+        { type: 'node_output', nodeId: 'B', portKey: 'text' },
+        { type: 'node_output', nodeId: 'C', portKey: 'text' },
+      ],
+    };
+    await expect(
+      bindingResolver.resolveInputs({
+        workflowInputs: [],
+        node: { ...node, id: 'D', inputs: { prompt: candidate } },
+        nodeType,
+        edges: [],
+        state: state({ B: {}, other: { text: prompt } }),
+      }),
+    ).rejects.toMatchObject({
+      name: 'BindingResolutionError',
+      code: 'SOURCE_NODE_OUTPUT_MISSING',
+      details: { nodeId: 'D', inputKey: 'prompt' },
+    });
+
+    await expect(
+      bindingResolver.resolveInputs({
+        workflowInputs: [],
+        node: { ...node, id: 'D', inputs: { prompt: candidate } },
+        nodeType,
+        edges: [],
+        state: state({
+          B: { text: { storage: 'inline', type: StringType, value: 'TRUE' } },
+          C: { text: { storage: 'inline', type: StringType, value: 'FALSE' } },
+        }),
+      }),
+    ).rejects.toMatchObject({
+      name: 'BindingResolutionError',
+      code: 'CANDIDATE_INPUT_AMBIGUOUS',
+      details: { nodeId: 'D', inputKey: 'prompt' },
+    });
+  });
+
+  it.each(['', 0, false, null] as const)(
+    'candidate：恰好 1 个存在时原样返回，inline %s 均按存在处理',
+    async (raw) => {
+      const candidate: StaticInputBinding = {
+        type: 'candidate',
+        sources: [
+          { type: 'node_output', nodeId: 'B', portKey: 'text' },
+          { type: 'node_output', nodeId: 'C', portKey: 'text' },
+        ],
+      };
+      const value: RuntimeValue = { storage: 'inline', type: JsonType, value: raw };
+      for (const active of ['B', 'C'] as const) {
+        const inputs = await bindingResolver.resolveInputs({
+          workflowInputs: [],
+          node: { ...node, id: 'D', inputs: { prompt: candidate } },
+          nodeType: { ...nodeType, inputs: [{ key: 'prompt', name: 'JSON', dataType: JsonType }] },
+          edges: [],
+          state: state({ [active]: { text: value } }),
+        });
+        expect(inputs.prompt).toBe(value);
+      }
+    },
+  );
+
+  it('candidate：reference RuntimeValue 原样返回，不 decode 或读取 reference', async () => {
+    const value: RuntimeValue = {
+      storage: 'reference',
+      type: ImageType,
+      get reference(): never {
+        throw new Error('BindingResolver 不得读取 candidate reference');
+      },
+    };
+    const inputs = await bindingResolver.resolveInputs({
+      workflowInputs: [],
+      node: {
+        ...node,
+        id: 'D',
+        inputs: {
+          image: {
+            type: 'candidate',
+            sources: [
+              { type: 'node_output', nodeId: 'B', portKey: 'image' },
+              { type: 'node_output', nodeId: 'C', portKey: 'image' },
+            ],
+          },
+        },
+      },
+      nodeType,
+      edges: [],
+      state: state({ C: { image: value } }),
+    });
+    expect(inputs.image).toBe(value);
   });
 });
