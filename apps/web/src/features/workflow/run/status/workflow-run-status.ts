@@ -1,4 +1,5 @@
 import type {
+  NodeRun,
   PendingHumanReview,
   PendingHumanReviewsResponse,
   ResumeWorkflowRunRequest,
@@ -30,6 +31,7 @@ export interface WorkflowRunStatusState {
   phase: 'idle' | 'loading' | 'ready' | 'error';
   runId: string | null;
   run: WorkflowRunResponse | null;
+  nodeRuns?: readonly NodeRun[];
   error: WorkflowRunStatusError | null;
   refreshing: boolean;
   review: HumanReviewState | null;
@@ -38,6 +40,7 @@ export interface WorkflowRunStatusState {
 interface WorkflowRunStatusOperations {
   get(runId: string, signal: AbortSignal): Promise<WorkflowRunResponse>;
   getPending(runId: string, signal: AbortSignal): Promise<PendingHumanReviewsResponse>;
+  getNodeRuns?(runId: string, signal: AbortSignal): Promise<{ items: NodeRun[] }>;
   resume(runId: string, input: ResumeWorkflowRunRequest): Promise<WorkflowRunResponse>;
 }
 
@@ -63,6 +66,7 @@ export class WorkflowRunStatusController {
     phase: 'idle',
     runId: null,
     run: null,
+    nodeRuns: [],
     error: null,
     refreshing: false,
     review: null,
@@ -97,6 +101,7 @@ export class WorkflowRunStatusController {
       phase: runId ? 'loading' : 'idle',
       runId,
       run: null,
+      nodeRuns: [],
       error: null,
       refreshing: !!runId,
       review: null,
@@ -186,24 +191,41 @@ export class WorkflowRunStatusController {
       if (!isCurrent()) return;
       if (run.id !== runId) throw new ApiError('返回的运行身份与查询目标不匹配', 200);
       this.update({ run });
+      let nodeRuns: readonly NodeRun[] = this.state.nodeRuns ?? [];
       let review: HumanReviewState | null = null;
-      if (run.status === 'waiting') {
-        const pending = await this.operations.getPending(runId, request.signal);
+      if (this.operations.getNodeRuns || run.status === 'waiting') {
+        const [nodeRunsResult, pending] = await Promise.all([
+          this.operations.getNodeRuns
+            ? this.operations.getNodeRuns(runId, request.signal)
+            : Promise.resolve(null),
+          run.status === 'waiting'
+            ? this.operations.getPending(runId, request.signal)
+            : Promise.resolve(null),
+        ]);
         if (!isCurrent()) return;
-        if (pending.items.length > 1) throw new ApiError('当前暂不支持同时处理多个待审批节点', 200);
-        const item = pending.items[0];
-        if (item) {
-          const previous = this.state.review;
-          review = {
-            phase: 'ready',
-            item,
-            feedback: previous && sameReview(previous.item, item) ? previous.feedback : '',
-            notice,
-          };
+        if (nodeRunsResult) {
+          if (nodeRunsResult.items.some((item) => item.workflowRunId !== runId)) {
+            throw new ApiError('返回的节点运行记录与查询目标不匹配', 200);
+          }
+          nodeRuns = nodeRunsResult.items;
+        }
+        if (pending) {
+          if (pending.items.length > 1)
+            throw new ApiError('当前暂不支持同时处理多个待审批节点', 200);
+          const item = pending.items[0];
+          if (item) {
+            const previous = this.state.review;
+            review = {
+              phase: 'ready',
+              item,
+              feedback: previous && sameReview(previous.item, item) ? previous.feedback : '',
+              notice,
+            };
+          }
         }
       }
       this.request = null;
-      this.update({ phase: 'ready', run, review, error: null, refreshing: false });
+      this.update({ phase: 'ready', run, nodeRuns, review, error: null, refreshing: false });
       // 普通待审批不频繁查询；已提交或状态切换间隙沿用同一 Run timer 跟踪。
       if (
         run.status === 'pending' ||

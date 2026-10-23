@@ -10,6 +10,7 @@ export function useWorkflowRunStatus(runId: string | null) {
       new WorkflowRunStatusController({
         get: (target, signal) => workflowApi.getRun(target, signal),
         getPending: (target, signal) => workflowApi.getPendingHumanReviews(target, signal),
+        getNodeRuns: (target, signal) => workflowApi.getNodeRuns(target, signal),
         resume: (target, input) => workflowApi.resumeRun(target, input),
       }),
     [],

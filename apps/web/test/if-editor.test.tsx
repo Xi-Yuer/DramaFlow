@@ -113,7 +113,7 @@ describe('If Generic Node 编辑', () => {
       config: {},
       inputs: {},
     });
-    expect(screen.getByText('尚未配置条件')).toBeTruthy();
+    expect(screen.getAllByText('尚未配置条件').length).toBeGreaterThan(0);
     expect(view.container.querySelector('[data-handleid="value"]')).toBeTruthy();
     expect(view.container.querySelector('[data-handleid="control:source:true"]')).toBeTruthy();
     expect(view.container.querySelector('[data-handleid="control:source:false"]')).toBeTruthy();
@@ -126,13 +126,14 @@ describe('If Generic Node 编辑', () => {
     ['不包含', 'not_contains'],
   ] as const)('%s 使用表单生成协议，保存后重读恢复同一表单', async (label, operator) => {
     setup();
+    fireEvent.click(screen.getByRole('article', { name: '条件分支' }));
     await choose(label);
     fireEvent.change(screen.getByRole('textbox', { name: '比较文本' }), {
       target: { value: ' 通过\nApproved ' },
     });
     const expression = conditionFromFields(operator, ' 通过\nApproved ');
     expect(draft.definition.nodes[0]!.config).toEqual({ condition: expression });
-    expect(screen.getByText(`value ${label} " 通过\\nApproved "`)).toBeTruthy();
+    expect(screen.getAllByText(`value ${label} " 通过\\nApproved "`).length).toBeGreaterThan(0);
     let stored: WorkflowDefinition | undefined;
     const save = vi.spyOn(workflowApi, 'saveDraft').mockImplementation(async (_id, request) => {
       stored = structuredClone(request.definition);
@@ -159,7 +160,8 @@ describe('If Generic Node 编辑', () => {
     const expression = { and: [{ '===': [{ var: 'value' }, 'x'] }] };
     initial.nodes[0]!.config.condition = expression;
     setup(initial);
-    expect(screen.getByText('当前编辑器暂不支持该条件表达式')).toBeTruthy();
+    fireEvent.click(screen.getByRole('article', { name: '条件分支' }));
+    expect(screen.getAllByText('当前编辑器暂不支持该条件表达式').length).toBeGreaterThan(0);
     expect(screen.queryByRole('combobox', { name: '比较方式' })).toBeNull();
     fireEvent.change(screen.getByRole('textbox', { name: '输入值文本' }), {
       target: { value: '业务文本' },
@@ -233,6 +235,7 @@ describe('If Generic Node 编辑', () => {
     const initial = ifWorkflow();
     initial.nodes[0]!.config.condition = conditionFromFields('equals', 'x');
     setup(initial, true);
+    fireEvent.click(screen.getByRole('article', { name: '条件分支' }));
     expect(
       (screen.getByRole('textbox', { name: '比较文本' }) as HTMLTextAreaElement).disabled,
     ).toBe(true);

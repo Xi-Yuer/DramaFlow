@@ -1,12 +1,15 @@
 import {
+  nodeRunSchema,
   resumeWorkflowRunRequestSchema,
   startWorkflowRunRequestSchema,
   workflowIdentifierSchema,
   workflowInvocationKeySchema,
   workflowInvocationLookupResponseSchema,
   workflowRunResponseSchema,
+  type NodeRun,
   type WorkflowRunResponse,
 } from '@dramaflow/contracts';
+import { z } from 'zod';
 import {
   DatabaseService,
   WorkflowRunSubmissionFactory,
@@ -27,6 +30,10 @@ import {
   workflowRuntimeHttpError,
   type WorkflowResourceNotFoundCode,
 } from './workflow-runtime-http-error.js';
+
+const workflowNodeRunsResponseSchema = z
+  .object({ items: z.array(nodeRunSchema) })
+  .strict();
 
 @Injectable()
 export class WorkflowRuntimeService {
@@ -150,6 +157,52 @@ export class WorkflowRuntimeService {
     return this.httpOperation('WORKFLOW_RUN_NOT_FOUND', () =>
       this.humanReviews.pending(ownerId, runId),
     );
+  }
+
+  async listNodeRuns(
+    ownerId: string,
+    rawId: string,
+  ): Promise<{ items: NodeRun[] }> {
+    const runId = workflowIdentifierSchema.parse(rawId);
+    return this.httpOperation('WORKFLOW_RUN_NOT_FOUND', async () => {
+      const run = await this.authorizedRun(ownerId, runId);
+      const rows = await this.database.client.nodeRun.findMany({
+        where: {
+          workflowRunId: run.id,
+          projectId: run.projectId,
+          project: { ownerId },
+        },
+        orderBy: [{ startedAt: 'asc' }, { attempt: 'asc' }, { id: 'asc' }],
+        select: {
+          id: true,
+          workflowRunId: true,
+          nodeId: true,
+          attempt: true,
+          status: true,
+          inputs: true,
+          outputs: true,
+          error: true,
+          startedAt: true,
+          completedAt: true,
+        },
+      });
+      return workflowNodeRunsResponseSchema.parse({
+        items: rows.map((row) => ({
+          id: row.id,
+          workflowRunId: row.workflowRunId,
+          nodeId: row.nodeId,
+          attempt: row.attempt,
+          status: row.status,
+          ...(row.inputs !== null ? { inputs: row.inputs } : {}),
+          ...(row.outputs !== null ? { outputs: row.outputs } : {}),
+          ...(row.error !== null ? { error: row.error } : {}),
+          startedAt: row.startedAt.toISOString(),
+          ...(row.completedAt !== null
+            ? { completedAt: row.completedAt.toISOString() }
+            : {}),
+        })),
+      });
+    });
   }
 
   private async authorizedRun(ownerId: string, runId: string) {

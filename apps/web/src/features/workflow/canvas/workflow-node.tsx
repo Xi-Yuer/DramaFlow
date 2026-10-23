@@ -3,19 +3,24 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { Handle, Position, type NodeProps, type NodeTypes } from '@xyflow/react';
 import type { DataType, NodeTypeManifest } from '@dramaflow/contracts';
-import { HumanReviewSettings } from '../node-catalog/human-review-settings';
+import { conditionToFields, ifConditionOperators } from '../conditions/if-condition';
 import { NodeTypeIcon } from '../node-catalog/node-type-icon';
-import { ModelSelector } from '../model-selection/model-selector';
+import { useWorkflowNodeRuntime } from '../runtime/runtime-status';
+import { runtimeNodeBorderClass, RuntimeStatusBadge } from '../runtime/runtime-status-badge';
 import type { WorkflowNode } from './react-flow-adapter';
-import { CandidateInputSummary } from '../inputs/candidate-input-summary';
-import { TemplateInputEditor } from '../inputs/template-input-editor';
-import { availableStringOutputs } from '../inputs/template-input';
-import { WorkflowInputContext } from '../inputs/workflow-input-context';
-import { IfConditionEditor } from '../conditions/if-condition-editor';
 import { controlHandleId } from './workflow-handles';
 import styles from './workflow-node.module.css';
 
 const ManifestContext = createContext<readonly NodeTypeManifest[]>([]);
+
+export interface WorkflowNodeSelectionActions {
+  selectedNodeId: string | null;
+  onSelectNode: (nodeId: string) => void;
+}
+
+export const WorkflowNodeSelectionContext = createContext<WorkflowNodeSelectionActions | null>(
+  null,
+);
 
 export function WorkflowManifestProvider({
   manifests,
@@ -48,6 +53,7 @@ const dataTypeNames: Record<string, string> = {
   'media.file': '文件',
   'media.document': '文档',
 };
+
 function dataTypeName(type: DataType): string {
   if (type.kind === 'any') return dataTypeNames.any!;
   if (type.kind === 'array') return `(${dataTypeName(type.itemType)})[]`;
@@ -56,11 +62,33 @@ function dataTypeName(type: DataType): string {
   return dataTypeNames[type.name] ?? type.name;
 }
 
-function configSummary(value: unknown) {
+function configSummary(value: unknown, isModelSelector = false) {
+  if (isModelSelector) {
+    return typeof value === 'string' && value.length > 0 ? '已配置' : '未配置';
+  }
   if (value === undefined) return '未配置';
   if (typeof value === 'boolean') return value ? '开启' : '关闭';
   if (typeof value === 'string' || typeof value === 'number') return String(value);
   return '已配置';
+}
+
+function ifConditionSummary(condition: unknown): string {
+  const fields = conditionToFields(condition);
+  if (condition !== undefined && !fields) {
+    return '当前编辑器暂不支持该条件表达式';
+  }
+  if (!fields) {
+    return '尚未配置条件';
+  }
+  const operatorLabel = ifConditionOperators.find((item) => item.value === fields.operator)?.label;
+  return `value ${operatorLabel} ${JSON.stringify(fields.expected)}`;
+}
+
+export function summarizeReviewContent(content: string, maxLength = 28): string {
+  const normalized = content.replace(/\s+/g, ' ').trim();
+  if (!normalized) return '“暂无待审内容”';
+  if (normalized.length <= maxLength) return `“${normalized}”`;
+  return `“${normalized.slice(0, maxLength)}……”`;
 }
 
 export function GenericWorkflowNode({
@@ -70,31 +98,32 @@ export function GenericWorkflowNode({
   isConnectable,
 }: NodeProps<WorkflowNode>) {
   const manifests = useContext(ManifestContext);
-  const inputActions = useContext(WorkflowInputContext);
+  const selection = useContext(WorkflowNodeSelectionContext);
+  const runtime = useWorkflowNodeRuntime(id);
   const manifest = findNodeManifest(manifests, data.nodeType, data.typeVersion);
   const isIf =
     data.nodeType === 'flow.if' && data.typeVersion === 1 && manifest?.executionKind === 'control';
-
   const isHumanReview =
     data.nodeType === 'flow.human_review' &&
     data.typeVersion === 1 &&
     manifest?.executionKind === 'interaction';
-
-  const inputPorts =
-    manifest?.inputs.filter(
-      (port) =>
-        data.inputs[port.key]?.type === 'candidate' ||
-        (isHumanReview && port.key === 'content') ||
-        (isIf
-          ? port.key === 'value'
-          : data.nodeType === 'ai.text_generate' &&
-            (port.key === 'prompt' || port.key === 'system')),
-    ) ?? [];
+  const isSelected = selected || selection?.selectedNodeId === id;
+  const borderClass = runtimeNodeBorderClass(runtime.status, {
+    isHumanReview: isHumanReview || runtime.isWaitingHumanReview,
+  });
+  const instructionSummary =
+    isHumanReview && typeof data.config.instruction === 'string' && data.config.instruction.trim()
+      ? data.config.instruction.trim()
+      : null;
+  const waitingReview = isHumanReview && runtime.isWaitingHumanReview ? runtime.review : null;
 
   return (
     <article
-      className={`${styles.node}${selected ? ` ${styles.selected}` : ''}`}
+      className={`${styles.node} ${borderClass}${isSelected ? ` ${styles.selected}` : ''}`}
+      data-node-id={id}
+      data-runtime-status={runtime.status}
       aria-label={`${data.name}${manifest ? '' : '：节点类型不可用'}`}
+      onClick={() => selection?.onSelectNode(id)}
     >
       <header className={styles.header}>
         {manifest ? (
@@ -131,6 +160,12 @@ export function GenericWorkflowNode({
           </span>
         </div>
       </header>
+      <div className={styles.statusRow}>
+        <RuntimeStatusBadge
+          status={runtime.status}
+          isHumanReview={isHumanReview || runtime.isWaitingHumanReview}
+        />
+      </div>
       {manifest ? (
         <>
           <div className={styles.ports}>
@@ -185,69 +220,41 @@ export function GenericWorkflowNode({
               ))}
             </div>
           </div>
-          {isHumanReview ? (
-            <HumanReviewSettings
-              nodeId={id}
-              name={data.name}
-              instruction={data.config.instruction}
-            />
-          ) : null}
-          {inputActions && inputPorts.length > 0 ? (
-            <div className={styles.inputs}>
-              {inputPorts.map((port) => {
-                const binding = data.inputs[port.key];
-                return binding?.type === 'candidate' ? (
-                  <CandidateInputSummary
-                    key={port.key}
-                    portName={port.name}
-                    binding={binding}
-                    definition={inputActions.definition}
-                    manifests={inputActions.manifests}
-                  />
-                ) : (
-                  <TemplateInputEditor
-                    key={port.key}
-                    portName={port.name}
-                    rows={port.key === 'system' ? 2 : 4}
-                    binding={data.inputs[port.key]}
-                    connected={inputActions.definition.edges.some(
-                      (edge) =>
-                        edge.kind === 'data' &&
-                        edge.target.nodeId === id &&
-                        edge.target.portKey === port.key,
-                    )}
-                    outputs={availableStringOutputs(
-                      inputActions.definition,
-                      id,
-                      inputActions.manifests,
-                    )}
-                    definition={inputActions.definition}
-                    manifests={inputActions.manifests}
-                    disabled={inputActions.disabled}
-                    onChange={(binding) => inputActions.onReplaceInput(id, port.key, binding)}
-                  />
-                );
-              })}
+          {waitingReview ? (
+            <div
+              className={styles.reviewCallout}
+              data-testid="human-review-waiting-callout"
+              aria-label="待审核摘要"
+            >
+              <span className={styles.reviewHeading}>等待你的审核</span>
+              <p className={styles.reviewExcerpt} title={waitingReview.item.content}>
+                {summarizeReviewContent(waitingReview.item.content)}
+              </p>
+              <span className={styles.reviewCta}>查看并审核 →</span>
+            </div>
+          ) : instructionSummary ? (
+            <div className={styles.summaryRow}>
+              <p className={styles.summaryText} title={instructionSummary}>
+                {instructionSummary}
+              </p>
             </div>
           ) : null}
-          {isIf ? <IfConditionEditor nodeId={id} condition={data.config.condition} /> : null}
+          {isIf ? (
+            <div className={styles.summaryRow}>
+              <p className={styles.summaryText} title={ifConditionSummary(data.config.condition)}>
+                {ifConditionSummary(data.config.condition)}
+              </p>
+            </div>
+          ) : null}
           {!isIf && !isHumanReview && manifest.config.length ? (
             <dl className={styles.config}>
               {manifest.config.slice(0, 3).map((field) => (
-                <div
-                  key={field.key}
-                  className={field.ui?.component === 'model-selector' ? styles.selector : undefined}
-                >
+                <div key={field.key}>
                   <dt>{field.name}</dt>
                   <dd>
-                    {field.ui?.component === 'model-selector' ? (
-                      <ModelSelector
-                        nodeId={id}
-                        capabilityTypes={(manifest.capabilities ?? []).map((item) => item.type)}
-                        value={data.config[field.key]}
-                      />
-                    ) : (
-                      configSummary(data.config[field.key])
+                    {configSummary(
+                      data.config[field.key],
+                      field.ui?.component === 'model-selector',
                     )}
                   </dd>
                 </div>

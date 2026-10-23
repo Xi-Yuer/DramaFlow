@@ -63,10 +63,11 @@ function setup() {
   const pending = vi
     .spyOn(workflowApi, 'getPendingHumanReviews')
     .mockResolvedValue({ items: [pendingReview] });
+  const nodeRuns = vi.spyOn(workflowApi, 'getNodeRuns').mockResolvedValue({ items: [] });
   const resume = vi.spyOn(workflowApi, 'resumeRun').mockResolvedValue(waitingRun);
   const start = vi.spyOn(workflowApi, 'startRun');
   const view = render(<Harness />);
-  return { get, pending, resume, start, view };
+  return { get, pending, nodeRuns, resume, start, view };
 }
 function button(name: '通过' | '拒绝') {
   return screen.getByRole('button', {

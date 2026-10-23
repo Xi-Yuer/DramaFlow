@@ -159,8 +159,11 @@ describe('Human Review 复用通用节点编辑', () => {
       );
     }
     expect(draft.definition.edges.filter((edge) => edge.kind === 'data')).toHaveLength(4);
+    fireEvent.click(screen.getByRole('article', { name: '人工审批' }));
     expect(
-      within(screen.getByRole('article', { name: '人工审批' })).getByText('该输入由连线提供'),
+      within(screen.getByRole('complementary', { name: '节点检查器' })).getByText(
+        '该输入由连线提供',
+      ),
     ).toBeTruthy();
     const saved = structuredClone(draft.definition);
     vi.spyOn(workflowApi, 'saveDraft').mockResolvedValue({ revision: 2 });
@@ -182,6 +185,7 @@ describe('Human Review 复用通用节点编辑', () => {
       nodes: [createWorkflowNode(humanReviewManifest, 'review', '人工审批', { x: 0, y: 0 })],
     };
     setup(definition, true);
+    fireEvent.click(screen.getByRole('article', { name: '人工审批' }));
     for (const name of ['节点名称', '审核说明', '待审核内容文本'])
       expect((screen.getByRole('textbox', { name }) as HTMLInputElement).disabled).toBe(true);
   });

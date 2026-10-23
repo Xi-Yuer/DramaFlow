@@ -439,6 +439,10 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
           interactionLocked={modelSettingsOpen || publication.publishing}
           defaultViewport={project.viewport}
           onMoveEnd={onMoveEnd}
+          runStatus={workflowRun.runStatus}
+          nodeRuns={workflowRun.runStatus.nodeRuns}
+          reviewActions={workflowRun.reviewActions}
+          onRefreshRunStatus={() => void workflowRun.refreshRunStatus()}
         />
       </WorkflowExecutionWorkspace>
     </main>

@@ -48,6 +48,12 @@ export class WorkflowRunsController {
     return this.runtime.pendingHumanReviews(actor.user.id, runId);
   }
 
+  @Get(':runId/node-runs')
+  @Header('Cache-Control', 'no-store')
+  nodeRuns(@Actor() actor: AuthActor, @Param('runId') runId: string) {
+    return this.runtime.listNodeRuns(actor.user.id, runId);
+  }
+
   @Post(':runId/resume')
   @HttpCode(202)
   @Header('Cache-Control', 'no-store')

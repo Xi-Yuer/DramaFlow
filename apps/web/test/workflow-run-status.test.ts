@@ -200,4 +200,31 @@ describe('GET WorkflowRun HTTP', () => {
       expect.objectContaining({ credentials: 'same-origin' }),
     );
   });
+
+  it('按 Run ID 查询 NodeRun 列表并校验响应 Contract', async () => {
+    const nodeRunItems = [
+      {
+        id: 'nr-1',
+        workflowRunId: 'run-1',
+        nodeId: 'node-a',
+        attempt: 1,
+        status: 'completed' as const,
+        inputs: {
+          prompt: { storage: 'inline' as const, type: StringType, value: '节点输入' },
+        },
+        outputs: {
+          text: { storage: 'inline' as const, type: StringType, value: '节点输出' },
+        },
+        startedAt: '2026-10-22T01:00:02.000Z',
+        completedAt: '2026-10-22T01:00:04.000Z',
+      },
+    ];
+    const fetch = vi.fn().mockResolvedValue(Response.json({ items: nodeRunItems }));
+    vi.stubGlobal('fetch', fetch);
+    expect(await workflowApi.getNodeRuns('run-1')).toEqual({ items: nodeRunItems });
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(
+      '/api/v1/workflow-runs/run-1/node-runs',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    );
+  });
 });

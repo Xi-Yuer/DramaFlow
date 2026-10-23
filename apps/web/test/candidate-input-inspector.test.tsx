@@ -9,6 +9,7 @@ import {
   toReactFlowNode,
   type WorkflowNode,
 } from '../src/features/workflow/canvas/react-flow-adapter';
+import { WorkflowNodeInspector } from '../src/features/workflow/inspector/workflow-node-inspector';
 import { WorkflowInputContext } from '../src/features/workflow/inputs/workflow-input-context';
 import { TemplateInputEditor } from '../src/features/workflow/inputs/template-input-editor';
 import { candidateWorkflow } from './fixtures/candidate-input';
@@ -26,7 +27,8 @@ function fixture(type = 'ai.text_generate') {
       port.key === 'text' ? { ...port, name: '生成文本' } : port,
     ),
   };
-  const target = toReactFlowNode(definition.nodes[3]);
+  const targetNode = definition.nodes[3]!;
+  const target = toReactFlowNode(targetNode);
   const props: NodeProps<WorkflowNode> = {
     id: target.id,
     type: 'workflowNode',
@@ -41,34 +43,46 @@ function fixture(type = 'ai.text_generate') {
     positionAbsoluteX: 0,
     positionAbsoluteY: 0,
   };
-  return { definition, catalog, props };
+  return { definition, catalog, props, targetNode };
 }
 
 describe('候选输入 Inspector', () => {
   it.each(['ai.text_generate', 'text.test'])(
     '在 %s 的目标输入显示来源与分支取值说明，不显示空文本或 JSON',
     (type) => {
-      const { definition, catalog, props } = fixture(type);
-      const html = renderToStaticMarkup(
+      const { definition, catalog, props, targetNode } = fixture(type);
+      const canvasHtml = renderToStaticMarkup(
         <ReactFlowProvider>
-          <WorkflowInputContext.Provider
-            value={{ definition, manifests: [catalog], disabled: false, onReplaceInput: () => {} }}
-          >
-            <WorkflowManifestProvider manifests={[catalog]}>
-              <GenericWorkflowNode {...props} />
-            </WorkflowManifestProvider>
-          </WorkflowInputContext.Provider>
+          <WorkflowManifestProvider manifests={[catalog]}>
+            <GenericWorkflowNode {...props} />
+          </WorkflowManifestProvider>
         </ReactFlowProvider>,
       );
-      expect(html).toContain('提示词候选输入');
-      expect(html).toContain('分支 B · 生成文本');
-      expect(html).toContain('分支 C · 生成文本');
-      expect(html).toContain('使用实际执行分支产生的那个值');
-      expect(html).toContain('data-handleid="prompt"');
-      expect(html).not.toContain('textarea');
-      expect(html).not.toContain('插入变量');
-      expect(html).not.toContain('node_output');
-      expect(html).not.toContain('"sources"');
+      expect(canvasHtml).toContain('data-handleid="prompt"');
+      expect(canvasHtml).not.toContain('textarea');
+      expect(canvasHtml).not.toContain('插入变量');
+
+      const inspectorHtml = renderToStaticMarkup(
+        <WorkflowInputContext.Provider
+          value={{ definition, manifests: [catalog], disabled: false, onReplaceInput: () => {} }}
+        >
+          <WorkflowNodeInspector
+            node={targetNode}
+            manifest={catalog}
+            mode="design"
+            onModeChange={() => {}}
+            onClose={() => {}}
+          />
+        </WorkflowInputContext.Provider>,
+      );
+      expect(inspectorHtml).toContain('提示词候选输入');
+      expect(inspectorHtml).toContain('分支 B · 生成文本');
+      expect(inspectorHtml).toContain('分支 C · 生成文本');
+      expect(inspectorHtml).toContain('使用实际执行分支产生的那个值');
+      expect(inspectorHtml).not.toContain('textarea');
+      expect(inspectorHtml).not.toContain('插入变量');
+      expect(inspectorHtml).not.toContain('node_output');
+      expect(inspectorHtml).not.toContain('"sources"');
     },
   );
   it('文本输入组件也识别已有候选，单候选提示补齐，名称安全显示', () => {

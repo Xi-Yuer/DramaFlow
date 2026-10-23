@@ -1,4 +1,5 @@
 import {
+  nodeRunSchema,
   publishWorkflowRequestSchema,
   pendingHumanReviewsResponseSchema,
   resumeWorkflowRunRequestSchema,
@@ -14,8 +15,11 @@ import {
   type SaveWorkflowDraftRequest,
   type StartWorkflowRunRequest,
 } from '@dramaflow/contracts';
+import { z } from 'zod';
 import type { WorkflowPublicationStatus } from './publish/workflow-publish';
 import { ApiError, jsonBody, request } from '../../lib/http';
+
+const workflowNodeRunsResponseSchema = z.object({ items: z.array(nodeRunSchema) }).strict();
 
 export const workflowKeys = {
   version: (versionId: string) => ['workflow-version', versionId] as const,
@@ -39,6 +43,12 @@ export const workflowApi = {
     request(
       `/workflow-runs/${encodeURIComponent(runId)}/pending-human-reviews`,
       pendingHumanReviewsResponseSchema,
+      { signal },
+    ),
+  getNodeRuns: (runId: string, signal?: AbortSignal) =>
+    request(
+      `/workflow-runs/${encodeURIComponent(runId)}/node-runs`,
+      workflowNodeRunsResponseSchema,
       { signal },
     ),
   resumeRun: (runId: string, input: ResumeWorkflowRunRequest) =>

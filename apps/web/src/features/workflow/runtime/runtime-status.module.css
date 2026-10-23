@@ -1,0 +1,106 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 500;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.badge_idle {
+  color: #8f9199;
+  background: #ffffff06;
+  border-color: #ffffff0d;
+}
+
+.badge_idle .dot {
+  background: #6c6e76;
+}
+
+.badge_pending {
+  color: #b7b9c2;
+  background: #ffffff09;
+  border-color: #ffffff14;
+}
+
+.badge_pending .dot {
+  background: #9ca0ab;
+}
+
+.badge_running {
+  color: #67ded5;
+  background: #67ded514;
+  border-color: #67ded536;
+}
+
+.badge_running .dot {
+  background: #67ded5;
+}
+
+.badge_waiting {
+  color: #e2ba6c;
+  background: #e2ba6c18;
+  border-color: #e2ba6c45;
+}
+
+.badge_waiting .dot {
+  background: #e2ba6c;
+}
+
+.badge_completed {
+  color: #68cc9a;
+  background: #68cc9a14;
+  border-color: #68cc9a38;
+}
+
+.badge_completed .dot {
+  background: #68cc9a;
+}
+
+.badge_failed {
+  color: #ee777c;
+  background: #ee777c16;
+  border-color: #ee777c42;
+}
+
+.badge_failed .dot {
+  background: #ee777c;
+}
+
+.node_idle {
+  border-color: #ffffff17;
+}
+
+.node_pending {
+  border-color: #ffffff24;
+}
+
+.node_running {
+  border-color: #67ded570;
+}
+
+.node_waiting {
+  border-color: #e2ba6c85;
+  box-shadow:
+    0 0 0 1px #e2ba6c28,
+    0 12px 36px #00000026;
+}
+
+.node_completed {
+  border-color: #68cc9a55;
+}
+
+.node_failed {
+  border-color: #ee777c75;
+}

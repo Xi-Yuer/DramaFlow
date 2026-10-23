@@ -10,11 +10,14 @@ import {
 } from '@dramaflow/contracts';
 import {
   availableStringOutputs,
+  bindingToTemplateEditorDocument,
   displayTemplateSegments,
   draftBinding,
   insertVariable,
   removeVariable,
   replaceNodeInput,
+  templateEditorDocumentToBinding,
+  templateEditorDocumentToDraft,
   templateFromSegments,
   templateSegments,
   variableNameForPort,
@@ -163,6 +166,51 @@ describe('文本编辑与 TemplateBinding', () => {
       binding: { type: 'constant', value: '请根据 {{outline}}' },
     });
     expect(draftBinding('请根据 {{text}} {{', variables)).toEqual({ status: 'invalid' });
+  });
+
+  it('TemplateBinding 与 Tiptap Editor Document 双向无损转换，且自动清理未引用变量', () => {
+    const binding = {
+      type: 'template' as const,
+      value: '请根据 {{content}} 生成最终内容。\n审核结果：{{action}}\n审核意见：{{feedback}}',
+      variables: {
+        content: { type: 'node_output' as const, nodeId: 'review-1', portKey: 'content' },
+        action: { type: 'node_output' as const, nodeId: 'review-1', portKey: 'action' },
+        feedback: { type: 'node_output' as const, nodeId: 'review-1', portKey: 'feedback' },
+      },
+    };
+    const doc = bindingToTemplateEditorDocument(binding);
+    expect(doc.type).toBe('doc');
+    expect(doc.content).toHaveLength(3);
+    expect(doc.content[0]?.content).toEqual([
+      { type: 'text', text: '请根据 ' },
+      {
+        type: 'variableToken',
+        attrs: { alias: 'content', nodeId: 'review-1', portKey: 'content' },
+      },
+      { type: 'text', text: ' 生成最终内容。' },
+    ]);
+
+    // 原样还原为相同的 TemplateBinding，不泄漏任何 Tiptap JSON 字段
+    const restored = templateEditorDocumentToBinding(doc);
+    expect(restored).toEqual(binding);
+
+    // 删除第三行中的 feedback token 后，自动清理未引用的 feedback 变量
+    const withoutFeedback = {
+      type: 'doc' as const,
+      content: [doc.content[0]!, doc.content[1]!, { type: 'paragraph' as const }],
+    };
+    const partial = templateEditorDocumentToDraft(withoutFeedback, binding.variables);
+    expect(partial.draft).toEqual({
+      status: 'ready',
+      binding: {
+        type: 'template',
+        value: '请根据 {{content}} 生成最终内容。\n审核结果：{{action}}\n',
+        variables: {
+          content: binding.variables.content,
+          action: binding.variables.action,
+        },
+      },
+    });
   });
 
   it('已绑定 alias 切成变量段，未绑定标记和展示名都不进入保存文本', () => {

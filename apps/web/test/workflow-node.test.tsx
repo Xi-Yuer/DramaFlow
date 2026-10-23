@@ -7,6 +7,7 @@ import {
   GenericWorkflowNode,
   WorkflowManifestProvider,
 } from '../src/features/workflow/canvas/workflow-node';
+import { WorkflowNodeInspector } from '../src/features/workflow/inspector/workflow-node-inspector';
 import { WorkflowInputContext } from '../src/features/workflow/inputs/workflow-input-context';
 import {
   toReactFlowNode,
@@ -148,7 +149,7 @@ describe('通用 WorkflowNode', () => {
     expect(html).not.toContain('不应显示的字段');
   });
 
-  it('只在文本节点提供变量编辑，其他节点不出现插入按钮', () => {
+  it('画布节点保持轻量，变量编辑迁移至右侧 Inspector', () => {
     const html = render([manifest], props());
     expect(html).not.toContain('插入变量');
     const text = nodeTypeManifestSchema.parse({
@@ -167,51 +168,45 @@ describe('通用 WorkflowNode', () => {
       outputs: [{ key: 'text', name: '生成文本', dataType: { kind: 'primitive', name: 'string' } }],
       config: [],
     });
-    const node = toReactFlowNode({
+    const scriptNode = {
       id: 'script',
       type: 'ai.text_generate',
       typeVersion: 1,
       name: '剧本',
       inputs: {
         prompt: {
-          type: 'template',
+          type: 'template' as const,
           value: '请根据 {{text}} 生成剧本',
-          variables: { text: { type: 'node_output', nodeId: 'outline', portKey: 'text' } },
+          variables: { text: { type: 'node_output' as const, nodeId: 'outline', portKey: 'text' } },
         },
       },
       config: {},
       ui: { position: { x: 0, y: 0 } },
-    });
-    const markup = renderToStaticMarkup(
+    };
+    const node = toReactFlowNode(scriptNode);
+    const definition = {
+      inputs: [],
+      nodes: [
+        {
+          id: 'outline',
+          type: 'ai.text_generate',
+          typeVersion: 1,
+          name: '故事大纲',
+          inputs: {},
+          config: {},
+          ui: { position: { x: 0, y: 0 } },
+        },
+        scriptNode,
+      ],
+      edges: [],
+      outputs: [],
+    };
+    const nodeMarkup = renderToStaticMarkup(
       <ReactFlowProvider>
         <WorkflowInputContext.Provider
           value={{
             disabled: false,
-            definition: {
-              inputs: [],
-              nodes: [
-                {
-                  id: 'outline',
-                  type: 'ai.text_generate',
-                  typeVersion: 1,
-                  name: '故事大纲',
-                  inputs: {},
-                  config: {},
-                  ui: { position: { x: 0, y: 0 } },
-                },
-                {
-                  id: 'script',
-                  type: 'ai.text_generate',
-                  typeVersion: 1,
-                  name: '剧本',
-                  inputs: node.data.inputs,
-                  config: {},
-                  ui: { position: { x: 0, y: 0 } },
-                },
-              ],
-              edges: [],
-              outputs: [],
-            },
+            definition,
             manifests: [text],
             onReplaceInput: () => undefined,
           }}
@@ -222,13 +217,37 @@ describe('通用 WorkflowNode', () => {
         </WorkflowInputContext.Provider>
       </ReactFlowProvider>,
     );
-    expect(markup).toContain('请根据');
-    expect(markup).toContain('生成剧本');
-    expect(markup).toContain('故事大纲 · 生成文本');
-    expect(markup).toContain('data-alias="text"');
-    expect(markup).not.toContain('{{text}}');
-    expect(markup).toContain('aria-label="向提示词插入变量"');
-    expect(markup).toContain('aria-label="向系统提示词插入变量"');
+    expect(nodeMarkup).toContain('data-handleid="prompt"');
+    expect(nodeMarkup).toContain('data-handleid="system"');
+    expect(nodeMarkup).toContain('data-handleid="text"');
+    expect(nodeMarkup).not.toContain('textarea');
+    expect(nodeMarkup).not.toContain('插入变量');
+
+    const inspectorMarkup = renderToStaticMarkup(
+      <WorkflowInputContext.Provider
+        value={{
+          disabled: false,
+          definition,
+          manifests: [text],
+          onReplaceInput: () => undefined,
+        }}
+      >
+        <WorkflowNodeInspector
+          node={scriptNode}
+          manifest={text}
+          mode="design"
+          onModeChange={() => undefined}
+          onClose={() => undefined}
+        />
+      </WorkflowInputContext.Provider>,
+    );
+    expect(inspectorMarkup).toContain('请根据');
+    expect(inspectorMarkup).toContain('生成剧本');
+    expect(inspectorMarkup).toContain('故事大纲 · 生成文本');
+    expect(inspectorMarkup).toContain('data-alias="text"');
+    expect(inspectorMarkup).not.toContain('{{text}}');
+    expect(inspectorMarkup).toContain('aria-label="向提示词插入变量"');
+    expect(inspectorMarkup).toContain('aria-label="向系统提示词插入变量"');
   });
 
   it('类型缺失时安全显示名称，不把名称当 HTML 或注入脚本', () => {

@@ -10,6 +10,23 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: #151517;
+  --color-card-foreground: #efeff2;
+  --color-popover: #1b1b1f;
+  --color-popover-foreground: #efeff2;
+  --color-primary: #67ded5;
+  --color-primary-foreground: #0c2926;
+  --color-secondary: #252529;
+  --color-secondary-foreground: #efeff2;
+  --color-muted: #1f1f24;
+  --color-muted-foreground: #a2a2ad;
+  --color-accent: #263533;
+  --color-accent-foreground: #efeff2;
+  --color-destructive: #ee777c;
+  --color-destructive-foreground: #290e10;
+  --color-border: #36363d;
+  --color-input: #36363d;
+  --color-ring: #67ded5;
   --font-sans: var(--font-body);
 }
 * {
@@ -668,6 +685,14 @@ a {
 .canvas-stage {
   position: relative;
   flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+}
+.canvas-flow {
+  position: relative;
+  flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 .canvas-stage .react-flow {

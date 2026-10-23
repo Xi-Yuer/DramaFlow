@@ -3,13 +3,25 @@
   gap: 8px;
 }
 
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .label {
   color: #a2a2ad;
   font-size: 12px;
+  font-weight: 500;
 }
 
-.locked,
-.empty {
+.hint {
+  color: #7b7d86;
+  font-size: 11px;
+}
+
+.locked {
   margin: 0;
   color: #929498;
   font-size: 12px;
@@ -17,140 +29,106 @@
 }
 
 .composer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 2px;
   box-sizing: border-box;
   width: 100%;
   padding: 8px 10px;
   border: 1px solid #ffffff14;
   border-radius: 10px;
   background: #101012;
+  transition: border-color 150ms ease;
 }
 
 .composer:focus-within {
-  border-color: #79c9c4;
+  border-color: #67ded5;
+  box-shadow: 0 0 0 2px #67ded515;
 }
 
-.run {
-  display: inline-grid;
-  max-width: 100%;
-  min-width: 0.6em;
+.composerDisabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-.mirror,
-.run textarea {
-  grid-area: 1 / 1;
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  font: inherit;
+.prosemirror {
+  min-height: inherit;
+  outline: none;
+  color: #efeff2;
+  caret-color: #efeff2;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.65;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-.mirror {
-  visibility: hidden;
-  min-width: 0.6em;
+.prosemirror :global(p) {
+  margin: 0;
+  min-height: 1.65em;
 }
 
-.run textarea {
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  resize: none;
-  overflow: hidden;
-  color: #efeff2;
-  caret-color: #efeff2;
-  background: transparent;
-}
-
-.run textarea::placeholder {
-  color: #8d9096;
-}
-
-.run textarea::selection {
-  background: #79c9c455;
-}
-
-.run textarea:disabled {
-  cursor: not-allowed;
+.prosemirror :global(p.is-editor-empty:first-child::before) {
+  content: attr(data-placeholder);
+  float: left;
+  color: #777982;
+  pointer-events: none;
+  height: 0;
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
+  vertical-align: baseline;
   max-width: 100%;
   gap: 4px;
-  padding: 1px 2px 1px 8px;
-  border: 1px solid #79c9c433;
-  border-radius: 999px;
-  background: #79c9c41f;
+  margin: 0 2px;
+  padding: 1px 4px 1px 8px;
+  border: 1px solid #67ded538;
+  border-radius: 6px;
+  background: #67ded518;
   color: #d7f4f1;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.5;
+  user-select: none;
 }
 
-.chip span {
+.chip[data-selected='true'] {
+  border-color: #67ded5;
+  background: #67ded52b;
+  box-shadow: 0 0 0 1px #67ded540;
+}
+
+.chipLabel {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chip button {
-  display: grid;
+.chipRemove {
+  display: inline-grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: 4px;
   background: transparent;
   color: #a2a2ad;
   cursor: pointer;
+  line-height: 1;
 }
 
-.chip button:hover {
-  background: #ffffff10;
+.chipRemove:hover:not(:disabled) {
+  background: #ffffff14;
   color: #efeff2;
 }
 
-.menu {
-  width: min(280px, 70vw);
-  max-height: 320px;
-  overflow: auto;
-  padding: 4px;
-}
-
-.group h3 {
-  margin: 8px 8px 4px;
-  color: #a2a2ad;
-  font-size: 12px;
-  font-weight: 550;
-}
-
-.option {
-  display: block;
-  width: 100%;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #efeff2;
-  cursor: pointer;
-  text-align: left;
-}
-
-.option:hover {
-  background: #ffffff0d;
-}
-
-.option:disabled {
-  color: #8d9096;
+.chipRemove:disabled {
   cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
