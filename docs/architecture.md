@@ -28,7 +28,7 @@ Project 使用 `GET / POST /projects`、`GET / PUT /projects/:id`；Workflow 使
 
 ## Workflow 发布与版本 HTTP API
 
-发布入口 `POST /workflows/:workflowId/publish`；版本摘要 `GET /workflows/:workflowId/versions`；固定版本 `GET /workflow-versions/:versionId`。发布锁定来源修订并原子分配版本号，失败不写版本；不解密凭证或调用模型。当前拒绝 Asset 绑定、命名控制端口和非 Action 结构。
+发布入口 `POST /workflows/:workflowId/publish`；版本摘要 `GET /workflows/:workflowId/versions`；固定版本 `GET /workflow-versions/:versionId`。发布锁定来源修订并原子分配版本号，失败不写版本；不解密凭证或调用模型。当前拒绝 Asset 绑定与非 Action 的生产发布。Registry 已注册 flow.if@1 control 声明；静态语义验证 condition 安全子集与 true / false 控制出口；独立 evaluator 已封装解释执行，但 Compiler 尚未支持，生产发布仍统一拒绝含 If 的图。声明与阶段性门禁见 [Node](node-model.md#if-声明与阶段性发布门禁)。
 
 ## 生产 Runtime 装配
 

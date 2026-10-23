@@ -53,6 +53,15 @@ export const outputPortDefinitionSchema = z
   })
   .strict();
 
+// 控制出口只命名路由，不承载 DataType / RuntimeValue。
+export const controlOutputDefinitionSchema = z
+  .object({
+    key: workflowPortNameSchema,
+    name: displayNameSchema,
+    description: descriptionSchema.optional(),
+  })
+  .strict();
+
 export const capabilityRequirementSchema = z.object({ type: nodeTypeIdSchema }).strict();
 
 // 控件只保留公开提示；数值范围、选项与默认值统一由配置字段声明。
@@ -80,6 +89,15 @@ const configFieldBase = {
 };
 
 export const configFieldDefinitionSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      ...configFieldBase,
+      type: z.literal('condition'),
+      required: z.boolean().optional(),
+      // 保留通用读取默认值的字段形状，但不开放默认表达式。
+      defaultValue: z.never().optional(),
+    })
+    .strict(),
   z
     .object({
       ...configFieldBase,
@@ -167,15 +185,16 @@ export const nodeTypeManifestSchema = z
     metadata: nodeMetadataSchema,
     inputs: z.array(inputPortDefinitionSchema),
     outputs: z.array(outputPortDefinitionSchema),
+    controlOutputs: z.array(controlOutputDefinitionSchema).optional(),
     config: z.array(configFieldDefinitionSchema),
     capabilities: z.array(capabilityRequirementSchema).optional(),
     ui: nodeUISchema.optional(),
   })
   .strict()
   .superRefine((manifest, context) => {
-    for (const group of ['inputs', 'outputs', 'config'] as const) {
+    for (const group of ['inputs', 'outputs', 'config', 'controlOutputs'] as const) {
       const keys = new Set<string>();
-      manifest[group].forEach((item, index) => {
+      manifest[group]?.forEach((item, index) => {
         if (keys.has(item.key)) {
           context.addIssue({
             code: 'custom',
@@ -227,6 +246,7 @@ export type NodeCategory = z.infer<typeof nodeCategorySchema>;
 export type NodeMetadata = z.infer<typeof nodeMetadataSchema>;
 export type InputPortDefinition = z.infer<typeof inputPortDefinitionSchema>;
 export type OutputPortDefinition = z.infer<typeof outputPortDefinitionSchema>;
+export type ControlOutputDefinition = z.infer<typeof controlOutputDefinitionSchema>;
 export type CapabilityRequirement = z.infer<typeof capabilityRequirementSchema>;
 export type FieldUI = z.infer<typeof fieldUISchema>;
 export type ConfigFieldDefinition = z.infer<typeof configFieldDefinitionSchema>;

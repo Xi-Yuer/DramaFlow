@@ -16,9 +16,9 @@ Manifest 固定 type / version 与 executionKind（action / control / composite 
 
 数据端口使用正式 DataType，Handle.id 等于端口 key，同方向唯一。required 表示可省略，null 用 union 表达；集合用 array.itemType，没有 multiple。输出 storagePolicy 为 inline / reference / auto，缺省 auto，不改变端口类型。
 
-普通控制 Handle 为 `control:source` / `control:target`，与数据 key 隔离，默认 Handle 不写入领域 portKey。命名控制端口仅有结构与转换支持，当前没有对应 Manifest / 路由交互。
+普通控制 Handle 为 `control:source` / `control:target`，与数据 key 隔离，默认 Handle 不写入领域 portKey。Manifest 可选 `controlOutputs: [{ key, name, description? }]` 声明控制出口，不携带 DataType，不属于数据 outputs；同组 key 唯一。ControlEdge.source.portKey 只能引用该精确 Manifest 的已声明出口，target 命名控制输入仍不支持。当前 Web 尚无 If 控制出口编辑与路由交互。
 
-config 用 string / number / boolean / select 字段数组；默认值按类型、范围与选项校验。配置编辑提示在 config[].ui，输入提示在 ui.inputs，必须引用现有输入。Zod transform / 默认值不回写定义或 State。
+config 用 string / number / boolean / select 字段数组；condition 字段只声明条件配置，不开放通用对象表单或默认表达式。默认值按类型、范围与选项校验。配置编辑提示在 config[].ui，输入提示在 ui.inputs，必须引用现有输入。Zod transform / 默认值不回写定义或 State。
 
 ## 服务端执行与编译
 
@@ -48,6 +48,20 @@ State 只保留当前有效值，Artifact 保存内容，Checkpoint 负责恢复
 
 execute 通过 CapabilityInvoker 调用 text.generate。节点只保存 modelConfigurationId，不保存插件、厂商或 SDK。正式执行由 `text_generation@1` 完成；新增文本厂商不因此新增 NodeType、Compiler 或 Executor。保存草稿允许未完成选择，但拒绝额外配置字段；发布要求完整严格 Schema 及同 Owner 可用模型绑定，执行时重新授权并解密，见[架构](architecture.md#文本-ai-与-provider-plugin)。
 
+## If 声明与阶段性发布门禁
+
+`flow.if@1` 为 control 声明，不提供 Action execute；必填 string 输入 value，配置仅为 condition，控制出口 true / false，数据 outputs 为空，不声明 matched。旧 operator / expected 临时配置不再接受。condition 使用共享 ConditionExpression 协议，例如 `{"===":[{"var":"value"},"approved"]}`。
+
+第一版只接受四种形式：`{"===":[变量,字符串]}`、`{"!==":[变量,字符串]}`、`{"in":[字符串,变量]}`、`{"!":{"in":[字符串,变量]}}`；变量固定 `{"var":"value"}`，不允许路径、默认值、未知字段、自由嵌套 !、AND / OR、数值或 boolean 条件。比较区分大小写、不 trim、不转换类型；空字符串合法。contains / not_contains 沿用 JSON Logic 的 in 语义：被查字符串为空时 in 返回 false，取反返回 true。
+
+协议解析前检查纯 JSON 结构，拒绝循环、accessor、隐藏或 symbol 属性、稀疏数组、自定义原型及非 JSON 值；最大深度 8，最大节点数 32（对象、数组和标量均计数）。这些是条件表达式的静态防护，不是 Workflow 容量或执行预算。
+
+Workflow 的 `runtime/condition-evaluator.ts` 封装精确版本 json-logic-engine@5.0.7，只调用同步 run，关闭解释优化与 inline 优化，不暴露引擎实例、build 或注册入口。调用方提供 condition 与独立 `{ value }`；evaluator 重校验表达式，并要求 value 是自身可枚举数据属性且为 string，不接受缺失、继承值、getter 或额外上下文。引擎只获得新建 `{ value }`，返回值必须为 boolean；异常使用安全摘要，不附原始异常、条件或值。第三方不接触 WorkflowState、凭证或任何服务。
+
+`validateWorkflowDefinitionSemantics` 复用相同 condition Schema 和现有 Binding / DataType 规则，只静态校验、不求值；要求 true、false 各有分支，拒绝未知或无名称出口，仅识别精确 flow.if@1。生产 `validateWorkflowForPublish` 随后仍以 NODE_EXECUTION_KIND_UNSUPPORTED 拒绝所有含 If 的图，不创建可执行版本。
+
+此阶段性门禁保护互斥汇合、跨分支依赖及引用可能不执行节点的 Workflow output；未新增永久拓扑、optional output 或 merge 协议，也未修改 OutputResolver。后续编译任务须明确路由、数据就绪、执行预算和最终输出安全性，再复用 evaluator 接入原生 conditional edges；不能直接套用静态 ALL 或只删除门禁。本阶段不实现 If CompilationStrategy、routing 或 Web 条件编辑器。
+
 ## 视频领域能力与厂商边界
 
-领域类型可以专业化。用户选择 Provider，对应的受信任插件执行能力。图片、视频、语音可以使用各自插件，文本插件和 Vercel AI SDK 只负责当前的 `text.generate`。这些媒体能力、Asset、控制 / 交互结构与通用节点配置 UI 尚未交付，范围见[实施方案](implementation-plan.md)。
+领域类型可以专业化。用户选择 Provider，对应的受信任插件执行能力。图片、视频、语音可以使用各自插件，文本插件和 Vercel AI SDK 只负责当前的 `text.generate`。这些媒体能力、Asset、控制 / 交互执行与通用节点配置 UI 尚未交付，范围见[实施方案](implementation-plan.md)。

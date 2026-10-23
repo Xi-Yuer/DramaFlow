@@ -401,6 +401,9 @@ importers:
       '@langchain/langgraph':
         specifier: ^1.5.0
         version: 1.5.0(@langchain/core@1.2.18(openai@7.34.0(@aws-sdk/credential-provider-node@3.972.86)(@smithy/signature-v4@5.7.4)(zod@4.6.7)))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(zod@4.6.7)
+      json-logic-engine:
+        specifier: 5.0.7
+        version: 5.0.7
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -4263,6 +4266,10 @@ packages:
 
   json-buffer@3.0.1:
     resolution: {integrity: sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ==}
+
+  json-logic-engine@5.0.7:
+    resolution: {integrity: sha512-Q7L18Ds60urcXPfw2yNJgE21zJOqvoBvVLLHnvzH3NR1GfFeoDu+YxCdLsHBNYiWzO5UAsv3T77VaUVeslmbrA==}
+    engines: {node: '>=12.22.7'}
 
   json-schema-traverse@0.4.1:
     resolution: {integrity: sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==}
@@ -9783,6 +9790,8 @@ snapshots:
   jsesc@3.1.0: {}
 
   json-buffer@3.0.1: {}
+
+  json-logic-engine@5.0.7: {}
 
   json-schema-traverse@0.4.1: {}
 

@@ -6,7 +6,7 @@ import {
 } from '@dramaflow/contracts';
 import { StateGraph } from '@langchain/langgraph';
 import { NodeRegistry } from '../node/registry.js';
-import type { NodeType } from '../node/type.js';
+import type { NodeDeclaration, NodeType } from '../node/type.js';
 import { DefaultDataStoragePolicyResolver } from '../runtime/values/data-storage-policy-resolver.js';
 import { WorkflowStateAnnotation } from '../runtime/state.js';
 
@@ -23,6 +23,8 @@ export type WorkflowPublishIssueCode =
   | 'INPUT_TYPE_MISMATCH'
   | 'WORKFLOW_OUTPUT_TYPE_MISMATCH'
   | 'NAMED_CONTROL_PORT_UNSUPPORTED'
+  | 'CONTROL_OUTPUT_PORT_REQUIRED'
+  | 'CONTROL_OUTPUT_BRANCH_MISSING'
   | 'ASSET_BINDING_UNSUPPORTED'
   | 'OUTPUT_STORAGE_UNSUPPORTED';
 
@@ -32,15 +34,30 @@ export class WorkflowPublishValidationError extends Error {
     readonly nodeId: string,
     readonly portKey?: string,
   ) {
-    super('工作流不满足当前 Action DAG 的静态发布条件');
+    super(
+      code === 'NODE_EXECUTION_KIND_UNSUPPORTED'
+        ? '当前 Compiler 尚不支持该节点执行种类，不能发布执行'
+        : '工作流不满足静态发布条件',
+    );
     this.name = 'WorkflowPublishValidationError';
   }
 }
 
-export interface ValidatedPublishNode {
+export interface ValidatedDefinitionNode {
   readonly node: NodeDefinition;
-  readonly nodeType: NodeType;
+  readonly nodeType: NodeDeclaration;
   readonly config: unknown;
+}
+
+export interface ValidatedPublishNode extends ValidatedDefinitionNode {
+  readonly nodeType: NodeType;
+}
+
+function isSupportedIf(nodeType: NodeDeclaration): boolean {
+  const { manifest } = nodeType;
+  return (
+    manifest.type === 'flow.if' && manifest.version === 1 && manifest.executionKind === 'control'
+  );
 }
 
 function invalid(code: WorkflowPublishIssueCode, nodeId: string, portKey?: string): never {
@@ -53,23 +70,27 @@ function staticOnlyNode(): never {
 }
 
 // 调用方先用正式 Definition Schema 校验引用、来源冲突和联合 DAG。
-// 这里只补充依赖真实 Registry / Schema 的语义；资源归属由应用层在发布事务内检查。
-export function validateWorkflowForPublish(
+// 这里只检查 Registry / Schema 静态语义，不代表允许生产发布；生产调用下方门禁入口。
+// 资源归属仍由应用层在发布事务内检查。
+export function validateWorkflowDefinitionSemantics(
   definition: WorkflowDefinition,
   registry: NodeRegistry,
-): ValidatedPublishNode[] {
+): ValidatedDefinitionNode[] {
   const names = new StateGraph(WorkflowStateAnnotation);
   const storage = new DefaultDataStoragePolicyResolver();
-  const entries = definition.nodes.map((node): ValidatedPublishNode => {
+  const entries = definition.nodes.map((node): ValidatedDefinitionNode => {
     let declaration;
     try {
       declaration = registry.get(node.type, node.typeVersion);
     } catch {
       return invalid('NODE_TYPE_UNAVAILABLE', node.id);
     }
-    if (declaration.manifest.executionKind !== 'action' || !declaration.execute)
+    if (
+      !isSupportedIf(declaration) &&
+      (declaration.manifest.executionKind !== 'action' || !declaration.execute)
+    )
       return invalid('NODE_EXECUTION_KIND_UNSUPPORTED', node.id);
-    const nodeType = registry.getAction(node.type, node.typeVersion);
+    const nodeType = declaration;
     try {
       names.addNode(node.id, staticOnlyNode);
     } catch {
@@ -93,8 +114,18 @@ export function validateWorkflowForPublish(
 
   for (const edge of definition.edges) {
     if (edge.kind === 'control') {
-      if (edge.source.portKey !== undefined || edge.target.portKey !== undefined)
-        invalid('NAMED_CONTROL_PORT_UNSUPPORTED', edge.target.nodeId);
+      const source = nodes.get(edge.source.nodeId)!;
+      // 当前仅声明控制出口；目标命名控制输入没有对应协议，不放行。
+      if (edge.target.portKey !== undefined)
+        invalid('NAMED_CONTROL_PORT_UNSUPPORTED', edge.target.nodeId, edge.target.portKey);
+      if (edge.source.portKey !== undefined) {
+        if (
+          !source.nodeType.manifest.controlOutputs?.some((port) => port.key === edge.source.portKey)
+        )
+          invalid('NAMED_CONTROL_PORT_UNSUPPORTED', source.node.id, edge.source.portKey);
+      } else if (isSupportedIf(source.nodeType)) {
+        invalid('CONTROL_OUTPUT_PORT_REQUIRED', source.node.id);
+      }
       continue;
     }
     const source = nodes.get(edge.source.nodeId)!;
@@ -107,6 +138,21 @@ export function validateWorkflowForPublish(
     if (!input) invalid('INPUT_PORT_NOT_FOUND', target.node.id, edge.target.portKey);
     if (!isTypeAssignable(output.dataType, input.dataType))
       invalid('INPUT_TYPE_MISMATCH', target.node.id, input.key);
+  }
+
+  for (const { node, nodeType } of entries) {
+    if (!isSupportedIf(nodeType)) continue;
+    for (const branch of ['true', 'false']) {
+      if (
+        !definition.edges.some(
+          (edge) =>
+            edge.kind === 'control' &&
+            edge.source.nodeId === node.id &&
+            edge.source.portKey === branch,
+        )
+      )
+        invalid('CONTROL_OUTPUT_BRANCH_MISSING', node.id, branch);
+    }
   }
 
   for (const { node, nodeType } of entries) {
@@ -182,4 +228,18 @@ export function validateWorkflowForPublish(
       invalid('WORKFLOW_OUTPUT_TYPE_MISMATCH', source.node.id, output.source.outputKey);
   }
   return entries;
+}
+
+// 生产发布必须经过此入口。静态语义合法不等于当前 Compiler 已支持执行。
+// 阶段性门禁涵盖全部 If 拓扑和分支最终输出，不向 Contract 注入永久限制。
+export function validateWorkflowForPublish(
+  definition: WorkflowDefinition,
+  registry: NodeRegistry,
+): ValidatedPublishNode[] {
+  const entries = validateWorkflowDefinitionSemantics(definition, registry);
+  return entries.map((entry) => {
+    if (entry.nodeType.manifest.executionKind !== 'action')
+      invalid('NODE_EXECUTION_KIND_UNSUPPORTED', entry.node.id);
+    return { ...entry, nodeType: registry.getAction(entry.node.type, entry.node.typeVersion) };
+  });
 }

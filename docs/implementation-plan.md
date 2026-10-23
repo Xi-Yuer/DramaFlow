@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-当前授权的 Workflow Output 编辑已完成自动验证：End Boundary 投影、输出配置及数据一致性；仅改 Web，不扩展后端协议。拖线、保存重载与键盘删除的浏览器交互待人工验收。下一步需明确授权；不自动开始 Start Boundary、Artifact 内容读取、Run History 或其他功能。
+If 条件协议调整与安全 evaluator 边界已完成自动验证：condition 替换 operator / expected，仅支持 string 单条件，生产发布仍保留 Compiler 未支持门禁。后续 If conditional routing 与 Web 编辑必须分别授权，不自动开始 Task 2。
 
 ## 待决策与后续边界
 

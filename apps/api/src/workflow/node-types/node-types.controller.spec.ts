@@ -68,6 +68,13 @@ describe('节点类型目录 API', () => {
       .expect('Cache-Control', 'no-store');
     expect(response.body).toMatchObject([
       { type: 'ai.text_generate', version: 1, executionKind: 'action' },
+      {
+        type: 'flow.if',
+        version: 1,
+        executionKind: 'control',
+        outputs: [],
+        controlOutputs: [{ key: 'true' }, { key: 'false' }],
+      },
     ]);
     expect(JSON.stringify(response.body)).not.toMatch(
       /apiKey|encryptedCredentials|configSchema|inputSchema|outputSchema/,
