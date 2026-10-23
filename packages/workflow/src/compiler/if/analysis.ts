@@ -1,22 +1,46 @@
 import type { WorkflowDefinition } from '@dramaflow/contracts';
 import { collectNodeDependencies, type NodeDependency } from '../dependency.compiler.js';
 
+import {
+  analyzeBranchRegions,
+  type BranchRegionAnalysis,
+  type SimpleIfRoute,
+} from './branch-regions.js';
+export type { SimpleIfRoute } from './branch-regions.js';
+
+export type IfCapabilityIssueCode =
+  | 'IF_TOPOLOGY_UNSUPPORTED'
+  | 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED'
+  | 'IF_CONVERGENCE_UNSUPPORTED'
+  | 'IF_NESTED_UNSUPPORTED'
+  | 'IF_REGION_INTERSECTION_UNSUPPORTED'
+  | 'IF_BRANCH_DEPENDENCY_UNSUPPORTED';
+const messages = new Map<string, string>([
+  ['IF_TOPOLOGY_UNSUPPORTED', '当前 Compiler 要求 If 的 true / false 各有一个 Action 入口'],
+  [
+    'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',
+    '当前 Compiler 要求候选分别覆盖同一 If 的 true / false region；单来源须必定执行',
+  ],
+  ['IF_CONVERGENCE_UNSUPPORTED', '当前版本暂不支持条件分支汇合'],
+  ['IF_NESTED_UNSUPPORTED', '当前版本暂不支持嵌套 If'],
+  ['IF_REGION_INTERSECTION_UNSUPPORTED', '当前版本暂不支持不同 If 的分支区域交叉'],
+  ['IF_BRANCH_DEPENDENCY_UNSUPPORTED', '分支输入必须来自本分支或所属 If 之前保证完成的祖先'],
+]);
+export function ifCapabilityMessage(code: string): string | undefined {
+  return messages.get(code);
+}
 export class SimpleIfCapabilityError extends Error {
   constructor(
-    readonly code: 'IF_TOPOLOGY_UNSUPPORTED' | 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',
+    readonly code: IfCapabilityIssueCode,
     readonly nodeId: string,
   ) {
-    super('当前 Compiler 只支持分支互不重叠、指向终端 Action 且输入已就绪的简单 If');
+    super(ifCapabilityMessage(code));
     this.name = 'SimpleIfCapabilityError';
   }
 }
-export interface SimpleIfRoute {
-  nodeId: string;
-  true: string;
-  false: string;
-}
 export interface SimpleIfExecutionAnalysis {
   routes: SimpleIfRoute[];
+  branchRegions: BranchRegionAnalysis;
   staticDependencies: NodeDependency[];
   roots: string[];
   leaves: string[];
@@ -33,7 +57,6 @@ export function analyzeSimpleIfExecution(
   const reject = (nodeId: string): never => {
     throw new SimpleIfCapabilityError('IF_TOPOLOGY_UNSUPPORTED', nodeId);
   };
-  const branchOwners = new Map<string, string>();
   const routes: SimpleIfRoute[] = [];
   for (const nodeId of ifNodeIds) {
     const outgoing = definition.edges.filter((edge) => edge.source.nodeId === nodeId);
@@ -51,44 +74,55 @@ export function analyzeSimpleIfExecution(
     );
     if (outgoing.length !== 2 || yes.length !== 1 || no.length !== 1) reject(nodeId);
     const route = { nodeId, true: yes[0]!.target.nodeId, false: no[0]!.target.nodeId };
-    for (const target of [route.true, route.false]) {
-      if (ifNodeIds.has(target) || branchOwners.has(target)) reject(target);
-      branchOwners.set(target, nodeId);
-    }
     routes.push(route);
-  }
-  const allDependencies = collectNodeDependencies(definition.edges, definition.nodes);
-  // 分支只允许终端 Action：任何后继、互斥汇合、跨支依赖或 nested 均保守拒绝。
-  for (const dependency of allDependencies) {
-    for (const source of dependency.sourceNodeIds) if (branchOwners.has(source)) reject(source);
   }
   const ordinaryEdges = definition.edges.filter((edge) => !ifNodeIds.has(edge.source.nodeId));
   const ordinaryDependencies = collectNodeDependencies(ordinaryEdges, definition.nodes);
+  const branchRegions = analyzeBranchRegions(
+    definition.nodes.map((node) => node.id),
+    routes,
+    ordinaryDependencies,
+  );
+  for (const id of ifNodeIds)
+    if (branchRegions.memberships.get(id)?.length)
+      throw new SimpleIfCapabilityError('IF_NESTED_UNSUPPORTED', id);
+  if (branchRegions.convergenceCandidates.length)
+    throw new SimpleIfCapabilityError(
+      'IF_CONVERGENCE_UNSUPPORTED',
+      branchRegions.convergenceCandidates[0]!.nodeId,
+    );
+  if (branchRegions.intersections.length)
+    throw new SimpleIfCapabilityError(
+      'IF_REGION_INTERSECTION_UNSUPPORTED',
+      branchRegions.intersections[0]!,
+    );
   const parents = new Map(
     ordinaryDependencies.map((dependency) => [dependency.targetNodeId, dependency.sourceNodeIds]),
   );
-  for (const [target, owner] of branchOwners) {
-    const ancestors = new Set<string>();
-    const pending = [...(parents.get(owner) ?? [])];
-    for (let index = 0; index < pending.length; index++) {
-      const source = pending[index]!;
-      if (ancestors.has(source)) continue;
-      ancestors.add(source);
-      pending.push(...(parents.get(source) ?? []));
+  for (const region of branchRegions.regions)
+    for (const id of region.nodeIds) {
+      const upstream = parents.get(id) ?? [];
+      if (
+        upstream.some(
+          (source) => !region.nodeIds.has(source) && !region.guaranteedBefore.has(source),
+        ) ||
+        (id !== region.entryNodeId && !upstream.some((source) => region.nodeIds.has(source)))
+      )
+        throw new SimpleIfCapabilityError('IF_BRANCH_DEPENDENCY_UNSUPPORTED', id);
     }
-    // 路由激活时，Binding 的每一个静态来源都必须已由 If 的 ALL 前置完成。
-    for (const source of parents.get(target) ?? []) if (!ancestors.has(source)) reject(target);
-  }
+  // Definition 已无环，region 内只包含 Action；每个 successor 保留本分支依赖，
+  // 全部其他依赖已由 If 前置保证。由 entry 沿 DAG 归纳，选中分支的所有成员必执行。
   for (const output of definition.outputs) {
     if (output.sources !== undefined) {
       const candidates = output.sources;
-      const owner = candidates[0] && branchOwners.get(candidates[0].nodeId);
-      const route = routes.find((route) => route.nodeId === owner);
+      const first = candidates[0] && branchRegions.memberships.get(candidates[0].nodeId)?.[0];
+      const second = candidates[1] && branchRegions.memberships.get(candidates[1].nodeId)?.[0];
       if (
         candidates.length === 2 &&
-        route &&
-        new Set(candidates.map((source) => source.nodeId)).size === 2 &&
-        candidates.every((source) => source.nodeId === route.true || source.nodeId === route.false)
+        first &&
+        second &&
+        first.ifNodeId === second.ifNodeId &&
+        first.branch !== second.branch
       )
         continue;
       throw new SimpleIfCapabilityError(
@@ -96,15 +130,16 @@ export function analyzeSimpleIfExecution(
         candidates[0]?.nodeId ?? 'workflow',
       );
     }
-    if (branchOwners.has(output.source.nodeId))
+    if (branchRegions.memberships.get(output.source.nodeId)?.length)
       throw new SimpleIfCapabilityError(
         'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',
         output.source.nodeId,
       );
   }
-  // 只移除分支节点的触发依赖；原始 edges / template 仍完整保留给 BindingResolver。
+  // 只移除 entry 的静态触发；successor 的 ALL 依赖和原始 Binding 均保留。
+  const entries = new Set(routes.flatMap((route) => [route.true, route.false]));
   const staticDependencies = ordinaryDependencies.filter(
-    (dependency) => !branchOwners.has(dependency.targetNodeId),
+    (dependency) => !entries.has(dependency.targetNodeId),
   );
   const executionParents = new Map(definition.nodes.map((node) => [node.id, new Set<string>()]));
   for (const dependency of staticDependencies) {
@@ -145,6 +180,7 @@ export function analyzeSimpleIfExecution(
   // 再加一次终止检测，与纯 Action 分析独立维护并用真实 LangGraph 边界测试证明。
   return {
     routes,
+    branchRegions,
     staticDependencies,
     roots,
     leaves: definition.nodes.filter((node) => !downstream.has(node.id)).map((node) => node.id),

@@ -20,7 +20,7 @@ Submission 在创建 Run / Outbox 前调用独立 WorkflowInvocationContractVali
 
 Workflow Output 保留 `{ name, type, source: { nodeId, outputKey } }`，新增互斥的 `{ name, type, sources: [{ nodeId, outputKey }, ...] }`。没有 required，不直接引用 workflow_input，不自动选择最后节点。候选不可重复、顺序无优先级；正式 Definition 至少两个候选。`workflowDraftDefinitionSchema` 允许 sources 为零或一个以保存可修复状态，但仍检查重复、名称和节点引用；正式 Definition / 不可变版本继续使用严格 Schema，不迁移或重写旧版本。
 
-Publish 逐来源按精确 Manifest 检查 port 和 `isTypeAssignable(port.dataType, output.type)`；多候选仅允许同一 flow.if@1 的 true / false 各一个终端 Action，复用 Compiler 的简单 If 能力分析证明互斥和覆盖。单 source 不得引用条件分支，不开放跨 If、遗漏分支或额外无条件候选。
+Publish 逐来源按精确 Manifest 检查 port 和 `isTypeAssignable(port.dataType, output.type)`；多候选仅允许同一 flow.if@1 的 true / false region 各一个保证执行的 Action（可处于不同深度，不要求 entry 或 terminal），复用 Compiler 的简单 If 能力分析证明互斥和覆盖。单 source 不得引用条件分支，不开放跨 If、遗漏分支或额外无条件候选。
 
 完成时按声明名称收集 RuntimeValue。单来源缺失或类型不符失败；多候选只检查最终 State 中自身来源属性，恰好一个存在才原样返回，零个或多个都失败，不比较值、不读取 route、不 decode reference。空字符串、0、false、null 均是存在的值；`outputs: []` 合法并得到 `{}`。保存 Draft 的新 output 声明不会改变已发布版本或既有 Run。持久化和查询行为见 [Runtime 最终输出](runtime-architecture.md#最终输出)。
 

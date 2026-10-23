@@ -9,7 +9,12 @@ import { StateGraph } from '@langchain/langgraph';
 import { NodeRegistry } from '../node/registry.js';
 import type { NodeDeclaration } from '../node/type.js';
 import { DefaultDataStoragePolicyResolver } from '../runtime/values/data-storage-policy-resolver.js';
-import { analyzeSimpleIfExecution, SimpleIfCapabilityError } from '../compiler/if/analysis.js';
+import {
+  analyzeSimpleIfExecution,
+  SimpleIfCapabilityError,
+  ifCapabilityMessage,
+  type IfCapabilityIssueCode,
+} from '../compiler/if/analysis.js';
 import { WorkflowStateAnnotation } from '../runtime/state.js';
 
 export type WorkflowPublishIssueCode =
@@ -29,8 +34,7 @@ export type WorkflowPublishIssueCode =
   | 'CONTROL_OUTPUT_BRANCH_MISSING'
   | 'ASSET_BINDING_UNSUPPORTED'
   | 'OUTPUT_STORAGE_UNSUPPORTED'
-  | 'IF_TOPOLOGY_UNSUPPORTED'
-  | 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED';
+  | IfCapabilityIssueCode;
 
 export class WorkflowPublishValidationError extends Error {
   constructor(
@@ -39,11 +43,10 @@ export class WorkflowPublishValidationError extends Error {
     readonly portKey?: string,
   ) {
     super(
-      code === 'IF_TOPOLOGY_UNSUPPORTED' || code === 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED'
-        ? '当前 Compiler 不支持该 If 拓扑或可能缺失的最终输出'
-        : code === 'NODE_EXECUTION_KIND_UNSUPPORTED'
+      ifCapabilityMessage(code) ??
+        (code === 'NODE_EXECUTION_KIND_UNSUPPORTED'
           ? '当前 Compiler 尚不支持该节点执行种类，不能发布执行'
-          : '工作流不满足静态发布条件',
+          : '工作流不满足静态发布条件'),
     );
     this.name = 'WorkflowPublishValidationError';
   }

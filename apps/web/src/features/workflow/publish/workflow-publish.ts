@@ -41,13 +41,10 @@ const errorSchema = z.object({
 });
 
 const publishIssueMessages = new Map([
-  [
-    'IF_TOPOLOGY_UNSUPPORTED',
-    '当前仅支持 true / false 分别连接不同的末端操作节点；暂不支持分支后续连接、汇合或嵌套条件。分支输入须来自条件节点已完成的上游。',
-  ],
+  ['IF_TOPOLOGY_UNSUPPORTED', 'true / false 每个出口须恰好连接一个不同的操作节点作为分支入口。'],
   [
     'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',
-    '条件分支最终输出须使用同一 If 的 true / false 两个末端节点作为候选来源；单来源输出须来自必定执行的节点。',
+    '条件分支最终输出须使用同一 If 的 true / false 两个分支中保证执行的节点作为候选来源；单来源输出须来自必定执行的节点。',
   ],
   ['NODE_EXECUTION_KIND_UNSUPPORTED', '当前暂不支持运行此类节点，请调整工作流后再发布。'],
   ['CONTROL_OUTPUT_PORT_REQUIRED', '请从条件节点的 true / false 出口连接分支。'],

@@ -9,7 +9,7 @@ import {
 } from '@dramaflow/workflow';
 import { WorkflowService } from './workflow.service.js';
 
-it.each([false, true, 'candidates'] as const)(
+it.each([false, true, 'candidates', 'successors', 'convergence'] as const)(
   '生产 Publish 仅放行安全 If：条件分支最终输出=%s',
   async (conditionalOutput) => {
     const draft: WorkflowDefinition = {
@@ -51,7 +51,7 @@ it.each([false, true, 'candidates'] as const)(
         },
       ],
       outputs:
-        conditionalOutput === 'candidates'
+        conditionalOutput === 'candidates' || conditionalOutput === 'successors'
           ? [
               {
                 name: 'result',
@@ -72,6 +72,34 @@ it.each([false, true, 'candidates'] as const)(
               ]
             : [],
     };
+    if (
+      conditionalOutput === 'successors' ||
+      conditionalOutput === 'convergence'
+    ) {
+      draft.nodes.push(
+        { ...structuredClone(draft.nodes[1]!), id: 'D' },
+        { ...structuredClone(draft.nodes[2]!), id: 'E' },
+      );
+      draft.edges.push(
+        {
+          id: 'BD',
+          kind: 'control',
+          source: { nodeId: 'B' },
+          target: { nodeId: 'D' },
+        },
+        {
+          id: 'Cnext',
+          kind: 'control',
+          source: { nodeId: 'C' },
+          target: { nodeId: conditionalOutput === 'convergence' ? 'D' : 'E' },
+        },
+      );
+      if (conditionalOutput === 'successors')
+        draft.outputs[0]!.sources = [
+          { nodeId: 'D', outputKey: 'text' },
+          { nodeId: 'E', outputKey: 'text' },
+        ];
+    }
     const createVersion = vi.fn(
       async ({
         data,
@@ -120,7 +148,7 @@ it.each([false, true, 'candidates'] as const)(
       new NodeRegistry([createTextGenerationNodeType(), createIfNodeType()]),
       models,
     );
-    if (conditionalOutput === true) {
+    if (conditionalOutput === true || conditionalOutput === 'convergence') {
       await expect(
         service.publish('owner', {
           workflowId: 'workflow',
@@ -129,9 +157,19 @@ it.each([false, true, 'candidates'] as const)(
       ).rejects.toMatchObject({
         response: {
           code: 'WORKFLOW_PUBLISH_VALIDATION_FAILED',
-          message: expect.stringContaining('Compiler'),
+          message: expect.stringContaining(
+            conditionalOutput === 'convergence'
+              ? '暂不支持条件分支汇合'
+              : 'Compiler',
+          ),
           issues: [
-            { code: 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED', nodeId: 'B' },
+            {
+              code:
+                conditionalOutput === 'convergence'
+                  ? 'IF_CONVERGENCE_UNSUPPORTED'
+                  : 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',
+              nodeId: conditionalOutput === 'convergence' ? 'D' : 'B',
+            },
           ],
         },
       });
@@ -152,7 +190,9 @@ it.each([false, true, 'candidates'] as const)(
       });
       expect(createVersion).toHaveBeenCalledOnce();
       // 包含未选分支的模型绑定也沿用当前 Owner 的发布授权，不绕过既有权限。
-      expect(assertModel).toHaveBeenCalledTimes(2);
+      expect(assertModel).toHaveBeenCalledTimes(
+        conditionalOutput === 'successors' ? 4 : 2,
+      );
       for (const call of assertModel.mock.calls) expect(call[1]).toBe('owner');
     }
   },

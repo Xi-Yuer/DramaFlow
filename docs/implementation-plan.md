@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-终端 If 多候选最终输出进入交付验收，能力见[当前架构](architecture.md)。浏览器候选拖线 / 删除 / 节点删除、Save / reload / Publish / Run 待人工验收，本轮不运行浏览器 E2E 或真实 Provider。后续条件类型或拓扑扩展须单独授权。
+If Branch successor 进入交付验收，能力见[当前架构](architecture.md)。浏览器分支串行 / 并行与分支内 ALL join、不同深度输出候选、非法汇合提示、Save / reload / Publish / Run 待人工验收，本轮不运行浏览器 E2E 或真实 Provider。后续条件类型或拓扑扩展须单独授权。
 
 ## 待决策与后续边界
 

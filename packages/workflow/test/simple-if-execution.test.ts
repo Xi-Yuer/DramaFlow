@@ -109,6 +109,274 @@ async function snapshot(f: ReturnType<typeof fixture>) {
   return f.graphs[0]!.getState({ configurable: { thread_id: 'thread-7' } });
 }
 
+function successorDefinition(): WorkflowDefinition {
+  const d = definition();
+  const next = action('D');
+  next.inputs = {};
+  const other = action('E');
+  other.inputs = {
+    text: {
+      type: 'template',
+      value: '{{c}}',
+      variables: { c: { type: 'node_output', nodeId: 'C', portKey: 'text' } },
+    },
+  };
+  d.nodes.push(next, other, action('F'), action('G'));
+  d.edges.push(
+    {
+      id: 'bd',
+      kind: 'data',
+      source: { nodeId: 'B', portKey: 'text' },
+      target: { nodeId: 'D', portKey: 'text' },
+    },
+    { id: 'ad', kind: 'control', source: { nodeId: 'A' }, target: { nodeId: 'D' } },
+    { id: 'df', kind: 'control', source: { nodeId: 'D' }, target: { nodeId: 'F' } },
+    { id: 'eg', kind: 'control', source: { nodeId: 'E' }, target: { nodeId: 'G' } },
+  );
+  d.outputs = [
+    {
+      name: 'result',
+      type: StringType,
+      sources: [
+        { nodeId: 'D', outputKey: 'text' },
+        { nodeId: 'E', outputKey: 'text' },
+      ],
+    },
+  ];
+  return d;
+}
+
+describe('真实 LangGraph Branch successor', () => {
+  it.each([25, 50, 100])(
+    '%i 层 branch successor 沿实际 execution graph 获得足够预算',
+    async (depth) => {
+      const d = definition();
+      let parent = 'B';
+      for (let index = 0; index < depth; index++) {
+        const id = `next${index}`;
+        d.nodes.push(action(id));
+        d.edges.push({
+          id: `edge${index}`,
+          kind: 'control',
+          source: { nodeId: parent },
+          target: { nodeId: id },
+        });
+        parent = id;
+      }
+      d.outputs = [
+        {
+          name: 'result',
+          type: StringType,
+          sources: [
+            { nodeId: parent, outputKey: 'text' },
+            { nodeId: 'C', outputKey: 'text' },
+          ],
+        },
+      ];
+      const f = fixture(d);
+      validateWorkflowForPublish(f.version.definition, f.registry);
+      expect(analyzeSimpleIfExecution(d, new Set(['If']))).toMatchObject({
+        maxDepth: depth + 3,
+        recursionLimit: depth + 4,
+      });
+      expect(await f.start({ ...f.input, inputs: {} })).toMatchObject({ status: 'completed' });
+      expect(f.executeNode).toHaveBeenCalledTimes(depth + 2);
+    },
+  );
+  it.each([
+    'control',
+    'data',
+    'template',
+    'nested',
+    'intersection',
+    'outside',
+    'single-output',
+  ] as const)('非法 %s 在 Publish 和 Compiler 执行前以同一 code 拒绝', async (kind) => {
+    const d = successorDefinition();
+    let code = 'IF_CONVERGENCE_UNSUPPORTED';
+    let nodeId = 'F';
+    if (kind === 'nested') {
+      code = 'IF_NESTED_UNSUPPORTED';
+      nodeId = 'D';
+      d.nodes[d.nodes.findIndex((node) => node.id === 'D')] = {
+        ...structuredClone(d.nodes[1]!),
+        id: 'D',
+      };
+      d.edges.find((edge) => edge.id === 'bd')!.target.portKey = 'value';
+      d.edges = d.edges.filter((edge) => edge.id !== 'df');
+      d.nodes.push(action('H'));
+      d.edges.push(
+        {
+          id: 'nestedtrue',
+          kind: 'control',
+          source: { nodeId: 'D', portKey: 'true' },
+          target: { nodeId: 'F' },
+        },
+        {
+          id: 'nestedfalse',
+          kind: 'control',
+          source: { nodeId: 'D', portKey: 'false' },
+          target: { nodeId: 'H' },
+        },
+      );
+      d.outputs = [
+        { name: 'result', type: StringType, source: { nodeId: 'A', outputKey: 'text' } },
+      ];
+    } else if (kind === 'intersection') {
+      code = 'IF_REGION_INTERSECTION_UNSUPPORTED';
+      nodeId = 'Z';
+      d.nodes.push(
+        {
+          ...structuredClone(d.nodes[1]!),
+          id: 'If2',
+          inputs: { value: { type: 'constant', value: 'approved' } },
+        },
+        action('X'),
+        action('Y'),
+        action('Z'),
+      );
+      for (const [port, target] of [
+        ['true', 'X'],
+        ['false', 'Y'],
+      ])
+        d.edges.push({
+          id: `if2${port}`,
+          kind: 'control',
+          source: { nodeId: 'If2', portKey: port },
+          target: { nodeId: target! },
+        });
+      for (const source of ['B', 'X'])
+        d.edges.push({
+          id: `${source}Z`,
+          kind: 'control',
+          source: { nodeId: source },
+          target: { nodeId: 'Z' },
+        });
+    } else if (kind === 'outside') {
+      code = 'IF_BRANCH_DEPENDENCY_UNSUPPORTED';
+      nodeId = 'D';
+      d.nodes.push(action('X'));
+      d.edges.push({ id: 'xd', kind: 'control', source: { nodeId: 'X' }, target: { nodeId: 'D' } });
+    } else if (kind === 'single-output') {
+      code = 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED';
+      nodeId = 'F';
+      d.outputs = [
+        { name: 'result', type: StringType, source: { nodeId: 'F', outputKey: 'text' } },
+      ];
+    } else if (kind === 'template') {
+      d.nodes.find((node) => node.id === 'F')!.inputs.text = {
+        type: 'template',
+        value: '{{c}}',
+        variables: { c: { type: 'node_output', nodeId: 'C', portKey: 'text' } },
+      };
+    } else {
+      if (kind === 'data') d.nodes.find((node) => node.id === 'F')!.inputs = {};
+      d.edges.push(
+        kind === 'data'
+          ? {
+              id: 'cf',
+              kind: 'data',
+              source: { nodeId: 'C', portKey: 'text' },
+              target: { nodeId: 'F', portKey: 'text' },
+            }
+          : { id: 'cf', kind: 'control', source: { nodeId: 'C' }, target: { nodeId: 'F' } },
+      );
+    }
+    const f = fixture(d);
+    expect(() => validateWorkflowForPublish(f.version.definition, f.registry)).toThrow(
+      expect.objectContaining({ code, nodeId }),
+    );
+    await expect(f.start({ ...f.input, inputs: {} })).rejects.toMatchObject({ code, nodeId });
+    expect(f.executorFactory).not.toHaveBeenCalled();
+    expect(f.nodeRuns.createRunning).not.toHaveBeenCalled();
+  });
+  it.each([true, false])(
+    '选中 %s region 才执行后继；Data/Template 传播且共同祖先不绕过 gate',
+    async (choice) => {
+      const d = successorDefinition();
+      d.nodes[0]!.inputs.text = { type: 'constant', value: choice ? 'approved' : 'denied' };
+      const f = fixture(d);
+      validateWorkflowForPublish(f.version.definition, f.registry);
+      const analysis = analyzeSimpleIfExecution(f.version.definition, new Set(['If']));
+      expect(analysis.roots).toEqual(['A']);
+      expect(analysis.leaves.sort()).toEqual(['F', 'G']);
+      expect(analysis.staticDependencies).toContainEqual({
+        targetNodeId: 'D',
+        sourceNodeIds: ['B', 'A'],
+      });
+      expect(analysis).toMatchObject({ maxDepth: 5, recursionLimit: 6 });
+      const result = await f.start({ ...f.input, inputs: {} });
+      expect(result).toMatchObject({
+        status: 'completed',
+        outputs: { result: { value: choice ? 'approved' : 'denied' } },
+      });
+      const executed = f.executeNode.mock.calls.map(([node]) => node.id);
+      expect(executed).toEqual(choice ? ['A', 'B', 'D', 'F'] : ['A', 'C', 'E', 'G']);
+      expect(f.nodeRuns.createRunning.mock.calls.map(([input]) => input.nodeId)).toEqual(executed);
+      expect((await snapshot(f)).next).toEqual([]);
+    },
+  );
+  it.each([true, false])('候选可以取不同深度 B/E：%s', async (choice) => {
+    const d = successorDefinition();
+    d.nodes[0]!.inputs.text = { type: 'constant', value: choice ? 'approved' : 'denied' };
+    d.outputs[0]!.sources![0]!.nodeId = 'B';
+    const f = fixture(d);
+    validateWorkflowForPublish(f.version.definition, f.registry);
+    expect(await f.start({ ...f.input, inputs: {} })).toMatchObject({
+      status: 'completed',
+      outputs: { result: { value: choice ? 'approved' : 'denied' } },
+    });
+  });
+  it.each([true, false])('分支内并行、不等长 ALL join 和多个 terminal：%s', async (choice) => {
+    const d = definition();
+    d.nodes[0]!.inputs.text = { type: 'constant', value: choice ? 'approved' : 'denied' };
+    for (const id of ['D', 'E', 'H', 'F', 'T']) {
+      const n = action(id);
+      n.inputs.text = { type: 'constant', value: id };
+      d.nodes.push(n);
+    }
+    for (const [source, target] of [
+      ['B', 'D'],
+      ['B', 'E'],
+      ['E', 'H'],
+      ['D', 'F'],
+      ['H', 'F'],
+      ['A', 'F'],
+      ['B', 'T'],
+    ])
+      d.edges.push({
+        id: `${source}${target}`,
+        kind: 'control',
+        source: { nodeId: source! },
+        target: { nodeId: target! },
+      });
+    d.outputs = [
+      {
+        name: 'result',
+        type: StringType,
+        sources: [
+          { nodeId: 'F', outputKey: 'text' },
+          { nodeId: 'C', outputKey: 'text' },
+        ],
+      },
+    ];
+    const f = fixture(d);
+    validateWorkflowForPublish(f.version.definition, f.registry);
+    expect(analyzeSimpleIfExecution(d, new Set(['If']))).toMatchObject({
+      maxDepth: 6,
+      recursionLimit: 7,
+    });
+    expect(await f.start({ ...f.input, inputs: {} })).toMatchObject({
+      status: 'completed',
+      outputs: { result: { value: choice ? 'F' : 'denied' } },
+    });
+    const executed = f.executeNode.mock.calls.map(([node]) => node.id);
+    expect(executed.filter((id) => id === 'F')).toHaveLength(choice ? 1 : 0);
+    expect(executed.sort()).toEqual(choice ? ['A', 'B', 'D', 'E', 'F', 'H', 'T'] : ['A', 'C']);
+    expect((await snapshot(f)).tasks).toEqual([]);
+  });
+});
+
 describe('真实 LangGraph 简单 If 路由', () => {
   it.each(['missing', 'ambiguous', 'type'])(
     '最终 State 候选异常 %s 在 resolve_output 标记 failed',
@@ -419,7 +687,6 @@ describe('真实 LangGraph 简单 If 路由', () => {
     'branch-output',
     'same-target',
     'multi-target',
-    'branch-chain',
     'unknown-port',
   ] as const)('%s 在 Publish 和 Compiler 执行节点前共同拒绝', async (kind) => {
     const d = definition();

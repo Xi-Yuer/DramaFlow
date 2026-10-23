@@ -32,13 +32,13 @@ Compiler 在创建 Executor / 图节点前确认全图均为受支持的 Action 
 
 当前仅开放精确 `flow.if@1`，由独立 IfNodeCompilationStrategy 编译；普通 Action strategy / NodeExecutor 不变。If 复用 BindingResolver 与本次 Run 已授权的 Codec，校验 RuntimeValue 和解码后的 string，再调用 evaluateCondition 一次。它不创建 Action NodeRun，也不返回公开 Data Output。条件结果写入内部 `execution.controlResults[nodeId]`，boolean map reducer 合并并行 If、拒绝重复写入；旧空 execution 仍有效，checkpoint / resume 保存该结果。
 
-Compiler 使用 LangGraph 原生 addConditionalEdges，callback 只读取该 If 已写入的 boolean，不再 Binding / decode / 求值。当前 true / false 各指向一个不同的终端 Action；支持多个分支互不重叠的独立 If，以及 If 前的普通 Action DAG / ALL join。分支的每个 Data / Control / Template 来源必须是所属 If 的严格祖先，保证路由发生时已经完成。
+Compiler 使用 LangGraph 原生 addConditionalEdges，callback 只读取该 If 已写入的 boolean，不再 Binding / decode / 求值。true / false 各路由到一个不同的 Action entry，后继允许串行、并行和同一分支内部的 ALL join。多个独立 If 的 region 不得交叉。Branch Region 是 compiler/if/branch-regions.ts 的内部分析结果，不进入 Definition、State 或数据库。以两个 entry 为 seed，沿 collectNodeDependencies 的统一普通依赖传播，记录所有 membership、terminal、ordinary 节点及汇合 / 交叉证据。分支输入仅能来自本 region 或所属 If 之前确定完成的祖先；祖先由依赖推导，不看位置。
 
-`compiler/if/analysis.ts` 复用 collectNodeDependencies，同时验证当前拓扑并产生编译投影。If 的命名 ControlEdge 不进入普通静态依赖；分支目标的其他依赖只用于就绪证明和 Binding，不编译成无条件触发边，避免 DataEdge / Template 绕过条件。其他普通依赖仍由 DependencyCompiler 编译为原生 ALL。START 排除所有条件目标；END 连接可执行叶子，不等待未选分支。
+`compiler/if/analysis.ts` 复用 collectNodeDependencies，同时验证当前拓扑并产生编译投影。If 的命名 ControlEdge 不进入普通静态依赖；只移除 entry 的静态触发依赖；successor 保留全部普通依赖，且至少有一个本 region 的上游作为 gate，避免共同祖先先完成就绕过 If。多个上游仍由 DependencyCompiler 编译为一次原生 ALL，包含已经完成的 pre-If 祖先；原始 edges / template 完整保留给 Binding。START 排除所有条件目标；每个 region 可有多个 terminal（无 region 内后继）；END 分别连接执行叶子，不对两支 terminal 建 ALL barrier，不等待未选分支。
 
-预算按实际编译后的静态依赖与两条潜在条件路径计算最长节点深度（包含 If），再加 1 次终止检测；If 路由 callback 不额外占 superstep。这是独立的简单 If 分析，不调用 Action 专用分析。真实边界为 A=1、If=2、leaf=3，recursionLimit=4；100 个上游并行节点仍为 4，100 层串行上游加 If 和 leaf 为 103。预算属于单次 invocation，不是 thread 累计额度。
+预算算法保持不变：按实际编译后的静态依赖与两条潜在条件路径计算最长节点深度（包含 If 和全部 successor），再加 1 次终止检测；If 路由 callback 不额外占 superstep。这是独立的简单 If 分析，不调用 Action 专用分析。真实边界为 A=1、If=2、leaf=3，recursionLimit=4；100 个上游并行节点仍为 4，100 层串行上游加 If 和 leaf 为 103。预算属于单次 invocation，不是 thread 累计额度。
 
-Publish 与 Compiler 共用同一个能力分析：拒绝分支后继链、merge / nested、跨支依赖、共享分支目标、一出口多目标、来源未被 If 前置保证就绪的分支输入，以及不满足同一 If 双分支覆盖的条件最终输出；不新增长期 Contract 限制或 optional output。不通过能力检查时，在创建执行服务 / 执行任何节点前失败。单 source 只允许必定执行的节点；sources 仅允许同一 If 的两个终端分支各一个候选，不改变调度、叶子或执行预算。Web 的四种 string 条件与命名控制出口只编辑 Definition，不扩展这些运行能力。
+Publish 与 Compiler 共用同一个能力分析：拒绝跨互斥分支汇合、nested If、不同 If region 交叉、一出口多 entry，以及来源既非本 region 又非 guaranteed-before 祖先的输入；不新增长期 Contract 限制或 optional output。不通过能力检查时，在创建执行服务 / 执行任何节点前失败。单 source 只允许必定执行的节点；sources 允许同一 If 的两个 region 各一个保证执行的候选，可取不同深度且不要求 terminal；无环 Action region 的可达性、本地 gate 与全部父依赖就绪证明共同保证选中后必执行。汇合 / nested / region 交叉 / 外部依赖分别返回 IF_CONVERGENCE_UNSUPPORTED、IF_NESTED_UNSUPPORTED、IF_REGION_INTERSECTION_UNSUPPORTED、IF_BRANCH_DEPENDENCY_UNSUPPORTED，保留安全 nodeId 定位；这些是当前 Compiler 能力限制，不是永久 Contract 规则。
 
 ## Submission 与 Runner
 

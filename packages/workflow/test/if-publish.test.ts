@@ -353,7 +353,7 @@ describe('flow.if@1 协议与发布阶段门禁', () => {
     expect(() => workflowDefinitionSchema.parse(graph)).not.toThrow();
     expect(check(graph)).toHaveLength(4);
     expect(() => validateWorkflowForPublish(graph, registry())).toThrow(
-      expect.objectContaining({ code: 'IF_TOPOLOGY_UNSUPPORTED' }),
+      expect.objectContaining({ code: 'IF_CONVERGENCE_UNSUPPORTED' }),
     );
   });
 });
