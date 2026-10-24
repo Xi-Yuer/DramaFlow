@@ -164,9 +164,20 @@ describe('正式 Nest 应用的提交 / 队列 / 执行装配', () => {
       expect(app.get(WorkflowVersionRepositories)).toBeInstanceOf(
         WorkflowVersionRepositories,
       );
-      expect(app.get(NodeRegistry).listManifests()).toMatchObject([
-        { type: 'ai.text_generate', version: 1, executionKind: 'action' },
-      ]);
+      expect(app.get(NodeRegistry).listManifests()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'ai.text_generate',
+            version: 1,
+            executionKind: 'action',
+          }),
+          expect.objectContaining({
+            type: 'data.format_text',
+            version: 1,
+            executionKind: 'action',
+          }),
+        ]),
+      );
     }
     expect(api.get(WorkflowRunSubmissionFactory)).toBeInstanceOf(
       WorkflowRunSubmissionFactory,

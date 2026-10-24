@@ -157,9 +157,20 @@ it('真实密码登录、Cookie 会话和安全 DTO，不暴露凭证', async ()
   );
   expect(nodeTypes.status).toBe(200);
   expect(nodeTypes.headers.get('Cache-Control')).toBe('no-store');
-  expect(await nodeTypes.json()).toMatchObject([
-    { type: 'ai.text_generate', version: 1, executionKind: 'action' },
-  ]);
+  expect(await nodeTypes.json()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: 'ai.text_generate',
+        version: 1,
+        executionKind: 'action',
+      }),
+      expect.objectContaining({
+        type: 'data.format_text',
+        version: 1,
+        executionKind: 'action',
+      }),
+    ]),
+  );
   const account = await db.account.findFirstOrThrow({ where: { userId } });
   expect(account.password).not.toBe(password);
   expect(account.password!.length).toBeGreaterThan(30);

@@ -11,6 +11,7 @@ export { isTypeAssignable } from '@dramaflow/contracts';
 export * from './data/registry.js';
 export * from './node/type.js';
 export * from './node/text-generation.js';
+export * from './node/format-text.js';
 export * from './node/if.js';
 export * from './node/human-review.js';
 export * from './runtime/values/value-codec.js';

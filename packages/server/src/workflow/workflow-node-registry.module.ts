@@ -1,6 +1,7 @@
 import {
   NodeRegistry,
   createTextGenerationNodeType,
+  createFormatTextNodeType,
   createIfNodeType,
   createIterationNodeType,
   createHumanReviewNodeType,
@@ -15,6 +16,7 @@ import { Module } from '@nestjs/common';
       useFactory: () =>
         new NodeRegistry([
           createTextGenerationNodeType(),
+          createFormatTextNodeType(),
           createIfNodeType(),
           createIterationNodeType(),
           createHumanReviewNodeType(),

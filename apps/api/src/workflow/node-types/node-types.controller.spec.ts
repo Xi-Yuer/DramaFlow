@@ -60,7 +60,7 @@ describe('节点类型目录 API', () => {
     expect(list).not.toHaveBeenCalled();
   });
 
-  it('受保护目录提供正式 AI / Control / Composite / Interaction 声明，禁止缓存', async () => {
+  it('受保护目录提供正式 AI / Data / Control / Composite / Interaction 声明，禁止缓存', async () => {
     const context = await setup();
     const response = await request(context.app.getHttpServer())
       .get('/api/v1/workflow/node-types')
@@ -68,6 +68,18 @@ describe('节点类型目录 API', () => {
       .expect('Cache-Control', 'no-store');
     expect(response.body).toMatchObject([
       { type: 'ai.text_generate', version: 1, executionKind: 'action' },
+      {
+        type: 'data.format_text',
+        version: 1,
+        executionKind: 'action',
+        metadata: { category: 'data' },
+        inputs: [
+          { key: 'text', required: true },
+          { key: 'index', required: true },
+        ],
+        outputs: [{ key: 'text' }],
+        config: [{ key: 'template', defaultValue: '{{text}}-{{index}}' }],
+      },
       {
         type: 'flow.if',
         version: 1,
@@ -106,6 +118,9 @@ describe('节点类型目录 API', () => {
     expect(() => context.registry.getAction('flow.human_review', 1)).toThrow(
       '不是普通',
     );
+    expect(
+      context.registry.getAction('data.format_text', 1).manifest.capabilities,
+    ).toBeUndefined();
     expect(context.requireSession).toHaveBeenCalledOnce();
   });
 
