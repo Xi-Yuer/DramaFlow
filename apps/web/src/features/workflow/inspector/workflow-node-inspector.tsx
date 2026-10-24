@@ -20,6 +20,7 @@ import {
   useWorkflowRuntime,
 } from '../runtime/runtime-status';
 import { RuntimeStatusBadge } from '../runtime/runtime-status-badge';
+import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
 import { HumanReviewInspector } from './human-review-inspector';
 import { IfInspector } from './if-inspector';
 import { NodeInputBindingField } from './node-input-binding-field';
@@ -100,11 +101,12 @@ function GenericNodeInspector({
   manifest: NodeTypeManifest;
 }) {
   const capabilityTypes = (manifest.capabilities ?? []).map((item) => item.type);
+  const inputs = resolveWorkflowNodePorts(node, manifest).inputs;
   return (
     <div className={styles.sections}>
-      {manifest.inputs.length > 0 ? (
+      {inputs.length > 0 ? (
         <section className={styles.section} aria-label="输入绑定">
-          {manifest.inputs.map((port) => (
+          {inputs.map((port) => (
             <NodeInputBindingField
               key={port.key}
               nodeId={node.id}
@@ -236,6 +238,7 @@ function NodeRuntimeInspectorBody({
     attempt: number;
   } | null>(null);
 
+  const ports = manifest ? resolveWorkflowNodePorts(node, manifest) : undefined;
   const displayedNodeRun =
     (selectedAttempt?.nodeId === node.id
       ? runtime.attempts.find((item) => item.attempt === selectedAttempt.attempt)
@@ -392,7 +395,7 @@ function NodeRuntimeInspectorBody({
             ) : (
               <div className={styles.ioList}>
                 {inputEntries.map(([portKey, value]) => {
-                  const portName = manifest?.inputs.find((port) => port.key === portKey)?.name;
+                  const portName = ports?.inputs.find((port) => port.key === portKey)?.name;
                   return (
                     <article key={portKey} className={styles.ioCard} aria-label={`输入 ${portKey}`}>
                       <div className={styles.ioHeader}>
@@ -418,7 +421,7 @@ function NodeRuntimeInspectorBody({
             ) : (
               <div className={styles.ioList}>
                 {outputEntries.map(([portKey, value]) => {
-                  const portName = manifest?.outputs.find((port) => port.key === portKey)?.name;
+                  const portName = ports?.outputs.find((port) => port.key === portKey)?.name;
                   return (
                     <article key={portKey} className={styles.ioCard} aria-label={`输出 ${portKey}`}>
                       <div className={styles.ioHeader}>

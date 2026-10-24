@@ -9,6 +9,7 @@ import {
 } from '@dramaflow/contracts';
 import type { Edge, Node, XYPosition } from '@xyflow/react';
 import { removeTemplateNodeSources } from '../inputs/template-input';
+import { findResolvedNodePorts } from '../ports/resolve-workflow-node-ports';
 
 export const END_INPUT_HANDLE = 'workflow-output';
 export type WorkflowOutputEdge = Edge<{ kind: 'workflow-output'; outputName: string }>;
@@ -78,9 +79,9 @@ export function setWorkflowOutput(
   }
   const ports = workflowOutputSources(value).map((source) => {
     const node = definition.nodes.find((node) => node.id === source.nodeId);
-    const port = manifests
-      .find((manifest) => manifest.type === node?.type && manifest.version === node.typeVersion)
-      ?.outputs.find((port) => port.key === source.outputKey);
+    const port = findResolvedNodePorts(node, manifests)?.outputs.find(
+      (port) => port.key === source.outputKey,
+    );
     if (!port) throw new Error('请选择可用的来源节点和输出端口');
     return port;
   });
@@ -146,9 +147,9 @@ export function appendWorkflowOutputCandidate(
   const output = definition.outputs.find((output) => output.name === name);
   if (!output) throw new Error('该工作流输出已被删除');
   const node = definition.nodes.find((node) => node.id === source.nodeId);
-  const port = manifests
-    .find((manifest) => manifest.type === node?.type && manifest.version === node.typeVersion)
-    ?.outputs.find((port) => port.key === source.outputKey);
+  const port = findResolvedNodePorts(node, manifests)?.outputs.find(
+    (port) => port.key === source.outputKey,
+  );
   if (!port) throw new Error('请选择可用的来源节点和输出端口');
   if (!isTypeAssignable(port.dataType, output.type))
     throw new Error('候选来源与工作流输出类型不兼容');

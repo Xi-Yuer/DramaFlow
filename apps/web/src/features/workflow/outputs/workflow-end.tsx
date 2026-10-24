@@ -9,6 +9,7 @@ import {
   type WorkflowDefinition,
   type WorkflowOutputSource,
 } from '@dramaflow/contracts';
+import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
 import {
   END_INPUT_HANDLE,
   nextWorkflowOutputName,
@@ -125,13 +126,16 @@ export function WorkflowOutputDialog({
   const [form] = Form.useForm<OutputForm>();
   const nodeId = Form.useWatch('nodeId', form);
   const previous = definition.outputs.find((output) => output.name === previousName);
-  const nodes = definition.nodes.map((node) => ({
-    node,
-    manifest: manifests.find(
-      (manifest) => manifest.type === node.type && manifest.version === node.typeVersion,
-    ),
-  }));
-  const ports = nodes.find((item) => item.node.id === nodeId)?.manifest?.outputs ?? [];
+  const nodes = definition.nodes.map((node) => {
+    const manifest = manifests.find(
+      (item) => item.type === node.type && item.version === node.typeVersion,
+    );
+    return {
+      node,
+      outputs: manifest ? resolveWorkflowNodePorts(node, manifest).outputs : [],
+    };
+  });
+  const ports = nodes.find((item) => item.node.id === nodeId)?.outputs ?? [];
   return (
     <Modal
       open
@@ -204,10 +208,10 @@ export function WorkflowOutputDialog({
               rules={[{ required: true, message: '请选择来源节点' }]}
             >
               <Select
-                options={nodes.map(({ node, manifest }) => ({
+                options={nodes.map(({ node, outputs }) => ({
                   value: node.id,
                   label: `${node.name} · ${node.id}`,
-                  disabled: !manifest?.outputs.length,
+                  disabled: outputs.length === 0,
                 }))}
                 onChange={() => form.setFieldValue('outputKey', undefined)}
               />

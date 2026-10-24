@@ -2,6 +2,7 @@ import {
   controlEdgeDefinitionSchema,
   dataEdgeDefinitionSchema,
   isTypeAssignable,
+  iterationCompositeDefinitionSchema,
   nodeDefinitionSchema,
   nodeTypeManifestListSchema,
   workflowDraftDefinitionSchema,
@@ -14,6 +15,7 @@ import {
   type CandidateBinding,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
+import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
 import type { Edge, Node, NodeChange } from '@xyflow/react';
 import { z } from 'zod';
 import { controlHandleId, parseWorkflowHandle } from './workflow-handles';
@@ -26,6 +28,8 @@ export type WorkflowNodeData = {
   inputs: NodeDefinition['inputs'];
   config: NodeDefinition['config'];
   preset?: NodeDefinition['preset'];
+  // 仅供卡片解析动态端口。草稿保存仍以领域 Definition 为准，不从 React Flow 回写整图。
+  composite?: NodeDefinition['composite'];
 };
 
 export type WorkflowNode = Node<WorkflowNodeData, 'workflowNode'>;
@@ -45,6 +49,7 @@ const reactFlowNodeSchema = z.object({
     inputs: nodeDefinitionSchema.shape.inputs,
     config: nodeDefinitionSchema.shape.config,
     preset: nodeDefinitionSchema.shape.preset,
+    composite: iterationCompositeDefinitionSchema.optional(),
   }),
 });
 
@@ -81,6 +86,7 @@ export function toReactFlowNode(input: unknown): WorkflowNode {
       inputs: definition.inputs,
       config: definition.config,
       ...(definition.preset !== undefined ? { preset: definition.preset } : {}),
+      ...(definition.composite !== undefined ? { composite: definition.composite } : {}),
     },
   } satisfies WorkflowNode);
 }
@@ -96,8 +102,24 @@ export function fromReactFlowNode(input: unknown): NodeDefinition {
     inputs: node.data.inputs,
     config: node.data.config,
     ...(node.data.preset !== undefined ? { preset: node.data.preset } : {}),
+    ...(node.data.composite !== undefined ? { composite: node.data.composite } : {}),
     ui: { position: node.position },
   });
+}
+
+// 卡片只有投影数据。这里补齐 resolveNodePorts 需要的实例，不作为草稿保存入口。
+export function canvasNodeDefinition(id: string, data: WorkflowNodeData): NodeDefinition {
+  return {
+    id,
+    type: data.nodeType,
+    typeVersion: data.typeVersion,
+    name: data.name,
+    inputs: data.inputs,
+    config: data.config,
+    ui: { position: { x: 0, y: 0 } },
+    ...(data.preset !== undefined ? { preset: data.preset } : {}),
+    ...(data.composite !== undefined ? { composite: data.composite } : {}),
+  };
 }
 
 export function toReactFlowNodes(input: unknown): WorkflowNode[] {
@@ -340,9 +362,13 @@ function addWorkflowEdge(
     });
     return workflowDraftDefinitionSchema.parse(workflow);
   }
-  const output = sourceManifest.outputs.find((port) => port.key === connection.sourceHandle);
+  const output = resolveWorkflowNodePorts(source, sourceManifest).outputs.find(
+    (port) => port.key === connection.sourceHandle,
+  );
   if (!output) throw new Error('来源端口不存在');
-  const inputPort = targetManifest.inputs.find((port) => port.key === connection.targetHandle);
+  const inputPort = resolveWorkflowNodePorts(target, targetManifest).inputs.find(
+    (port) => port.key === connection.targetHandle,
+  );
   if (!inputPort) throw new Error('目标端口不存在');
   if (!isTypeAssignable(output.dataType, inputPort.dataType)) {
     throw new Error('端口类型不兼容');

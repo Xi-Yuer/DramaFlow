@@ -23,6 +23,7 @@ import {
 } from '@dramaflow/contracts';
 import { WorkflowOutputTargetDialog } from '../outputs/workflow-output-target-dialog';
 import { createWorkflowNode } from '../node-catalog/create-workflow-node';
+import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
 import { NodePicker } from '../node-catalog/node-picker';
 import { nodeTypeApi, nodeTypeKeys } from '../node-catalog/node-type-api';
 import {
@@ -587,15 +588,17 @@ export function WorkflowCanvas({
                               const node = workflow.nodes.find(
                                 (node) => node.id === connection.source,
                               );
+                              const manifest = nodeTypes.data?.find(
+                                (item) =>
+                                  item.type === node?.type && item.version === node.typeVersion,
+                              );
                               return (
                                 connection.targetHandle === END_INPUT_HANDLE &&
-                                !!nodeTypes.data
-                                  ?.find(
-                                    (manifest) =>
-                                      manifest.type === node?.type &&
-                                      manifest.version === node.typeVersion,
-                                  )
-                                  ?.outputs.some((port) => port.key === connection.sourceHandle)
+                                !!node &&
+                                !!manifest &&
+                                resolveWorkflowNodePorts(node, manifest).outputs.some(
+                                  (port) => port.key === connection.sourceHandle,
+                                )
                               );
                             }
                             return areWorkflowHandlesCompatible(

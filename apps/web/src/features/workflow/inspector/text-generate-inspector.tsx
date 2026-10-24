@@ -3,6 +3,7 @@
 import { useContext } from 'react';
 import type { NodeDefinition, NodeTypeManifest } from '@dramaflow/contracts';
 import { ModelSelector, WorkflowModelActionsContext } from '../model-selection/model-selector';
+import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
 import { NodeInputBindingField } from './node-input-binding-field';
 import styles from './workflow-node-inspector.module.css';
 
@@ -18,7 +19,7 @@ export function TextGenerateInspector({
     (field) => field.key === 'modelConfigurationId' || field.ui?.component === 'model-selector',
   );
   const capabilityTypes = (manifest.capabilities ?? []).map((item) => item.type);
-  const inputPorts = manifest.inputs.filter(
+  const inputPorts = resolveWorkflowNodePorts(node, manifest).inputs.filter(
     (port) =>
       port.key === 'prompt' || port.key === 'system' || node.inputs[port.key]?.type === 'candidate',
   );

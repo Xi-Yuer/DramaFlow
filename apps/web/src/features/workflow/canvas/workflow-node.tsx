@@ -5,6 +5,8 @@ import { Handle, Position, type NodeProps, type NodeTypes } from '@xyflow/react'
 import type { DataType, NodeTypeManifest } from '@dramaflow/contracts';
 import { conditionToFields, ifConditionOperators } from '../conditions/if-condition';
 import { NodeTypeIcon } from '../node-catalog/node-type-icon';
+import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
+import { canvasNodeDefinition } from './react-flow-adapter';
 import { useWorkflowNodeRuntime } from '../runtime/runtime-status';
 import { runtimeNodeBorderClass } from '../runtime/runtime-status-badge';
 import { RuntimeCanvasStatus } from '../runtime/runtime-canvas-status';
@@ -102,6 +104,9 @@ export function GenericWorkflowNode({
   const selection = useContext(WorkflowNodeSelectionContext);
   const runtime = useWorkflowNodeRuntime(id);
   const manifest = findNodeManifest(manifests, data.nodeType, data.typeVersion);
+  const ports = manifest
+    ? resolveWorkflowNodePorts(canvasNodeDefinition(id, data), manifest)
+    : { inputs: [], outputs: [] };
   const isIf =
     data.nodeType === 'flow.if' && data.typeVersion === 1 && manifest?.executionKind === 'control';
   const isHumanReview =
@@ -169,7 +174,7 @@ export function GenericWorkflowNode({
         <>
           <div className={styles.ports}>
             <div>
-              {manifest.inputs.map((port) => (
+              {ports.inputs.map((port) => (
                 <div className={styles.input} key={port.key}>
                   <Handle
                     className={styles.handle}
@@ -188,7 +193,7 @@ export function GenericWorkflowNode({
               ))}
             </div>
             <div>
-              {manifest.outputs.map((port) => (
+              {ports.outputs.map((port) => (
                 <div className={styles.output} key={port.key}>
                   <span>{port.name}</span>
                   <small>{dataTypeName(port.dataType)}</small>

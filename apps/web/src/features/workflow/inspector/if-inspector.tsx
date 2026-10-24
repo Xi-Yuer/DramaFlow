@@ -5,6 +5,7 @@ import type { NodeDefinition, NodeTypeManifest } from '@dramaflow/contracts';
 import { Badge } from '@/components/ui/badge';
 import { IfConditionEditor } from '../conditions/if-condition-editor';
 import { WorkflowInputContext } from '../inputs/workflow-input-context';
+import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
 import { NodeInputBindingField } from './node-input-binding-field';
 import styles from './workflow-node-inspector.module.css';
 
@@ -16,7 +17,9 @@ export function IfInspector({
   manifest: NodeTypeManifest;
 }) {
   const inputActions = useContext(WorkflowInputContext);
-  const valuePort = manifest.inputs.find((port) => port.key === 'value') ?? {
+  const valuePort = resolveWorkflowNodePorts(node, manifest).inputs.find(
+    (port) => port.key === 'value',
+  ) ?? {
     key: 'value',
     name: '输入值',
     dataType: { kind: 'primitive' as const, name: 'string' as const },

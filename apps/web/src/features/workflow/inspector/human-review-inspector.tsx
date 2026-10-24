@@ -4,6 +4,7 @@ import { useContext } from 'react';
 import type { NodeDefinition, NodeTypeManifest } from '@dramaflow/contracts';
 import { Textarea } from '@/components/ui/textarea';
 import { WorkflowNodeSettingsActions } from '../node-catalog/human-review-settings';
+import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
 import { NodeInputBindingField } from './node-input-binding-field';
 import styles from './workflow-node-inspector.module.css';
 
@@ -16,7 +17,9 @@ export function HumanReviewInspector({
 }) {
   const settingsActions = useContext(WorkflowNodeSettingsActions);
   const disabled = !settingsActions || settingsActions.disabled;
-  const contentPort = manifest.inputs.find((port) => port.key === 'content') ?? {
+  const contentPort = resolveWorkflowNodePorts(node, manifest).inputs.find(
+    (port) => port.key === 'content',
+  ) ?? {
     key: 'content',
     name: '待审核内容',
     dataType: { kind: 'primitive' as const, name: 'string' as const },

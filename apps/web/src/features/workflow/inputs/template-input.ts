@@ -8,6 +8,7 @@ import {
   type TemplateBinding,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
+import { findResolvedNodePorts } from '../ports/resolve-workflow-node-ports';
 
 export interface AvailableOutput {
   nodeId: string;
@@ -100,11 +101,9 @@ export function availableStringOutputs(
   const outputs: AvailableOutput[] = [];
   for (const node of definition.nodes) {
     if (blocked.has(node.id)) continue;
-    const manifest = manifests.find(
-      (item) => item.type === node.type && item.version === node.typeVersion,
-    );
-    if (!manifest) continue;
-    for (const port of manifest.outputs) {
+    const ports = findResolvedNodePorts(node, manifests);
+    if (!ports) continue;
+    for (const port of ports.outputs) {
       if (!isTypeAssignable(port.dataType, StringType)) continue;
       outputs.push({
         nodeId: node.id,
@@ -366,10 +365,9 @@ export function describeNodeOutput(
   source: { nodeId: string; portKey: string },
 ) {
   const node = definition.nodes.find((item) => item.id === source.nodeId);
-  const manifest = node
-    ? manifests.find((item) => item.type === node.type && item.version === node.typeVersion)
-    : undefined;
-  const port = manifest?.outputs.find((item) => item.key === source.portKey);
+  const port = findResolvedNodePorts(node, manifests)?.outputs.find(
+    (item) => item.key === source.portKey,
+  );
   return {
     nodeName: node?.name ?? source.nodeId,
     portName: port?.name ?? source.portKey,
