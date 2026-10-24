@@ -20,6 +20,20 @@ Manifest 固定 type / version 与 executionKind（action / control / composite 
 
 config 用 string / number / boolean / select 字段数组；condition 字段只声明条件配置，不开放通用对象表单或默认表达式。默认值按类型、范围与选项校验。配置编辑提示在 config[].ui，输入提示在 ui.inputs，必须引用现有输入。Zod transform / 默认值不回写定义或 State。
 
+## Iteration Composite Contract
+
+正式 `flow.iteration@1` 为 composite，不提供 execute。实例使用受 Schema 校验的 `composite` 字段，协议见[Iteration definition](../packages/contracts/src/node/iteration.ts)，不把 body 存入 config。固定 collection 端口为 items；itemType 明确声明 T，端口类型为 Array<T>，不从常量内容推断，空数组同样保留 T。invariantInputs 复用 GraphInputDefinition 声明额外端口，不得重复或覆盖 items。
+
+body 使用同一 GraphDefinition / NodeDefinition / DataEdge / ControlEdge / 输出协议。bodyInputMapping 的 current_item 对应 T，current_index 对应 number，iteration_input 对应实例已声明端口（包括 items）；target 必须属于 body inputs、唯一、类型可赋值，并覆盖必填 body input。可选 invariant 不得供应必填 body input；optional → optional 可缺失，未来调用适配需省略缺失值，不补 null。body 内 workflow_input 仍指局部输入，Template / Candidate / 边和输出只能引用局部定义。
+
+[resolveNodePorts](../packages/contracts/src/node/ports.ts)是静态语义端口入口：普通节点复用 Manifest；Iteration 按实例 itemType / invariantInputs 推导输入，并将每个 body declared output U 提升为同名 Array<U>，数组 U 保持嵌套，不 flatten。Manifest 的 portDerivation=iteration 标识需结合实例解析，静态 outputs=[] 不能解释为没有有效输出，也不接受手工固定 outputs。
+
+Draft 可保存缺少 composite、空 body、未完成映射及既有 sources=[] 输出编辑态；结构、局部引用与联合 DAG 仍遵循原 Graph Draft 校验。Publish 检查完整映射、已知元素类型（不接受顶层 any）、必填来源、有效非空 Action body、类型及输出。body 可不声明输出，遵循既有 Graph outputs=[] 语义。
+
+v1 Publish 仅允许 body 内普通 Action；拒绝 nested Iteration、其他 composite、If、Human Review、其他 control / interaction，以及带命名控制出口的特殊 Action。Contract 的递归表达能力不代表 Publish 或 Runtime 放行。Candidate 等表达继续受既有互斥来源证明约束，不因为进入 body 放松。
+
+空 items 合法，语义为不调用 body，并为每个声明输出产生对应类型的空集合；本阶段仅锁定语义，Compiler 尚无 Iteration 策略，执行前明确拒绝，不产生占位结果。current_index 是固定 snapshot 的从零位置，不是业务 itemKey；Definition 不含 occurrence、scope 或 LangGraph 身份。
+
 ## 服务端执行与编译
 
 普通 Action NodeType 持 manifest、三组 Zod Schema 和 execute(input, config, context)，不取得 Graph builder、BindingResolver、内容 Store 或 Checkpoint。普通业务只接收已校验输入与配置并返回结果，不自行调度、解析绑定或持久化输出。非 Action 使用不带 execute 的 NodeDeclaration，由独立策略决定是否可执行；正式目录注册不等于获准 Publish / Compile。

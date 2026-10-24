@@ -1,5 +1,9 @@
 import type { WorkflowDefinition } from '@dramaflow/contracts';
-import { NodeRegistrationError, NodeRegistry } from '@dramaflow/workflow';
+import {
+  NodeRegistrationError,
+  NodeRegistry,
+  isIterationNodeManifest,
+} from '@dramaflow/workflow';
 import { BadRequestException } from '@nestjs/common';
 
 function invalidConfiguration(): BadRequestException {
@@ -15,6 +19,8 @@ export function validateWorkflowNodeConfigurations(
   registry: NodeRegistry,
 ): void {
   for (const node of definition.nodes) {
+    if (node.composite)
+      validateWorkflowNodeConfigurations(node.composite.body, registry);
     let nodeType: ReturnType<NodeRegistry['get']>;
     try {
       nodeType = registry.get(node.type, node.typeVersion);
@@ -27,7 +33,11 @@ export function validateWorkflowNodeConfigurations(
         continue;
       throw error;
     }
-    if (nodeType.manifest.executionKind !== 'action') continue;
+    if (
+      nodeType.manifest.executionKind !== 'action' &&
+      !isIterationNodeManifest(nodeType.manifest)
+    )
+      continue;
     const allowed = new Set(nodeType.manifest.config.map((field) => field.key));
     if (Object.keys(node.config).some((key) => !allowed.has(key)))
       throw invalidConfiguration();

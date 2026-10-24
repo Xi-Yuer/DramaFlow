@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { dataTypeSchema } from '../data/type.js';
-import { nodeDefinitionSchema } from '../node/definition.js';
-import { workflowEdgeSchema } from '../workflow/edge-definition.js';
+import { nodeDefinitionSchema, type NodeDefinition } from '../node/definition.js';
+import { workflowEdgeSchema, type WorkflowEdge } from '../workflow/edge-definition.js';
 import { createWorkflowSchemas } from '../workflow/metadata.js';
 
 const schemas = createWorkflowSchemas({
   dataType: dataTypeSchema,
-  node: nodeDefinitionSchema,
+  node: z.lazy(() => nodeDefinitionSchema),
   edge: workflowEdgeSchema,
 });
 
@@ -175,9 +175,18 @@ export const graphDraftDefinitionSchema = schemas.draftDefinitionSchema.superRef
 export const graphOutputDefinitionSchema = schemas.outputSchema;
 export type GraphOutputDefinition = z.infer<typeof graphOutputDefinitionSchema>;
 // 编辑态允许候选不足；不可变版本及执行边界必须通过最终输出协议。
-export const graphDefinitionSchema = graphDraftDefinitionSchema.superRefine(
-  (definition, context) => {
+export const graphDefinitionSchema: typeof graphDraftDefinitionSchema =
+  graphDraftDefinitionSchema.superRefine((definition, context) => {
     definition.nodes.forEach((node, index) => {
+      if (node.composite) {
+        const body = graphDefinitionSchema.safeParse(node.composite.body);
+        if (!body.success)
+          for (const issue of body.error.issues)
+            context.addIssue({
+              ...issue,
+              path: ['nodes', index, 'composite', 'body', ...issue.path],
+            });
+      }
       for (const [key, binding] of Object.entries(node.inputs)) {
         if (binding.type === 'candidate' && binding.sources.length < 2) {
           context.addIssue({
@@ -194,6 +203,10 @@ export const graphDefinitionSchema = graphDraftDefinitionSchema.superRefine(
         for (const issue of result.error.issues)
           context.addIssue({ ...issue, path: ['outputs', index, ...issue.path] });
     });
-  },
-);
-export type GraphDefinition = z.infer<typeof graphDefinitionSchema>;
+  });
+export interface GraphDefinition {
+  inputs: GraphInputDefinition[];
+  nodes: NodeDefinition[];
+  edges: WorkflowEdge[];
+  outputs: GraphOutputDefinition[];
+}

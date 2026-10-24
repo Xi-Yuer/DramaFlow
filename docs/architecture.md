@@ -52,6 +52,14 @@ Definition Location 单独记录不可变 workflowVersionId 与 nodeId / graphKe
 
 Graph Invocation input mapping 与 WorkflowOutputResolver 直接接受统一 RuntimeValue，不新增 Binding / Resolver。调用输入校验递归检查 collection 的内联元素，引用仍不读取。Web 只对 collection 显示“集合值暂不支持展示”，不展开元素或新增集合 UI。此基础未接入 Send、Iteration、SubWorkflow 或 Provider media nodes，无数据库变更。
 
+## Iteration Contract 与 Publish
+
+`flow.iteration@1` 已注册为 composite 声明，新增受校验的实例 body / 输入映射和 body-derived 数组端口；正式协议、Draft / Publish 差异与 v1 capability 见[Node 模型](node-model.md#iteration-composite-contract)。统一 resolveNodePorts 参与 Publish 的 DataEdge、Candidate、Template、类型与 WorkflowOutput 检查，不伪造静态输出。
+
+validateGraphForPublish / validateGraphDefinitionSemantics 与旧 Workflow 入口共用同一管线，递归验证独立 body，并返回带 definitionPath 的后代节点供现有发布事务统一检查模型权限；同名节点按所属局部定义查找，不覆盖父节点。Draft 配置字段边界也递归检查 body 已知 Action，Iteration config 不接受额外字段，仍允许映射 / 必填配置未完成，不把 Publish 门禁前移到保存。
+
+当前只实现 Contract / Publish。body 的嵌套 composite、If / control、Human Review / interaction 均拒绝；根既有 If / Human Review 行为不变。Compiler 在创建执行服务前以 NODE_EXECUTION_KIND_UNSUPPORTED 拒绝 Iteration；目录注册、可保存 / 可发布均不代表可运行。没有 Send、body runtime invocation、聚合策略或 Web Iteration Editor，无数据库变更。
+
 ## Human Review 声明与纯业务边界
 
 `flow.human_review@1` 已进入生产 Registry / 节点目录，执行种类为 interaction，不提供 Action execute 或审批控制出口；Draft、Publish / Compile / Run 已接入独立 HumanReviewNodeCompilationStrategy；其他未知 interaction 仍以 NODE_EXECUTION_KIND_UNSUPPORTED 拒绝。节点标题使用 NodeDefinition.name，不另加 title config。

@@ -1,9 +1,10 @@
 import {
   isTypeAssignable,
+  graphDefinitionSchema,
   workflowOutputSources,
   StringType,
   type NodeDefinition,
-  type WorkflowDefinition,
+  type GraphDefinition,
 } from '@dramaflow/contracts';
 import { StateGraph } from '@langchain/langgraph';
 import { NodeRegistry } from '../node/registry.js';
@@ -17,9 +18,21 @@ import {
 } from '../compiler/if/analysis.js';
 import { isHumanReviewNodeManifest } from '../node/human-review.js';
 import { findUnsupportedHumanReviewTopology } from '../compiler/human-review/analysis.js';
+import { isIterationNodeManifest } from '../node/iteration.js';
+import {
+  resolveNodePorts,
+  validateIterationInputMapping,
+  CompositeDefinitionError,
+  type ResolvedNodePorts,
+} from '@dramaflow/contracts';
+import { WorkflowInvocationContractValidator } from './validate-invocation.js';
+import type { GraphDefinitionLocation } from '../runtime/execution-scope.js';
 import { WorkflowStateAnnotation } from '../runtime/state.js';
 
 export type WorkflowPublishIssueCode =
+  | CompositeDefinitionError['code']
+  | 'ITERATION_BODY_CAPABILITY_UNSUPPORTED'
+  | 'ITERATION_BODY_EMPTY'
   | 'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED'
   | 'NODE_TYPE_UNAVAILABLE'
   | 'NODE_EXECUTION_KIND_UNSUPPORTED'
@@ -44,13 +57,19 @@ export class WorkflowPublishValidationError extends Error {
     readonly code: WorkflowPublishIssueCode,
     readonly nodeId: string,
     readonly portKey?: string,
+    readonly definitionPath?: GraphDefinitionLocation['path'],
   ) {
     super(
       ifCapabilityMessage(code) ??
+        (code === 'ITERATION_BODY_CAPABILITY_UNSUPPORTED'
+          ? 'Iteration v1 body 仅允许普通 Action，尚不支持 control / interaction / composite'
+          : code === 'ITERATION_BODY_EMPTY'
+            ? 'Iteration body 至少需要一个 Action 节点'
+            : undefined) ??
         (code === 'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED'
           ? '当前 Human Review 仅支持分支区域外的串行审核，不支持并行待审批'
           : code === 'NODE_EXECUTION_KIND_UNSUPPORTED'
-            ? '当前 Compiler 尚不支持该节点执行种类，不能发布执行'
+            ? '当前 Compiler 尚不支持该节点执行种类'
             : '工作流不满足静态发布条件'),
     );
     this.name = 'WorkflowPublishValidationError';
@@ -61,9 +80,16 @@ export interface ValidatedDefinitionNode {
   readonly node: NodeDefinition;
   readonly nodeType: NodeDeclaration;
   readonly config: unknown;
+  readonly ports: ResolvedNodePorts;
+  readonly definitionPath?: GraphDefinitionLocation['path'];
 }
 
 export type ValidatedPublishNode = ValidatedDefinitionNode;
+
+interface GraphValidationContext {
+  readonly definitionPath: GraphDefinitionLocation['path'];
+  readonly capability: 'workflow' | 'iteration_body_v1';
+}
 
 function isSupportedIf(nodeType: NodeDeclaration): boolean {
   const { manifest } = nodeType;
@@ -84,10 +110,13 @@ function staticOnlyNode(): never {
 // 调用方先用正式 Definition Schema 校验引用、来源冲突和联合 DAG。
 // 这里只检查 Registry / Schema 静态语义，不代表允许生产发布；生产调用下方门禁入口。
 // 资源归属仍由应用层在发布事务内检查。
-export function validateWorkflowDefinitionSemantics(
-  definition: WorkflowDefinition,
+export function validateGraphDefinitionSemantics(
+  definition: GraphDefinition,
   registry: NodeRegistry,
+  context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
 ): ValidatedDefinitionNode[] {
+  const { definitionPath } = context;
+  const descendants: ValidatedDefinitionNode[] = [];
   const names = new StateGraph(WorkflowStateAnnotation);
   const storage = new DefaultDataStoragePolicyResolver();
   const entries = definition.nodes.map((node): ValidatedDefinitionNode => {
@@ -98,6 +127,19 @@ export function validateWorkflowDefinitionSemantics(
       return invalid('NODE_TYPE_UNAVAILABLE', node.id);
     }
     if (
+      context.capability === 'iteration_body_v1' &&
+      (declaration.manifest.executionKind !== 'action' ||
+        !declaration.execute ||
+        (declaration.manifest.controlOutputs?.length ?? 0) > 0)
+    )
+      throw new WorkflowPublishValidationError(
+        'ITERATION_BODY_CAPABILITY_UNSUPPORTED',
+        node.id,
+        undefined,
+        definitionPath,
+      );
+    if (
+      !isIterationNodeManifest(declaration.manifest) &&
       !isSupportedIf(declaration) &&
       !isHumanReviewNodeManifest(declaration.manifest) &&
       (declaration.manifest.executionKind !== 'action' || !declaration.execute)
@@ -120,7 +162,44 @@ export function validateWorkflowDefinitionSemantics(
         }
       }
     }
-    return { node, nodeType, config: config.data };
+    let ports: ResolvedNodePorts;
+    try {
+      ports = resolveNodePorts(node, nodeType.manifest);
+      if (isIterationNodeManifest(nodeType.manifest)) validateIterationInputMapping(node, ports);
+    } catch (error) {
+      if (error instanceof CompositeDefinitionError)
+        return invalid(error.code, node.id, error.portKey);
+      throw error;
+    }
+    if (isIterationNodeManifest(nodeType.manifest)) {
+      const body = node.composite!.body;
+      if (body.nodes.length === 0) invalid('ITERATION_BODY_EMPTY', node.id);
+      const childPath = [...definitionPath, { nodeId: node.id, graphKey: 'body' }];
+      try {
+        descendants.push(
+          ...validateGraphForPublish(body, registry, {
+            definitionPath: childPath,
+            capability: 'iteration_body_v1',
+          }),
+        );
+      } catch (error) {
+        if (error instanceof WorkflowPublishValidationError && !error.definitionPath)
+          throw new WorkflowPublishValidationError(
+            error.code,
+            error.nodeId,
+            error.portKey,
+            childPath,
+          );
+        throw error;
+      }
+    }
+    return {
+      node,
+      nodeType,
+      config: config.data,
+      ports,
+      ...(definitionPath.length ? { definitionPath } : {}),
+    };
   });
   const nodes = new Map(entries.map((entry) => [entry.node.id, entry]));
   const workflowInputs = new Map(definition.inputs.map((input) => [input.name, input]));
@@ -143,10 +222,8 @@ export function validateWorkflowDefinitionSemantics(
     }
     const source = nodes.get(edge.source.nodeId)!;
     const target = nodes.get(edge.target.nodeId)!;
-    const output = source.nodeType.manifest.outputs.find(
-      (port) => port.key === edge.source.portKey,
-    );
-    const input = target.nodeType.manifest.inputs.find((port) => port.key === edge.target.portKey);
+    const output = source.ports.outputs.find((port) => port.key === edge.source.portKey);
+    const input = target.ports.inputs.find((port) => port.key === edge.target.portKey);
     if (!output) invalid('OUTPUT_PORT_NOT_FOUND', source.node.id, edge.source.portKey);
     if (!input) invalid('INPUT_PORT_NOT_FOUND', target.node.id, edge.target.portKey);
     if (!isTypeAssignable(output.dataType, input.dataType))
@@ -168,8 +245,28 @@ export function validateWorkflowDefinitionSemantics(
     }
   }
 
-  for (const { node, nodeType } of entries) {
-    const ports = new Map(nodeType.manifest.inputs.map((port) => [port.key, port]));
+  for (const { node, nodeType, ports: resolved } of entries) {
+    const composite = isIterationNodeManifest(nodeType.manifest);
+    const acceptsMissing = (key: string) =>
+      composite
+        ? resolved.inputs.find((port) => port.key === key)?.required === false
+        : nodeType.inputSchema.shape[key]!.safeParse(undefined).success;
+    const acceptsConstant = (key: string, value: unknown) => {
+      if (!composite) return nodeType.inputSchema.shape[key]!.safeParse(value).success;
+      const port = resolved.inputs.find((port) => port.key === key)!;
+      // 空数组没有待验证的业务元素；显式 itemType 仍决定边界类型。
+      if (port.dataType.kind === 'array' && Array.isArray(value) && value.length === 0) return true;
+      try {
+        new WorkflowInvocationContractValidator().validate(
+          [{ name: key, type: port.dataType, required: true }],
+          { [key]: { storage: 'inline', type: port.dataType, value } },
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const ports = new Map(resolved.inputs.map((port) => [port.key, port]));
     const connected = new Set(
       definition.edges
         .filter((edge) => edge.kind === 'data' && edge.target.nodeId === node.id)
@@ -186,7 +283,7 @@ export function validateWorkflowDefinitionSemantics(
         for (const source of binding.sources) {
           const sourceNode = nodes.get(source.nodeId);
           if (!sourceNode) invalid('NODE_TYPE_UNAVAILABLE', source.nodeId);
-          const output = sourceNode.nodeType.manifest.outputs.find(
+          const output = sourceNode.ports.outputs.find(
             (outputPort) => outputPort.key === source.portKey,
           );
           if (!output) invalid('OUTPUT_PORT_NOT_FOUND', sourceNode.node.id, source.portKey);
@@ -196,10 +293,7 @@ export function validateWorkflowDefinitionSemantics(
       } else if (binding.type === 'workflow_input') {
         dynamic = true;
         const source = workflowInputs.get(binding.key)!;
-        if (
-          source.required === false &&
-          (port.required === true || !nodeType.inputSchema.shape[key]!.safeParse(undefined).success)
-        )
+        if (source.required === false && (port.required === true || !acceptsMissing(key)))
           invalid('INPUT_SOURCE_OPTIONAL', node.id, key);
         if (!isTypeAssignable(source.type, port.dataType))
           invalid('INPUT_TYPE_MISMATCH', node.id, key);
@@ -217,7 +311,7 @@ export function validateWorkflowDefinitionSemantics(
           }
           const sourceNode = nodes.get(source.nodeId);
           if (!sourceNode) invalid('NODE_TYPE_UNAVAILABLE', source.nodeId);
-          const output = sourceNode.nodeType.manifest.outputs.find(
+          const output = sourceNode.ports.outputs.find(
             (outputPort) => outputPort.key === source.portKey,
           );
           if (!output) invalid('OUTPUT_PORT_NOT_FOUND', sourceNode.node.id, source.portKey);
@@ -225,8 +319,7 @@ export function validateWorkflowDefinitionSemantics(
             invalid('INPUT_TYPE_MISMATCH', node.id, key);
         }
       } else {
-        if (!nodeType.inputSchema.shape[key]!.safeParse(binding.value).success)
-          invalid('INPUT_VALUE_INVALID', node.id, key);
+        if (!acceptsConstant(key, binding.value)) invalid('INPUT_VALUE_INVALID', node.id, key);
         constants[key] = binding.value;
       }
     }
@@ -234,35 +327,35 @@ export function validateWorkflowDefinitionSemantics(
       if (
         !Object.hasOwn(node.inputs, port.key) &&
         !connected.has(port.key) &&
-        !nodeType.inputSchema.shape[port.key]!.safeParse(undefined).success
+        !acceptsMissing(port.key)
       )
         invalid('INPUT_SOURCE_MISSING', node.id, port.key);
     }
     // 全部实际输入在发布时已知时，连同跨字段 refine / 默认值按 Runtime 同一 Schema 校验。
-    if (!dynamic && !nodeType.inputSchema.safeParse(constants).success)
+    if (!composite && !dynamic && !nodeType.inputSchema.safeParse(constants).success)
       invalid('INPUT_VALUE_INVALID', node.id);
   }
 
   for (const output of definition.outputs) {
     for (const candidate of workflowOutputSources(output)) {
       const source = nodes.get(candidate.nodeId)!;
-      const port = source.nodeType.manifest.outputs.find(
-        (port) => port.key === candidate.outputKey,
-      );
+      const port = source.ports.outputs.find((port) => port.key === candidate.outputKey);
       if (!port) invalid('OUTPUT_PORT_NOT_FOUND', source.node.id, candidate.outputKey);
       if (!isTypeAssignable(port.dataType, output.type))
         invalid('WORKFLOW_OUTPUT_TYPE_MISMATCH', source.node.id, candidate.outputKey);
     }
   }
-  return entries;
+  return [...entries, ...descendants];
 }
 
 // 生产 Publish 与 Compiler 使用同一简单 If 能力分析，不能只按 executionKind 放行。
-export function validateWorkflowForPublish(
-  definition: WorkflowDefinition,
+export function validateGraphForPublish(
+  definition: GraphDefinition,
   registry: NodeRegistry,
+  context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
 ): ValidatedPublishNode[] {
-  const entries = validateWorkflowDefinitionSemantics(definition, registry);
+  definition = graphDefinitionSchema.parse(definition);
+  const entries = validateGraphDefinitionSemantics(definition, registry, context);
   const ifNodeIds = new Set(
     entries.filter((entry) => isSupportedIf(entry.nodeType)).map((entry) => entry.node.id),
   );
@@ -293,3 +386,7 @@ export function validateWorkflowForPublish(
   if (unsupportedReview) invalid('HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED', unsupportedReview);
   return entries;
 }
+
+// 根 Workflow 保留原入口，与局部图共用校验管线；返回值包含后代，应用层可统一检查资源权限。
+export const validateWorkflowDefinitionSemantics = validateGraphDefinitionSemantics;
+export const validateWorkflowForPublish = validateGraphForPublish;

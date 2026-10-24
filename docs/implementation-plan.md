@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-RuntimeValue Collection Foundation 进入架构评审；范围见[当前架构](architecture.md#runtimevalue-collection)。后续 Iteration 编译接入须独立授权；本轮止于集合表示、固定快照、有序构造与 Codec / Graph Invocation 组合，不接 Send 或实现 Iteration。
+Iteration Composite Contract / Publish Validation 进入架构评审；范围见[当前架构](architecture.md#iteration-contract-与-publish)。下一步 Compiler / Send / body invocation 与聚合须独立授权，本轮不实现 Iteration Runtime。
 
 Human Review 第五阶段已接入现有 Run 面板的单个文本审批闭环，等待人工 Canvas / Run 验收。能力与限制见[当前架构](architecture.md#web-human-review)。本轮不运行 Browser E2E 或 Provider。
 

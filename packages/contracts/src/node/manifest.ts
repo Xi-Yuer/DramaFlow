@@ -186,12 +186,48 @@ export const nodeTypeManifestSchema = z
     inputs: z.array(inputPortDefinitionSchema),
     outputs: z.array(outputPortDefinitionSchema),
     controlOutputs: z.array(controlOutputDefinitionSchema).optional(),
+    // 这些端口需结合实例解析；空静态 outputs 不表示没有有效输出。
+    portDerivation: z.literal('iteration').optional(),
     config: z.array(configFieldDefinitionSchema),
     capabilities: z.array(capabilityRequirementSchema).optional(),
     ui: nodeUISchema.optional(),
   })
   .strict()
   .superRefine((manifest, context) => {
+    if (
+      manifest.type === 'flow.iteration' &&
+      manifest.version === 1 &&
+      (manifest.executionKind !== 'composite' || manifest.portDerivation !== 'iteration')
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['executionKind'],
+        message: 'flow.iteration@1 必须声明 composite 与动态端口推导',
+      });
+    if (
+      manifest.portDerivation &&
+      (manifest.type !== 'flow.iteration' ||
+        manifest.version !== 1 ||
+        manifest.executionKind !== 'composite' ||
+        manifest.outputs.length !== 0)
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['portDerivation'],
+        message: '动态 Iteration 端口声明必须属于 flow.iteration@1 composite，不能手工声明 outputs',
+      });
+    if (
+      manifest.portDerivation === 'iteration' &&
+      (manifest.inputs.length !== 1 ||
+        manifest.inputs[0]?.key !== 'items' ||
+        manifest.inputs[0]?.dataType.kind !== 'array' ||
+        manifest.inputs[0]?.required !== true)
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['inputs'],
+        message: 'Iteration 静态声明必须具有唯一必填 items 数组端口',
+      });
     for (const group of ['inputs', 'outputs', 'config', 'controlOutputs'] as const) {
       const keys = new Set<string>();
       manifest[group]?.forEach((item, index) => {

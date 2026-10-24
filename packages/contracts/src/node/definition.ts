@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  iterationCompositeDefinitionSchema,
+  type IterationCompositeDefinition,
+} from './iteration.js';
 import { contentIdentifierSchema } from '../data/reference.js';
 import { nodeTypeIdSchema, nodeTypeVersionSchema } from './manifest.js';
 import { workflowIdentifierSchema, workflowPortNameSchema } from '../workflow/metadata.js';
@@ -94,7 +98,7 @@ export function templateBindingMatches(
   );
 }
 
-export const nodeDefinitionSchema = z
+const baseNodeDefinitionSchema = z
   .object({
     id: workflowIdentifierSchema,
     type: nodeTypeIdSchema,
@@ -109,8 +113,21 @@ export const nodeDefinitionSchema = z
       })
       .strict(),
   })
-  .strict()
+  .strict();
+
+export type NodeDefinition = z.infer<typeof baseNodeDefinitionSchema> & {
+  composite?: IterationCompositeDefinition;
+};
+
+export const nodeDefinitionSchema = baseNodeDefinitionSchema
+  .extend({ composite: z.lazy(() => iterationCompositeDefinitionSchema).optional() })
   .superRefine((node, context) => {
+    if (node.composite && (node.type !== 'flow.iteration' || node.typeVersion !== 1))
+      context.addIssue({
+        code: 'custom',
+        path: ['composite'],
+        message: '此 composite 定义仅属于 flow.iteration@1',
+      });
     for (const [key, binding] of Object.entries(node.inputs)) {
       if (binding.type === 'candidate') {
         const seen = new Set<string>();
@@ -157,7 +174,6 @@ export type TemplateVariableSource = z.infer<typeof templateVariableSourceSchema
 export type TemplateBinding = z.infer<typeof templateBindingSchema>;
 export type CandidateBinding = z.infer<typeof candidateBindingSchema>;
 export type StaticInputBinding = z.infer<typeof staticInputBindingSchema>;
-export type NodeDefinition = z.infer<typeof nodeDefinitionSchema>;
 export type NodePreset = z.infer<typeof nodePresetSchema>;
 
 export function templateNodeOutputDependencies(

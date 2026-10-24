@@ -60,7 +60,7 @@ describe('节点类型目录 API', () => {
     expect(list).not.toHaveBeenCalled();
   });
 
-  it('受保护目录提供正式 AI / Control / Interaction 声明，禁止缓存', async () => {
+  it('受保护目录提供正式 AI / Control / Composite / Interaction 声明，禁止缓存', async () => {
     const context = await setup();
     const response = await request(context.app.getHttpServer())
       .get('/api/v1/workflow/node-types')
@@ -74,6 +74,13 @@ describe('节点类型目录 API', () => {
         executionKind: 'control',
         outputs: [],
         controlOutputs: [{ key: 'true' }, { key: 'false' }],
+      },
+      {
+        type: 'flow.iteration',
+        version: 1,
+        executionKind: 'composite',
+        portDerivation: 'iteration',
+        outputs: [],
       },
       {
         type: 'flow.human_review',

@@ -40,3 +40,10 @@ export * from './runtime/condition-evaluator.js';
 export * from './runtime/execution-scope.js';
 export * from './runtime/graph-invocation.js';
 export * from './runtime/values/runtime-collection.js';
+export * from './node/iteration.js';
+export {
+  resolveNodePorts,
+  validateIterationInputMapping,
+  CompositeDefinitionError,
+  type ResolvedNodePorts,
+} from '@dramaflow/contracts';

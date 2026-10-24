@@ -6,6 +6,7 @@ import {
 import {
   createTextGenerationNodeType,
   createHumanReviewNodeType,
+  createIterationNodeType,
   NodeRegistry,
 } from '@dramaflow/workflow';
 import { describe, expect, it } from 'vitest';
@@ -97,4 +98,51 @@ describe('Draft 配置字段边界', () => {
       validateWorkflowNodeConfigurations(draft, registry),
     ).not.toThrow();
   });
+});
+
+it('Iteration Draft 不要求完成映射，但递归拒绝 body 与 composite config 中的额外密钥字段', () => {
+  const types = new NodeRegistry([
+    createIterationNodeType(),
+    createTextGenerationNodeType(),
+  ]);
+  const body = definition({});
+  const draft: WorkflowDefinition = {
+    inputs: [],
+    edges: [],
+    outputs: [],
+    nodes: [
+      {
+        id: 'iterate',
+        type: 'flow.iteration',
+        typeVersion: 1,
+        name: '逐项',
+        inputs: {},
+        config: {},
+        ui: { position: { x: 0, y: 0 } },
+        composite: {
+          kind: 'iteration',
+          itemType: StringType,
+          invariantInputs: [],
+          body,
+          bodyInputMapping: [],
+        },
+      },
+    ],
+  };
+  expect(
+    saveWorkflowDraftRequestSchema.safeParse({
+      expectedRevision: 1,
+      definition: draft,
+    }).success,
+  ).toBe(true);
+  expect(() => validateWorkflowNodeConfigurations(draft, types)).not.toThrow();
+  body.nodes[0]!.config = { secret: 'secret-marker' };
+  expect(() => validateWorkflowNodeConfigurations(draft, types)).toThrow(
+    expect.objectContaining({ status: 400 }),
+  );
+  body.nodes[0]!.config = {};
+  draft.nodes[0]!.config = { body: 'secret-marker' };
+  expect(() => validateWorkflowNodeConfigurations(draft, types)).toThrow(
+    expect.objectContaining({ status: 400 }),
+  );
 });

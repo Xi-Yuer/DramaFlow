@@ -4,6 +4,8 @@ import {
   type NodeTypeManifest,
 } from '@dramaflow/contracts';
 import { z } from 'zod';
+import { resolveNodePorts } from '@dramaflow/contracts';
+import type { NodeDefinition } from '@dramaflow/contracts';
 import type { NodeType, NodeDeclaration } from './type.js';
 import { assertNodeSchemas, parseNodeManifest, type NodeSchemas } from './schemas.js';
 import type { NodeOperation } from './operation.js';
@@ -78,6 +80,9 @@ export class NodeRegistry {
     if (entry.manifest.executionKind !== 'action' || !entry.execute)
       throw new Error('该类型不是普通操作节点');
     return { ...entry, execute: entry.execute };
+  }
+  resolveNodePorts(node: NodeDefinition) {
+    return resolveNodePorts(node, this.get(node.type, node.typeVersion).manifest);
   }
   listManifests(): NodeTypeManifest[] {
     return [...this.types.values()].map((nodeType) => parseNodeManifest(nodeType.manifest));

@@ -8,6 +8,8 @@ Compiler 冻结定义、校验精确 Registry 版本并连接依赖与 START / E
 
 NodeExecutor 从显式 scopeKey 获取或创建 occurrence，再在该 occurrence 内 createRunning → 解析绑定 → 记录 RuntimeValue 输入 → decode → 校验 input / config → execute → 校验 output → encode → markCompleted。完成记录成功后才写 State。服务对象不进入 State；Codec / Writer 只取得当前项目 / 运行 / 节点 / 输出定位。
 
+Iteration 的 Contract 与 Publish 现已独立支持；Compiler 尚无 composite strategy，创建执行服务前明确拒绝，不把 Iteration 当 Action。动态端口与 body 门禁见[Node 模型](node-model.md#iteration-composite-contract)。
+
 ### Action 执行错误阶段
 
 业务失败记录 resolve_input、decode_input、validate_input、validate_config、execute、validate_output 或 encode_output；持久错误只保留安全摘要，不保存 cause / stack / Provider 内容。节点失败不产生占位输出，不自动重试。

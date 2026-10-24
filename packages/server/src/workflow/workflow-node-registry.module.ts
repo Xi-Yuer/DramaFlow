@@ -2,6 +2,7 @@ import {
   NodeRegistry,
   createTextGenerationNodeType,
   createIfNodeType,
+  createIterationNodeType,
   createHumanReviewNodeType,
 } from '@dramaflow/workflow';
 import { Module } from '@nestjs/common';
@@ -15,6 +16,7 @@ import { Module } from '@nestjs/common';
         new NodeRegistry([
           createTextGenerationNodeType(),
           createIfNodeType(),
+          createIterationNodeType(),
           createHumanReviewNodeType(),
         ]),
     },
