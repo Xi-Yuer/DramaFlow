@@ -17,6 +17,7 @@ const schemas = {
   configSchema: z.object({}),
 };
 const context = {
+  scopeKey: 'root',
   projectId: 'p',
   workflowRunId: 'r',
   workflow: { inputs: [], nodes: [], edges: [], outputs: [] },

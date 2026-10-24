@@ -44,6 +44,8 @@ function renderNode(status: RuntimeNodeStatus, selected = false) {
             id: 'node-run-1',
             workflowRunId: waitingRun.id,
             nodeId: node.id,
+            occurrenceId: `occurrence-${node.id}`,
+            scopeKey: 'root',
             attempt: 1,
             status: status === 'waiting' ? 'running' : status,
             startedAt: '2026-10-24T00:00:00.000Z',

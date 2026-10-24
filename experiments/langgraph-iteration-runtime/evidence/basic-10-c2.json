@@ -1,0 +1,459 @@
+{
+  "pid": 97969,
+  "request": {
+    "operation": "start",
+    "mode": "basic",
+    "threadId": "iteration-experiment-basic-10-c2-800f6bc1-88f3-436d-b29a-0359cb74a846",
+    "count": 10,
+    "maxConcurrency": 2,
+    "eventPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/basic-10-c2.events.jsonl",
+    "outputPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/basic-10-c2.json"
+  },
+  "config": {
+    "configurable": {
+      "thread_id": "iteration-experiment-basic-10-c2-800f6bc1-88f3-436d-b29a-0359cb74a846"
+    },
+    "maxConcurrency": 2,
+    "recursionLimit": 40
+  },
+  "invoke": {
+    "status": "returned",
+    "value": {
+      "items": [
+        {
+          "index": 0,
+          "value": 0
+        },
+        {
+          "index": 1,
+          "value": 1
+        },
+        {
+          "index": 2,
+          "value": 2
+        },
+        {
+          "index": 3,
+          "value": 3
+        },
+        {
+          "index": 4,
+          "value": 4
+        },
+        {
+          "index": 5,
+          "value": 5
+        },
+        {
+          "index": 6,
+          "value": 6
+        },
+        {
+          "index": 7,
+          "value": 7
+        },
+        {
+          "index": 8,
+          "value": 8
+        },
+        {
+          "index": 9,
+          "value": 9
+        }
+      ],
+      "outerIndex": -1,
+      "results": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1
+        },
+        {
+          "index": 1,
+          "outerIndex": -1,
+          "value": 3
+        },
+        {
+          "index": 2,
+          "outerIndex": -1,
+          "value": 5
+        },
+        {
+          "index": 3,
+          "outerIndex": -1,
+          "value": 7
+        },
+        {
+          "index": 4,
+          "outerIndex": -1,
+          "value": 9
+        },
+        {
+          "index": 5,
+          "outerIndex": -1,
+          "value": 11
+        },
+        {
+          "index": 6,
+          "outerIndex": -1,
+          "value": 13
+        },
+        {
+          "index": 7,
+          "outerIndex": -1,
+          "value": 15
+        },
+        {
+          "index": 8,
+          "outerIndex": -1,
+          "value": 17
+        },
+        {
+          "index": 9,
+          "outerIndex": -1,
+          "value": 19
+        }
+      ],
+      "ordered": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1
+        },
+        {
+          "index": 1,
+          "outerIndex": -1,
+          "value": 3
+        },
+        {
+          "index": 2,
+          "outerIndex": -1,
+          "value": 5
+        },
+        {
+          "index": 3,
+          "outerIndex": -1,
+          "value": 7
+        },
+        {
+          "index": 4,
+          "outerIndex": -1,
+          "value": 9
+        },
+        {
+          "index": 5,
+          "outerIndex": -1,
+          "value": 11
+        },
+        {
+          "index": 6,
+          "outerIndex": -1,
+          "value": 13
+        },
+        {
+          "index": 7,
+          "outerIndex": -1,
+          "value": 15
+        },
+        {
+          "index": 8,
+          "outerIndex": -1,
+          "value": 17
+        },
+        {
+          "index": 9,
+          "outerIndex": -1,
+          "value": 19
+        }
+      ]
+    }
+  },
+  "after": {
+    "checkpointId": "1f1cf528-a387-6620-8003-47b6d8faa964",
+    "checkpointNs": "",
+    "values": {
+      "items": [
+        {
+          "index": 0,
+          "value": 0
+        },
+        {
+          "index": 1,
+          "value": 1
+        },
+        {
+          "index": 2,
+          "value": 2
+        },
+        {
+          "index": 3,
+          "value": 3
+        },
+        {
+          "index": 4,
+          "value": 4
+        },
+        {
+          "index": 5,
+          "value": 5
+        },
+        {
+          "index": 6,
+          "value": 6
+        },
+        {
+          "index": 7,
+          "value": 7
+        },
+        {
+          "index": 8,
+          "value": 8
+        },
+        {
+          "index": 9,
+          "value": 9
+        }
+      ],
+      "outerIndex": -1,
+      "results": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1
+        },
+        {
+          "index": 1,
+          "outerIndex": -1,
+          "value": 3
+        },
+        {
+          "index": 2,
+          "outerIndex": -1,
+          "value": 5
+        },
+        {
+          "index": 3,
+          "outerIndex": -1,
+          "value": 7
+        },
+        {
+          "index": 4,
+          "outerIndex": -1,
+          "value": 9
+        },
+        {
+          "index": 5,
+          "outerIndex": -1,
+          "value": 11
+        },
+        {
+          "index": 6,
+          "outerIndex": -1,
+          "value": 13
+        },
+        {
+          "index": 7,
+          "outerIndex": -1,
+          "value": 15
+        },
+        {
+          "index": 8,
+          "outerIndex": -1,
+          "value": 17
+        },
+        {
+          "index": 9,
+          "outerIndex": -1,
+          "value": 19
+        }
+      ],
+      "ordered": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1
+        },
+        {
+          "index": 1,
+          "outerIndex": -1,
+          "value": 3
+        },
+        {
+          "index": 2,
+          "outerIndex": -1,
+          "value": 5
+        },
+        {
+          "index": 3,
+          "outerIndex": -1,
+          "value": 7
+        },
+        {
+          "index": 4,
+          "outerIndex": -1,
+          "value": 9
+        },
+        {
+          "index": 5,
+          "outerIndex": -1,
+          "value": 11
+        },
+        {
+          "index": 6,
+          "outerIndex": -1,
+          "value": 13
+        },
+        {
+          "index": 7,
+          "outerIndex": -1,
+          "value": 15
+        },
+        {
+          "index": 8,
+          "outerIndex": -1,
+          "value": 17
+        },
+        {
+          "index": 9,
+          "outerIndex": -1,
+          "value": 19
+        }
+      ]
+    },
+    "next": [],
+    "tasks": []
+  },
+  "checkpointCount": 45,
+  "namespaceHeads": [
+    {
+      "namespace": "",
+      "checkpointId": "1f1cf528-a387-6620-8003-47b6d8faa964",
+      "metadata": {
+        "step": 3,
+        "source": "loop",
+        "parents": {}
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:ca13534a-832f-55fc-9e96-a9bc334ff014",
+      "checkpointId": "1f1cf528-a378-6bc0-8002-d2d788031054",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-a231-6960-8001-c179b508110d"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:c3c67c94-3912-5c64-a290-dca22424b1ee",
+      "checkpointId": "1f1cf528-a376-64b0-8002-4aee85b4b468",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-a231-6960-8001-c179b508110d"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:00fe8eb1-befc-5555-befa-9ccdc558735e",
+      "checkpointId": "1f1cf528-a356-68e0-8002-84d88337068d",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-a231-6960-8001-c179b508110d"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:edba0c9c-5318-5c62-ad7e-c175a43c50db",
+      "checkpointId": "1f1cf528-a345-6770-8002-532ed8c9ba32",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-a231-6960-8001-c179b508110d"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:5fdee40f-e83a-5099-a154-9c123362f355",
+      "checkpointId": "1f1cf528-a328-62b0-8002-785cbe6f38d3",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-a231-6960-8001-c179b508110d"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:dc95221a-55d3-5df1-b828-3788726c2013",
+      "checkpointId": "1f1cf528-a31e-6670-8002-233a3868cf4a",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-a231-6960-8001-c179b508110d"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:88738eea-55c1-5277-ac99-b4b7d310d1d6",
+      "checkpointId": "1f1cf528-a2eb-6220-8002-78703aa211fa",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-a231-6960-8001-c179b508110d"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:406e0599-e695-5ab2-86e0-f4b01137ad4c",
+      "checkpointId": "1f1cf528-a2e3-6cf0-8002-def76ba89cdf",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-a231-6960-8001-c179b508110d"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:3f49d2b9-b3a7-5167-b47c-fffc0fe02e23",
+      "checkpointId": "1f1cf528-a2a1-6e40-8002-6b9e18e475bd",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-a231-6960-8001-c179b508110d"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:a14f3ac2-7a97-59ad-87f9-0f5357164381",
+      "checkpointId": "1f1cf528-a29f-6730-8002-a833c2aa7277",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-a231-6960-8001-c179b508110d"
+        }
+      },
+      "pendingWrites": []
+    }
+  ]
+}

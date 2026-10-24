@@ -171,6 +171,7 @@ model WorkflowRun {
   completedAt       DateTime?
   project           Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   nodeRuns          NodeRun[]
+  nodeOccurrences   NodeOccurrence[]
   waitingRevision   Int                       @default(0)
   executions        WorkflowExecutionOutbox[]
   artifacts         Artifact[]
@@ -184,24 +185,42 @@ model WorkflowRun {
   @@map("workflow_run")
 }
 
-model NodeRun {
+// scopeKey 当前为 root；未来由受信任的 scoped execution 显式提供，不解析其字符串结构。
+model NodeOccurrence {
   id            String      @id @default(uuid()) @db.Uuid
   projectId     String      @db.Uuid
   workflowRunId String
   nodeId        String
+  scopeKey      String
+  createdAt     DateTime    @default(now())
+  workflowRun   WorkflowRun @relation(fields: [workflowRunId, projectId], references: [id, projectId], onDelete: Cascade)
+  attempts      NodeRun[]
+
+  @@unique([workflowRunId, scopeKey, nodeId])
+  @@unique([id, workflowRunId, projectId, nodeId])
+  @@map("node_occurrence")
+}
+
+model NodeRun {
+  id            String         @id @default(uuid()) @db.Uuid
+  projectId     String         @db.Uuid
+  workflowRunId String
+  nodeId        String
+  occurrenceId  String         @db.Uuid
   attempt       Int
-  status        String      @default("running")
+  status        String         @default("running")
   inputs        Json?
   outputs       Json?
   error         Json?
-  startedAt     DateTime    @default(now())
+  startedAt     DateTime       @default(now())
   completedAt   DateTime?
-  project       Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  workflowRun   WorkflowRun @relation(fields: [workflowRunId, projectId], references: [id, projectId], onDelete: Cascade)
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowRun   WorkflowRun    @relation(fields: [workflowRunId, projectId], references: [id, projectId], onDelete: Cascade)
+  occurrence    NodeOccurrence @relation(fields: [occurrenceId, workflowRunId, projectId, nodeId], references: [id, workflowRunId, projectId, nodeId], onDelete: Cascade, onUpdate: Restrict)
   artifacts     Artifact[]
 
   @@unique([id, workflowRunId, projectId])
-  @@unique([workflowRunId, nodeId, attempt])
+  @@unique([occurrenceId, attempt])
   @@index([workflowRunId])
   @@index([workflowRunId, nodeId])
   @@index([projectId, workflowRunId])

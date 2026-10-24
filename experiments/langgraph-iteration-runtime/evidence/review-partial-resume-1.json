@@ -1,0 +1,599 @@
+{
+  "pid": 98139,
+  "request": {
+    "operation": "resume",
+    "mode": "review",
+    "threadId": "iteration-experiment-review-partial-800f6bc1-88f3-436d-b29a-0359cb74a846",
+    "count": 3,
+    "maxConcurrency": 5,
+    "eventPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/review-partial.events.jsonl",
+    "outputPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/review-partial-resume-1.json",
+    "resume": {
+      "d721035efdb27a67dcc86c594bce86bd": "approve:-1/1"
+    }
+  },
+  "config": {
+    "configurable": {
+      "thread_id": "iteration-experiment-review-partial-800f6bc1-88f3-436d-b29a-0359cb74a846"
+    },
+    "maxConcurrency": 5,
+    "recursionLimit": 40
+  },
+  "before": {
+    "checkpointId": "1f1cf528-d1c8-6340-8001-eb66516d01ef",
+    "checkpointNs": "",
+    "values": {
+      "items": [
+        {
+          "index": 0,
+          "value": 0
+        },
+        {
+          "index": 1,
+          "value": 1
+        },
+        {
+          "index": 2,
+          "value": 2
+        }
+      ],
+      "outerIndex": -1,
+      "results": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1,
+          "decision": "approve:-1/0"
+        }
+      ]
+    },
+    "next": [
+      "body",
+      "body"
+    ],
+    "tasks": [
+      {
+        "id": "85bfa704-b797-5a88-a105-39bc49990dad",
+        "name": "body",
+        "path": [
+          "__pregel_push",
+          0,
+          false
+        ],
+        "interrupts": [
+          {
+            "id": "4feefda370ed7f30b7d7455645322fe7",
+            "value": {
+              "kind": "runtime_experiment",
+              "index": 0,
+              "outerIndex": -1,
+              "value": 0,
+              "taskId": "a9cf1f71-b148-5726-97c8-27afb3c4162c",
+              "checkpointNs": "body:85bfa704-b797-5a88-a105-39bc49990dad|review:a9cf1f71-b148-5726-97c8-27afb3c4162c",
+              "nodeAttempt": 1
+            }
+          }
+        ],
+        "state": {
+          "checkpointId": "1f1cf528-d894-6ed0-8003-8032498769f5",
+          "checkpointNs": "body:85bfa704-b797-5a88-a105-39bc49990dad",
+          "values": {
+            "index": 0,
+            "value": 0,
+            "outerIndex": -1,
+            "intermediate": 0,
+            "result": 1,
+            "decision": "approve:-1/0"
+          },
+          "next": [],
+          "tasks": []
+        }
+      },
+      {
+        "id": "b58ce2f3-4927-5490-8e14-253df45be808",
+        "name": "body",
+        "path": [
+          "__pregel_push",
+          1,
+          false
+        ],
+        "interrupts": [
+          {
+            "id": "d721035efdb27a67dcc86c594bce86bd",
+            "value": {
+              "kind": "runtime_experiment",
+              "index": 1,
+              "outerIndex": -1,
+              "value": 1,
+              "taskId": "52187276-d1ae-50ee-ba3a-bfea03ebed01",
+              "checkpointNs": "body:b58ce2f3-4927-5490-8e14-253df45be808|review:52187276-d1ae-50ee-ba3a-bfea03ebed01",
+              "nodeAttempt": 1
+            }
+          }
+        ],
+        "state": {
+          "checkpointId": "1f1cf528-d244-6b70-8001-a20014e4b924",
+          "checkpointNs": "body:b58ce2f3-4927-5490-8e14-253df45be808",
+          "values": {
+            "index": 1,
+            "value": 1,
+            "outerIndex": -1,
+            "intermediate": 2
+          },
+          "next": [
+            "review"
+          ],
+          "tasks": [
+            {
+              "id": "52187276-d1ae-50ee-ba3a-bfea03ebed01",
+              "name": "review",
+              "path": [
+                "__pregel_pull",
+                "review"
+              ],
+              "interrupts": [
+                {
+                  "id": "d721035efdb27a67dcc86c594bce86bd",
+                  "value": {
+                    "kind": "runtime_experiment",
+                    "index": 1,
+                    "outerIndex": -1,
+                    "value": 1,
+                    "taskId": "52187276-d1ae-50ee-ba3a-bfea03ebed01",
+                    "checkpointNs": "body:b58ce2f3-4927-5490-8e14-253df45be808|review:52187276-d1ae-50ee-ba3a-bfea03ebed01",
+                    "nodeAttempt": 1
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1",
+        "name": "body",
+        "path": [
+          "__pregel_push",
+          2,
+          false
+        ],
+        "interrupts": [
+          {
+            "id": "e94e2ea5c67355cc745a482a36cc7585",
+            "value": {
+              "kind": "runtime_experiment",
+              "index": 2,
+              "outerIndex": -1,
+              "value": 2,
+              "taskId": "16d61b35-4622-57c1-ac39-cef1814de563",
+              "checkpointNs": "body:aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1|review:16d61b35-4622-57c1-ac39-cef1814de563",
+              "nodeAttempt": 1
+            }
+          }
+        ],
+        "state": {
+          "checkpointId": "1f1cf528-d247-6280-8001-4b26baee3c8b",
+          "checkpointNs": "body:aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1",
+          "values": {
+            "index": 2,
+            "value": 2,
+            "outerIndex": -1,
+            "intermediate": 4
+          },
+          "next": [
+            "review"
+          ],
+          "tasks": [
+            {
+              "id": "16d61b35-4622-57c1-ac39-cef1814de563",
+              "name": "review",
+              "path": [
+                "__pregel_pull",
+                "review"
+              ],
+              "interrupts": [
+                {
+                  "id": "e94e2ea5c67355cc745a482a36cc7585",
+                  "value": {
+                    "kind": "runtime_experiment",
+                    "index": 2,
+                    "outerIndex": -1,
+                    "value": 2,
+                    "taskId": "16d61b35-4622-57c1-ac39-cef1814de563",
+                    "checkpointNs": "body:aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1|review:16d61b35-4622-57c1-ac39-cef1814de563",
+                    "nodeAttempt": 1
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "invoke": {
+    "status": "returned",
+    "value": {
+      "items": [
+        {
+          "index": 0,
+          "value": 0
+        },
+        {
+          "index": 1,
+          "value": 1
+        },
+        {
+          "index": 2,
+          "value": 2
+        }
+      ],
+      "outerIndex": -1,
+      "results": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1,
+          "decision": "approve:-1/0"
+        },
+        {
+          "index": 1,
+          "outerIndex": -1,
+          "value": 3,
+          "decision": "approve:-1/1"
+        }
+      ],
+      "__interrupt__": [
+        {
+          "id": "e94e2ea5c67355cc745a482a36cc7585",
+          "value": {
+            "kind": "runtime_experiment",
+            "index": 2,
+            "outerIndex": -1,
+            "value": 2,
+            "taskId": "16d61b35-4622-57c1-ac39-cef1814de563",
+            "checkpointNs": "body:aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1|review:16d61b35-4622-57c1-ac39-cef1814de563",
+            "nodeAttempt": 1
+          }
+        }
+      ]
+    }
+  },
+  "after": {
+    "checkpointId": "1f1cf528-d1c8-6340-8001-eb66516d01ef",
+    "checkpointNs": "",
+    "values": {
+      "items": [
+        {
+          "index": 0,
+          "value": 0
+        },
+        {
+          "index": 1,
+          "value": 1
+        },
+        {
+          "index": 2,
+          "value": 2
+        }
+      ],
+      "outerIndex": -1,
+      "results": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1,
+          "decision": "approve:-1/0"
+        },
+        {
+          "index": 1,
+          "outerIndex": -1,
+          "value": 3,
+          "decision": "approve:-1/1"
+        }
+      ]
+    },
+    "next": [
+      "body"
+    ],
+    "tasks": [
+      {
+        "id": "85bfa704-b797-5a88-a105-39bc49990dad",
+        "name": "body",
+        "path": [
+          "__pregel_push",
+          0,
+          false
+        ],
+        "interrupts": [
+          {
+            "id": "4feefda370ed7f30b7d7455645322fe7",
+            "value": {
+              "kind": "runtime_experiment",
+              "index": 0,
+              "outerIndex": -1,
+              "value": 0,
+              "taskId": "a9cf1f71-b148-5726-97c8-27afb3c4162c",
+              "checkpointNs": "body:85bfa704-b797-5a88-a105-39bc49990dad|review:a9cf1f71-b148-5726-97c8-27afb3c4162c",
+              "nodeAttempt": 1
+            }
+          }
+        ],
+        "state": {
+          "checkpointId": "1f1cf528-d894-6ed0-8003-8032498769f5",
+          "checkpointNs": "body:85bfa704-b797-5a88-a105-39bc49990dad",
+          "values": {
+            "index": 0,
+            "value": 0,
+            "outerIndex": -1,
+            "intermediate": 0,
+            "result": 1,
+            "decision": "approve:-1/0"
+          },
+          "next": [],
+          "tasks": []
+        }
+      },
+      {
+        "id": "b58ce2f3-4927-5490-8e14-253df45be808",
+        "name": "body",
+        "path": [
+          "__pregel_push",
+          1,
+          false
+        ],
+        "interrupts": [
+          {
+            "id": "d721035efdb27a67dcc86c594bce86bd",
+            "value": {
+              "kind": "runtime_experiment",
+              "index": 1,
+              "outerIndex": -1,
+              "value": 1,
+              "taskId": "52187276-d1ae-50ee-ba3a-bfea03ebed01",
+              "checkpointNs": "body:b58ce2f3-4927-5490-8e14-253df45be808|review:52187276-d1ae-50ee-ba3a-bfea03ebed01",
+              "nodeAttempt": 1
+            }
+          }
+        ],
+        "state": {
+          "checkpointId": "1f1cf528-dc03-6d50-8003-9ff99180d265",
+          "checkpointNs": "body:b58ce2f3-4927-5490-8e14-253df45be808",
+          "values": {
+            "index": 1,
+            "value": 1,
+            "outerIndex": -1,
+            "intermediate": 2,
+            "result": 3,
+            "decision": "approve:-1/1"
+          },
+          "next": [],
+          "tasks": []
+        }
+      },
+      {
+        "id": "aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1",
+        "name": "body",
+        "path": [
+          "__pregel_push",
+          2,
+          false
+        ],
+        "interrupts": [
+          {
+            "id": "e94e2ea5c67355cc745a482a36cc7585",
+            "value": {
+              "kind": "runtime_experiment",
+              "index": 2,
+              "outerIndex": -1,
+              "value": 2,
+              "taskId": "16d61b35-4622-57c1-ac39-cef1814de563",
+              "checkpointNs": "body:aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1|review:16d61b35-4622-57c1-ac39-cef1814de563",
+              "nodeAttempt": 1
+            }
+          }
+        ],
+        "state": {
+          "checkpointId": "1f1cf528-d247-6280-8001-4b26baee3c8b",
+          "checkpointNs": "body:aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1",
+          "values": {
+            "index": 2,
+            "value": 2,
+            "outerIndex": -1,
+            "intermediate": 4
+          },
+          "next": [
+            "review"
+          ],
+          "tasks": [
+            {
+              "id": "16d61b35-4622-57c1-ac39-cef1814de563",
+              "name": "review",
+              "path": [
+                "__pregel_pull",
+                "review"
+              ],
+              "interrupts": [
+                {
+                  "id": "e94e2ea5c67355cc745a482a36cc7585",
+                  "value": {
+                    "kind": "runtime_experiment",
+                    "index": 2,
+                    "outerIndex": -1,
+                    "value": 2,
+                    "taskId": "16d61b35-4622-57c1-ac39-cef1814de563",
+                    "checkpointNs": "body:aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1|review:16d61b35-4622-57c1-ac39-cef1814de563",
+                    "nodeAttempt": 1
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "checkpointCount": 16,
+  "namespaceHeads": [
+    {
+      "namespace": "body:b58ce2f3-4927-5490-8e14-253df45be808",
+      "checkpointId": "1f1cf528-dc03-6d50-8003-9ff99180d265",
+      "metadata": {
+        "step": 3,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-d1c8-6340-8001-eb66516d01ef"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:85bfa704-b797-5a88-a105-39bc49990dad",
+      "checkpointId": "1f1cf528-d894-6ed0-8003-8032498769f5",
+      "metadata": {
+        "step": 3,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-d1c8-6340-8001-eb66516d01ef"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1",
+      "checkpointId": "1f1cf528-d247-6280-8001-4b26baee3c8b",
+      "metadata": {
+        "step": 1,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-d1c8-6340-8001-eb66516d01ef"
+        }
+      },
+      "pendingWrites": [
+        [
+          "16d61b35-4622-57c1-ac39-cef1814de563",
+          "__interrupt__",
+          {
+            "id": "e94e2ea5c67355cc745a482a36cc7585",
+            "value": {
+              "kind": "runtime_experiment",
+              "index": 2,
+              "outerIndex": -1,
+              "value": 2,
+              "taskId": "16d61b35-4622-57c1-ac39-cef1814de563",
+              "checkpointNs": "body:aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1|review:16d61b35-4622-57c1-ac39-cef1814de563",
+              "nodeAttempt": 1
+            }
+          }
+        ]
+      ]
+    },
+    {
+      "namespace": "",
+      "checkpointId": "1f1cf528-d1c8-6340-8001-eb66516d01ef",
+      "metadata": {
+        "step": 1,
+        "source": "loop",
+        "parents": {}
+      },
+      "pendingWrites": [
+        [
+          "4feefda370ed7f30b7d7455645322fe7",
+          "__resume__",
+          [
+            "approve:-1/0"
+          ]
+        ],
+        [
+          "d721035efdb27a67dcc86c594bce86bd",
+          "__resume__",
+          [
+            "approve:-1/1"
+          ]
+        ],
+        [
+          "85bfa704-b797-5a88-a105-39bc49990dad",
+          "__interrupt__",
+          {
+            "id": "4feefda370ed7f30b7d7455645322fe7",
+            "value": {
+              "kind": "runtime_experiment",
+              "index": 0,
+              "outerIndex": -1,
+              "value": 0,
+              "taskId": "a9cf1f71-b148-5726-97c8-27afb3c4162c",
+              "checkpointNs": "body:85bfa704-b797-5a88-a105-39bc49990dad|review:a9cf1f71-b148-5726-97c8-27afb3c4162c",
+              "nodeAttempt": 1
+            }
+          }
+        ],
+        [
+          "85bfa704-b797-5a88-a105-39bc49990dad",
+          "results",
+          [
+            {
+              "index": 0,
+              "outerIndex": -1,
+              "value": 1,
+              "decision": "approve:-1/0"
+            }
+          ]
+        ],
+        [
+          "85bfa704-b797-5a88-a105-39bc49990dad",
+          "branch:to:collect",
+          null
+        ],
+        [
+          "b58ce2f3-4927-5490-8e14-253df45be808",
+          "__interrupt__",
+          {
+            "id": "d721035efdb27a67dcc86c594bce86bd",
+            "value": {
+              "kind": "runtime_experiment",
+              "index": 1,
+              "outerIndex": -1,
+              "value": 1,
+              "taskId": "52187276-d1ae-50ee-ba3a-bfea03ebed01",
+              "checkpointNs": "body:b58ce2f3-4927-5490-8e14-253df45be808|review:52187276-d1ae-50ee-ba3a-bfea03ebed01",
+              "nodeAttempt": 1
+            }
+          }
+        ],
+        [
+          "b58ce2f3-4927-5490-8e14-253df45be808",
+          "results",
+          [
+            {
+              "index": 1,
+              "outerIndex": -1,
+              "value": 3,
+              "decision": "approve:-1/1"
+            }
+          ]
+        ],
+        [
+          "b58ce2f3-4927-5490-8e14-253df45be808",
+          "branch:to:collect",
+          null
+        ],
+        [
+          "aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1",
+          "__interrupt__",
+          {
+            "id": "e94e2ea5c67355cc745a482a36cc7585",
+            "value": {
+              "kind": "runtime_experiment",
+              "index": 2,
+              "outerIndex": -1,
+              "value": 2,
+              "taskId": "16d61b35-4622-57c1-ac39-cef1814de563",
+              "checkpointNs": "body:aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1|review:16d61b35-4622-57c1-ac39-cef1814de563",
+              "nodeAttempt": 1
+            }
+          }
+        ]
+      ]
+    }
+  ]
+}

@@ -147,6 +147,10 @@ describe('生产 Human Review 专用策略 / 原生 interrupt', () => {
       outputs: (await state(f)).state.outputs.R,
     });
     expect(f.nodeRuns.getOrCreateHumanReviewRunning).toHaveBeenCalledTimes(2);
+    expect(
+      f.nodeRuns.getOrCreateHumanReviewRunning.mock.calls.map(([input]) => input.occurrenceId),
+    ).toEqual([audit.occurrenceId, audit.occurrenceId]);
+    expect(f.nodeRuns.getRecords()[0]!.occurrenceId).toBe(audit.occurrenceId);
     expect(f.nodeRuns.updateInputs).toHaveBeenCalledTimes(1);
     expect(f.nodeRuns.markCompleted).toHaveBeenCalledExactlyOnceWith(
       audit.id,
@@ -414,6 +418,7 @@ describe('生产 Human Review 专用策略 / 原生 interrupt', () => {
       const initial = (await state(f)).state;
       let action: LangGraphNode | undefined;
       new HumanReviewNodeCompilationStrategy().compile({
+        scopeKey: 'root',
         node: d.nodes[0]!,
         declaration: f.registry.get('flow.human_review', 1),
         workflow: d,

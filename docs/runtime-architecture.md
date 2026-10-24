@@ -6,7 +6,7 @@
 
 Compiler 冻结定义、校验精确 Registry 版本并连接依赖与 START / END；不创建 Run / thread 或执行业务。普通 Action 只实现 execute，经编译 wrapper 调用统一 NodeExecutor；其他 executionKind 必须使用独立策略。
 
-NodeExecutor 顺序为 createRunning → 解析绑定 → 记录 RuntimeValue 输入 → decode → 校验 input / config → execute → 校验 output → encode → markCompleted。完成记录成功后才写 State。服务对象不进入 State；Codec / Writer 只取得当前项目 / 运行 / 节点 / 输出定位。
+NodeExecutor 从显式 scopeKey 获取或创建 occurrence，再在该 occurrence 内 createRunning → 解析绑定 → 记录 RuntimeValue 输入 → decode → 校验 input / config → execute → 校验 output → encode → markCompleted。完成记录成功后才写 State。服务对象不进入 State；Codec / Writer 只取得当前项目 / 运行 / 节点 / 输出定位。
 
 ### Action 执行错误阶段
 
@@ -80,7 +80,7 @@ Resolver 不返回整份 State，不生成临时 URL；空声明得到 `{}`。
 
 State 与 Annotation 共处 runtime/state.ts。run / inputs / variables / execution 为单值通道，Action wrapper 只返回当前 nodeId 的 outputs 增量，不展开旧 State。非变异 reducer 合并不同节点；重复 nodeId 即报 DUPLICATE_NODE_OUTPUT_WRITE，不合并端口片段或静默覆盖。
 
-这是普通 DAG 的单次有效输出约束，不能推断循环 / 批量 / 审核语义。NodeRun 保存 attempt 与业务历史，Artifact 保存内容，Checkpoint 保存恢复状态；attempt 不等于函数重入次数，不把日志、媒体、服务或对话历史塞入 State。输入绑定、decode / encode 和内容失败边界见[数据模型](data-model.md#codec-与-binding)。
+这是普通 DAG 的单次有效输出约束，不能推断循环 / 批量 / 审核语义。NodeOccurrence 保存逻辑执行身份，NodeRun 保存其 attempt 与业务历史，Artifact 保存内容，Checkpoint 保存恢复状态；attempt 不等于函数重入次数。领域 occurrence 不取自 taskId、checkpoint namespace 或 nodeAttempt，也不要求修改已有 checkpoint State。身份与持久约束见[当前架构](architecture.md#node-execution-occurrence)。不把日志、媒体、服务或对话历史塞入 State。输入绑定、decode / encode 和内容失败边界见[数据模型](data-model.md#codec-与-binding)。
 
 ## PostgreSQL Checkpointer
 

@@ -428,6 +428,8 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
         id: 'nr-outline-1',
         workflowRunId: waitingRun.id,
         nodeId: 'node-outline',
+        occurrenceId: 'occurrence-node-outline',
+        scopeKey: 'root',
         attempt: 1,
         status: 'failed',
         inputs: {
@@ -445,6 +447,8 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
         id: 'nr-outline-2',
         workflowRunId: waitingRun.id,
         nodeId: 'node-outline',
+        occurrenceId: 'occurrence-node-outline',
+        scopeKey: 'root',
         attempt: 2,
         status: 'completed',
         inputs: {
@@ -461,6 +465,8 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
         id: 'nr-downstream-1',
         workflowRunId: waitingRun.id,
         nodeId: 'node-downstream',
+        occurrenceId: 'occurrence-node-downstream',
+        scopeKey: 'root',
         attempt: 1,
         status: 'failed',
         inputs: {
@@ -574,6 +580,8 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
           id: 'nr-outline-1',
           workflowRunId: waitingRun.id,
           nodeId: 'node-outline',
+          occurrenceId: 'occurrence-node-outline',
+          scopeKey: 'root',
           attempt: 1,
           status: 'completed',
           inputs: {
@@ -589,6 +597,8 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
           id: 'nr-review-1',
           workflowRunId: waitingRun.id,
           nodeId: 'review-1',
+          occurrenceId: 'occurrence-review-1',
+          scopeKey: 'root',
           attempt: 1,
           status: 'running',
           inputs: {
@@ -725,6 +735,8 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
           id: 'nr-outline-1',
           workflowRunId: waitingRun.id,
           nodeId: 'node-outline',
+          occurrenceId: 'occurrence-node-outline',
+          scopeKey: 'root',
           attempt: 1,
           status: 'completed',
           inputs: {
@@ -740,6 +752,8 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
           id: 'nr-review-1',
           workflowRunId: waitingRun.id,
           nodeId: 'review-1',
+          occurrenceId: 'occurrence-review-1',
+          scopeKey: 'root',
           attempt: 1,
           status: 'completed',
           inputs: {

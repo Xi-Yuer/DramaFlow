@@ -207,6 +207,8 @@ describe('GET WorkflowRun HTTP', () => {
         id: 'nr-1',
         workflowRunId: 'run-1',
         nodeId: 'node-a',
+        occurrenceId: 'occurrence-node-a',
+        scopeKey: 'root',
         attempt: 1,
         status: 'completed' as const,
         inputs: {

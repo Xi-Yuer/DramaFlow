@@ -92,6 +92,7 @@ function fixture() {
   const nodeRuns = nodeRunRepositoryFixture();
   const executor = new DefaultNodeExecutor(registry, bindings, codec, nodeRuns);
   const context: NodeExecutionContext = {
+    scopeKey: 'root',
     projectId: 'p',
     workflowRunId: 'r',
     workflow: {
@@ -189,6 +190,12 @@ describe('普通 Action Node 执行主链', () => {
     expect(f.nodeRuns.createRunning).toHaveBeenCalledExactlyOnceWith({
       workflowRunId: 'r',
       nodeId: 'sum',
+      occurrenceId: 'occurrence-1',
+    });
+    expect(f.nodeRuns.getOrCreateOccurrence).toHaveBeenCalledExactlyOnceWith({
+      workflowRunId: 'r',
+      nodeId: 'sum',
+      scopeKey: 'root',
     });
     expect(f.nodeRuns.updateInputs).toHaveBeenCalledExactlyOnceWith('node-run-1', {
       a: { storage: 'inline', type: NumberType, value: 10 },

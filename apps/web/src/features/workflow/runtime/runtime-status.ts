@@ -7,6 +7,7 @@ import type {
   WorkflowDefinition,
   WorkflowRunResponse,
 } from '@dramaflow/contracts';
+import { ROOT_EXECUTION_SCOPE_KEY } from '@dramaflow/contracts';
 import type {
   HumanReviewActions,
   HumanReviewState,
@@ -64,7 +65,11 @@ function groupNodeRunsByNodeId(
   const grouped = new Map<string, NodeRun[]>();
   if (!nodeRuns) return grouped;
   for (const record of nodeRuns) {
+    // 当前 Inspector 只展示 root scope，不能让子 scope 的高 attempt 覆盖 root。
+    if (record.scopeKey !== ROOT_EXECUTION_SCOPE_KEY) continue;
     const list = grouped.get(record.nodeId) ?? [];
+    if (list[0] && list[0].occurrenceId !== record.occurrenceId)
+      throw new Error('同一 root 节点存在不一致的 occurrence 身份');
     list.push(record);
     grouped.set(record.nodeId, list);
   }

@@ -25,6 +25,7 @@ interface HumanReviewCompilationContext {
   workflow: WorkflowDefinition;
   services: WorkflowValueServices;
   nodeRuns: HumanReviewNodeRunRepository;
+  scopeKey: string;
   addNode(id: string, node: LangGraphNode): void;
 }
 
@@ -39,6 +40,7 @@ export class HumanReviewNodeCompilationStrategy implements NodeCompilationStrate
     workflow,
     services,
     nodeRuns,
+    scopeKey,
     addNode,
   }: HumanReviewCompilationContext): void {
     if (
@@ -49,12 +51,19 @@ export class HumanReviewNodeCompilationStrategy implements NodeCompilationStrate
       throw new Error('Human Review 编译策略仅支持 flow.human_review@1');
     // 当前能力边界下每个 node / Run 仅一次逻辑审核；重入不是新 attempt。
     addNode(node.id, async (state) => {
-      const acquire = () =>
-        nodeRuns.getOrCreateHumanReviewRunning({
+      const acquire = async () => {
+        const occurrence = await nodeRuns.getOrCreateOccurrence({
+          workflowRunId: state.run.workflowRunId,
+          nodeId: node.id,
+          scopeKey,
+        });
+        return nodeRuns.getOrCreateHumanReviewRunning({
           workflowRunId: state.run.workflowRunId,
           workflowVersionId: state.run.workflowVersionId,
           nodeId: node.id,
+          occurrenceId: occurrence.id,
         });
+      };
       let values: Record<string, RuntimeValue>;
       try {
         values = await services.bindings.resolveInputs({

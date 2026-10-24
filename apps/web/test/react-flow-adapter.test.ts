@@ -192,6 +192,9 @@ describe('React Flow 与一等 Data Edge 无损适配', () => {
         target: 'storyboard',
         targetHandle: 'script',
         data: { kind: 'data' },
+        type: 'workflowEdge',
+        animated: false,
+        markerEnd: { type: 'arrowclosed', width: 14, height: 14, color: '#729d99' },
       },
     ]);
     expect(edges.map(fromReactFlowEdge)).toEqual(input.edges);

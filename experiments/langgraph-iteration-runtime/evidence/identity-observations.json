@@ -1,0 +1,99 @@
+{
+  "runId": "800f6bc1-88f3-436d-b29a-0359cb74a846",
+  "simple": [
+    {
+      "conceptualItem": {
+        "outerIndex": -1,
+        "index": 0
+      },
+      "bodyTaskId": "85bfa704-b797-5a88-a105-39bc49990dad",
+      "subgraphCheckpointNamespace": "body:85bfa704-b797-5a88-a105-39bc49990dad",
+      "reviewTaskId": "a9cf1f71-b148-5726-97c8-27afb3c4162c",
+      "reviewCheckpointNs": "body:85bfa704-b797-5a88-a105-39bc49990dad|review:a9cf1f71-b148-5726-97c8-27afb3c4162c",
+      "nodeAttempt": 1,
+      "interruptId": "4feefda370ed7f30b7d7455645322fe7"
+    },
+    {
+      "conceptualItem": {
+        "outerIndex": -1,
+        "index": 1
+      },
+      "bodyTaskId": "b58ce2f3-4927-5490-8e14-253df45be808",
+      "subgraphCheckpointNamespace": "body:b58ce2f3-4927-5490-8e14-253df45be808",
+      "reviewTaskId": "52187276-d1ae-50ee-ba3a-bfea03ebed01",
+      "reviewCheckpointNs": "body:b58ce2f3-4927-5490-8e14-253df45be808|review:52187276-d1ae-50ee-ba3a-bfea03ebed01",
+      "nodeAttempt": 1,
+      "interruptId": "d721035efdb27a67dcc86c594bce86bd"
+    },
+    {
+      "conceptualItem": {
+        "outerIndex": -1,
+        "index": 2
+      },
+      "bodyTaskId": "aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1",
+      "subgraphCheckpointNamespace": "body:aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1",
+      "reviewTaskId": "16d61b35-4622-57c1-ac39-cef1814de563",
+      "reviewCheckpointNs": "body:aa0a4b03-e889-54fd-bc6d-a1f39bf5f8a1|review:16d61b35-4622-57c1-ac39-cef1814de563",
+      "nodeAttempt": 1,
+      "interruptId": "e94e2ea5c67355cc745a482a36cc7585"
+    }
+  ],
+  "nested": [
+    {
+      "conceptualItem": {
+        "outerIndex": 0,
+        "index": 0
+      },
+      "bodyTaskId": "392a25b5-5505-5a26-b552-b84f657c33d7",
+      "subgraphCheckpointNamespace": "outerBody:53d0b8a1-8c27-500e-ab36-f7871e04a1de|body:392a25b5-5505-5a26-b552-b84f657c33d7",
+      "reviewTaskId": "ef2c0af4-6f80-55b7-af80-3621d7e37b7a",
+      "reviewCheckpointNs": "outerBody:53d0b8a1-8c27-500e-ab36-f7871e04a1de|body:392a25b5-5505-5a26-b552-b84f657c33d7|review:ef2c0af4-6f80-55b7-af80-3621d7e37b7a",
+      "nodeAttempt": 1,
+      "interruptId": "cabf97f4e0dede3d332f7e9b680a1d12",
+      "outerTaskId": "53d0b8a1-8c27-500e-ab36-f7871e04a1de",
+      "outerSubgraphNamespace": "outerBody:53d0b8a1-8c27-500e-ab36-f7871e04a1de"
+    },
+    {
+      "conceptualItem": {
+        "outerIndex": 0,
+        "index": 1
+      },
+      "bodyTaskId": "9b0e9e30-5e7d-5af6-a566-ef84a500876c",
+      "subgraphCheckpointNamespace": "outerBody:53d0b8a1-8c27-500e-ab36-f7871e04a1de|body:9b0e9e30-5e7d-5af6-a566-ef84a500876c",
+      "reviewTaskId": "f08c8fab-8963-57a5-8b6e-61c6aa6ca351",
+      "reviewCheckpointNs": "outerBody:53d0b8a1-8c27-500e-ab36-f7871e04a1de|body:9b0e9e30-5e7d-5af6-a566-ef84a500876c|review:f08c8fab-8963-57a5-8b6e-61c6aa6ca351",
+      "nodeAttempt": 1,
+      "interruptId": "c8e2f69a0e1d366374bd614503b77470",
+      "outerTaskId": "53d0b8a1-8c27-500e-ab36-f7871e04a1de",
+      "outerSubgraphNamespace": "outerBody:53d0b8a1-8c27-500e-ab36-f7871e04a1de"
+    },
+    {
+      "conceptualItem": {
+        "outerIndex": 1,
+        "index": 0
+      },
+      "bodyTaskId": "0a064675-2817-51e9-a5cf-046b6a03b146",
+      "subgraphCheckpointNamespace": "outerBody:3996ed57-08b8-5dca-8e93-8acd8b30ac37|body:0a064675-2817-51e9-a5cf-046b6a03b146",
+      "reviewTaskId": "496958a6-cbb3-5ca9-acdf-15c397c6beb5",
+      "reviewCheckpointNs": "outerBody:3996ed57-08b8-5dca-8e93-8acd8b30ac37|body:0a064675-2817-51e9-a5cf-046b6a03b146|review:496958a6-cbb3-5ca9-acdf-15c397c6beb5",
+      "nodeAttempt": 1,
+      "interruptId": "130d3aff2ebf2d3f314a85916e265aa4",
+      "outerTaskId": "3996ed57-08b8-5dca-8e93-8acd8b30ac37",
+      "outerSubgraphNamespace": "outerBody:3996ed57-08b8-5dca-8e93-8acd8b30ac37"
+    },
+    {
+      "conceptualItem": {
+        "outerIndex": 1,
+        "index": 1
+      },
+      "bodyTaskId": "c7e93400-8067-5be9-9ae9-a67666678cee",
+      "subgraphCheckpointNamespace": "outerBody:3996ed57-08b8-5dca-8e93-8acd8b30ac37|body:c7e93400-8067-5be9-9ae9-a67666678cee",
+      "reviewTaskId": "e965d0b2-09e4-58cb-8d9e-1b45b49a516e",
+      "reviewCheckpointNs": "outerBody:3996ed57-08b8-5dca-8e93-8acd8b30ac37|body:c7e93400-8067-5be9-9ae9-a67666678cee|review:e965d0b2-09e4-58cb-8d9e-1b45b49a516e",
+      "nodeAttempt": 1,
+      "interruptId": "736db62d7ff85fa3a7d63e383db82b0c",
+      "outerTaskId": "3996ed57-08b8-5dca-8e93-8acd8b30ac37",
+      "outerSubgraphNamespace": "outerBody:3996ed57-08b8-5dca-8e93-8acd8b30ac37"
+    }
+  ]
+}

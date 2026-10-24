@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { NodeRun } from '@dramaflow/contracts';
+import type { NodeOccurrence, NodeRun } from '@dramaflow/contracts';
 import type {
   CreateNodeRunInput,
   HumanReviewNodeRunRepository,
@@ -8,13 +8,33 @@ import type {
 
 // 只作为生命周期调用替身；并发 attempt 与持久化使用 API 的真实 PostgreSQL 测试。
 export function nodeRunRepositoryFixture() {
+  const occurrences = new Map<string, NodeOccurrence>();
+  const getOccurrence = (id: string) => {
+    const occurrence = [...occurrences.values()].find((item) => item.id === id);
+    if (!occurrence) throw new Error('occurrence 不存在');
+    return occurrence;
+  };
   return {
+    getOccurrence,
+    getOrCreateOccurrence: vi
+      .fn<NodeRunRepository['getOrCreateOccurrence']>()
+      .mockImplementation(async (input) => {
+        const key = JSON.stringify([input.workflowRunId, input.scopeKey, input.nodeId]);
+        let occurrence = occurrences.get(key);
+        if (!occurrence) {
+          occurrence = { id: `occurrence-${occurrences.size + 1}`, ...input };
+          occurrences.set(key, occurrence);
+        }
+        return structuredClone(occurrence);
+      }),
     createRunning: vi
       .fn<NodeRunRepository['createRunning']>()
       .mockImplementation(async (input) => ({
         id: 'node-run-1',
         workflowRunId: input.workflowRunId,
         nodeId: input.nodeId,
+        occurrenceId: input.occurrenceId,
+        scopeKey: getOccurrence(input.occurrenceId).scopeKey,
         attempt: 1,
         status: 'running',
         startedAt: '2026-10-20T00:00:00.000Z',
@@ -22,7 +42,7 @@ export function nodeRunRepositoryFixture() {
     updateInputs: vi.fn<NodeRunRepository['updateInputs']>().mockResolvedValue(undefined),
     markCompleted: vi.fn<NodeRunRepository['markCompleted']>().mockResolvedValue(undefined),
     markFailed: vi.fn<NodeRunRepository['markFailed']>().mockResolvedValue(undefined),
-  } satisfies NodeRunRepository;
+  } satisfies NodeRunRepository & { getOccurrence(id: string): NodeOccurrence };
 }
 
 // 仅用于真实 Graph 的内存审计断言；SQL 锁 / 权限边界由隔离 PostgreSQL 测试证明。
@@ -35,6 +55,8 @@ export function auditedNodeRunRepositoryFixture() {
       id: `node-run-${++sequence}`,
       workflowRunId: input.workflowRunId,
       nodeId: input.nodeId,
+      occurrenceId: input.occurrenceId,
+      scopeKey: repository.getOccurrence(input.occurrenceId).scopeKey,
       attempt,
       status: 'running' as const,
       startedAt: '2026-10-20T00:00:00.000Z',
@@ -53,7 +75,7 @@ export function auditedNodeRunRepositoryFixture() {
       Math.max(
         0,
         ...[...records.values()]
-          .filter((row) => row.workflowRunId === input.workflowRunId && row.nodeId === input.nodeId)
+          .filter((row) => row.occurrenceId === input.occurrenceId)
           .map((row) => row.attempt),
       ) + 1,
     ),
@@ -79,9 +101,7 @@ export function auditedNodeRunRepositoryFixture() {
   const getOrCreateHumanReviewRunning = vi
     .fn<HumanReviewNodeRunRepository['getOrCreateHumanReviewRunning']>()
     .mockImplementation(async (input) => {
-      const rows = [...records.values()].filter(
-        (row) => row.workflowRunId === input.workflowRunId && row.nodeId === input.nodeId,
-      );
+      const rows = [...records.values()].filter((row) => row.occurrenceId === input.occurrenceId);
       const row = rows[0];
       if (row && (rows.length !== 1 || row.status !== 'running' || row.attempt !== 1))
         throw new Error('不能复用审核记录');

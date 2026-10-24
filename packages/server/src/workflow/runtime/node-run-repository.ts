@@ -1,16 +1,22 @@
 import {
   nodeRunErrorSchema,
+  nodeOccurrenceSchema,
   nodeRunSchema,
   runtimeValueMapSchema,
   workflowDefinitionSchema,
   workflowIdentifierSchema,
   type NodeRun,
+  type NodeOccurrence,
   type NodeRunError,
   type RuntimeValue,
 } from '@dramaflow/contracts';
 import { Prisma } from '@dramaflow/database';
 import { DatabaseService } from '../../database/database.service.js';
-import type { CreateNodeRunInput, HumanReviewNodeRunRepository } from '@dramaflow/workflow';
+import type {
+  CreateNodeRunInput,
+  GetNodeOccurrenceInput,
+  HumanReviewNodeRunRepository,
+} from '@dramaflow/workflow';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 
@@ -31,10 +37,10 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
     private readonly scope: RepositoryScope,
   ) {}
 
-  async createRunning(input: CreateNodeRunInput): Promise<NodeRun> {
+  async getOrCreateOccurrence(input: GetNodeOccurrenceInput): Promise<NodeOccurrence> {
+    const identity = nodeOccurrenceSchema.omit({ id: true }).parse(input);
     const { projectId, workflowRunId, ownerId } = this.scope;
-    if (input.workflowRunId !== workflowRunId) throw new Error('节点执行记录与已授权运行不匹配');
-    const nodeId = workflowIdentifierSchema.parse(input.nodeId);
+    if (identity.workflowRunId !== workflowRunId) throw new Error('节点执行记录与已授权运行不匹配');
     return this.db.client.$transaction(
       async (tx) => {
         const run = await tx.workflowRun.findFirst({
@@ -42,18 +48,59 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
           select: { id: true },
         });
         if (!run) throw new NotFoundException('运行不存在或无权访问');
-        // 同一运行 / 节点串行分配；锁随事务释放，不重试业务执行，也不需要独立计数实体。
-        const lockKey = JSON.stringify([workflowRunId, nodeId]);
+        // 唯一键竞争也串行化；不依赖 find-then-create 或无锁 upsert 的实现细节。
+        const lockKey = JSON.stringify([workflowRunId, identity.scopeKey, identity.nodeId]);
         await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+        const row =
+          (await tx.nodeOccurrence.findUnique({
+            where: { workflowRunId_scopeKey_nodeId: identity },
+          })) ?? (await tx.nodeOccurrence.create({ data: { ...identity, projectId } }));
+        return nodeOccurrenceSchema.parse({
+          id: row.id,
+          workflowRunId,
+          nodeId: row.nodeId,
+          scopeKey: row.scopeKey,
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+    );
+  }
+
+  private async lockOccurrence(tx: Prisma.TransactionClient, input: CreateNodeRunInput) {
+    const { projectId, workflowRunId, ownerId } = this.scope;
+    if (input.workflowRunId !== workflowRunId) throw new Error('节点执行记录与已授权运行不匹配');
+    const nodeId = workflowIdentifierSchema.parse(input.nodeId);
+    const occurrenceId = z.uuid().parse(input.occurrenceId);
+    const run = await tx.workflowRun.findFirst({
+      where: { id: workflowRunId, projectId, project: { ownerId } },
+      select: { workflowId: true, workflowVersionId: true, status: true },
+    });
+    if (!run) throw new NotFoundException('运行不存在或无权访问');
+    const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "node_occurrence"
+      WHERE "id" = ${occurrenceId}::uuid AND "projectId" = ${projectId}::uuid
+        AND "workflowRunId" = ${workflowRunId} AND "nodeId" = ${nodeId} FOR UPDATE`;
+    if (locked.length !== 1)
+      throw new NotFoundException('节点 occurrence 不存在或与执行身份不匹配');
+    const occurrence = await tx.nodeOccurrence.findUniqueOrThrow({ where: { id: occurrenceId } });
+    return { run, occurrence };
+  }
+
+  async createRunning(input: CreateNodeRunInput): Promise<NodeRun> {
+    const { projectId, workflowRunId } = this.scope;
+    return this.db.client.$transaction(
+      async (tx) => {
+        const { occurrence } = await this.lockOccurrence(tx, input);
+        // 仅在这一 occurrence 内分配；行锁随事务释放，不增加业务重试策略。
         const previous = await tx.nodeRun.aggregate({
-          where: { projectId, workflowRunId, nodeId },
+          where: { occurrenceId: occurrence.id },
           _max: { attempt: true },
         });
         const row = await tx.nodeRun.create({
           data: {
             projectId,
             workflowRunId,
-            nodeId,
+            nodeId: occurrence.nodeId,
+            occurrenceId: occurrence.id,
             attempt: (previous._max.attempt ?? 0) + 1,
           },
         });
@@ -61,6 +108,8 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
           id: row.id,
           workflowRunId: row.workflowRunId,
           nodeId: row.nodeId,
+          occurrenceId: occurrence.id,
+          scopeKey: occurrence.scopeKey,
           attempt: row.attempt,
           status: row.status,
           startedAt: row.startedAt.toISOString(),
@@ -74,19 +123,12 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
     input: CreateNodeRunInput & { readonly workflowVersionId: string },
   ): Promise<NodeRun> {
     const { projectId, workflowRunId, ownerId } = this.scope;
-    if (input.workflowRunId !== workflowRunId) throw new Error('节点执行记录与已授权运行不匹配');
     const nodeId = workflowIdentifierSchema.parse(input.nodeId);
     const workflowVersionId = workflowIdentifierSchema.parse(input.workflowVersionId);
     return this.db.client.$transaction(
       async (tx) => {
-        // 与 Action attempt 分配使用同一把锁，不能 find 后无锁 create。
-        const lockKey = JSON.stringify([workflowRunId, nodeId]);
-        await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
-        const run = await tx.workflowRun.findFirst({
-          where: { id: workflowRunId, projectId, project: { ownerId } },
-          select: { workflowId: true, workflowVersionId: true, status: true },
-        });
-        if (!run) throw new NotFoundException('运行不存在或无权访问');
+        // 与 Action attempt 分配锁同一 occurrence；重入不能换成其他 item 的记录。
+        const { run, occurrence } = await this.lockOccurrence(tx, input);
         if (run.status !== 'running' || run.workflowVersionId !== workflowVersionId)
           throw new Error('Human Review 必须属于当前已 claim 的固定版本运行');
         const version = await tx.workflowVersion.findFirst({
@@ -104,10 +146,10 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
             .nodes.find((node) => node.id === nodeId);
         if (!node || node.type !== 'flow.human_review' || node.typeVersion !== 1)
           throw new Error('固定运行版本中的节点不是 flow.human_review@1');
-        // Compiler 已 gate：无环、分支区域外、审核之间有先后依赖；每节点仅一次逻辑审核。
+        // 当前仍由 Compiler gate 串行审核；审计复用只依赖明确 occurrence。
         // 不按 latest running 猜身份；任何终态或多 attempt 的旧记录均拒绝复用。
         const existing = await tx.nodeRun.findMany({
-          where: { projectId, workflowRunId, nodeId },
+          where: { projectId, workflowRunId, occurrenceId: occurrence.id },
           take: 2,
         });
         const previous = existing[0];
@@ -118,11 +160,15 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
           throw new Error('Human Review 已结束或存在不支持的 attempt 历史');
         const row =
           previous ??
-          (await tx.nodeRun.create({ data: { projectId, workflowRunId, nodeId, attempt: 1 } }));
+          (await tx.nodeRun.create({
+            data: { projectId, workflowRunId, nodeId, occurrenceId: occurrence.id, attempt: 1 },
+          }));
         return nodeRunSchema.parse({
           id: row.id,
           workflowRunId: row.workflowRunId,
           nodeId: row.nodeId,
+          occurrenceId: occurrence.id,
+          scopeKey: occurrence.scopeKey,
           attempt: row.attempt,
           status: row.status,
           startedAt: row.startedAt.toISOString(),

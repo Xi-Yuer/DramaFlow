@@ -13,6 +13,7 @@ export interface CapabilityInvoker {
 }
 
 export interface NodeExecutionContext extends RuntimeValueContext {
+  readonly scopeKey: string;
   readonly workflow: WorkflowDefinition;
   readonly state: WorkflowState;
   readonly signal?: AbortSignal;
@@ -38,9 +39,15 @@ export class DefaultNodeExecutor implements NodeExecutor {
 
   async execute(node: NodeDefinition, context: NodeExecutionContext): Promise<NodeExecutionResult> {
     // Repository 故障属于基础设施异常，必须位于业务失败的 catch 范围之外。
+    const occurrence = await this.nodeRunRepository.getOrCreateOccurrence({
+      workflowRunId: context.workflowRunId,
+      nodeId: node.id,
+      scopeKey: context.scopeKey,
+    });
     const nodeRun = await this.nodeRunRepository.createRunning({
       workflowRunId: context.workflowRunId,
       nodeId: node.id,
+      occurrenceId: occurrence.id,
     });
     let nodeType: ReturnType<NodeRegistry['getAction']>;
     let runtimeInputs: Record<string, RuntimeValue>;

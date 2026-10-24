@@ -1,0 +1,459 @@
+{
+  "pid": 98032,
+  "request": {
+    "operation": "start",
+    "mode": "basic",
+    "threadId": "iteration-experiment-basic-10-c5-800f6bc1-88f3-436d-b29a-0359cb74a846",
+    "count": 10,
+    "maxConcurrency": 5,
+    "eventPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/basic-10-c5.events.jsonl",
+    "outputPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/basic-10-c5.json"
+  },
+  "config": {
+    "configurable": {
+      "thread_id": "iteration-experiment-basic-10-c5-800f6bc1-88f3-436d-b29a-0359cb74a846"
+    },
+    "maxConcurrency": 5,
+    "recursionLimit": 40
+  },
+  "invoke": {
+    "status": "returned",
+    "value": {
+      "items": [
+        {
+          "index": 0,
+          "value": 0
+        },
+        {
+          "index": 1,
+          "value": 1
+        },
+        {
+          "index": 2,
+          "value": 2
+        },
+        {
+          "index": 3,
+          "value": 3
+        },
+        {
+          "index": 4,
+          "value": 4
+        },
+        {
+          "index": 5,
+          "value": 5
+        },
+        {
+          "index": 6,
+          "value": 6
+        },
+        {
+          "index": 7,
+          "value": 7
+        },
+        {
+          "index": 8,
+          "value": 8
+        },
+        {
+          "index": 9,
+          "value": 9
+        }
+      ],
+      "outerIndex": -1,
+      "results": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1
+        },
+        {
+          "index": 1,
+          "outerIndex": -1,
+          "value": 3
+        },
+        {
+          "index": 2,
+          "outerIndex": -1,
+          "value": 5
+        },
+        {
+          "index": 3,
+          "outerIndex": -1,
+          "value": 7
+        },
+        {
+          "index": 4,
+          "outerIndex": -1,
+          "value": 9
+        },
+        {
+          "index": 5,
+          "outerIndex": -1,
+          "value": 11
+        },
+        {
+          "index": 6,
+          "outerIndex": -1,
+          "value": 13
+        },
+        {
+          "index": 7,
+          "outerIndex": -1,
+          "value": 15
+        },
+        {
+          "index": 8,
+          "outerIndex": -1,
+          "value": 17
+        },
+        {
+          "index": 9,
+          "outerIndex": -1,
+          "value": 19
+        }
+      ],
+      "ordered": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1
+        },
+        {
+          "index": 1,
+          "outerIndex": -1,
+          "value": 3
+        },
+        {
+          "index": 2,
+          "outerIndex": -1,
+          "value": 5
+        },
+        {
+          "index": 3,
+          "outerIndex": -1,
+          "value": 7
+        },
+        {
+          "index": 4,
+          "outerIndex": -1,
+          "value": 9
+        },
+        {
+          "index": 5,
+          "outerIndex": -1,
+          "value": 11
+        },
+        {
+          "index": 6,
+          "outerIndex": -1,
+          "value": 13
+        },
+        {
+          "index": 7,
+          "outerIndex": -1,
+          "value": 15
+        },
+        {
+          "index": 8,
+          "outerIndex": -1,
+          "value": 17
+        },
+        {
+          "index": 9,
+          "outerIndex": -1,
+          "value": 19
+        }
+      ]
+    }
+  },
+  "after": {
+    "checkpointId": "1f1cf528-bc8b-6310-8003-89833b00e9ab",
+    "checkpointNs": "",
+    "values": {
+      "items": [
+        {
+          "index": 0,
+          "value": 0
+        },
+        {
+          "index": 1,
+          "value": 1
+        },
+        {
+          "index": 2,
+          "value": 2
+        },
+        {
+          "index": 3,
+          "value": 3
+        },
+        {
+          "index": 4,
+          "value": 4
+        },
+        {
+          "index": 5,
+          "value": 5
+        },
+        {
+          "index": 6,
+          "value": 6
+        },
+        {
+          "index": 7,
+          "value": 7
+        },
+        {
+          "index": 8,
+          "value": 8
+        },
+        {
+          "index": 9,
+          "value": 9
+        }
+      ],
+      "outerIndex": -1,
+      "results": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1
+        },
+        {
+          "index": 1,
+          "outerIndex": -1,
+          "value": 3
+        },
+        {
+          "index": 2,
+          "outerIndex": -1,
+          "value": 5
+        },
+        {
+          "index": 3,
+          "outerIndex": -1,
+          "value": 7
+        },
+        {
+          "index": 4,
+          "outerIndex": -1,
+          "value": 9
+        },
+        {
+          "index": 5,
+          "outerIndex": -1,
+          "value": 11
+        },
+        {
+          "index": 6,
+          "outerIndex": -1,
+          "value": 13
+        },
+        {
+          "index": 7,
+          "outerIndex": -1,
+          "value": 15
+        },
+        {
+          "index": 8,
+          "outerIndex": -1,
+          "value": 17
+        },
+        {
+          "index": 9,
+          "outerIndex": -1,
+          "value": 19
+        }
+      ],
+      "ordered": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1
+        },
+        {
+          "index": 1,
+          "outerIndex": -1,
+          "value": 3
+        },
+        {
+          "index": 2,
+          "outerIndex": -1,
+          "value": 5
+        },
+        {
+          "index": 3,
+          "outerIndex": -1,
+          "value": 7
+        },
+        {
+          "index": 4,
+          "outerIndex": -1,
+          "value": 9
+        },
+        {
+          "index": 5,
+          "outerIndex": -1,
+          "value": 11
+        },
+        {
+          "index": 6,
+          "outerIndex": -1,
+          "value": 13
+        },
+        {
+          "index": 7,
+          "outerIndex": -1,
+          "value": 15
+        },
+        {
+          "index": 8,
+          "outerIndex": -1,
+          "value": 17
+        },
+        {
+          "index": 9,
+          "outerIndex": -1,
+          "value": 19
+        }
+      ]
+    },
+    "next": [],
+    "tasks": []
+  },
+  "checkpointCount": 45,
+  "namespaceHeads": [
+    {
+      "namespace": "",
+      "checkpointId": "1f1cf528-bc8b-6310-8003-89833b00e9ab",
+      "metadata": {
+        "step": 3,
+        "source": "loop",
+        "parents": {}
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:520774eb-ab2e-538d-8952-ccc7376fa388",
+      "checkpointId": "1f1cf528-bc33-64d0-8002-198056242acc",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-bb79-6c10-8001-5164301e7d1c"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:3a5018fd-a195-5755-8386-49ab2244971a",
+      "checkpointId": "1f1cf528-bc2e-66b0-8002-888c8583754a",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-bb79-6c10-8001-5164301e7d1c"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:6d9cc1bd-e04b-5f46-98e5-77cedb7a4d82",
+      "checkpointId": "1f1cf528-bc29-6890-8002-b9446d8fa88c",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-bb79-6c10-8001-5164301e7d1c"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:2cd7acf0-13b4-5b88-9065-5c77ccf03e18",
+      "checkpointId": "1f1cf528-bc27-6180-8002-227520ff6315",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-bb79-6c10-8001-5164301e7d1c"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:2782248a-4d47-58d2-a86e-024220fcd6e8",
+      "checkpointId": "1f1cf528-bc24-6a70-8002-56720f1818c4",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-bb79-6c10-8001-5164301e7d1c"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:5e7ab405-9694-5ec2-baf8-8ddc68ff21c8",
+      "checkpointId": "1f1cf528-bbf1-6620-8002-a21389a0af74",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-bb79-6c10-8001-5164301e7d1c"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:9bf97cc3-c826-5f9a-94ba-48386f66cd5f",
+      "checkpointId": "1f1cf528-bbe7-69e0-8002-8ed5dc2b6f65",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-bb79-6c10-8001-5164301e7d1c"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:9e67bb19-2d25-51aa-a23c-c0856ee417b2",
+      "checkpointId": "1f1cf528-bbe5-62d0-8002-0cb0cb12537c",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-bb79-6c10-8001-5164301e7d1c"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:8eb3ab49-7454-5f49-81bf-a15079394094",
+      "checkpointId": "1f1cf528-bbe0-64b1-8002-c43bfd9e20e0",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-bb79-6c10-8001-5164301e7d1c"
+        }
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:93f01fe6-7b75-566d-aaa6-32e1d40e325a",
+      "checkpointId": "1f1cf528-bbdb-6690-8002-1f93a3d768f0",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-bb79-6c10-8001-5164301e7d1c"
+        }
+      },
+      "pendingWrites": []
+    }
+  ]
+}

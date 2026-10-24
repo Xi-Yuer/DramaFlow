@@ -81,6 +81,38 @@ function makeRunStatus(
 }
 
 describe('集中式 Runtime Node Status（真实 NodeRun execution facts 优先）', () => {
+  it('先选择 root occurrence，再比较其 attempt；其他 scope 的高 attempt 不代表最新 root 执行', () => {
+    const root: NodeRun = {
+      id: 'root-attempt',
+      workflowRunId: waitingRun.id,
+      nodeId: 'node-generate',
+      occurrenceId: 'root-occurrence',
+      scopeKey: 'root',
+      attempt: 1,
+      status: 'completed',
+      startedAt: '2026-10-24T00:00:00.000Z',
+    };
+    const child: NodeRun = {
+      ...root,
+      id: 'child-attempt',
+      occurrenceId: 'child-occurrence',
+      scopeKey: 'opaque-child-scope',
+      attempt: 99,
+      status: 'failed',
+    };
+    const map = resolveWorkflowRuntimeNodes({
+      workflow: createWorkflow(),
+      runStatus: makeRunStatus(waitingRun, null, [child, root]),
+    });
+    expect(map.get(root.nodeId)?.nodeRun?.id).toBe(root.id);
+    expect(map.get(root.nodeId)?.attempts).toEqual([root]);
+    expect(() =>
+      resolveWorkflowRuntimeNodes({
+        workflow: createWorkflow(),
+        nodeRuns: [root, { ...root, occurrenceId: 'inconsistent-root' }],
+      }),
+    ).toThrow('occurrence');
+  });
   it('无运行或终态运行下没有 NodeRun 的节点均为 idle，进行中运行下没有 NodeRun 的节点为 pending，不按拓扑猜测完成状态', () => {
     const workflow = createWorkflow();
 
@@ -114,6 +146,8 @@ describe('集中式 Runtime Node Status（真实 NodeRun execution facts 优先�
         id: 'nr-gen-1',
         workflowRunId: waitingRun.id,
         nodeId: 'node-generate',
+        occurrenceId: 'occurrence-node-generate',
+        scopeKey: 'root',
         attempt: 1,
         status: 'failed',
         inputs: {
@@ -127,6 +161,8 @@ describe('集中式 Runtime Node Status（真实 NodeRun execution facts 优先�
         id: 'nr-gen-2',
         workflowRunId: waitingRun.id,
         nodeId: 'node-generate',
+        occurrenceId: 'occurrence-node-generate',
+        scopeKey: 'root',
         attempt: 2,
         status: 'completed',
         inputs: {
@@ -142,6 +178,8 @@ describe('集中式 Runtime Node Status（真实 NodeRun execution facts 优先�
         id: 'nr-review-1',
         workflowRunId: waitingRun.id,
         nodeId: 'review-1',
+        occurrenceId: 'occurrence-review-1',
+        scopeKey: 'root',
         attempt: 1,
         status: 'running',
         inputs: {
@@ -182,6 +220,8 @@ describe('集中式 Runtime Node Status（真实 NodeRun execution facts 优先�
         id: 'nr-gen-1',
         workflowRunId: waitingRun.id,
         nodeId: 'node-generate',
+        occurrenceId: 'occurrence-node-generate',
+        scopeKey: 'root',
         attempt: 1,
         status: 'completed',
         inputs: {
@@ -197,6 +237,8 @@ describe('集中式 Runtime Node Status（真实 NodeRun execution facts 优先�
         id: 'nr-review-1',
         workflowRunId: waitingRun.id,
         nodeId: 'review-1',
+        occurrenceId: 'occurrence-review-1',
+        scopeKey: 'root',
         attempt: 1,
         status: 'running',
         inputs: {

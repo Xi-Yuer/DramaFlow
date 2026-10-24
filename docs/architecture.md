@@ -20,6 +20,18 @@ End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 nodes
 
 `packages/contracts` 定义中立 JSON 协议；`packages/workflow` 负责 Registry、发布 / 调用校验、编译和执行适配。运行绑定指定 WorkflowVersion，不读 draft / latest。Action DAG 的联合依赖与技术执行预算见 [Runtime](runtime-architecture.md#action-dag-技术执行预算)。
 
+## Node Execution Occurrence
+
+[NodeOccurrence / NodeRun 协议](../packages/contracts/src/workflow/node-run.ts)区分一次逻辑执行与尝试。持久化仅新增 `node_occurrence`，不创建 ExecutionScope 表；occurrence 由固定 WorkflowRun、scopeKey 和 nodeId 唯一定位，并拥有独立 UUID。当前 Compiler 显式使用 root scope，nodeId 归属 Run 的固定 WorkflowVersion；If 仍不创建 NodeRun。scopeKey 是受信任执行上下文提供的产品身份，不解析为 iterationIndex、LangGraph namespace 或权限凭据。
+
+[NodeRun Repository](../packages/server/src/workflow/runtime/node-run-repository.ts)按授权 Run 获取 / 创建 occurrence；唯一键竞争在事务 advisory lock 内串行化。创建 attempt 时锁定对应 occurrence 行，只在该 occurrence 内分配序号；NodeRun 的唯一键为 occurrenceId / attempt，复合外键保证 occurrence、NodeRun 的项目 / Run / nodeId 一致。数据库禁止修改 occurrence 身份及既有 attempt 的归属、序号和开始时间。Action Executor 通过显式 scopeKey 取得 occurrence，分配 attempt 的操作不新增 retry 策略或重放兜底。
+
+NodeRun 查询新增安全的 occurrenceId / scopeKey，不返回 thread、checkpoint 或原生 task metadata。当前 Runtime Inspector 仅展示 root scope 的唯一 occurrence，再按其 attempt 排序；不以跨 occurrence 的最大 attempt 猜最新执行，不增加 Iteration UI。Artifact 继续只关联 nodeRunId，经 NodeRun 反查 occurrence，不复制 scope / occurrence 字段。
+
+[增量迁移](../packages/database/prisma/migrations/20261024000000_node_occurrences/migration.sql)将旧数据的每组 Run / node 全部 attempt 回填到同一个 root occurrence，保留 NodeRun ID、序号、状态、输入输出、时间和 Artifact 关联，不清空审计记录。旧 checkpoint 的 State 不增加必填字段，现有 root 审核恢复重新查得同一 occurrence。
+
+底座只支持身份解析与审计关联，不执行子 scope，也没有 scope 父链或 SubWorkflow 版本 / 权限解析。未来受信任的 scoped execution 需显式分配稳定 scopeKey、提供对应定义与权限上下文，再调用同一 occurrence / attempt 接口；scopeKey 不能替代这些检查。
+
 ## Human Review 声明与纯业务边界
 
 `flow.human_review@1` 已进入生产 Registry / 节点目录，执行种类为 interaction，不提供 Action execute 或审批控制出口；Draft、Publish / Compile / Run 已接入独立 HumanReviewNodeCompilationStrategy；其他未知 interaction 仍以 NODE_EXECUTION_KIND_UNSUPPORTED 拒绝。节点标题使用 NodeDefinition.name，不另加 title config。
@@ -32,9 +44,9 @@ Publish / Compile 共用 Human Review 能力门禁：支持分支区域外有明
 
 Human Review 已有正式 NodeRun 审计：首次进入创建 attempt 1 running、首次记录 RuntimeValue inputs；WorkflowRun waiting 时 NodeRun 保持 running，interrupt 身份以 checkpoint 为权威，不写入 NodeRun outputs。resume 重入获取同一记录，比较重新解析的 inputs 与首次快照（对象键顺序无关），不再次 updateInputs。decision / 输出校验及编码成功后 markCompleted，再提交 State；approve 和 reject 均正常 completed。业务错误将原记录记 failed，原生 GraphInterrupt / ParentCommand 不记失败；仓储失败不反向标记业务 failed。
 
-[审核专用 Repository](../packages/server/src/workflow/runtime/node-run-repository.ts)在原有事务 advisory lock 内获取 / 创建记录，核对 Owner / Project / Run、已 claim 的 running Run、固定 WorkflowVersion 中的精确 Human Review node，以及唯一 attempt 1 running 历史；终态、多 attempt 或错误节点 / 版本明确拒绝，不按 latest running 猜测，也不自动新建 attempt 2。inputs 仍受原有一次写约束保护，完整执行的串行性依赖 Run / Outbox 的数据库 claim，获取 / 创建本身的唯一性由节点锁与既有唯一约束保证。Action createRunning 继续原子分配新 attempt。
+[审核专用 Repository](../packages/server/src/workflow/runtime/node-run-repository.ts)锁定明确 occurrence 获取 / 创建记录，核对 Owner / Project / Run、已 claim 的 running Run、固定 WorkflowVersion 中的精确 Human Review node，以及该 occurrence 唯一 attempt 1 running 历史；终态、多 attempt 或错误节点 / 版本明确拒绝，不按 latest running 猜测，也不自动新建 attempt 2。inputs 仍受原有一次写约束保护，完整执行的串行性依赖 Run / Outbox 的数据库 claim，获取 / 创建本身的唯一性由 occurrence 行锁与唯一约束保证。不同 scope 的同名节点不交叉复用审计；本轮未开放并行审核。
 
-该复用键仅适用于当前无环、每节点每 Run 一次逻辑审核的能力边界。未来 Loop / Iteration 必须增加显式 execution occurrence identity；本轮没有新增发生次数模型、NodeRun waiting、数据库字段或约束。审计 completed 与 Graph checkpoint 不构成跨系统原子提交；异常中断后的对账 / recovery_required 仍沿用既有边界，不重放终态记录。待审批查询与 targeted resume HTTP 已接入，Web 已提供单个文本审批闭环，Artifact 预览待后续任务。
+审核首次进入与 resume 通过同一 root scope 找到同一 occurrence，复用同一 running NodeRun attempt；本轮没有新增 NodeRun waiting、并行 pending projection、重试或恢复产品能力。审计 completed 与 Graph checkpoint 不构成跨系统原子提交；异常中断后的对账 / recovery_required 仍沿用既有边界，不重放终态记录。待审批查询与 targeted resume HTTP 已接入，Web 已提供单个文本审批闭环，Artifact 预览待后续任务。
 
 ## Workflow 编辑 HTTP API
 

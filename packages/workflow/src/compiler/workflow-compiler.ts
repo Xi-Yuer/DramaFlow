@@ -1,4 +1,8 @@
-import type { WorkflowDefinition, WorkflowRun } from '@dramaflow/contracts';
+import {
+  ROOT_EXECUTION_SCOPE_KEY,
+  type WorkflowDefinition,
+  type WorkflowRun,
+} from '@dramaflow/contracts';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import {
   END,
@@ -158,6 +162,7 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
           workflow: definition,
           services: valueServices,
           nodeRuns: reviewRuns,
+          scopeKey: ROOT_EXECUTION_SCOPE_KEY,
           addNode: (id, action) => {
             graph.addNode(id, action);
           },
@@ -168,7 +173,11 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
           node,
           manifest: declaration.manifest,
           executor,
-          executionContext: (config) => ({ workflow: definition, runnableConfig: config }),
+          executionContext: (config) => ({
+            workflow: definition,
+            runnableConfig: config,
+            scopeKey: ROOT_EXECUTION_SCOPE_KEY,
+          }),
           addNode: (id, action) => {
             graph.addNode(id, action);
           },

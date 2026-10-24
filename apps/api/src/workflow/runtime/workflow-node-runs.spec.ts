@@ -32,6 +32,9 @@ function fixture() {
       projectId: 'project-a',
       workflowRunId: 'run-a',
       nodeId: 'node-generate',
+      occurrenceId: 'occurrence-node-generate',
+      scopeKey: 'root',
+      occurrence: { scopeKey: 'root' },
       attempt: 1,
       status: 'failed',
       inputs: {
@@ -51,6 +54,9 @@ function fixture() {
       projectId: 'project-a',
       workflowRunId: 'run-a',
       nodeId: 'node-generate',
+      occurrenceId: 'occurrence-node-generate',
+      scopeKey: 'root',
+      occurrence: { scopeKey: 'root' },
       attempt: 2,
       status: 'completed',
       inputs: {
@@ -77,6 +83,9 @@ function fixture() {
       projectId: 'project-a',
       workflowRunId: 'run-a',
       nodeId: 'review-1',
+      occurrenceId: 'occurrence-review-1',
+      scopeKey: 'root',
+      occurrence: { scopeKey: 'root' },
       attempt: 1,
       status: 'running',
       inputs: {
@@ -144,6 +153,8 @@ describe('WorkflowRun NodeRun 查询 API', () => {
         id: true,
         workflowRunId: true,
         nodeId: true,
+        occurrenceId: true,
+        occurrence: { select: { scopeKey: true } },
         attempt: true,
         status: true,
         inputs: true,
@@ -159,6 +170,8 @@ describe('WorkflowRun NodeRun 查询 API', () => {
       id: 'node-run-1',
       workflowRunId: 'run-a',
       nodeId: 'node-generate',
+      occurrenceId: 'occurrence-node-generate',
+      scopeKey: 'root',
       attempt: 1,
       status: 'failed',
       inputs: {
@@ -176,6 +189,8 @@ describe('WorkflowRun NodeRun 查询 API', () => {
       id: 'node-run-2',
       workflowRunId: 'run-a',
       nodeId: 'node-generate',
+      occurrenceId: 'occurrence-node-generate',
+      scopeKey: 'root',
       attempt: 2,
       status: 'completed',
       inputs: {
@@ -200,6 +215,8 @@ describe('WorkflowRun NodeRun 查询 API', () => {
       id: 'node-run-3',
       workflowRunId: 'run-a',
       nodeId: 'review-1',
+      occurrenceId: 'occurrence-review-1',
+      scopeKey: 'root',
       attempt: 1,
       status: 'running',
       inputs: {

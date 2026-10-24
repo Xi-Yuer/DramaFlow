@@ -2,6 +2,19 @@ import { z } from 'zod';
 import { runtimeValueMapSchema } from '../data/runtime-value.js';
 import { workflowIdentifierSchema } from './metadata.js';
 
+export const ROOT_EXECUTION_SCOPE_KEY = 'root';
+// 产品执行作用域标识，不是 LangGraph task / checkpoint namespace。
+export const executionScopeKeySchema = workflowIdentifierSchema;
+export const nodeOccurrenceSchema = z
+  .object({
+    id: workflowIdentifierSchema,
+    workflowRunId: workflowIdentifierSchema,
+    nodeId: workflowIdentifierSchema,
+    scopeKey: executionScopeKeySchema,
+  })
+  .strict();
+export type NodeOccurrence = z.infer<typeof nodeOccurrenceSchema>;
+
 export const nodeRunStatusSchema = z.enum(['running', 'completed', 'failed']);
 
 export const nodeRunErrorSchema = z
@@ -12,12 +25,14 @@ export const nodeRunErrorSchema = z
   })
   .strict();
 
-// 跨 API / Web / Worker 的 JSON 领域协议；attempt 由持久化层原子分配。
+// 跨 API / Web / Worker 的 JSON 领域协议；attempt 仅在 occurrence 内由持久化层原子分配。
 export const nodeRunSchema = z
   .object({
     id: workflowIdentifierSchema,
     workflowRunId: workflowIdentifierSchema,
     nodeId: workflowIdentifierSchema,
+    occurrenceId: workflowIdentifierSchema,
+    scopeKey: executionScopeKeySchema,
     attempt: z.number().int().positive(),
     status: nodeRunStatusSchema,
     inputs: runtimeValueMapSchema.optional(),

@@ -6,6 +6,8 @@ describe('NodeRun 记录协议', () => {
     id: 'nr1',
     workflowRunId: 'wr1',
     nodeId: 'storyboard',
+    occurrenceId: 'occurrence-1',
+    scopeKey: 'root',
     attempt: 1,
     status: 'running',
     startedAt: '2026-10-20T00:00:00.000Z',
@@ -23,6 +25,27 @@ describe('NodeRun 记录协议', () => {
       expect(nodeRunStatusSchema.safeParse(status).success).toBe(false);
     expect(nodeRunSchema.safeParse({ ...run, startedAt: undefined }).success).toBe(false);
     expect(nodeRunSchema.safeParse({ ...run, config: {} }).success).toBe(false);
+  });
+
+  it('occurrence 与 attempt 分离，身份必须明确且不接受运行时内部字段', () => {
+    for (const field of ['occurrenceId', 'scopeKey'] as const) {
+      expect(nodeRunSchema.safeParse({ ...run, [field]: undefined }).success).toBe(false);
+      expect(nodeRunSchema.safeParse({ ...run, [field]: '' }).success).toBe(false);
+    }
+    for (const field of ['taskId', 'threadId', 'checkpointNs', 'nodeAttempt'])
+      expect(nodeRunSchema.safeParse({ ...run, [field]: 'internal' }).success).toBe(false);
+    expect(nodeRunSchema.parse({ ...run, id: 'nr2', attempt: 2 }).occurrenceId).toBe(
+      run.occurrenceId,
+    );
+    expect(
+      nodeRunSchema.parse({
+        ...run,
+        id: 'nr3',
+        occurrenceId: 'other-occurrence',
+        scopeKey: 'opaque-child',
+        attempt: 1,
+      }).attempt,
+    ).toBe(1);
   });
 
   it('保存结构化阶段错误与 ISO 时间，拒绝原始异常、空阶段和业务快照', () => {

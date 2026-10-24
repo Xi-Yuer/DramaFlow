@@ -297,7 +297,13 @@ describe('真实 PostgreSQL WorkflowRun', () => {
       nodes.forRun(ownerId, projectId, 'missing-run'),
     ).rejects.toThrow('运行不存在');
     const nodeRepository = await nodes.forRun(ownerId, projectId, run.id);
+    const occurrence = await nodeRepository.getOrCreateOccurrence({
+      workflowRunId: run.id,
+      nodeId: 'node-1',
+      scopeKey: 'root',
+    });
     const node = await nodeRepository.createRunning({
+      occurrenceId: occurrence.id,
       workflowRunId: run.id,
       nodeId: 'node-1',
     });
@@ -311,7 +317,8 @@ describe('真实 PostgreSQL WorkflowRun', () => {
             projectId: project!,
             workflowRunId: parent!,
             nodeId: 'invalid',
-            attempt: 1,
+            occurrenceId: occurrence.id,
+            attempt: 2,
           },
         }),
       ).rejects.toMatchObject({ code: 'P2003' });

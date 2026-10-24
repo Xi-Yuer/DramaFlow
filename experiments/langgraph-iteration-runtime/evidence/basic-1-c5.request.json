@@ -1,0 +1,9 @@
+{
+  "operation": "start",
+  "mode": "basic",
+  "count": 1,
+  "maxConcurrency": 5,
+  "threadId": "iteration-experiment-basic-1-c5-800f6bc1-88f3-436d-b29a-0359cb74a846",
+  "eventPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/basic-1-c5.events.jsonl",
+  "outputPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/basic-1-c5.json"
+}

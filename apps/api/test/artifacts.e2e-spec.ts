@@ -120,9 +120,19 @@ async function writingFixture() {
   await (
     await app.get(WorkflowRunRepositories).forProject(ownerId, f.projectId)
   ).markRunning(f.run.id);
-  const node = await (
-    await app.get(NodeRunRepositories).forRun(ownerId, f.projectId, f.run.id)
-  ).createRunning({ workflowRunId: f.run.id, nodeId: 'A' });
+  const nodeRepository = await app
+    .get(NodeRunRepositories)
+    .forRun(ownerId, f.projectId, f.run.id);
+  const occurrence = await nodeRepository.getOrCreateOccurrence({
+    workflowRunId: f.run.id,
+    nodeId: 'A',
+    scopeKey: 'root',
+  });
+  const node = await nodeRepository.createRunning({
+    workflowRunId: f.run.id,
+    nodeId: 'A',
+    occurrenceId: occurrence.id,
+  });
   const codec = await app
     .get(ArtifactRuntimeFactory)
     .forRun(ownerId, f.projectId, f.run.id);
@@ -219,6 +229,23 @@ async function launch(command: {
 }
 
 describe('生产 Artifact：PostgreSQL + RustFS + Runtime + persistent checkpoint', () => {
+  it('Artifact 仅经原 nodeRunId 追溯 occurrence，不重复存储 scope / occurrence 字段', async () => {
+    const f = await writingFixture();
+    const value = await f.codec.encode({ identity: 'normalized' }, f.options);
+    const row = await database.client.artifact.findUniqueOrThrow({
+      where: { id: artifactId(value) },
+      include: { nodeRun: { include: { occurrence: true } } },
+    });
+    expect(row.nodeRun?.id).toBe(f.context.nodeRunId);
+    expect(row.nodeRun?.occurrence).toMatchObject({
+      workflowRunId: f.run.id,
+      nodeId: 'A',
+      scopeKey: 'root',
+    });
+    expect(row.nodeRun?.occurrenceId).toBe(row.nodeRun?.occurrence.id);
+    expect(row).not.toHaveProperty('occurrenceId');
+    expect(row).not.toHaveProperty('scopeKey');
+  });
   it('生产 Compiler / Executor 的 A→B 管线读写真实 JSON 与二进制，State / NodeRun / Checkpoint 仅保存引用', async () => {
     const f = await fixture();
     const result = await (

@@ -1,0 +1,14 @@
+{
+  "name": "dramaflow-langgraph-iteration-runtime-experiment",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "test": "node run.ts",
+    "typecheck": "../../node_modules/.bin/tsc -p tsconfig.json",
+    "repro": "node repro-max-concurrency.ts"
+  }
+}

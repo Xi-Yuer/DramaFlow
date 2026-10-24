@@ -1,0 +1,53 @@
+{
+  "pid": 97879,
+  "request": {
+    "operation": "start",
+    "mode": "basic",
+    "threadId": "iteration-experiment-basic-0-c1-800f6bc1-88f3-436d-b29a-0359cb74a846",
+    "count": 0,
+    "maxConcurrency": 1,
+    "eventPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/basic-0-c1.events.jsonl",
+    "outputPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/basic-0-c1.json"
+  },
+  "config": {
+    "configurable": {
+      "thread_id": "iteration-experiment-basic-0-c1-800f6bc1-88f3-436d-b29a-0359cb74a846"
+    },
+    "maxConcurrency": 1,
+    "recursionLimit": 40
+  },
+  "invoke": {
+    "status": "returned",
+    "value": {
+      "items": [],
+      "outerIndex": -1,
+      "results": [],
+      "ordered": []
+    }
+  },
+  "after": {
+    "checkpointId": "1f1cf528-8b46-6e30-8002-d1646563a384",
+    "checkpointNs": "",
+    "values": {
+      "items": [],
+      "outerIndex": -1,
+      "results": [],
+      "ordered": []
+    },
+    "next": [],
+    "tasks": []
+  },
+  "checkpointCount": 4,
+  "namespaceHeads": [
+    {
+      "namespace": "",
+      "checkpointId": "1f1cf528-8b46-6e30-8002-d1646563a384",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {}
+      },
+      "pendingWrites": []
+    }
+  ]
+}

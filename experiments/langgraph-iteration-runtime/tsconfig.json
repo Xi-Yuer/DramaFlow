@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    "paths": {
+      "@langchain/langgraph": [
+        "../../packages/workflow/node_modules/@langchain/langgraph/dist/index.d.ts"
+      ],
+      "@langchain/langgraph-checkpoint-postgres": [
+        "../../packages/server/node_modules/@langchain/langgraph-checkpoint-postgres/dist/index.d.ts"
+      ],
+      "pg": ["../../packages/server/node_modules/@types/pg/index.d.ts"],
+      "zod": ["../../packages/workflow/node_modules/zod/index.d.ts"]
+    }
+  },
+  "include": ["*.ts"]
+}

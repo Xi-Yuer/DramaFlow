@@ -1,0 +1,12 @@
+{
+  "operation": "resume",
+  "mode": "review",
+  "count": 3,
+  "maxConcurrency": 5,
+  "threadId": "iteration-experiment-review-partial-800f6bc1-88f3-436d-b29a-0359cb74a846",
+  "eventPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/review-partial.events.jsonl",
+  "resume": {
+    "4feefda370ed7f30b7d7455645322fe7": "approve:-1/0"
+  },
+  "outputPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/review-partial-resume-0.json"
+}

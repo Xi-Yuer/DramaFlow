@@ -42,6 +42,7 @@ function fixture() {
   const makeExecutor = (capabilities?: CapabilityInvoker) =>
     new DefaultNodeExecutor(registry, bindings, codec, nodeRuns, capabilities);
   const context: NodeExecutionContext = {
+    scopeKey: 'root',
     projectId: 'project-a',
     workflowRunId: 'run-a',
     workflow: {

@@ -57,6 +57,7 @@ describe('普通操作编译策略', () => {
       manifest,
       executor: { execute },
       executionContext: (config) => ({
+        scopeKey: 'root',
         projectId: 'stale-project',
         workflowRunId: 'stale-run',
         workflow,
@@ -75,6 +76,7 @@ describe('普通操作编译策略', () => {
     expect(await wrapped(currentState, config)).toEqual({ outputs: { [node.id]: result.output } });
     expect(currentState).toEqual(snapshot);
     expect(execute).toHaveBeenCalledWith(node, {
+      scopeKey: 'root',
       projectId: 'p',
       workflowRunId: 'r',
       runnableConfig: config,
@@ -90,7 +92,7 @@ describe('普通操作编译策略', () => {
       node,
       manifest,
       executor: { execute },
-      executionContext: () => ({ workflow }),
+      executionContext: () => ({ scopeKey: 'root', workflow }),
       addNode,
     });
     await expect(addNode.mock.calls[0]![1](state, {})).rejects.toBe(cause);
@@ -101,7 +103,7 @@ describe('普通操作编译策略', () => {
       node,
       manifest,
       executor: { execute: vi.fn<NodeExecutor['execute']>() },
-      executionContext: () => ({ projectId: 'p', workflowRunId: 'r', workflow }),
+      executionContext: () => ({ scopeKey: 'root', projectId: 'p', workflowRunId: 'r', workflow }),
       addNode: vi.fn(),
     };
     for (const executionKind of ['control', 'composite', 'interaction'] as const)

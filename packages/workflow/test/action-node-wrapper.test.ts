@@ -150,7 +150,7 @@ function parallelFixture() {
       node: definition,
       manifest: registry.get(definition.type, definition.typeVersion).manifest,
       executor,
-      executionContext: (config) => ({ workflow, runnableConfig: config }),
+      executionContext: (config) => ({ scopeKey: 'root', workflow, runnableConfig: config }),
       addNode: (id, action) => {
         wrapped.set(id, action);
       },

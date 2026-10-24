@@ -90,6 +90,7 @@ try {
           manifest: registry.getAction(node.type, node.typeVersion).manifest,
           executor,
           executionContext: (config) => ({
+            scopeKey: 'root',
             workflow: definition,
             runnableConfig: config,
           }),

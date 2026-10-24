@@ -1,0 +1,99 @@
+{
+  "pid": 97881,
+  "request": {
+    "operation": "start",
+    "mode": "basic",
+    "threadId": "iteration-experiment-basic-1-c1-800f6bc1-88f3-436d-b29a-0359cb74a846",
+    "count": 1,
+    "maxConcurrency": 1,
+    "eventPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/basic-1-c1.events.jsonl",
+    "outputPath": "/Volumes/LunaDrive/code/DramaFlow/experiments/langgraph-iteration-runtime/evidence/basic-1-c1.json"
+  },
+  "config": {
+    "configurable": {
+      "thread_id": "iteration-experiment-basic-1-c1-800f6bc1-88f3-436d-b29a-0359cb74a846"
+    },
+    "maxConcurrency": 1,
+    "recursionLimit": 40
+  },
+  "invoke": {
+    "status": "returned",
+    "value": {
+      "items": [
+        {
+          "index": 0,
+          "value": 0
+        }
+      ],
+      "outerIndex": -1,
+      "results": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1
+        }
+      ],
+      "ordered": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1
+        }
+      ]
+    }
+  },
+  "after": {
+    "checkpointId": "1f1cf528-8f28-68a1-8003-59fd9b44aa21",
+    "checkpointNs": "",
+    "values": {
+      "items": [
+        {
+          "index": 0,
+          "value": 0
+        }
+      ],
+      "outerIndex": -1,
+      "results": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1
+        }
+      ],
+      "ordered": [
+        {
+          "index": 0,
+          "outerIndex": -1,
+          "value": 1
+        }
+      ]
+    },
+    "next": [],
+    "tasks": []
+  },
+  "checkpointCount": 9,
+  "namespaceHeads": [
+    {
+      "namespace": "",
+      "checkpointId": "1f1cf528-8f28-68a1-8003-59fd9b44aa21",
+      "metadata": {
+        "step": 3,
+        "source": "loop",
+        "parents": {}
+      },
+      "pendingWrites": []
+    },
+    {
+      "namespace": "body:76721132-7d03-5267-8bc5-040e5fd60cd5",
+      "checkpointId": "1f1cf528-8f1c-6550-8002-8501db77be3d",
+      "metadata": {
+        "step": 2,
+        "source": "loop",
+        "parents": {
+          "": "1f1cf528-8eae-6780-8001-4f340cd5ad75"
+        }
+      },
+      "pendingWrites": []
+    }
+  ]
+}
