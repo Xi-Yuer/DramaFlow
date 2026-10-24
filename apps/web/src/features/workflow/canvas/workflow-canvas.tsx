@@ -45,6 +45,13 @@ import {
   type WorkflowOutputEdge,
 } from '../outputs/workflow-outputs';
 import { replaceNodeInput } from '../inputs/template-input';
+import { WorkflowBodyInputs } from '../iteration/body-input-boundary-node';
+import {
+  isBodyInputConnection,
+  projectBodyInputBoundary,
+  type WorkflowBodyInputNode,
+} from '../iteration/body-input-boundary';
+import { bindGraphInput } from '../iteration/iteration-body-inputs';
 import { WorkflowInputContext } from '../inputs/workflow-input-context';
 import { WorkflowConditionActions } from '../conditions/if-condition-editor';
 import { setIfCondition } from '../conditions/if-condition';
@@ -77,9 +84,13 @@ import {
   type WorkflowNode,
 } from './react-flow-adapter';
 
-type CanvasNode = WorkflowNode | WorkflowEndNode;
+type CanvasNode = WorkflowNode | WorkflowEndNode | WorkflowBodyInputNode;
 type CanvasEdge = WorkflowEdge | WorkflowOutputEdge;
-const canvasNodeTypes = { ...workflowNodeTypes, workflowEnd: WorkflowEnd };
+const canvasNodeTypes = {
+  ...workflowNodeTypes,
+  workflowEnd: WorkflowEnd,
+  workflowBodyInputs: WorkflowBodyInputs,
+};
 
 export function WorkflowCanvas({
   projectId,
@@ -145,6 +156,14 @@ export function WorkflowCanvas({
   const [inspectorMode, setInspectorMode] = useState<InspectorContextMode>('design');
   const [endPosition, setEndPosition] = useState<XYPosition>(
     () => projectWorkflowEnd(workflow).node.position,
+  );
+  const [inputPosition, setInputPosition] = useState<XYPosition>(
+    () => projectBodyInputBoundary(workflow).node.position,
+  );
+  const showInputBoundary = navigation !== null;
+  const inputBoundary = useMemo(
+    () => (showInputBoundary ? projectBodyInputBoundary(workflow, inputPosition) : null),
+    [inputPosition, showInputBoundary, workflow],
   );
   const [outputEditor, setOutputEditor] = useState<{ name?: string } | null>(null);
   const [pendingOutputSource, setPendingOutputSource] = useState<WorkflowOutputSource | null>(null);
@@ -233,21 +252,26 @@ export function WorkflowCanvas({
 
   const nodes = useMemo(
     () =>
-      [...toReactFlowNodes(workflow), end.node].map((node) => ({
-        ...node,
-        ...nodeView.get(node.id),
-        selected: node.id === activeSelectedNode?.id || (nodeView.get(node.id)?.selected ?? false),
-        deletable: node.type !== 'workflowEnd',
-      })),
-    [workflow, nodeView, end.node, activeSelectedNode?.id],
+      [...toReactFlowNodes(workflow), ...(inputBoundary ? [inputBoundary.node] : []), end.node].map(
+        (node) => ({
+          ...node,
+          ...nodeView.get(node.id),
+          selected:
+            node.id === activeSelectedNode?.id || (nodeView.get(node.id)?.selected ?? false),
+          deletable: node.type === 'workflowNode',
+        }),
+      ),
+    [workflow, nodeView, end.node, inputBoundary, activeSelectedNode?.id],
   );
   const edges = useMemo(
     () =>
-      [...toReactFlowEdges(workflow), ...end.edges].map((edge) => ({
-        ...edge,
-        selected: selectedEdgeIds.has(edge.id),
-      })),
-    [workflow, selectedEdgeIds, end.edges],
+      [...toReactFlowEdges(workflow), ...(inputBoundary?.edges ?? []), ...end.edges].map(
+        (edge) => ({
+          ...edge,
+          selected: selectedEdgeIds.has(edge.id),
+        }),
+      ),
+    [workflow, selectedEdgeIds, end.edges, inputBoundary],
   );
 
   function addNode(selection: NodeTypeManifest) {
@@ -338,6 +362,33 @@ export function WorkflowCanvas({
       okButtonProps: { autoInsertSpace: false },
       cancelButtonProps: { autoInsertSpace: false },
       onOk: () => onEdit((current) => apply(current, { replaceBinding: true })),
+    });
+  }
+
+  function commitBodyInput(connection: Connection) {
+    const boundaryId = inputBoundary?.node.id;
+    const inputKey = connection.sourceHandle;
+    const portKey = connection.targetHandle;
+    const targetId = connection.target;
+    if (!boundaryId || connection.source !== boundaryId || !inputKey || !portKey || !targetId)
+      return;
+    if (!isBodyInputConnection(workflow, nodeTypes.data ?? [], connection, boundaryId)) return;
+    const existing = staticBindingForDataConnection(workflow, connection);
+    const hasEdge = sourcesForDataConnection(workflow, connection).length > 0;
+    if (existing?.type === 'workflow_input' && existing.key === inputKey && !hasEdge) return;
+    const apply = (current: WorkflowDefinition) =>
+      bindGraphInput(current, nodeTypes.data ?? [], targetId, portKey, inputKey);
+    if (!existing && !hasEdge) {
+      onEdit(apply);
+      return;
+    }
+    modal.confirm({
+      title: '该输入已有内容。连接后将改为使用 Body 输入，当前内容将被替换。',
+      okText: '确认替换',
+      cancelText: '取消',
+      okButtonProps: { autoInsertSpace: false },
+      cancelButtonProps: { autoInsertSpace: false },
+      onOk: () => onEdit(apply),
     });
   }
 
@@ -495,11 +546,13 @@ export function WorkflowCanvas({
                               }
                               return next;
                             });
+                            const viewOnly = (id: string) =>
+                              id === end.node.id || id === inputBoundary?.node.id;
                             for (const change of changes) {
                               if (
                                 change.type === 'select' &&
                                 change.selected &&
-                                change.id !== end.node.id
+                                !viewOnly(change.id)
                               ) {
                                 selectNode(change.id);
                               }
@@ -509,15 +562,13 @@ export function WorkflowCanvas({
                               (change) =>
                                 change.type !== 'add' &&
                                 change.type !== 'replace' &&
-                                change.id !== end.node.id,
+                                !viewOnly(change.id),
                             );
                             for (const change of changes) {
-                              if (
-                                change.type === 'position' &&
-                                change.id === end.node.id &&
-                                change.position
-                              )
-                                setEndPosition(change.position);
+                              if (change.type !== 'position' || !change.position) continue;
+                              if (change.id === end.node.id) setEndPosition(change.position);
+                              if (change.id === inputBoundary?.node.id)
+                                setInputPosition(change.position);
                             }
                             const removedIds = domainChanges.flatMap((change) =>
                               change.type === 'remove' ? [change.id] : [],
@@ -547,6 +598,10 @@ export function WorkflowCanvas({
                           }}
                           onConnect={(connection) => {
                             if (locked) return;
+                            if (inputBoundary && connection.source === inputBoundary.node.id) {
+                              commitBodyInput(connection);
+                              return;
+                            }
                             if (connection.target === end.node.id) {
                               const sourceHandle = connection.sourceHandle;
                               if (connection.targetHandle !== END_INPUT_HANDLE || !sourceHandle)
@@ -582,7 +637,9 @@ export function WorkflowCanvas({
                               edge.data?.kind === 'workflow-output' ||
                               edge.data?.projection !== undefined ||
                               connection.target === end.node.id ||
-                              connection.source === end.node.id
+                              connection.source === end.node.id ||
+                              connection.source === inputBoundary?.node.id ||
+                              connection.target === inputBoundary?.node.id
                             )
                               return;
                             commitDataConnection(
@@ -636,6 +693,18 @@ export function WorkflowCanvas({
                           }}
                           isValidConnection={(connection) => {
                             if (connection.source === end.node.id) return false;
+                            if (
+                              inputBoundary &&
+                              (connection.source === inputBoundary.node.id ||
+                                connection.target === inputBoundary.node.id)
+                            ) {
+                              return isBodyInputConnection(
+                                workflow,
+                                nodeTypes.data ?? [],
+                                connection,
+                                inputBoundary.node.id,
+                              );
+                            }
                             if (connection.target === end.node.id) {
                               const node = workflow.nodes.find(
                                 (node) => node.id === connection.source,
@@ -706,6 +775,14 @@ export function WorkflowCanvas({
                           mode={inspectorMode}
                           onModeChange={setInspectorMode}
                           onClose={() => setSelectedNodeId(null)}
+                          onUpdateNode={(next) =>
+                            onEdit((current) => ({
+                              ...current,
+                              nodes: current.nodes.map((item) =>
+                                item.id === next.id ? next : item,
+                              ),
+                            }))
+                          }
                           bodyEntry={
                             onEnterBody &&
                             activeSelectedNode.type === 'flow.iteration' &&

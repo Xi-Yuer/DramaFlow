@@ -35,7 +35,7 @@ export type WorkflowNodeData = {
 export type WorkflowNode = Node<WorkflowNodeData, 'workflowNode'>;
 export type WorkflowEdgeData =
   | { kind: 'data' | 'control'; projection?: never }
-  | { kind: 'data'; projection: 'candidate-input' | 'template-input' };
+  | { kind: 'data'; projection: 'candidate-input' | 'template-input' | 'workflow-input' };
 export type WorkflowEdge = Edge<WorkflowEdgeData>;
 
 const reactFlowNodeSchema = z.object({
@@ -66,7 +66,7 @@ const reactFlowEdgeSchema = connectionSchema.extend({
   targetHandle: z.string().nullish(),
   data: z.object({
     kind: z.enum(['data', 'control']),
-    projection: z.enum(['candidate-input', 'template-input']).optional(),
+    projection: z.enum(['candidate-input', 'template-input', 'workflow-input']).optional(),
   }),
 });
 
@@ -452,6 +452,20 @@ export function disconnectWorkflowEdge(input: unknown, edgeInput: unknown): Work
   const projection = reactFlowEdgeSchema.parse(edgeInput);
   // Template 只通过输入编辑器修改；删线事件不隐式删除正文或 alias。
   if (projection.data.projection === 'template-input') return workflow;
+  if (projection.data.projection === 'workflow-input') {
+    const node = workflow.nodes.find((item) => item.id === projection.target);
+    const key = projection.targetHandle;
+    const binding = key ? node?.inputs[key] : undefined;
+    if (
+      node &&
+      key &&
+      binding?.type === 'workflow_input' &&
+      binding.key === projection.sourceHandle
+    ) {
+      delete node.inputs[key];
+    }
+    return workflow;
+  }
   if (projection.data.projection === 'candidate-input') {
     const node = workflow.nodes.find((node) => node.id === projection.target);
     const key = projection.targetHandle;

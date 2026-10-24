@@ -2,7 +2,12 @@
 
 import { useContext, useState } from 'react';
 import { X } from 'lucide-react';
-import type { NodeDefinition, NodeTypeManifest, RuntimeValue } from '@dramaflow/contracts';
+import {
+  isIterationNodeManifest,
+  type NodeDefinition,
+  type NodeTypeManifest,
+  type RuntimeValue,
+} from '@dramaflow/contracts';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,6 +26,7 @@ import {
 } from '../runtime/runtime-status';
 import { RuntimeStatusBadge } from '../runtime/runtime-status-badge';
 import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
+import { IterationInspector } from '../iteration/iteration-inspector';
 import { HumanReviewInspector } from './human-review-inspector';
 import { IfInspector } from './if-inspector';
 import { NodeInputBindingField } from './node-input-binding-field';
@@ -191,9 +197,11 @@ function NodeNameSection({ node }: { node: NodeDefinition }) {
 function NodeDesignInspectorBody({
   node,
   manifest,
+  onUpdateNode,
 }: {
   node: NodeDefinition;
   manifest: NodeTypeManifest | undefined;
+  onUpdateNode?: (node: NodeDefinition) => void;
 }) {
   if (!manifest) {
     return (
@@ -217,6 +225,15 @@ function NodeDesignInspectorBody({
     manifest.executionKind === 'interaction'
   ) {
     return <HumanReviewInspector node={node} manifest={manifest} />;
+  }
+
+  if (
+    onUpdateNode &&
+    node.type === manifest.type &&
+    node.typeVersion === manifest.version &&
+    isIterationNodeManifest(manifest)
+  ) {
+    return <IterationInspector node={node} manifest={manifest} onUpdateNode={onUpdateNode} />;
   }
 
   return <GenericNodeInspector node={node} manifest={manifest} />;
@@ -451,6 +468,7 @@ export function WorkflowNodeInspector({
   mode,
   onModeChange,
   onClose,
+  onUpdateNode,
   bodyEntry,
 }: {
   node: NodeDefinition;
@@ -458,6 +476,7 @@ export function WorkflowNodeInspector({
   mode: InspectorContextMode;
   onModeChange: (next: InspectorContextMode) => void;
   onClose: () => void;
+  onUpdateNode?: (node: NodeDefinition) => void;
   bodyEntry?: { enabled: boolean; onEnter: () => void };
 }) {
   const runtime = useWorkflowNodeRuntime(node.id);
@@ -534,7 +553,11 @@ export function WorkflowNodeInspector({
                 <span>修改仅作用于当前工作流草稿</span>
               </div>
               <NodeNameSection node={node} />
-              <NodeDesignInspectorBody node={node} manifest={manifest} />
+              <NodeDesignInspectorBody
+                node={node}
+                manifest={manifest}
+                onUpdateNode={onUpdateNode}
+              />
             </div>
           </TabsContent>
           <TabsContent value="runtime" className="mt-0">
