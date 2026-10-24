@@ -689,6 +689,38 @@ a {
   min-width: 0;
   display: flex;
 }
+.canvas-breadcrumb {
+  position: absolute;
+  z-index: 6;
+  top: 14px;
+  left: 132px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(420px, calc(100% - 160px));
+  padding: 4px 10px;
+  border: 1px solid #ffffff14;
+  border-radius: 999px;
+  background: #141416cc;
+  color: #c8c8ce;
+  font-size: 12px;
+}
+.canvas-breadcrumb button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #d7ebe8;
+  cursor: pointer;
+}
+.canvas-breadcrumb button:hover {
+  color: #ffffff;
+}
+.canvas-breadcrumb span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .canvas-flow {
   position: relative;
   flex: 1;

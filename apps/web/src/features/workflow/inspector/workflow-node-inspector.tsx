@@ -451,12 +451,14 @@ export function WorkflowNodeInspector({
   mode,
   onModeChange,
   onClose,
+  bodyEntry,
 }: {
   node: NodeDefinition;
   manifest: NodeTypeManifest | undefined;
   mode: InspectorContextMode;
   onModeChange: (next: InspectorContextMode) => void;
   onClose: () => void;
+  bodyEntry?: { enabled: boolean; onEnter: () => void };
 }) {
   const runtime = useWorkflowNodeRuntime(node.id);
   const isHumanReview =
@@ -499,6 +501,19 @@ export function WorkflowNodeInspector({
         </Button>
       </header>
 
+      {bodyEntry ? (
+        <section className={styles.bodyEntry} aria-label="Iteration Body">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!bodyEntry.enabled}
+            onClick={bodyEntry.onEnter}
+          >
+            编辑 Body
+          </Button>
+          {bodyEntry.enabled ? null : <p>尚未配置 Body</p>}
+        </section>
+      ) : null}
       <Tabs
         value={mode}
         onValueChange={(key) => onModeChange(key as InspectorContextMode)}

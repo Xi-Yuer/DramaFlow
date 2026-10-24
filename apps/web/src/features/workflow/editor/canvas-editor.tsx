@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ReactFlowProvider, useReactFlow, type OnMove } from '@xyflow/react';
+import { type OnMove } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Alert, App, Button } from 'antd';
 import { ArrowLeft, Settings2 } from 'lucide-react';
@@ -9,7 +9,10 @@ import { saveProjectSchema, type Project, type WorkflowResponse } from '@dramafl
 import { ApiError } from '@/lib/http';
 import { AccountMenuButton } from '@/features/auth/account-menu';
 import { ModelSettings } from '@/features/models/model-settings';
-import { WorkflowCanvas } from '@/features/workflow/canvas/workflow-canvas';
+import {
+  GraphCanvasSession,
+  type GraphCanvasSessionHandle,
+} from '@/features/workflow/editor/graph-canvas-session';
 import type {
   ModelSelectionIntent,
   ModelSelectionResume,
@@ -31,17 +34,13 @@ export function CanvasEditor({
   project: Project;
   workflow: WorkflowResponse;
 }) {
-  return (
-    <ReactFlowProvider>
-      <CanvasBoard key={workflow.id} project={project} workflow={workflow} />
-    </ReactFlowProvider>
-  );
+  return <CanvasBoard key={workflow.id} project={project} workflow={workflow} />;
 }
 
 function CanvasBoard({ project, workflow }: { project: Project; workflow: WorkflowResponse }) {
   const router = useRouter();
   const { message, modal } = App.useApp();
-  const { getViewport, setViewport: setCanvasViewport } = useReactFlow();
+  const graphSession = useRef<GraphCanvasSessionHandle>(null);
   const draft = useWorkflowDraft(workflow);
   const publication = useWorkflowPublish(draft);
   const workflowRun = useWorkflowRun(
@@ -98,7 +97,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
       void message.error('请填写项目名称');
       return;
     }
-    const view = clampViewport(getViewport());
+    const view = clampViewport(graphSession.current?.getRootViewport() ?? viewport);
     const payload = { revision, name: trimmed, viewport: view };
     const parsed = saveProjectSchema.safeParse(payload);
     if (!parsed.success) {
@@ -125,7 +124,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
       savingLock.current = false;
       setSaving(false);
     }
-  }, [dirty, reloadingProject, conflict, getViewport, message, name, project.id, revision]);
+  }, [dirty, reloadingProject, conflict, message, name, project.id, revision, viewport]);
 
   const saveDraft = draft.save;
   useEffect(() => {
@@ -148,7 +147,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
         const result = await projectApi.get(project.id);
         setName(result.name);
         setViewport(result.viewport);
-        void setCanvasViewport(result.viewport);
+        graphSession.current?.setRootViewport(result.viewport);
         setRevision(result.revision);
         setSavedSignature(draftSignature(result.name, result.viewport));
         setConflict(false);
@@ -424,7 +423,8 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
         onRetryRecovery={() => void workflowRun.retryRecovery()}
         onSelectRecovered={workflowRun.selectRecovered}
       >
-        <WorkflowCanvas
+        <GraphCanvasSession
+          ref={graphSession}
           key={draft.workflowId}
           projectId={project.id}
           workflow={draft.definition}
@@ -437,8 +437,8 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
           onModelResumeConsumed={() => setModelResume(null)}
           reloading={draft.operation === 'reloading'}
           interactionLocked={modelSettingsOpen || publication.publishing}
-          defaultViewport={project.viewport}
-          onMoveEnd={onMoveEnd}
+          initialRootViewport={project.viewport}
+          onRootViewportChange={onMoveEnd}
           runStatus={workflowRun.runStatus}
           nodeRuns={workflowRun.runStatus.nodeRuns}
           reviewActions={workflowRun.reviewActions}

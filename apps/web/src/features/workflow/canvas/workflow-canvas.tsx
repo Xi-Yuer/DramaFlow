@@ -1,6 +1,6 @@
 'use client';
 import { WorkflowNodeSettingsActions } from '../node-catalog/human-review-settings';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -54,6 +54,7 @@ import {
 } from '../inspector/workflow-node-inspector';
 import type { HumanReviewActions, WorkflowRunStatusState } from '../run/status/workflow-run-status';
 import { resolveWorkflowRuntimeNodes, WorkflowRuntimeProvider } from '../runtime/runtime-status';
+import { canEnterIterationBody, type GraphViewportController } from '../editor/graph-navigation';
 import {
   findNodeManifest,
   WorkflowManifestProvider,
@@ -91,6 +92,13 @@ export function WorkflowCanvas({
   interactionLocked = false,
   defaultViewport,
   onMoveEnd,
+  initialSelectedNodeId = null,
+  initialSelectedEdgeIds = [],
+  onSelectionChange,
+  manifestFilter,
+  onEnterBody,
+  navigation = null,
+  viewportControllerRef,
   runStatus = null,
   reviewActions,
   nodeRuns,
@@ -110,20 +118,30 @@ export function WorkflowCanvas({
   interactionLocked?: boolean;
   defaultViewport: Project['viewport'];
   onMoveEnd: OnMove;
+  initialSelectedNodeId?: string | null;
+  initialSelectedEdgeIds?: readonly string[];
+  onSelectionChange?: (selection: {
+    selectedNodeId: string | null;
+    selectedEdgeIds: readonly string[];
+  }) => void;
+  manifestFilter?: (manifest: NodeTypeManifest) => boolean;
+  onEnterBody?: (ownerNodeId: string) => void;
+  navigation?: { ownerName: string; onBackToRoot: () => void } | null;
+  viewportControllerRef?: { current: GraphViewportController | null };
   runStatus?: WorkflowRunStatusState | null;
   reviewActions?: HumanReviewActions;
   nodeRuns?: readonly NodeRun[];
   onRefreshRunStatus?: () => void;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow<CanvasNode, CanvasEdge>();
+  const { screenToFlowPosition, getViewport, setViewport } = useReactFlow<CanvasNode, CanvasEdge>();
   const locked = reloading || interactionLocked;
   const { modal } = App.useApp();
   const nodeTypes = useQuery({ queryKey: nodeTypeKeys.list, queryFn: nodeTypeApi.list });
   const [nodeView, setNodeView] = useState<
     ReadonlyMap<string, Pick<WorkflowNode, 'selected' | 'measured'>>
   >(new Map());
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(initialSelectedNodeId);
   const [inspectorMode, setInspectorMode] = useState<InspectorContextMode>('design');
   const [endPosition, setEndPosition] = useState<XYPosition>(
     () => projectWorkflowEnd(workflow).node.position,
@@ -131,7 +149,30 @@ export function WorkflowCanvas({
   const [outputEditor, setOutputEditor] = useState<{ name?: string } | null>(null);
   const [pendingOutputSource, setPendingOutputSource] = useState<WorkflowOutputSource | null>(null);
   const end = useMemo(() => projectWorkflowEnd(workflow, endPosition), [workflow, endPosition]);
-  const [selectedEdgeIds, setSelectedEdgeIds] = useState<ReadonlySet<string>>(new Set());
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<ReadonlySet<string>>(
+    () => new Set(initialSelectedEdgeIds),
+  );
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  });
+  useEffect(() => {
+    onSelectionChangeRef.current?.({
+      selectedNodeId,
+      selectedEdgeIds: [...selectedEdgeIds],
+    });
+  }, [selectedEdgeIds, selectedNodeId]);
+  useEffect(() => {
+    if (!viewportControllerRef) return;
+    viewportControllerRef.current = { getViewport, setViewport };
+    return () => {
+      viewportControllerRef.current = null;
+    };
+  }, [getViewport, setViewport, viewportControllerRef]);
+  const catalog = useMemo(
+    () => (manifestFilter ? (nodeTypes.data ?? []).filter(manifestFilter) : (nodeTypes.data ?? [])),
+    [manifestFilter, nodeTypes.data],
+  );
 
   const runtimeNodes = useMemo(
     () => resolveWorkflowRuntimeNodes({ workflow, runStatus, nodeRuns }),
@@ -215,7 +256,7 @@ export function WorkflowCanvas({
     const manifest = nodeTypes.data.find(
       (item) => item.type === selection.type && item.version === selection.version,
     );
-    if (!manifest) return;
+    if (!manifest || (manifestFilter && !manifestFilter(manifest))) return;
     const bounds = stageRef.current.getBoundingClientRect();
     // 连续新增稍微错开，避免多个新节点初始完全重叠。
     const offset = (workflow.nodes.length % 5) * 24;
@@ -301,7 +342,18 @@ export function WorkflowCanvas({
   }
 
   return (
-    <div className="canvas-stage">
+    <div className="canvas-stage" data-graph-location={navigation ? 'body' : 'root'}>
+      {navigation ? (
+        <nav className="canvas-breadcrumb" aria-label="图位置">
+          <button type="button" onClick={navigation.onBackToRoot} aria-label="返回工作流">
+            工作流
+          </button>
+          <span aria-hidden="true">/</span>
+          <span>{navigation.ownerName}</span>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">Body</span>
+        </nav>
+      ) : null}
       <WorkflowRuntimeProvider
         workflow={workflow}
         runStatus={runStatus}
@@ -394,12 +446,12 @@ export function WorkflowCanvas({
                     <WorkflowManifestProvider manifests={nodeTypes.data ?? []}>
                       <div className="canvas-flow" ref={stageRef}>
                         <NodePicker
-                          manifests={nodeTypes.data ?? []}
+                          manifests={catalog}
                           disabled={
                             locked ||
                             nodeTypes.isPending ||
                             nodeTypes.isError ||
-                            !nodeTypes.data?.length
+                            catalog.length === 0
                           }
                           onSelect={addNode}
                         />
@@ -632,7 +684,9 @@ export function WorkflowCanvas({
                                   ? '节点目录加载失败，请重试加载目录。'
                                   : nodeTypes.data.length === 0
                                     ? '当前暂无可用节点。'
-                                    : '点击左上角“添加节点”，开始编排工作流。'}
+                                    : navigation
+                                      ? '点击左上角“添加节点”，开始编排 Body。'
+                                      : '点击左上角“添加节点”，开始编排工作流。'}
                             </span>
                           </div>
                         ) : null}
@@ -652,6 +706,16 @@ export function WorkflowCanvas({
                           mode={inspectorMode}
                           onModeChange={setInspectorMode}
                           onClose={() => setSelectedNodeId(null)}
+                          bodyEntry={
+                            onEnterBody &&
+                            activeSelectedNode.type === 'flow.iteration' &&
+                            activeSelectedNode.typeVersion === 1
+                              ? {
+                                  enabled: canEnterIterationBody(activeSelectedNode),
+                                  onEnter: () => onEnterBody(activeSelectedNode.id),
+                                }
+                              : undefined
+                          }
                         />
                       ) : null}
                     </WorkflowManifestProvider>
