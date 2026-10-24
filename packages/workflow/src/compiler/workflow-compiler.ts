@@ -18,7 +18,10 @@ import {
 } from '../definition/validate-publish.js';
 import { createWorkflowDefinitionSnapshot } from '../definition/version.js';
 import { NodeRegistry } from '../node/registry.js';
-import type { HumanReviewNodeRunRepository } from '../run/node-run-repository.js';
+import type {
+  HumanReviewNodeRunRepository,
+  NodeOccurrenceRepository,
+} from '../run/node-run-repository.js';
 import type { NodeExecutor } from '../runtime/node-executor.js';
 import { WorkflowStateAnnotation, type WorkflowState } from '../runtime/state.js';
 import { collectNodeDependencies, DependencyCompiler } from './dependency.compiler.js';
@@ -27,13 +30,18 @@ import { IfNodeCompilationStrategy, readIfRoute } from './if/strategy.js';
 import { analyzeSimpleIfExecution } from './if/analysis.js';
 import { HumanReviewNodeCompilationStrategy } from './human-review/strategy.js';
 import { findUnsupportedHumanReviewTopology } from './human-review/analysis.js';
+import { IterationNodeCompilationStrategy, iterationRecursionLimit } from './iteration/strategy.js';
+import { assertIterationCompatibility } from '../runtime/iteration-compatibility.js';
 import { analyzeStaticDagExecution } from './action-dag-execution-analysis.js';
 
 // Runner 仅发送 resume，不开放 Command.update / goto 的状态写入或路由能力。
 export type WorkflowResumeCommand = Command<unknown, never, never>;
 export interface CompiledWorkflow {
-  invoke(input: WorkflowState | WorkflowResumeCommand, config: RunnableConfig): Promise<unknown>;
-  getState(config: RunnableConfig): Promise<StateSnapshot>;
+  invoke(
+    input: WorkflowState | WorkflowResumeCommand | null,
+    config: RunnableConfig,
+  ): Promise<unknown>;
+  getState(config: RunnableConfig, options?: { subgraphs?: boolean }): Promise<StateSnapshot>;
 }
 
 export interface WorkflowCompiler {
@@ -57,17 +65,20 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     private readonly createHumanReviewRuns?: (
       run: WorkflowRun,
     ) => Promise<HumanReviewNodeRunRepository>,
+    private readonly createOccurrences?: (run: WorkflowRun) => Promise<NodeOccurrenceRepository>,
   ) {}
 
   async compile(input: WorkflowDefinition, run: WorkflowRun): Promise<CompiledWorkflow> {
     const definition = createWorkflowDefinitionSnapshot(input);
     if (!this.checkpointer) throw new Error('WorkflowCompiler 必须显式注入 Checkpointer');
+    const iterationStrategy = new IterationNodeCompilationStrategy();
     const actionStrategy = new ActionNodeCompilationStrategy();
     const ifStrategy = new IfNodeCompilationStrategy();
     const reviewStrategy = new HumanReviewNodeCompilationStrategy();
     const entries = definition.nodes.map((node) => {
       const declaration = this.registry.get(node.type, node.typeVersion);
       if (
+        !iterationStrategy.supports(declaration.manifest) &&
         !ifStrategy.supports(declaration.manifest) &&
         !reviewStrategy.supports(declaration.manifest)
       ) {
@@ -78,6 +89,9 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       }
       return { node, declaration };
     });
+    const iterationEntries = entries.filter((entry) =>
+      iterationStrategy.supports(entry.declaration.manifest),
+    );
     const ifNodeIds = new Set(
       entries
         .filter((entry) => ifStrategy.supports(entry.declaration.manifest))
@@ -90,6 +104,7 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     );
     // 所有能力 / 拓扑 / 输出证明均在创建服务或执行节点前完成。
     if (
+      iterationEntries.length ||
       reviewNodeIds.size ||
       ifNodeIds.size ||
       definition.nodes.some((node) =>
@@ -122,19 +137,29 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
         'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED',
         unsupportedReview,
       );
-    const { recursionLimit } = ifAnalysis ?? analyzeStaticDagExecution(definition);
-    const needsValueServices = ifAnalysis !== undefined || reviewNodeIds.size > 0;
+    const baseBudget = (ifAnalysis ?? analyzeStaticDagExecution(definition)).recursionLimit;
+    const recursionLimit = Math.max(
+      baseBudget,
+      ...iterationEntries.map(({ node }) => iterationRecursionLimit(node)),
+    );
+    const needsValueServices =
+      ifAnalysis !== undefined || reviewNodeIds.size > 0 || iterationEntries.length > 0;
     if (needsValueServices && !this.createValueServices)
-      throw new Error('If / Human Review 编译必须显式注入 BindingResolver / Codec');
-    const valueServices = needsValueServices ? await this.createValueServices!(run) : undefined;
+      throw new Error('If / Human Review / Iteration 编译必须显式注入 BindingResolver / Codec');
     if (reviewNodeIds.size && !this.createHumanReviewRuns)
       throw new Error('Human Review 编译必须显式注入 NodeRun Repository');
+    if (iterationEntries.length && !this.createOccurrences)
+      throw new Error('Iteration 编译必须注入 NodeOccurrence Repository');
+    const valueServices = needsValueServices ? await this.createValueServices!(run) : undefined;
     const reviewRuns = reviewNodeIds.size ? await this.createHumanReviewRuns!(run) : undefined;
-    const executor = entries.some((entry) => actionStrategy.supports(entry.declaration.manifest))
-      ? valueServices
-        ? await this.createExecutor(run, valueServices)
-        : await this.createExecutor(run)
-      : undefined;
+    const occurrences = iterationEntries.length ? await this.createOccurrences!(run) : undefined;
+    const executor =
+      iterationEntries.length ||
+      entries.some((entry) => actionStrategy.supports(entry.declaration.manifest))
+        ? valueServices
+          ? await this.createExecutor(run, valueServices)
+          : await this.createExecutor(run)
+        : undefined;
     // 动态节点名由已校验的领域定义提供；调度、barrier 与持久化继续由 LangGraph 承担。
     const graph = new StateGraph<
       typeof WorkflowStateAnnotation.spec,
@@ -143,7 +168,24 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       string
     >(WorkflowStateAnnotation);
     for (const { node, declaration } of entries) {
-      if (ifStrategy.supports(declaration.manifest)) {
+      if (iterationStrategy.supports(declaration.manifest)) {
+        if (!executor || !valueServices || !occurrences)
+          throw new Error('Iteration 执行服务未配置');
+        iterationStrategy.compile({
+          node,
+          declaration,
+          workflow: definition,
+          run,
+          scopeKey: ROOT_EXECUTION_SCOPE_KEY,
+          registry: this.registry,
+          executor,
+          services: valueServices,
+          occurrences,
+          addNode: (id, child) => {
+            graph.addNode(id, child);
+          },
+        });
+      } else if (ifStrategy.supports(declaration.manifest)) {
         if (!valueServices) throw new Error('If 执行服务未配置');
         ifStrategy.compile({
           node,
@@ -210,6 +252,16 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       }
     }
     if (definition.nodes.length === 0) graph.addEdge(START, END);
-    return graph.compile({ checkpointer: this.checkpointer }).withConfig({ recursionLimit });
+    const compiled = graph
+      .compile({ checkpointer: this.checkpointer })
+      .withConfig({ recursionLimit });
+    if (!iterationEntries.length) return compiled;
+    return {
+      invoke: async (input, config) => {
+        assertIterationCompatibility(config);
+        return compiled.invoke(input, config);
+      },
+      getState: (config, options) => compiled.getState(config, options),
+    };
   }
 }

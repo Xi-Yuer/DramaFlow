@@ -16,12 +16,14 @@ import {
   BindingResolutionError,
   type BindingResolutionErrorDetails,
 } from './binding-resolution-error.js';
+import type { ResolvedNodePorts } from '@dramaflow/contracts';
 import type { WorkflowState } from './state.js';
 
 export interface BindingResolverContext {
   readonly node: NodeDefinition;
   // 由上层按 node.type / typeVersion 取得并完成边界校验的同版本 Manifest。
   readonly nodeType: NodeTypeManifest;
+  readonly ports?: ResolvedNodePorts;
   readonly edges: readonly WorkflowEdge[];
   readonly state: WorkflowState;
   readonly workflowInputs: readonly WorkflowInputDefinition[];
@@ -256,7 +258,9 @@ export function createBindingResolver(): BindingResolver {
   return {
     async resolveInputs(context) {
       const { node, nodeType, edges, state } = context;
-      const ports = new Map(nodeType.inputs.map((port) => [port.key, port]));
+      const ports = new Map(
+        (context.ports?.inputs ?? nodeType.inputs).map((port) => [port.key, port]),
+      );
       // 在查找输出和转换静态绑定前检查冲突与目标端口，不定义来源覆盖优先级。
       for (const edge of edges) {
         if (edge.kind !== 'data' || edge.target.nodeId !== node.id) continue;

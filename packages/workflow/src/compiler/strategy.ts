@@ -16,18 +16,19 @@ export interface WorkflowValueServices {
 }
 
 // 每个节点只返回自己的输出增量，合并与冲突检查交给 State 通道。
-export type LangGraphNode = (
-  state: WorkflowState,
+export type LangGraphNode<State extends WorkflowState = WorkflowState> = (
+  state: State,
   config: LangGraphRunnableConfig,
 ) => Promise<WorkflowStateUpdate>;
-export interface NodeCompilationContext {
+export interface NodeCompilationContext<State extends WorkflowState = WorkflowState> {
   node: NodeDefinition;
   manifest: NodeTypeManifest;
   executor: NodeExecutor;
   executionContext(
     config: LangGraphRunnableConfig,
+    state: State,
   ): Omit<NodeExecutionContext, 'state' | 'projectId' | 'workflowRunId'>;
-  addNode(id: string, node: LangGraphNode): void;
+  addNode(id: string, node: LangGraphNode<State>): void;
 }
 export interface NodeCompilationStrategy<Context = NodeCompilationContext> {
   supports(manifest: NodeTypeManifest): boolean;
@@ -37,7 +38,7 @@ export class ActionNodeCompilationStrategy implements NodeCompilationStrategy {
   supports(manifest: NodeTypeManifest): boolean {
     return manifest.executionKind === 'action';
   }
-  compile(context: NodeCompilationContext): void {
+  compile<State extends WorkflowState>(context: NodeCompilationContext<State>): void {
     const manifest = nodeTypeManifestSchema.parse(context.manifest);
     const node = nodeDefinitionSchema.parse(context.node);
     if (!this.supports(manifest)) throw new Error('action 策略不能编译控制、复合或交互结构');
@@ -46,7 +47,7 @@ export class ActionNodeCompilationStrategy implements NodeCompilationStrategy {
     const { executor } = context;
     context.addNode(node.id, async (state, config) => {
       const result = await executor.execute(node, {
-        ...context.executionContext(config),
+        ...context.executionContext(config, state),
         state,
         projectId: state.run.projectId,
         workflowRunId: state.run.workflowRunId,

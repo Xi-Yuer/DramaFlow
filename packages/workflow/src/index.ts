@@ -47,3 +47,5 @@ export {
   CompositeDefinitionError,
   type ResolvedNodePorts,
 } from '@dramaflow/contracts';
+export * from './compiler/iteration/strategy.js';
+export * from './runtime/iteration-compatibility.js';

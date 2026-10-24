@@ -12,9 +12,12 @@ export interface CreateNodeRunInput {
   readonly occurrenceId: string;
 }
 
-// 实现须限定项目 / 运行权限，原子分配 attempt；不得修改已结束的记录。
-export interface NodeRunRepository {
+export interface NodeOccurrenceRepository {
   getOrCreateOccurrence(input: GetNodeOccurrenceInput): Promise<NodeOccurrence>;
+}
+
+// 实现须限定项目 / 运行权限，原子分配 attempt；不得修改已结束的记录。
+export interface NodeRunRepository extends NodeOccurrenceRepository {
   createRunning(input: CreateNodeRunInput): Promise<NodeRun>;
   updateInputs(nodeRunId: string, inputs: Record<string, RuntimeValue>): Promise<void>;
   markCompleted(nodeRunId: string, outputs: Record<string, RuntimeValue>): Promise<void>;

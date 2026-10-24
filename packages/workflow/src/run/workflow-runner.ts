@@ -10,6 +10,7 @@ import {
 import { Command, isGraphBubbleUp, isInterrupted, type StateSnapshot } from '@langchain/langgraph';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
+import { IterationRuntimeCompatibilityError } from '../runtime/iteration-compatibility.js';
 import type {
   CompiledWorkflow,
   WorkflowCompiler,
@@ -59,7 +60,9 @@ const failureCodes = {
 type WorkflowRunStage = keyof typeof failureCodes;
 
 // 记录稳定摘要，不把 Node cause、供应商错误或访问 URL 复制进整图记录。
-function toWorkflowRunError(stage: WorkflowRunStage): WorkflowRunError {
+function toWorkflowRunError(stage: WorkflowRunStage, cause?: unknown): WorkflowRunError {
+  if (cause instanceof IterationRuntimeCompatibilityError)
+    return { stage, code: cause.code, message: cause.message };
   return { stage, code: failureCodes[stage], message: `工作流在 ${stage} 阶段失败` };
 }
 
@@ -248,7 +251,7 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
   private async fail(run: WorkflowRun, stage: WorkflowRunStage, error: unknown): Promise<never> {
     if (error !== null && isGraphBubbleUp(error)) throw error;
     try {
-      await this.runs.markFailed(run.id, toWorkflowRunError(stage));
+      await this.runs.markFailed(run.id, toWorkflowRunError(stage, error));
     } catch (recordingError) {
       throw new WorkflowRunRecordingError(run.id, error, recordingError);
     }
