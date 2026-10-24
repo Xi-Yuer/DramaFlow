@@ -37,3 +37,5 @@ export * from './run/workflow-run-error.js';
 export * from './run/submission/workflow-run-submission-repository.js';
 export * from './run/submission/workflow-invocation-equivalence.js';
 export * from './runtime/condition-evaluator.js';
+export * from './runtime/execution-scope.js';
+export * from './runtime/graph-invocation.js';

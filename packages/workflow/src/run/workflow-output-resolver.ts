@@ -2,12 +2,15 @@ import {
   isTypeAssignable,
   workflowOutputSources,
   type RuntimeValue,
-  type WorkflowDefinition,
+  type GraphDefinition,
 } from '@dramaflow/contracts';
 import type { WorkflowState } from '../runtime/state.js';
 
 export interface WorkflowOutputResolver {
-  resolve(definition: WorkflowDefinition, state: WorkflowState): Record<string, RuntimeValue>;
+  resolve<State extends Pick<WorkflowState, 'outputs'>>(
+    definition: Pick<GraphDefinition, 'outputs'>,
+    state: State,
+  ): Record<string, RuntimeValue>;
 }
 
 export class WorkflowOutputResolutionError extends Error {
@@ -26,7 +29,10 @@ export class WorkflowOutputResolutionError extends Error {
 }
 
 export class DefaultWorkflowOutputResolver implements WorkflowOutputResolver {
-  resolve(definition: WorkflowDefinition, state: WorkflowState): Record<string, RuntimeValue> {
+  resolve<State extends Pick<WorkflowState, 'outputs'>>(
+    definition: Pick<GraphDefinition, 'outputs'>,
+    state: State,
+  ): Record<string, RuntimeValue> {
     return Object.fromEntries(
       definition.outputs.map((output) => {
         const present: RuntimeValue[] = [];

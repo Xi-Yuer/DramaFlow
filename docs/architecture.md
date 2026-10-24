@@ -32,6 +32,20 @@ NodeRun 查询新增安全的 occurrenceId / scopeKey，不返回 thread、check
 
 底座只支持身份解析与审计关联，不执行子 scope，也没有 scope 父链或 SubWorkflow 版本 / 权限解析。未来受信任的 scoped execution 需显式分配稳定 scopeKey、提供对应定义与权限上下文，再调用同一 occurrence / attempt 接口；scopeKey 不能替代这些检查。
 
+## Local Graph Invocation
+
+[GraphDefinition](../packages/contracts/src/graph/definition.ts)统一 inputs / nodes / edges / outputs 及既有静态引用与 DAG 校验；WorkflowDefinition 保留原导出名并直接复用同一 Schema，根 Workflow 产品协议不变。局部图不创建 WorkflowRun，不增加 Body Node / Edge / Binding 协议。
+
+[Invocation 工具](../packages/workflow/src/runtime/graph-invocation.ts)只接收调用方明确提供的 RuntimeValue sources 和 source → target 映射，校验目标存在、重复目标、必填、来源存在、envelope 与类型兼容；可选输入可不映射，显式映射到不存在的来源仍报错。新 input map 保留选中 RuntimeValue 原对象，不 decode、不读取 Artifact、不生成 URL；调用方应将共享 envelope 视为不可变。workflow_input 继续指当前图调用的 input。
+
+每次创建局部调用均独立初始化 inputs map、outputs、variables、execution 与 Run 元数据副本，不接收父 State；只共享明确传入的 RuntimeValue。统一 WorkflowOutputResolver 接收声明 outputs 与局部 outputs，支持多命名结果，继续检查缺失、歧义与类型并保留引用。
+
+[内部 scope 工具](../packages/workflow/src/runtime/execution-scope.ts)将 parent scope 与严格 typed segment 按固定顺序规范编码，再以 SHA-256 生成版本化 opaque scope。segment 包含 owner occurrence、slot，以及 iteration_item 的固定快照 index 或 subworkflow_call 的 callKey；不含 attempt / concurrency / LangGraph 身份。相同输入跨重入稳定，不同父 scope 可组合嵌套；root 仍为 root。调用方负责确认 owner、parent、Run 归属并恢复同一快照，这个纯工具不提供授权或持久化。
+
+Definition Location 单独记录不可变 workflowVersionId 与 nodeId / graphKey 路径；根图路径为空，不把 scopeKey 当定义地址。这里只校验定位结构，不解析嵌套版本或授权。局部 scope 直接复用 NodeOccurrence 的 Run / scopeKey / nodeId 身份，无数据库变更。
+
+该基础仅提供定义、输入映射、局部初始 State 与身份工具，尚未接入生产 Compiler / Runner；不提供局部图调度、Human Review nested support、Send、Iteration 或 SubWorkflow。RuntimeValue 集合承载仍未实现。
+
 ## Human Review 声明与纯业务边界
 
 `flow.human_review@1` 已进入生产 Registry / 节点目录，执行种类为 interaction，不提供 Action execute 或审批控制出口；Draft、Publish / Compile / Run 已接入独立 HumanReviewNodeCompilationStrategy；其他未知 interaction 仍以 NODE_EXECUTION_KIND_UNSUPPORTED 拒绝。节点标题使用 NodeDefinition.name，不另加 title config。

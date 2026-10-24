@@ -17,6 +17,7 @@ import {
 import {
   ActionNodeCompilationStrategy,
   createBindingResolver,
+  deriveChildScope,
   DefaultDataStoragePolicyResolver,
   DefaultNodeExecutor,
   DefaultWorkflowCompiler,
@@ -326,10 +327,27 @@ describe('真实 PostgreSQL occurrence 身份与 attempt 分配', () => {
     );
     expect(new Set(roots.map((item) => item.id)).size).toBe(1);
     const root = roots[0]!;
+    const childScope = deriveChildScope('root', {
+      kind: 'iteration_item',
+      ownerOccurrenceId: root.id,
+      slot: 'body',
+      index: 0,
+    });
     const child = await first.getOrCreateOccurrence({
       ...identity,
-      scopeKey: 'opaque-child-scope',
+      scopeKey: childScope,
     });
+    expect(
+      await second.getOrCreateOccurrence({
+        ...identity,
+        scopeKey: deriveChildScope('root', {
+          kind: 'iteration_item',
+          ownerOccurrenceId: root.id,
+          slot: 'body',
+          index: 0,
+        }),
+      }),
+    ).toEqual(child);
     expect(child.id).not.toBe(root.id);
     const rows = await Promise.all(
       [root, child].map(async (occurrence) =>

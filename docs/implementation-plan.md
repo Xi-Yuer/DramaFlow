@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-Node Execution Occurrence Identity 底座进入架构评审；实现范围见[当前架构](architecture.md#node-execution-occurrence)。本轮止于 root occurrence / attempt / 审核复用及审计查询，不继续实现 Iteration。
+Local Graph Invocation Foundation 进入架构评审；范围见[当前架构](architecture.md#local-graph-invocation)。下一独立任务是 RuntimeValue 集合承载、拆分与聚合的设计，不接 Send，不实施 Iteration 或 SubWorkflow。
 
 Human Review 第五阶段已接入现有 Run 面板的单个文本审批闭环，等待人工 Canvas / Run 验收。能力与限制见[当前架构](architecture.md#web-human-review)。本轮不运行 Browser E2E 或 Provider。
 
