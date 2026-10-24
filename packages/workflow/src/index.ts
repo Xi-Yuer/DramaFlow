@@ -39,3 +39,4 @@ export * from './run/submission/workflow-invocation-equivalence.js';
 export * from './runtime/condition-evaluator.js';
 export * from './runtime/execution-scope.js';
 export * from './runtime/graph-invocation.js';
+export * from './runtime/values/runtime-collection.js';

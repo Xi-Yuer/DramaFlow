@@ -80,11 +80,24 @@ export class WorkflowInvocationContractValidator {
       if (!Object.hasOwn(inputs, input.name)) continue;
       const value = inputs[input.name]!;
       if (value.storage === 'reference') continue;
+      if (value.storage === 'collection') {
+        this.validateCollectionElements(value, input.name);
+        continue;
+      }
       // 也验证来源标签，防止声明为 any / 宽 union 时掩盖伪造的具体类型标签。
       this.validateInline(value.type, value.value, input.name);
       this.validateInline(input.type, value.value, input.name);
     }
     return inputs;
+  }
+
+  private validateCollectionElements(value: RuntimeValue, inputName: string): void {
+    if (value.storage === 'reference') return;
+    if (value.storage === 'collection') {
+      for (const element of value.elements) this.validateCollectionElements(element, inputName);
+      return;
+    }
+    this.validateInline(value.type, value.value, inputName);
   }
 
   private validateInline(type: DataType, value: unknown, inputName: string): void {

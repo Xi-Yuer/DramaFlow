@@ -56,6 +56,10 @@ function NodeRuntimeValueView({ value }: { value: RuntimeValue }) {
     );
   }
 
+  if (value.storage === 'collection') {
+    return <span className="text-muted-foreground">集合值暂不支持展示</span>;
+  }
+
   const { type, reference } = value;
   const typeLabel =
     type.kind === 'named' || type.kind === 'primitive' ? type.name : JSON.stringify(type);

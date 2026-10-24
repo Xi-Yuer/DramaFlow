@@ -1,5 +1,6 @@
 import {
   artifactReferenceSchema,
+  containsInlineMediaValue,
   inlineRuntimeValueSchema,
   type DataStoragePolicy,
   type DataType,
@@ -43,6 +44,14 @@ export class DefaultRuntimeValueCodec implements RuntimeValueCodec {
   ) {}
 
   async encode(value: unknown, options: RuntimeValueEncodeOptions): Promise<RuntimeValue> {
+    if (options.type.kind === 'array' && !Array.isArray(value)) {
+      throw new Error('数组 encode 要求业务数组，不能传入 RuntimeValue envelope');
+    }
+    if (options.type.kind === 'array' && containsInlineMediaValue(options.type, value)) {
+      // 不把 decode 产生的 MediaResource / 临时 URL 再写成 JSON Artifact。
+      // 媒体需逐元素沿原有 BinaryContent encode 管线写入，再由 Builder 保留引用。
+      throw new Error('媒体集合必须逐元素 encode 后通过 CollectionBuilder 构造');
+    }
     const policy =
       options.storagePolicy === 'auto'
         ? this.storagePolicyResolver.resolve(options.type, value)
@@ -59,6 +68,10 @@ export class DefaultRuntimeValueCodec implements RuntimeValueCodec {
 
   async decode(value: RuntimeValue, context: RuntimeValueDecodeContext): Promise<unknown> {
     if (value.storage === 'inline') return value.value;
+    if (value.storage === 'collection') {
+      // 仅在真正 decode 时解析元素引用，顺序由 Promise.all 保持。
+      return Promise.all(value.elements.map((element) => this.decode(element, context)));
+    }
 
     try {
       return await this.referenceResolver.resolve(value.reference, context);

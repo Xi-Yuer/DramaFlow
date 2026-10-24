@@ -130,3 +130,23 @@ describe('Workflow Run Result 展示', () => {
     },
   );
 });
+
+it('集合运行表示只显示兼容提示，不展开引用身份', () => {
+  showRun({
+    outputs: {
+      collection: {
+        storage: 'collection',
+        type: { kind: 'array', itemType: StringType },
+        elements: [
+          {
+            storage: 'reference',
+            type: StringType,
+            reference: { kind: 'artifact', id: 'private-element-id' },
+          },
+        ],
+      },
+    },
+  });
+  expect(screen.getByText('集合值暂不支持展示')).toBeTruthy();
+  expect(screen.queryByText('private-element-id')).toBeNull();
+});

@@ -44,7 +44,13 @@ NodeRun 查询新增安全的 occurrenceId / scopeKey，不返回 thread、check
 
 Definition Location 单独记录不可变 workflowVersionId 与 nodeId / graphKey 路径；根图路径为空，不把 scopeKey 当定义地址。这里只校验定位结构，不解析嵌套版本或授权。局部 scope 直接复用 NodeOccurrence 的 Run / scopeKey / nodeId 身份，无数据库变更。
 
-该基础仅提供定义、输入映射、局部初始 State 与身份工具，尚未接入生产 Compiler / Runner；不提供局部图调度、Human Review nested support、Send、Iteration 或 SubWorkflow。RuntimeValue 集合承载仍未实现。
+该基础仅提供定义、输入映射、局部初始 State 与身份工具，尚未接入生产 Compiler / Runner；不提供局部图调度、Human Review nested support、Send、Iteration 或 SubWorkflow。集合承载见下节。
+
+## RuntimeValue Collection
+
+统一 RuntimeValue 增加可递归、可序列化的 collection 表示，与 inline 业务 JSON 数组及整体 reference 分离。Snapshot 提供固定 length / get(index) 与可持久化的 toRuntimeValue；Builder 按 index 验证完整性与类型并有序构造，保留元素引用和嵌套层级。Codec 仅在 decode 时解析元素引用；普通 JSON 数组可继续显式 inline 或整体 Artifact，auto 不新增阈值。语义、媒体约束与接口见[数据模型](data-model.md#固定集合快照与有序构造)。
+
+Graph Invocation input mapping 与 WorkflowOutputResolver 直接接受统一 RuntimeValue，不新增 Binding / Resolver。调用输入校验递归检查 collection 的内联元素，引用仍不读取。Web 只对 collection 显示“集合值暂不支持展示”，不展开元素或新增集合 UI。此基础未接入 Send、Iteration、SubWorkflow 或 Provider media nodes，无数据库变更。
 
 ## Human Review 声明与纯业务边界
 

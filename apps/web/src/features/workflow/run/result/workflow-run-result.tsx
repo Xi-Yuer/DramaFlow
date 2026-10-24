@@ -16,6 +16,10 @@ function ResultValue({ value }: { value: RuntimeValue }) {
     );
   }
 
+  if (value.storage === 'collection') {
+    return <Typography.Text type="secondary">集合值暂不支持展示</Typography.Text>;
+  }
+
   const { type, reference } = value;
   const typeLabel =
     type.kind === 'named' || type.kind === 'primitive' ? type.name : JSON.stringify(type);

@@ -65,3 +65,27 @@ export const dataTypeSchema: z.ZodType<DataType> = z.lazy(() =>
     z.object({ kind: z.literal('union'), types: z.array(dataTypeSchema).min(1) }).strict(),
   ]),
 );
+
+// 媒体业务值不能作为 JSON 集合元素持久化；内容引用必须在运行表示层保留。
+export function containsMediaDataType(type: DataType): boolean {
+  switch (type.kind) {
+    case 'named':
+      return type.name.startsWith('media.');
+    case 'array':
+      return containsMediaDataType(type.itemType);
+    case 'object':
+      return Object.values(type.properties).some(containsMediaDataType);
+    case 'union':
+      return type.types.some(containsMediaDataType);
+    default:
+      return false;
+  }
+}
+
+// 空媒体数组（含嵌套空数组）没有媒体业务值，无需人为创建引用。
+export function containsInlineMediaValue(type: DataType, value: unknown): boolean {
+  if (!containsMediaDataType(type)) return false;
+  if (type.kind === 'array' && Array.isArray(value))
+    return value.some((item: unknown) => containsInlineMediaValue(type.itemType, item));
+  return true;
+}
