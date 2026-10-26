@@ -106,7 +106,7 @@ export class WorkflowHumanReviewService {
         // LangGraph 1.5.0 每个 INTERRUPT pending write 保存一个 Interrupt 对象。
         const parsed = z
           .object({ id: z.string().min(1), value: z.unknown() })
-          .passthrough()
+          .loose()
           .safeParse(value);
         if (!parsed.success) throw new HumanReviewStateError('HUMAN_REVIEW_INTERRUPT_INVALID');
         native.push(parsed.data);

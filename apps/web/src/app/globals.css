@@ -689,6 +689,16 @@ a {
   min-width: 0;
   display: flex;
 }
+.graph-drill {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  transform-origin: center center;
+}
+.graph-drill-active {
+  pointer-events: none;
+}
 .canvas-breadcrumb {
   position: absolute;
   z-index: 6;

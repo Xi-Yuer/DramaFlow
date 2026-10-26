@@ -16,6 +16,7 @@ import {
   type WorkflowResponse,
 } from '@dramaflow/contracts';
 import { GraphCanvasSession } from '../src/features/workflow/editor/graph-canvas-session';
+import { DRILL_MOTION_MS } from '../src/features/workflow/editor/graph-drill-transition';
 import {
   createGraphNavigation,
   currentGraphLocation,
@@ -726,5 +727,83 @@ describe('SubWorkflow 画布', () => {
     expect(document.querySelector('[data-graph-location="root"]')).toBeTruthy();
     expect(flowNode('iterate')?.selected).toBe(true);
     expect(view.definition().nodes.map((item) => item.id)).toEqual(['format', 'iterate']);
+  });
+});
+
+function box(left: number, top: number, width: number, height: number): () => DOMRect {
+  return () =>
+    ({
+      x: left,
+      y: top,
+      left,
+      top,
+      width,
+      height,
+      right: left + width,
+      bottom: top + height,
+      toJSON: () => ({}),
+    }) as DOMRect;
+}
+
+function placeOwnerAnchor(id: string) {
+  const stage = document.querySelector('.canvas-stage');
+  if (!stage) throw new Error('找不到画布');
+  stage.getBoundingClientRect = box(0, 0, 800, 600);
+  const owner = document.createElement('div');
+  owner.className = 'react-flow__node';
+  owner.dataset.id = id;
+  owner.getBoundingClientRect = box(100, 80, 180, 72);
+  stage.appendChild(owner);
+}
+
+async function settleDrill() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, DRILL_MOTION_MS + 60));
+  });
+}
+
+describe('空间化进入与返回', () => {
+  it('有锚点时先锁定交互，动画结束后才允许返回', async () => {
+    setup();
+    clickNode('iterate');
+    move({ x: 12, y: 18, zoom: 1.2 });
+    placeOwnerAnchor('iterate');
+    fireEvent.click(screen.getByRole('button', { name: '编辑 Body' }));
+    expect(document.querySelector('[data-graph-location="body"]')).toBeTruthy();
+    expect(document.querySelector('[data-drill="enter"]')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '返回上一层' }));
+    expect(document.querySelector('[data-graph-location="body"]')).toBeTruthy();
+    await settleDrill();
+    expect(document.querySelector('[data-drill]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '返回上一层' }));
+    expect(document.querySelector('[data-drill="exit"]')).toBeTruthy();
+    expect(document.querySelector('[data-graph-location="body"]')).toBeTruthy();
+    await settleDrill();
+    expect(document.querySelector('[data-graph-location="root"]')).toBeTruthy();
+    expect(flow.defaultViewport).toEqual({ x: 12, y: 18, zoom: 1.2 });
+    expect(flowNode('iterate')?.selected).toBe(true);
+  });
+
+  it('reduced motion 或没有锚点时直接完成导航', () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('reduce'),
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+    setup();
+    clickNode('iterate');
+    placeOwnerAnchor('iterate');
+    fireEvent.click(screen.getByRole('button', { name: '编辑 Body' }));
+    expect(document.querySelector('[data-drill]')).toBeNull();
+    expect(document.querySelector('[data-graph-location="body"]')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '返回上一层' }));
+    expect(document.querySelector('[data-graph-location="root"]')).toBeTruthy();
+    window.matchMedia = original;
   });
 });
