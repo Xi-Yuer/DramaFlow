@@ -13,7 +13,12 @@ import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
 export const BODY_INPUT_NODE_TYPE = 'workflowBodyInputs';
 
 export type WorkflowBodyInputNode = Node<
-  { inputs: WorkflowDefinition['inputs'] },
+  {
+    inputs: WorkflowDefinition['inputs'];
+    scope?: 'root' | 'body';
+    onConfigure?: () => void;
+    disabled?: boolean;
+  },
   typeof BODY_INPUT_NODE_TYPE
 >;
 
@@ -24,7 +29,11 @@ function unusedId(base: string, used: ReadonlySet<string>) {
 }
 
 // 只生成视图。边界节点和投影线都不进入 GraphDefinition。
-export function projectBodyInputBoundary(definition: WorkflowDefinition, position?: XYPosition) {
+export function projectBodyInputBoundary(
+  definition: WorkflowDefinition,
+  position?: XYPosition,
+  options: Omit<WorkflowBodyInputNode['data'], 'inputs'> = {},
+) {
   const id = unusedId('ui:body-inputs', new Set(definition.nodes.map((node) => node.id)));
   const node: WorkflowBodyInputNode = {
     id,
@@ -38,7 +47,7 @@ export function projectBodyInputBoundary(definition: WorkflowDefinition, positio
         ? Math.min(...definition.nodes.map((item) => item.ui.position.y))
         : 80,
     },
-    data: { inputs: definition.inputs },
+    data: { inputs: definition.inputs, ...options },
   };
   const usedEdges = new Set(definition.edges.map((edge) => edge.id));
   const edges: WorkflowEdge[] = [];
@@ -60,7 +69,7 @@ export function projectBodyInputBoundary(definition: WorkflowDefinition, positio
         ...workflowEdgeViewOptions(data),
         deletable: true,
         reconnectable: false,
-        ariaLabel: 'Body 输入投影',
+        ariaLabel: options.scope === 'root' ? '工作流输入投影' : 'Body 输入投影',
       });
     }
   }

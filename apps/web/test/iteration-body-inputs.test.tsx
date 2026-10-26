@@ -33,7 +33,11 @@ import {
 } from '../src/features/workflow/canvas/workflow-node';
 import { GraphCanvasSession } from '../src/features/workflow/editor/graph-canvas-session';
 import { WorkflowBodyInputs } from '../src/features/workflow/iteration/body-input-boundary-node';
-import { projectBodyInputBoundary } from '../src/features/workflow/iteration/body-input-boundary';
+import {
+  projectBodyInputBoundary,
+  type WorkflowBodyInputNode,
+} from '../src/features/workflow/iteration/body-input-boundary';
+import { workflowApi } from '../src/features/workflow/workflow-api';
 import {
   addBodyInput,
   addInvariantInput,
@@ -67,6 +71,7 @@ vi.mock('@xyflow/react', async (importOriginal) => ({
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 const array = (itemType: typeof StringType | typeof NumberType) => ({
@@ -460,15 +465,18 @@ describe('Iteration Body 输入编辑', () => {
 });
 
 describe('Iteration Inspector 与 Body 画布', () => {
-  function setup() {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(nodeTypeKeys.list, manifests);
-    const initial: WorkflowDefinition = {
+  function setup(
+    initial: WorkflowDefinition = {
       inputs: [],
       nodes: [iteration()],
       edges: [],
       outputs: [],
-    };
+    },
+  ) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+    });
+    client.setQueryData(nodeTypeKeys.list, manifests);
     let current = initial;
     function Editor() {
       const [definition, setDefinition] = useState(initial);
@@ -503,9 +511,33 @@ describe('Iteration Inspector 与 Body 画布', () => {
     return node;
   }
 
-  it('从检查器配置映射，并在 Body 里投影为 workflow_input', async () => {
+  it('Root 数组声明 → Iteration → Body 输入和输出 → Draft HTTP 保存回读', async () => {
     const view = setup();
-    expect(flow.nodes?.some((node) => node.type === 'workflowBodyInputs')).toBe(false);
+    const rootBoundary = flow.nodes!.find(
+      (node) => node.type === 'workflowBodyInputs',
+    )! as WorkflowBodyInputNode;
+    expect(rootBoundary.data.scope).toBe('root');
+    act(() => rootBoundary.data.onConfigure?.());
+    fireEvent.click(screen.getByRole('button', { name: '添加 工作流输入' }));
+    const typeSelect = screen.getByRole('combobox', {
+      name: '工作流输入类型 input',
+    }) as HTMLSelectElement;
+    expect([...typeSelect.options].map((option) => option.text)).toEqual([
+      '文本',
+      '数字',
+      '布尔',
+      '文本列表',
+      '数字列表',
+    ]);
+    fireEvent.change(typeSelect, { target: { value: 'string[]' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '工作流输入名称 input' }), {
+      target: { value: 'items' },
+    });
+    fireEvent.blur(screen.getByRole('textbox', { name: '工作流输入名称 input' }));
+    fireEvent.click(screen.getByRole('button', { name: '完成' }));
+    expect(view.definition().inputs).toEqual([
+      { name: 'items', type: array(StringType), required: true },
+    ]);
     act(() =>
       flow.onNodeClick?.(
         {} as never,
@@ -516,9 +548,25 @@ describe('Iteration Inspector 与 Body 画布', () => {
     fireEvent.click(screen.getByRole('button', { name: '初始化 Body' }));
     expect(screen.getByRole('button', { name: '编辑 Body' })).toHaveProperty('disabled', false);
     expect(owner(view.definition()).composite?.body.nodes).toEqual([]);
+    const rootConnection = {
+      source: rootBoundary.id,
+      sourceHandle: 'items',
+      target: 'iterate',
+      targetHandle: 'items',
+    };
+    expect(flow.isValidConnection?.(rootConnection)).toBe(true);
+    act(() => flow.onConnect?.(rootConnection));
+    expect(owner(view.definition()).inputs.items).toEqual({ type: 'workflow_input', key: 'items' });
+    expect(view.definition().edges).toEqual([]);
+    const rootProjection = flow.edges!.find((edge) => edge.data?.projection === 'workflow-input')!;
+    act(() => flow.onEdgesDelete?.([rootProjection]));
+    expect(owner(view.definition()).inputs.items).toBeUndefined();
+    act(() => flow.onConnect?.(rootConnection));
 
     fireEvent.click(screen.getByRole('button', { name: '添加 Body 输入' }));
-    expect(screen.getByRole('status').textContent).toContain('未配置');
+    expect(screen.getAllByRole('status').some((item) => item.textContent?.includes('未配置'))).toBe(
+      true,
+    );
     const stringSources = screen.getByRole('combobox', {
       name: 'input 的来源',
     }) as HTMLSelectElement;
@@ -616,6 +664,14 @@ describe('Iteration Inspector 与 Body 画布', () => {
     expect(flow.edges?.some((edge) => edge.sourceHandle === 'text' && edge.data?.projection)).toBe(
       false,
     );
+    act(() =>
+      flow.onConnect?.({
+        source: boundary!.id,
+        sourceHandle: 'text',
+        target: format!.id,
+        targetHandle: 'text',
+      }),
+    );
 
     const end = flow.nodes?.find((node) => node.type === 'workflowEnd');
     act(() =>
@@ -642,6 +698,41 @@ describe('Iteration Inspector 与 Body 画布', () => {
     ]);
     expect(saved.nodes[0]?.composite?.invariantInputs.map((input) => input.name)).toEqual([
       'style',
+    ]);
+
+    const fetch = vi.fn().mockResolvedValueOnce(Response.json({ revision: 2 }));
+    vi.stubGlobal('fetch', fetch);
+    await workflowApi.saveDraft('workflow', { expectedRevision: 1, definition: view.definition() });
+    const request = JSON.parse(fetch.mock.calls[0]![1].body as string);
+    expect(request.definition).toEqual(saved);
+    expect(request.definition.nodes.map((node: NodeDefinition) => node.id)).toEqual(['iterate']);
+    expect(request.definition.edges).toEqual([]);
+    const projectId = '7ac10b00-33cc-4e50-9a2b-05ef764c44f4';
+    fetch.mockResolvedValueOnce(
+      Response.json({
+        id: 'workflow',
+        projectId,
+        name: '数组输入验收',
+        revision: 2,
+        draft: request.definition,
+        createdAt: '2026-10-26T00:00:00.000Z',
+        updatedAt: '2026-10-26T00:00:00.000Z',
+      }),
+    );
+    const loaded = (await workflowApi.get(projectId)).draft;
+    expect(fetch).toHaveBeenCalledTimes(2);
+    cleanup();
+    setup(loaded);
+    const reopenedBoundary = flow.nodes!.find((node) => node.type === 'workflowBodyInputs')!;
+    expect(reopenedBoundary.data.inputs).toEqual(saved.inputs);
+    expect(flow.edges!.find((edge) => edge.data?.projection === 'workflow-input')).toMatchObject({
+      source: reopenedBoundary.id,
+      sourceHandle: 'items',
+      target: 'iterate',
+      targetHandle: 'items',
+    });
+    expect(resolveWorkflowNodePorts(loaded.nodes[0]!, iterationManifest).outputs).toEqual([
+      { key: 'result', name: 'result', dataType: array(StringType) },
     ]);
   });
 });

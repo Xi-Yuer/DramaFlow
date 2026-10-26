@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-Iteration Composite Contract / Publish Validation 进入架构评审；范围见[当前架构](architecture.md#iteration-contract-与-publish)。下一步 Compiler / Send / body invocation 与聚合须独立授权，本轮不实现 Iteration Runtime。
+Root Workflow Input 的数组声明与 Boundary → Iteration.items 编辑链路进入验收；范围见[当前架构](architecture.md#已实现的基础工程)。待人工检查 Root 文本列表输入连接、Body 映射与输出提升，以及保存后重开。本轮不扩展 Iteration Runtime；Run Form 数组输入控件留待下一任务。
 
 Human Review 第五阶段已接入现有 Run 面板的单个文本审批闭环，等待人工 Canvas / Run 验收。能力与限制见[当前架构](architecture.md#web-human-review)。本轮不运行 Browser E2E 或 Provider。
 

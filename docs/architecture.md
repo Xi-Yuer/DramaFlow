@@ -14,7 +14,9 @@
 | 执行       | Action DAG、简单 If 与分支区域外的串行 Human Review；独立 Worker 执行                                                  |
 | 基础设施   | PostgreSQL / Prisma、Redis / BullMQ、RustFS、官方 PostgreSQL Checkpointer                                              |
 
-End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 nodes、Registry 或执行链。首条业务输出拖到 End 创建独立输出；已有输出时明确选择新建或加入某项候选。候选共用一个输出名称，分别投影连线，删除连线或节点仅清理对应候选；不足时保留可修复 Draft，不转换成单 source。单 source 仍保留原编辑与删除行为，类型按精确版本 Manifest 校验。End 位置仅在当前页面保留，声明从 Definition 恢复；保存与发布分开。协议与准入见 [Workflow](workflow-model.md#输入与输出)。Start Boundary 和 Workflow Input 编辑器尚未实现。
+End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 nodes、Registry 或执行链。首条业务输出拖到 End 创建独立输出；已有输出时明确选择新建或加入某项候选。候选共用一个输出名称，分别投影连线，删除连线或节点仅清理对应候选；不足时保留可修复 Draft，不转换成单 source。单 source 仍保留原编辑与删除行为，类型按精确版本 Manifest 校验。End 位置仅在当前页面保留，声明从 Definition 恢复；保存与发布分开。协议与准入见 [Workflow](workflow-model.md#输入与输出)。
+
+Root 的「工作流输入」边界投影 `definition.inputs`，可打开[输入编辑器](../apps/web/src/features/workflow/inputs/workflow-input-dialog.tsx)创建、改名、删除、设置必填与类型。复用 `GraphInputDefinition`、DataType 和 Body 的 Graph Input 控件，支持文本、数字、布尔、文本列表、数字列表；已有其他类型显示并保留原声明。Root 与 Body 共用[输入边界投影](../apps/web/src/features/workflow/iteration/body-input-boundary.ts)和类型兼容检查，包含 Iteration 实例派生的数组端口。连接只写入 `{ type: 'workflow_input', key }`，以 `workflow-input` 虚线显示；删除投影线清除对应 binding，边界不进入 nodes，投影不进入 edges 或运行时 DataEdge。改名同步本图 binding，删除声明或改为不兼容类型时清理相关直接 binding，已有来源替换须确认。Save / reload 从声明与 binding 恢复；Boundary 位置仅留在视图。此处只扩展编辑声明与连接，Run Form 仍未提供数组输入控件。
 
 ## Workflow 基础库
 
@@ -58,7 +60,7 @@ Graph Invocation input mapping 与 WorkflowOutputResolver 直接接受统一 Run
 
 validateGraphForPublish / validateGraphDefinitionSemantics 与旧 Workflow 入口共用同一管线，递归验证独立 body，并返回带 definitionPath 的后代节点供现有发布事务统一检查模型权限；同名节点按所属局部定义查找，不覆盖父节点。Draft 配置字段边界也递归检查 body 已知 Action，Iteration config 不接受额外字段，仍允许映射 / 必填配置未完成，不把 Publish 门禁前移到保存。
 
-当前只实现 Contract / Publish。body 的嵌套 composite、If / control、Human Review / interaction 均拒绝；根既有 If / Human Review 行为不变。Compiler 在创建执行服务前以 NODE_EXECUTION_KIND_UNSUPPORTED 拒绝 Iteration；目录注册、可保存 / 可发布均不代表可运行。没有 Send、body runtime invocation、聚合策略或 Web Iteration Editor，无数据库变更。
+body 的嵌套 composite、If / control、Human Review / interaction 均拒绝；根既有 If / Human Review 行为不变。Web Iteration Inspector 支持 itemType、不变输入、Body 输入及映射；Body 内的输入边界与 Root 共用 Graph Input 连接机制，Body 输出通过现有端口推导提升为父 Iteration 的数组输出。编辑能力不代表 Run Form 已支持数组提交。
 
 ## Human Review 声明与纯业务边界
 

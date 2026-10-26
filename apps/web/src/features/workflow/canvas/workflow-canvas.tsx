@@ -53,6 +53,7 @@ import {
 } from '../iteration/body-input-boundary';
 import { bindGraphInput } from '../iteration/iteration-body-inputs';
 import { WorkflowInputContext } from '../inputs/workflow-input-context';
+import { WorkflowInputDialog } from '../inputs/workflow-input-dialog';
 import { WorkflowConditionActions } from '../conditions/if-condition-editor';
 import { setIfCondition } from '../conditions/if-condition';
 import {
@@ -160,10 +161,16 @@ export function WorkflowCanvas({
   const [inputPosition, setInputPosition] = useState<XYPosition>(
     () => projectBodyInputBoundary(workflow).node.position,
   );
-  const showInputBoundary = navigation !== null;
+  const [inputEditorOpen, setInputEditorOpen] = useState(false);
+  const atRoot = navigation === null;
   const inputBoundary = useMemo(
-    () => (showInputBoundary ? projectBodyInputBoundary(workflow, inputPosition) : null),
-    [inputPosition, showInputBoundary, workflow],
+    () =>
+      projectBodyInputBoundary(workflow, inputPosition, {
+        scope: atRoot ? 'root' : 'body',
+        disabled: locked,
+        onConfigure: atRoot ? () => setInputEditorOpen(true) : undefined,
+      }),
+    [inputPosition, atRoot, locked, workflow],
   );
   const [outputEditor, setOutputEditor] = useState<{ name?: string } | null>(null);
   const [pendingOutputSource, setPendingOutputSource] = useState<WorkflowOutputSource | null>(null);
@@ -365,7 +372,7 @@ export function WorkflowCanvas({
     });
   }
 
-  function commitBodyInput(connection: Connection) {
+  function commitGraphInput(connection: Connection) {
     const boundaryId = inputBoundary?.node.id;
     const inputKey = connection.sourceHandle;
     const portKey = connection.targetHandle;
@@ -383,7 +390,7 @@ export function WorkflowCanvas({
       return;
     }
     modal.confirm({
-      title: '该输入已有内容。连接后将改为使用 Body 输入，当前内容将被替换。',
+      title: `该输入已有内容。连接后将改为使用${atRoot ? '工作流' : ' Body '}输入，当前内容将被替换。`,
       okText: '确认替换',
       cancelText: '取消',
       okButtonProps: { autoInsertSpace: false },
@@ -599,7 +606,7 @@ export function WorkflowCanvas({
                           onConnect={(connection) => {
                             if (locked) return;
                             if (inputBoundary && connection.source === inputBoundary.node.id) {
-                              commitBodyInput(connection);
+                              commitGraphInput(connection);
                               return;
                             }
                             if (connection.target === end.node.id) {
@@ -803,6 +810,15 @@ export function WorkflowCanvas({
           </WorkflowNodeSettingsActions.Provider>
         </WorkflowNodeSelectionContext.Provider>
       </WorkflowRuntimeProvider>
+      {atRoot && inputEditorOpen ? (
+        <WorkflowInputDialog
+          definition={workflow}
+          manifests={nodeTypes.data ?? []}
+          disabled={locked || nodeTypes.isPending || nodeTypes.isError}
+          onEdit={onEdit}
+          onClose={() => setInputEditorOpen(false)}
+        />
+      ) : null}
       {pendingOutputSource ? (
         <WorkflowOutputTargetDialog
           outputs={workflow.outputs}

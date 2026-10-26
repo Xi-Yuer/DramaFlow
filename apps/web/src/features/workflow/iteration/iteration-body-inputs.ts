@@ -423,6 +423,46 @@ export function graphInputTypeChoiceId(type: DataType) {
   );
 }
 
+export function addGraphInput(graph: WorkflowDefinition): WorkflowDefinition {
+  const name = uniqueName('input', new Set(graph.inputs.map((input) => input.name)));
+  return {
+    ...graph,
+    inputs: [...graph.inputs, parseInput({ name, type: StringType, required: true })],
+  };
+}
+
+export function removeGraphInput(graph: WorkflowDefinition, name: string): WorkflowDefinition {
+  return {
+    ...graph,
+    inputs: graph.inputs.filter((input) => input.name !== name),
+    nodes: rewriteGraphBindings(graph, name, null),
+  };
+}
+
+export function updateGraphInput(
+  graph: WorkflowDefinition,
+  previousName: string,
+  patch: GraphInputPatch,
+  manifests: readonly NodeTypeManifest[],
+): WorkflowDefinition {
+  const current = graph.inputs.find((input) => input.name === previousName);
+  if (!current) throw new Error('图输入不存在');
+  const name = patch.name === undefined ? current.name : parsePortName(patch.name);
+  if (name !== previousName && graph.inputs.some((input) => input.name === name)) {
+    throw new Error('输入名称不能重复');
+  }
+  const input = parseInput({ ...current, ...patch, name });
+  const next = {
+    ...graph,
+    inputs: graph.inputs.map((item) => (item.name === previousName ? input : item)),
+    nodes: name === previousName ? graph.nodes : rewriteGraphBindings(graph, previousName, name),
+  };
+  return {
+    ...next,
+    nodes: clearIncompatibleBindings(next, name, input.type, manifests),
+  };
+}
+
 export function bindGraphInput(
   definition: WorkflowDefinition,
   manifests: readonly NodeTypeManifest[],
@@ -431,7 +471,7 @@ export function bindGraphInput(
   inputKey: string,
 ): WorkflowDefinition {
   const input = definition.inputs.find((item) => item.name === inputKey);
-  if (!input) throw new Error('Body 输入不存在');
+  if (!input) throw new Error('图输入不存在');
   const node = definition.nodes.find((item) => item.id === targetNodeId);
   if (!node) throw new Error('目标节点不存在');
   const manifest = manifests.find(
