@@ -53,6 +53,25 @@
   background: #ffffff05;
 }
 
+.arrayInput {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.arrayRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.arrayRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
 .actions {
   justify-content: flex-end;
   position: sticky;

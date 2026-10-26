@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-Root Workflow Input 的数组声明与 Boundary → Iteration.items 编辑链路进入验收；范围见[当前架构](architecture.md#已实现的基础工程)。待人工检查 Root 文本列表输入连接、Body 映射与输出提升，以及保存后重开。本轮不扩展 Iteration Runtime；Run Form 数组输入控件留待下一任务。
+Root Workflow Input → Boundary → Iteration.items 与 Run Form 数组提交进入人工验收；范围见[当前架构](architecture.md#web-workflow-run-inputs)。待人工检查文本 / 数字列表增删、实际提交、Body 映射与数组输出，以及草稿保存重开。本轮只补齐通用运行输入表单，不扩展 Iteration Runtime，不创建验收 Workflow，不运行浏览器 E2E 或真实 Provider。
 
 Human Review 第五阶段已接入现有 Run 面板的单个文本审批闭环，等待人工 Canvas / Run 验收。能力与限制见[当前架构](architecture.md#web-human-review)。本轮不运行 Browser E2E 或 Provider。
 

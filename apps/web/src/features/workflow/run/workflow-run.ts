@@ -14,6 +14,7 @@ type BasicInputKind = 'string' | 'number' | 'boolean';
 
 export type WorkflowInputEditor =
   | { kind: BasicInputKind; nullable: boolean; type: DataType }
+  | { kind: 'array'; itemKind: 'string' | 'number'; nullable: false; type: DataType }
   | { kind: 'unsupported'; nullable: false };
 
 export interface WorkflowInputFormValue {
@@ -45,6 +46,13 @@ function basicType(type: DataType): type is DataType & {
 
 export function workflowInputEditor(type: DataType): WorkflowInputEditor {
   if (basicType(type)) return { kind: type.name, nullable: false, type };
+  if (
+    type.kind === 'array' &&
+    type.itemType.kind === 'primitive' &&
+    (type.itemType.name === 'string' || type.itemType.name === 'number')
+  ) {
+    return { kind: 'array', itemKind: type.itemType.name, nullable: false, type };
+  }
   if (type.kind !== 'union' || type.types.length !== 2)
     return { kind: 'unsupported', nullable: false };
   const valueType = type.types.find(basicType);
@@ -52,6 +60,15 @@ export function workflowInputEditor(type: DataType): WorkflowInputEditor {
   return valueType && nullTypes.length === 1
     ? { kind: valueType.name, nullable: true, type: valueType }
     : { kind: 'unsupported', nullable: false };
+}
+
+function arrayNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text)) return null;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : null;
 }
 
 function inlineValue(
@@ -104,6 +121,36 @@ export function buildWorkflowRunInputs(
         continue;
       }
       entries.push([definition.name, { storage: 'inline', type: NullType, value: null }]);
+      continue;
+    }
+    if (editor.kind === 'array') {
+      const items: unknown = field.value;
+      if (!Array.isArray(items)) {
+        issues.push({ name: definition.name, code: 'invalid', message: '请提供有效的列表输入' });
+        continue;
+      }
+      if (definition.required && items.length === 0) {
+        issues.push({ name: definition.name, code: 'required', message: '必填列表至少需要一项' });
+        continue;
+      }
+      const serialized: (string | number)[] = [];
+      // 不过滤空项或重排列表；任何无效项都阻止整个输入提交。
+      for (const [index, item] of items.entries()) {
+        const value = editor.itemKind === 'number' ? arrayNumber(item) : item;
+        if (
+          (editor.itemKind === 'string' && typeof value === 'string' && value.trim() !== '') ||
+          (editor.itemKind === 'number' && typeof value === 'number')
+        ) {
+          serialized.push(value);
+        } else {
+          issues.push({
+            name: definition.name,
+            code: 'invalid',
+            message: `${definition.name} 第 ${index + 1} 项${editor.itemKind === 'number' ? '请输入有效数字' : '不能为空白'}`,
+          });
+        }
+      }
+      entries.push([definition.name, { storage: 'inline', type: editor.type, value: serialized }]);
       continue;
     }
     const runtimeValue = inlineValue(editor, field.value);

@@ -221,6 +221,16 @@ export function WorkflowRunControls({
                             })
                           }
                         />
+                      ) : editor.kind === 'array' ? (
+                        <WorkflowArrayInput
+                          name={definition.name}
+                          itemKind={editor.itemKind}
+                          value={current.value}
+                          disabled={controlDisabled}
+                          onChange={(value) =>
+                            onChangeInput(definition.name, { ...current, value })
+                          }
+                        />
                       ) : (
                         <Switch
                           aria-label={`${definition.name} 输入`}
@@ -304,5 +314,53 @@ export function WorkflowRunControls({
         />
       ) : null}
     </section>
+  );
+}
+
+function WorkflowArrayInput({
+  name,
+  itemKind,
+  value,
+  disabled,
+  onChange,
+}: {
+  name: string;
+  itemKind: 'string' | 'number';
+  value: unknown;
+  disabled: boolean;
+  onChange: (value: unknown[]) => void;
+}) {
+  const items: unknown[] = Array.isArray(value) ? value : [];
+  return (
+    <div className={styles.arrayInput} role="group" aria-label={`${name} 列表输入`}>
+      {items.map((item, index) => (
+        <div className={styles.arrayRow} key={index}>
+          <Input
+            type={itemKind === 'number' ? 'number' : 'text'}
+            step={itemKind === 'number' ? 'any' : undefined}
+            aria-label={`${name} 第 ${index + 1} 项`}
+            value={typeof item === 'string' || typeof item === 'number' ? item : ''}
+            disabled={disabled}
+            onChange={(event) =>
+              onChange(items.map((current, at) => (at === index ? event.target.value : current)))
+            }
+          />
+          <Button
+            disabled={disabled}
+            aria-label={`删除 ${name} 第 ${index + 1} 项`}
+            onClick={() => onChange(items.filter((_, at) => at !== index))}
+          >
+            删除
+          </Button>
+        </div>
+      ))}
+      <Button
+        disabled={disabled}
+        aria-label={`添加 ${name} 一项`}
+        onClick={() => onChange([...items, ''])}
+      >
+        添加一项
+      </Button>
+    </div>
   );
 }

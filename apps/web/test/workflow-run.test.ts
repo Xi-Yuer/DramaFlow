@@ -104,7 +104,8 @@ describe('Workflow Version 输入表单转换', () => {
   const unsupportedTypes: DataType[] = [
     { kind: 'any' },
     { kind: 'named', name: 'media.image' },
-    { kind: 'array', itemType: StringType },
+    { kind: 'array', itemType: BooleanType },
+    { kind: 'array', itemType: { kind: 'array', itemType: StringType } },
     { kind: 'object', properties: { value: StringType } },
     { kind: 'union', types: [StringType, NumberType] },
   ];
@@ -115,6 +116,109 @@ describe('Workflow Version 输入表单转换', () => {
       issues: [{ name: 'value', code: 'unsupported' }],
     });
   });
+
+  it('scalar text 保留原文和空白，scalar number 不隐式转换字符串', () => {
+    expect(
+      buildWorkflowRunInputs([input('text', StringType)], {
+        text: { provided: true, explicitNull: false, value: '  原文  ' },
+      }),
+    ).toMatchObject({ ok: true, inputs: { text: { value: '  原文  ' } } });
+    for (const value of ['', '1', NaN, Infinity]) {
+      expect(
+        buildWorkflowRunInputs([input('count', NumberType)], {
+          count: { provided: true, explicitNull: false, value },
+        }),
+      ).toMatchObject({ ok: false });
+    }
+  });
+
+  const array = (itemType: DataType): DataType => ({ kind: 'array', itemType });
+  function buildArray(type: DataType, value: unknown, required = true, provided = true) {
+    return buildWorkflowRunInputs([input('values', type, required)], {
+      values: { provided, explicitNull: false, value },
+    });
+  }
+
+  it('数组编辑器由 DataType 决定，文本列表保留顺序和非空原文', () => {
+    const type = array(StringType);
+    expect(workflowInputEditor(type)).toEqual({
+      kind: 'array',
+      itemKind: 'string',
+      nullable: false,
+      type,
+    });
+    expect(buildArray(type, ['B', '  A  ', 'C'])).toEqual({
+      ok: true,
+      inputs: { values: { storage: 'inline', type, value: ['B', '  A  ', 'C'] } },
+    });
+    for (const value of [
+      ['hello', '', 'world'],
+      ['hello', '   ', 'world'],
+      ['hello', 1],
+      [null],
+      [undefined],
+    ]) {
+      expect(buildArray(type, value)).toMatchObject({ ok: false, issues: [{ code: 'invalid' }] });
+    }
+  });
+
+  it('number[] 转换为真正的数字数组，保留 0、负数、小数及顺序', () => {
+    const type = array(NumberType);
+    expect(workflowInputEditor(type)).toEqual({
+      kind: 'array',
+      itemKind: 'number',
+      nullable: false,
+      type,
+    });
+    expect(buildArray(type, ['1', '0', '-2.5', '3e2', 4])).toEqual({
+      ok: true,
+      inputs: { values: { storage: 'inline', type, value: [1, 0, -2.5, 300, 4] } },
+    });
+  });
+
+  it.each([
+    '',
+    '   ',
+    undefined,
+    null,
+    NaN,
+    Infinity,
+    -Infinity,
+    'NaN',
+    'Infinity',
+    '1e309',
+    'bad',
+    '1bad',
+    '0x10',
+    true,
+  ])('number[] 无效项 %j 阻止整个 payload，不将空值转成 0', (invalid) => {
+    const result = buildArray(array(NumberType), ['1', invalid, '3']);
+    expect(result).toMatchObject({ ok: false, issues: [{ name: 'values', code: 'invalid' }] });
+    expect(result).not.toHaveProperty('inputs');
+  });
+
+  it.each([StringType, NumberType])(
+    '数组 %j 沿用 required 与 optional 的存在性约定',
+    (itemType) => {
+      const type = array(itemType);
+      expect(buildArray(type, [])).toMatchObject({ ok: false, issues: [{ code: 'required' }] });
+      expect(buildWorkflowRunInputs([input('values', type)], {})).toMatchObject({ ok: false });
+      expect(buildArray(type, [], false, false)).toEqual({ ok: true, inputs: {} });
+      expect(buildWorkflowRunInputs([input('values', type, false)], {})).toEqual({
+        ok: true,
+        inputs: {},
+      });
+      expect(buildArray(type, [], false, true)).toEqual({
+        ok: true,
+        inputs: { values: { storage: 'inline', type, value: [] } },
+      });
+      expect(
+        buildWorkflowRunInputs([input('values', type)], {
+          values: { provided: true, explicitNull: true, value: [] },
+        }),
+      ).toMatchObject({ ok: false, issues: [{ code: 'invalid' }] });
+    },
+  );
 });
 
 describe('Start Run 请求控制器', () => {

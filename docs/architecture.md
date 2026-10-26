@@ -16,7 +16,7 @@
 
 End 是 `definition.outputs` 的画布投影，不是 NodeType，不进入 nodes、Registry 或执行链。首条业务输出拖到 End 创建独立输出；已有输出时明确选择新建或加入某项候选。候选共用一个输出名称，分别投影连线，删除连线或节点仅清理对应候选；不足时保留可修复 Draft，不转换成单 source。单 source 仍保留原编辑与删除行为，类型按精确版本 Manifest 校验。End 位置仅在当前页面保留，声明从 Definition 恢复；保存与发布分开。协议与准入见 [Workflow](workflow-model.md#输入与输出)。
 
-Root 的「工作流输入」边界投影 `definition.inputs`，可打开[输入编辑器](../apps/web/src/features/workflow/inputs/workflow-input-dialog.tsx)创建、改名、删除、设置必填与类型。复用 `GraphInputDefinition`、DataType 和 Body 的 Graph Input 控件，支持文本、数字、布尔、文本列表、数字列表；已有其他类型显示并保留原声明。Root 与 Body 共用[输入边界投影](../apps/web/src/features/workflow/iteration/body-input-boundary.ts)和类型兼容检查，包含 Iteration 实例派生的数组端口。连接只写入 `{ type: 'workflow_input', key }`，以 `workflow-input` 虚线显示；删除投影线清除对应 binding，边界不进入 nodes，投影不进入 edges 或运行时 DataEdge。改名同步本图 binding，删除声明或改为不兼容类型时清理相关直接 binding，已有来源替换须确认。Save / reload 从声明与 binding 恢复；Boundary 位置仅留在视图。此处只扩展编辑声明与连接，Run Form 仍未提供数组输入控件。
+Root 的「工作流输入」边界投影 `definition.inputs`，可打开[输入编辑器](../apps/web/src/features/workflow/inputs/workflow-input-dialog.tsx)创建、改名、删除、设置必填与类型。复用 `GraphInputDefinition`、DataType 和 Body 的 Graph Input 控件，支持文本、数字、布尔、文本列表、数字列表；已有其他类型显示并保留原声明。Root 与 Body 共用[输入边界投影](../apps/web/src/features/workflow/iteration/body-input-boundary.ts)和类型兼容检查，包含 Iteration 实例派生的数组端口。连接只写入 `{ type: 'workflow_input', key }`，以 `workflow-input` 虚线显示；删除投影线清除对应 binding，边界不进入 nodes，投影不进入 edges 或运行时 DataEdge。改名同步本图 binding，删除声明或改为不兼容类型时清理相关直接 binding，已有来源替换须确认。Save / reload 从声明与 binding 恢复；Boundary 位置仅留在视图。运行输入控件见 [Run Form](#web-workflow-run-inputs)。
 
 ## Workflow 基础库
 
@@ -60,7 +60,7 @@ Graph Invocation input mapping 与 WorkflowOutputResolver 直接接受统一 Run
 
 validateGraphForPublish / validateGraphDefinitionSemantics 与旧 Workflow 入口共用同一管线，递归验证独立 body，并返回带 definitionPath 的后代节点供现有发布事务统一检查模型权限；同名节点按所属局部定义查找，不覆盖父节点。Draft 配置字段边界也递归检查 body 已知 Action，Iteration config 不接受额外字段，仍允许映射 / 必填配置未完成，不把 Publish 门禁前移到保存。
 
-body 的嵌套 composite、If / control、Human Review / interaction 均拒绝；根既有 If / Human Review 行为不变。Web Iteration Inspector 支持 itemType、不变输入、Body 输入及映射；Body 内的输入边界与 Root 共用 Graph Input 连接机制，Body 输出通过现有端口推导提升为父 Iteration 的数组输出。编辑能力不代表 Run Form 已支持数组提交。
+body 的嵌套 composite、If / control、Human Review / interaction 均拒绝；根既有 If / Human Review 行为不变。Web Iteration Inspector 支持 itemType、不变输入、Body 输入及映射；Body 内的输入边界与 Root 共用 Graph Input 连接机制，Body 输出通过现有端口推导提升为父 Iteration 的数组输出。Root 数组参数通过通用 Run Form 提交，不为 Iteration 增加专用输入协议。
 
 ## Human Review 声明与纯业务边界
 
@@ -198,6 +198,12 @@ unsafe 注册标准 beforeunload，safe / 卸载时解除。不改写 Router / h
 [Run 状态控制器](../apps/web/src/features/workflow/run/status/workflow-run-status.ts)在 waiting 时读取 Pending API，仅展示单条审核。卡片展示节点名称、审核说明、纯文本内容和可选反馈；通过 / 拒绝提交当前 opaque token、waitingRevision 与 decision，不展示这些内部身份。合法 reject 不被前端解释为运行失败。
 
 提交中和 submissionStatus=submitted 禁止再次决策。POST 后只重读同一 Run / Pending，不创建新 Run；网络结果不明或 409 不自动 replay，按服务端 pending / submitted 恢复操作能力。查询失败撤下旧卡片，手动刷新后再确认；旧查询 / POST 响应受 Run generation 隔离，旧审核回调必须匹配当前 token 与 revision。新审核清空旧反馈。普通 pending 审核停止高频 Run 轮询；submitted 或 waiting 查询暂时返回空 items 时沿用原有单一 timer 确认进展，running 恢复常规跟踪，completed / failed 进入既有结果 / 失败视图。面板关闭不卸载页面级状态与请求。多个 Pending 或后端 capability 错误明确展示，不在前端猜测拓扑。
+
+### Web Workflow Run Inputs
+
+[Run Form](../apps/web/src/features/workflow/run/workflow-run-controls.tsx)从明确选中的已发布版本读取 Graph Input 声明，以 DataType 驱动文本、数字、布尔、文本列表与数字列表控件，不依赖名称、连接目标或 Iteration。列表从空数组开始，按项添加、删除并保留顺序，不要求手写 JSON。scalar text 保留原文与空字符串，number / boolean 保留 0 / false；原有 scalar nullable 与不支持类型的拦截行为保持。
+
+[提交转换](../apps/web/src/features/workflow/run/workflow-run.ts)继续生成现有 inline RuntimeValue 与 Start 请求。required 列表至少一项；文本列表逐项拒绝空字符串 / 纯空白，其他文本原文保留。数字列表逐项校验十进制数字文本并转换为有限 number，拒绝空值、NaN、Infinity 与非法项，不通过过滤或填 0 修复。任一无效项阻止整个请求。optional 未勾选「提供此输入」时省略字段；明确提供的空列表按实际值提交 `[]`，不制造空白项，不改变后端 optional 语义。输入由页面级 Hook 持有，切换版本重置，提交中锁定增删与编辑。
 
 ### Web Workflow Run Result
 

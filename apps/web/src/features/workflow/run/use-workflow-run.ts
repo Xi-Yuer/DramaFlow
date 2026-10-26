@@ -23,7 +23,14 @@ function initialInputValues(version: WorkflowVersionResponse): WorkflowInputForm
   return Object.fromEntries(
     version.definition.inputs.map((definition) => {
       const editor = workflowInputEditor(definition.type);
-      const value = editor.kind === 'string' ? '' : editor.kind === 'boolean' ? false : undefined;
+      const value =
+        editor.kind === 'array'
+          ? []
+          : editor.kind === 'string'
+            ? ''
+            : editor.kind === 'boolean'
+              ? false
+              : undefined;
       return [
         definition.name,
         {
