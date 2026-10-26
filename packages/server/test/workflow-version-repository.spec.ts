@@ -4,10 +4,11 @@ import { WorkflowVersionRepositories } from '../src/workflow/workflow-version-re
 
 describe('WorkflowVersionRepositories.findOwnedWorkflow', () => {
   it('按 owner 定位版本所属工作流，找不到时返回 null', async () => {
-    const findFirst = vi.fn(async (query: { where: { id: string; workflow: { project: { ownerId: string } } } }) =>
-      query.where.id === 'version-a' && query.where.workflow.project.ownerId === 'owner-a'
-        ? { workflow: { id: 'workflow-a', projectId: 'project-a' } }
-        : null,
+    const findFirst = vi.fn(
+      async (query: { where: { id: string; workflow: { project: { ownerId: string } } } }) =>
+        query.where.id === 'version-a' && query.where.workflow.project.ownerId === 'owner-a'
+          ? { workflow: { id: 'workflow-a', projectId: 'project-a' } }
+          : null,
     );
     const repositories = new WorkflowVersionRepositories({
       client: { workflowVersion: { findFirst } },

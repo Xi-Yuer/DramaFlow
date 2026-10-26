@@ -187,7 +187,7 @@ export const nodeTypeManifestSchema = z
     outputs: z.array(outputPortDefinitionSchema),
     controlOutputs: z.array(controlOutputDefinitionSchema).optional(),
     // 这些端口需结合实例解析；空静态 outputs 不表示没有有效输出。
-    portDerivation: z.literal('iteration').optional(),
+    portDerivation: z.enum(['iteration', 'subworkflow']).optional(),
     config: z.array(configFieldDefinitionSchema),
     capabilities: z.array(capabilityRequirementSchema).optional(),
     ui: nodeUISchema.optional(),
@@ -205,7 +205,30 @@ export const nodeTypeManifestSchema = z
         message: 'flow.iteration@1 必须声明 composite 与动态端口推导',
       });
     if (
-      manifest.portDerivation &&
+      manifest.type === 'flow.subworkflow' &&
+      manifest.version === 1 &&
+      (manifest.executionKind !== 'composite' || manifest.portDerivation !== 'subworkflow')
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['executionKind'],
+        message: 'flow.subworkflow@1 必须声明 composite 与动态端口推导',
+      });
+    if (
+      manifest.portDerivation === 'subworkflow' &&
+      (manifest.type !== 'flow.subworkflow' ||
+        manifest.version !== 1 ||
+        manifest.executionKind !== 'composite' ||
+        manifest.inputs.length !== 0 ||
+        manifest.outputs.length !== 0)
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['portDerivation'],
+        message: 'SubWorkflow 动态端口必须属于 flow.subworkflow@1 composite，且不能手工声明端口',
+      });
+    if (
+      manifest.portDerivation === 'iteration' &&
       (manifest.type !== 'flow.iteration' ||
         manifest.version !== 1 ||
         manifest.executionKind !== 'composite' ||

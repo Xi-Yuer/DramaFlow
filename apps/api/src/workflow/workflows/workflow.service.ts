@@ -21,7 +21,9 @@ import {
   NodeRegistry,
   workflowVersionRecordSchema,
   type WorkflowVersionRecord,
-  validateWorkflowForPublish,
+  validateGraphDefinitionSemantics,
+  assertGraphExecutionCapabilities,
+  assertGraphPublishTopology,
   WorkflowPublishValidationError,
   textGenerationConfigSchema,
 } from '@dramaflow/workflow';
@@ -251,7 +253,11 @@ export class WorkflowService {
         // 数据库 draft 不因曾经保存成功而成为可信的运行定义。
         const snapshot = createWorkflowDefinitionSnapshot(workflow.draft);
         try {
-          const nodes = validateWorkflowForPublish(snapshot, this.registry);
+          const nodes = validateGraphDefinitionSemantics(
+            snapshot,
+            this.registry,
+          );
+          assertGraphPublishTopology(snapshot, this.registry);
           for (const { node, nodeType, config } of nodes) {
             const requirements = nodeType.manifest.capabilities ?? [];
             if (requirements.length === 0) continue;
@@ -271,6 +277,8 @@ export class WorkflowService {
                 capability.type,
               );
           }
+          // 完整静态校验与后代资源授权后，仍必须通过当前 Compiler 执行门禁。
+          assertGraphExecutionCapabilities(snapshot, this.registry);
         } catch (error) {
           if (error instanceof WorkflowPublishValidationError) {
             if (error.code === 'NODE_CONFIG_INVALID')

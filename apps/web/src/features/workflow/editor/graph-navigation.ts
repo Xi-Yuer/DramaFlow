@@ -85,9 +85,9 @@ export function patchGraphView(
   return { ...state, views: { ...state.views, [key]: next } };
 }
 
-export function canEnterIterationBody(
-  node: NodeDefinition | undefined,
-): node is NodeDefinition & { composite: NonNullable<NodeDefinition['composite']> } {
+export function canEnterIterationBody(node: NodeDefinition | undefined): node is NodeDefinition & {
+  composite: Extract<NonNullable<NodeDefinition['composite']>, { kind: 'iteration' }>;
+} {
   return (
     !!node &&
     node.type === 'flow.iteration' &&

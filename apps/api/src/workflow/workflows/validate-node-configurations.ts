@@ -1,8 +1,12 @@
-import type { WorkflowDefinition } from '@dramaflow/contracts';
+import {
+  walkGraphDefinitions,
+  type WorkflowDefinition,
+} from '@dramaflow/contracts';
 import {
   NodeRegistrationError,
   NodeRegistry,
   isIterationNodeManifest,
+  isSubworkflowNodeManifest,
 } from '@dramaflow/workflow';
 import { BadRequestException } from '@nestjs/common';
 
@@ -18,28 +22,31 @@ export function validateWorkflowNodeConfigurations(
   definition: WorkflowDefinition,
   registry: NodeRegistry,
 ): void {
-  for (const node of definition.nodes) {
-    if (node.composite)
-      validateWorkflowNodeConfigurations(node.composite.body, registry);
-    let nodeType: ReturnType<NodeRegistry['get']>;
-    try {
-      nodeType = registry.get(node.type, node.typeVersion);
-    } catch (error) {
-      // 编辑中的草稿可引用尚不可用的类型；正式发布另走完整语义校验。
+  for (const { graph } of walkGraphDefinitions(definition)) {
+    for (const node of graph.nodes) {
+      let nodeType: ReturnType<NodeRegistry['get']>;
+      try {
+        nodeType = registry.get(node.type, node.typeVersion);
+      } catch (error) {
+        // 编辑中的草稿可引用尚不可用的类型；正式发布另走完整语义校验。
+        if (
+          error instanceof NodeRegistrationError &&
+          error.code === 'unavailable_type'
+        )
+          continue;
+        throw error;
+      }
       if (
-        error instanceof NodeRegistrationError &&
-        error.code === 'unavailable_type'
+        nodeType.manifest.executionKind !== 'action' &&
+        !isIterationNodeManifest(nodeType.manifest) &&
+        !isSubworkflowNodeManifest(nodeType.manifest)
       )
         continue;
-      throw error;
+      const allowed = new Set(
+        nodeType.manifest.config.map((field) => field.key),
+      );
+      if (Object.keys(node.config).some((key) => !allowed.has(key)))
+        throw invalidConfiguration();
     }
-    if (
-      nodeType.manifest.executionKind !== 'action' &&
-      !isIterationNodeManifest(nodeType.manifest)
-    )
-      continue;
-    const allowed = new Set(nodeType.manifest.config.map((field) => field.key));
-    if (Object.keys(node.config).some((key) => !allowed.has(key)))
-      throw invalidConfiguration();
   }
 }

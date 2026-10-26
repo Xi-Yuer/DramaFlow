@@ -1,8 +1,5 @@
 import { z } from 'zod';
-import {
-  iterationCompositeDefinitionSchema,
-  type IterationCompositeDefinition,
-} from './iteration.js';
+import { compositeDefinitionSchema, type CompositeDefinition } from './composite.js';
 import { contentIdentifierSchema } from '../data/reference.js';
 import { nodeTypeIdSchema, nodeTypeVersionSchema } from './manifest.js';
 import { workflowIdentifierSchema, workflowPortNameSchema } from '../workflow/metadata.js';
@@ -116,17 +113,17 @@ const baseNodeDefinitionSchema = z
   .strict();
 
 export type NodeDefinition = z.infer<typeof baseNodeDefinitionSchema> & {
-  composite?: IterationCompositeDefinition;
+  composite?: CompositeDefinition;
 };
 
 export const nodeDefinitionSchema = baseNodeDefinitionSchema
-  .extend({ composite: z.lazy(() => iterationCompositeDefinitionSchema).optional() })
+  .extend({ composite: z.lazy(() => compositeDefinitionSchema).optional() })
   .superRefine((node, context) => {
-    if (node.composite && (node.type !== 'flow.iteration' || node.typeVersion !== 1))
+    if (node.composite && (node.type !== `flow.${node.composite.kind}` || node.typeVersion !== 1))
       context.addIssue({
         code: 'custom',
         path: ['composite'],
-        message: '此 composite 定义仅属于 flow.iteration@1',
+        message: 'composite kind 必须与对应 flow 节点类型及版本一致',
       });
     for (const [key, binding] of Object.entries(node.inputs)) {
       if (binding.type === 'candidate') {

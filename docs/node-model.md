@@ -20,6 +20,16 @@ Manifest 固定 type / version 与 executionKind（action / control / composite 
 
 config 用 string / number / boolean / select 字段数组；condition 字段只声明条件配置，不开放通用对象表单或默认表达式。默认值按类型、范围与选项校验。配置编辑提示在 config[].ui，输入提示在 ui.inputs，必须引用现有输入。Zod transform / 默认值不回写定义或 State。
 
+## 内嵌 SubWorkflow Definition
+
+`composite` 按 kind 区分 Iteration 与 SubWorkflow，分别保留 body 与 graph 槽位。`flow.subworkflow@1` 已有正式 composite Manifest / Definition 身份，没有 execute，也没有 Compiler Strategy。实例仅包含 `composite: { kind: "subworkflow", graph: GraphDefinition }`，表示当前不可变版本内固定调用一次内嵌图；不引用其他 Workflow，不新增 Run / Job，不包含映射、并发、重试或执行身份。
+
+父节点输入直接由 graph.inputs 推导名称、类型与 required，继续使用 NodeDefinition.inputs 的 constant / workflow_input / template / candidate 及 DataEdge 语义；未来调用时按同名输入建立局部图边界。输出直接来自 graph.outputs，保持原类型，数组不再次提升。不存在单独 inputMapping / outputMapping 协议。
+
+[nestedGraphSlots / walkGraphDefinitions](../packages/contracts/src/graph/traversal.ts)统一访问 root、Iteration.body 与 SubWorkflow.graph，返回 nodeId / graphKey 静态路径；不解析 scope、执行序号或 checkpoint namespace。Definition schema 与静态语义递归检查局部引用、DAG、输入输出类型、节点版本和配置；发布事务对返回的全部后代执行现有 capability / 模型权限检查。
+
+Draft 允许保存尚不可执行的 SubWorkflow，配置字段边界仍递归生效。完整 Definition 静态校验不代表执行准入：生产 Publish 在资源授权后执行能力门禁，根 SubWorkflow 报 NODE_EXECUTION_KIND_UNSUPPORTED；Iteration body 内仍报 ITERATION_BODY_CAPABILITY_UNSUPPORTED。现有 Iteration Runtime、嵌套编辑、checkpoint 与 Execution Tree 未接入 SubWorkflow。
+
 ## Iteration Composite Contract
 
 正式 `flow.iteration@1` 为 composite，不提供 execute。实例使用受 Schema 校验的 `composite` 字段，协议见[Iteration definition](../packages/contracts/src/node/iteration.ts)，不把 body 存入 config。固定 collection 端口为 items；itemType 明确声明 T，端口类型为 Array<T>，不从常量内容推断，空数组同样保留 T。invariantInputs 复用 GraphInputDefinition 声明额外端口，不得重复或覆盖 items。

@@ -95,6 +95,14 @@ describe('节点类型目录 API', () => {
         outputs: [],
       },
       {
+        type: 'flow.subworkflow',
+        version: 1,
+        executionKind: 'composite',
+        portDerivation: 'subworkflow',
+        inputs: [],
+        outputs: [],
+      },
+      {
         type: 'flow.human_review',
         version: 1,
         executionKind: 'interaction',
@@ -111,6 +119,12 @@ describe('节点类型目录 API', () => {
     ]);
     expect(JSON.stringify(response.body)).not.toMatch(
       /apiKey|encryptedCredentials|configSchema|inputSchema|outputSchema/,
+    );
+    expect(context.registry.get('flow.subworkflow', 1)).not.toHaveProperty(
+      'execute',
+    );
+    expect(() => context.registry.getAction('flow.subworkflow', 1)).toThrow(
+      '不是普通',
     );
     expect(context.registry.get('flow.human_review', 1)).not.toHaveProperty(
       'execute',

@@ -10,9 +10,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 import { DatabaseService } from '../../database/database.service.js';
 
-const workflowNodeRunsResponseSchema = z
-  .object({ items: z.array(nodeRunSchema) })
-  .strict();
+const workflowNodeRunsResponseSchema = z.object({ items: z.array(nodeRunSchema) }).strict();
 
 // 已授权运行的只读投影。不创建运行、不写 Outbox、不入队。
 @Injectable()

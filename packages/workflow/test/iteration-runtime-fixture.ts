@@ -5,6 +5,7 @@ import {
   NumberType,
   StringType,
   type NodeDefinition,
+  type IterationCompositeDefinition,
   type WorkflowDefinition,
   type WorkflowRun,
 } from '@dramaflow/contracts';
@@ -130,7 +131,7 @@ export function iterationRuntimeFixture(count = 3, options?: { delay?: boolean }
     config: options?.delay ? { delay: true } : {},
     ui: { position: { x: 0, y: 0 } },
   });
-  const loop: NodeDefinition = {
+  const loop: NodeDefinition & { composite: IterationCompositeDefinition } = {
     id: 'iteration',
     type: 'flow.iteration',
     typeVersion: 1,

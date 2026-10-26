@@ -28,18 +28,16 @@ export interface IterationCompositeDefinition {
   body: GraphDefinition;
   bodyInputMapping: IterationBodyInputMapping[];
 }
+export const iterationCompositeDefinitionFields = () => ({
+  kind: z.literal('iteration'),
+  itemType: dataTypeSchema,
+  invariantInputs: z.array(graphInputDefinitionSchema),
+  body: z.lazy(() => graphDraftDefinitionSchema),
+  bodyInputMapping: z.array(iterationBodyInputMappingSchema),
+});
 // Draft 保留可编辑的不完整映射 / body；完整性和 capability 属于 Publish。
 export const iterationCompositeDefinitionSchema: z.ZodType<IterationCompositeDefinition> = z.lazy(
-  () =>
-    z
-      .object({
-        kind: z.literal('iteration'),
-        itemType: dataTypeSchema,
-        invariantInputs: z.array(graphInputDefinitionSchema),
-        body: graphDraftDefinitionSchema,
-        bodyInputMapping: z.array(iterationBodyInputMappingSchema),
-      })
-      .strict(),
+  () => z.object(iterationCompositeDefinitionFields()).strict(),
 );
 
 export function isIterationNodeManifest(

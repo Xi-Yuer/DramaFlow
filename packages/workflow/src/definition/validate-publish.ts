@@ -1,5 +1,8 @@
 import {
   isTypeAssignable,
+  isSubworkflowNodeManifest,
+  nestedGraphSlots,
+  type GraphDefinitionPath,
   graphDefinitionSchema,
   workflowOutputSources,
   StringType,
@@ -26,7 +29,6 @@ import {
   type ResolvedNodePorts,
 } from '@dramaflow/contracts';
 import { WorkflowInvocationContractValidator } from './validate-invocation.js';
-import type { GraphDefinitionLocation } from '../runtime/execution-scope.js';
 import { WorkflowStateAnnotation } from '../runtime/state.js';
 
 export type WorkflowPublishIssueCode =
@@ -57,7 +59,7 @@ export class WorkflowPublishValidationError extends Error {
     readonly code: WorkflowPublishIssueCode,
     readonly nodeId: string,
     readonly portKey?: string,
-    readonly definitionPath?: GraphDefinitionLocation['path'],
+    readonly definitionPath?: GraphDefinitionPath,
   ) {
     super(
       ifCapabilityMessage(code) ??
@@ -81,13 +83,13 @@ export interface ValidatedDefinitionNode {
   readonly nodeType: NodeDeclaration;
   readonly config: unknown;
   readonly ports: ResolvedNodePorts;
-  readonly definitionPath?: GraphDefinitionLocation['path'];
+  readonly definitionPath?: GraphDefinitionPath;
 }
 
 export type ValidatedPublishNode = ValidatedDefinitionNode;
 
 interface GraphValidationContext {
-  readonly definitionPath: GraphDefinitionLocation['path'];
+  readonly definitionPath: GraphDefinitionPath;
   readonly capability: 'workflow' | 'iteration_body_v1';
 }
 
@@ -107,7 +109,7 @@ function staticOnlyNode(): never {
   throw new Error('发布校验不能执行节点');
 }
 
-// 调用方先用正式 Definition Schema 校验引用、来源冲突和联合 DAG。
+// 正式 Definition Schema 统一校验引用、来源冲突和联合 DAG。
 // 这里只检查 Registry / Schema 静态语义，不代表允许生产发布；生产调用下方门禁入口。
 // 资源归属仍由应用层在发布事务内检查。
 export function validateGraphDefinitionSemantics(
@@ -115,6 +117,7 @@ export function validateGraphDefinitionSemantics(
   registry: NodeRegistry,
   context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
 ): ValidatedDefinitionNode[] {
+  definition = graphDefinitionSchema.parse(definition);
   const { definitionPath } = context;
   const descendants: ValidatedDefinitionNode[] = [];
   const names = new StateGraph(WorkflowStateAnnotation);
@@ -127,19 +130,8 @@ export function validateGraphDefinitionSemantics(
       return invalid('NODE_TYPE_UNAVAILABLE', node.id);
     }
     if (
-      context.capability === 'iteration_body_v1' &&
-      (declaration.manifest.executionKind !== 'action' ||
-        !declaration.execute ||
-        (declaration.manifest.controlOutputs?.length ?? 0) > 0)
-    )
-      throw new WorkflowPublishValidationError(
-        'ITERATION_BODY_CAPABILITY_UNSUPPORTED',
-        node.id,
-        undefined,
-        definitionPath,
-      );
-    if (
       !isIterationNodeManifest(declaration.manifest) &&
+      !isSubworkflowNodeManifest(declaration.manifest) &&
       !isSupportedIf(declaration) &&
       !isHumanReviewNodeManifest(declaration.manifest) &&
       (declaration.manifest.executionKind !== 'action' || !declaration.execute)
@@ -171,15 +163,15 @@ export function validateGraphDefinitionSemantics(
         return invalid(error.code, node.id, error.portKey);
       throw error;
     }
-    if (isIterationNodeManifest(nodeType.manifest)) {
-      const body = node.composite!.body;
-      if (body.nodes.length === 0) invalid('ITERATION_BODY_EMPTY', node.id);
-      const childPath = [...definitionPath, { nodeId: node.id, graphKey: 'body' }];
+    for (const slot of nestedGraphSlots(node)) {
+      if (slot.graphKey === 'body' && slot.graph.nodes.length === 0)
+        invalid('ITERATION_BODY_EMPTY', node.id);
+      const childPath = [...definitionPath, { nodeId: node.id, graphKey: slot.graphKey }];
       try {
         descendants.push(
-          ...validateGraphForPublish(body, registry, {
+          ...validateGraphDefinitionSemantics(slot.graph, registry, {
             definitionPath: childPath,
-            capability: 'iteration_body_v1',
+            capability: 'workflow',
           }),
         );
       } catch (error) {
@@ -246,7 +238,8 @@ export function validateGraphDefinitionSemantics(
   }
 
   for (const { node, nodeType, ports: resolved } of entries) {
-    const composite = isIterationNodeManifest(nodeType.manifest);
+    const composite =
+      isIterationNodeManifest(nodeType.manifest) || isSubworkflowNodeManifest(nodeType.manifest);
     const acceptsMissing = (key: string) =>
       composite
         ? resolved.inputs.find((port) => port.key === key)?.required === false
@@ -348,14 +341,60 @@ export function validateGraphDefinitionSemantics(
   return [...entries, ...descendants];
 }
 
-// 生产 Publish 与 Compiler 使用同一简单 If 能力分析，不能只按 executionKind 放行。
-export function validateGraphForPublish(
+// 执行准入单独检查；静态遍历完整不代表 Compiler 已能执行。
+function assertGraphExecutionKinds(
   definition: GraphDefinition,
   registry: NodeRegistry,
   context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
-): ValidatedPublishNode[] {
-  definition = graphDefinitionSchema.parse(definition);
-  const entries = validateGraphDefinitionSemantics(definition, registry, context);
+): void {
+  for (const node of definition.nodes) {
+    let declaration: NodeDeclaration;
+    try {
+      declaration = registry.get(node.type, node.typeVersion);
+    } catch {
+      throw new WorkflowPublishValidationError(
+        'NODE_TYPE_UNAVAILABLE',
+        node.id,
+        undefined,
+        context.definitionPath,
+      );
+    }
+    if (
+      context.capability === 'iteration_body_v1' &&
+      (declaration.manifest.executionKind !== 'action' ||
+        !declaration.execute ||
+        (declaration.manifest.controlOutputs?.length ?? 0) > 0)
+    )
+      throw new WorkflowPublishValidationError(
+        'ITERATION_BODY_CAPABILITY_UNSUPPORTED',
+        node.id,
+        undefined,
+        context.definitionPath,
+      );
+    if (isSubworkflowNodeManifest(declaration.manifest))
+      throw new WorkflowPublishValidationError(
+        'NODE_EXECUTION_KIND_UNSUPPORTED',
+        node.id,
+        undefined,
+        context.definitionPath,
+      );
+    for (const slot of nestedGraphSlots(node))
+      assertGraphExecutionKinds(slot.graph, registry, {
+        definitionPath: [...context.definitionPath, { nodeId: node.id, graphKey: slot.graphKey }],
+        capability: slot.graphKey === 'body' ? 'iteration_body_v1' : 'workflow',
+      });
+  }
+}
+
+export function assertGraphPublishTopology(
+  definition: GraphDefinition,
+  registry: NodeRegistry,
+  context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
+): void {
+  const entries = definition.nodes.map((node) => ({
+    node,
+    nodeType: registry.get(node.type, node.typeVersion),
+  }));
   const ifNodeIds = new Set(
     entries.filter((entry) => isSupportedIf(entry.nodeType)).map((entry) => entry.node.id),
   );
@@ -370,7 +409,13 @@ export function validateGraphForPublish(
     try {
       ifAnalysis = analyzeSimpleIfExecution(definition, ifNodeIds);
     } catch (error) {
-      if (error instanceof SimpleIfCapabilityError) invalid(error.code, error.nodeId);
+      if (error instanceof SimpleIfCapabilityError)
+        throw new WorkflowPublishValidationError(
+          error.code,
+          error.nodeId,
+          undefined,
+          context.definitionPath,
+        );
       throw error;
     }
   }
@@ -383,10 +428,60 @@ export function validateGraphForPublish(
     ),
     ifAnalysis?.branchRegions,
   );
-  if (unsupportedReview) invalid('HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED', unsupportedReview);
+  if (unsupportedReview)
+    throw new WorkflowPublishValidationError(
+      'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED',
+      unsupportedReview,
+      undefined,
+      context.definitionPath,
+    );
+  for (const node of definition.nodes)
+    for (const slot of nestedGraphSlots(node))
+      assertGraphPublishTopology(slot.graph, registry, {
+        definitionPath: [...context.definitionPath, { nodeId: node.id, graphKey: slot.graphKey }],
+        capability: slot.graphKey === 'body' ? 'iteration_body_v1' : 'workflow',
+      });
+}
+
+// 拓扑、执行种类分别可复用；完整执行准入始终同时检查两者。
+export function assertGraphExecutionCapabilities(
+  definition: GraphDefinition,
+  registry: NodeRegistry,
+  context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
+): void {
+  assertGraphExecutionKinds(definition, registry, context);
+  assertGraphPublishTopology(definition, registry, context);
+}
+
+// 正式 Publish / Compiler 的完整入口始终包含 execution capability gate。
+export function validateGraphForPublish(
+  definition: GraphDefinition,
+  registry: NodeRegistry,
+  context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
+): ValidatedPublishNode[] {
+  definition = graphDefinitionSchema.parse(definition);
+  assertGraphExecutionKinds(definition, registry, context);
+  const entries = validateGraphDefinitionSemantics(definition, registry, context);
+  assertGraphExecutionCapabilities(definition, registry, context);
   return entries;
 }
 
-// 根 Workflow 保留原入口，与局部图共用校验管线；返回值包含后代，应用层可统一检查资源权限。
-export const validateWorkflowDefinitionSemantics = validateGraphDefinitionSemantics;
+// 根 Workflow 与局部图共用静态协议；资源授权后仍必须执行 capability gate。
+// 旧入口被 Compiler 使用，保留其执行准入及错误优先级。
+export function validateWorkflowDefinitionSemantics(
+  definition: GraphDefinition,
+  registry: NodeRegistry,
+): ValidatedDefinitionNode[] {
+  definition = graphDefinitionSchema.parse(definition);
+  assertGraphExecutionKinds(definition, registry);
+  const entries = validateGraphDefinitionSemantics(definition, registry);
+  // 旧入口对子图使用完整发布门禁；根图的拓扑分析仍由 Compiler 自身执行。
+  for (const node of definition.nodes)
+    for (const slot of nestedGraphSlots(node))
+      assertGraphExecutionCapabilities(slot.graph, registry, {
+        definitionPath: [{ nodeId: node.id, graphKey: slot.graphKey }],
+        capability: slot.graphKey === 'body' ? 'iteration_body_v1' : 'workflow',
+      });
+  return entries;
+}
 export const validateWorkflowForPublish = validateGraphForPublish;

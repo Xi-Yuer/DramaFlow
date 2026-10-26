@@ -1,3 +1,4 @@
+import { requireComposite } from '../src/features/workflow/iteration/inputs/composite';
 // @vitest-environment happy-dom
 import { useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -207,48 +208,48 @@ describe('Iteration Body 输入编辑', () => {
         variables: { label: { type: 'workflow_input', key: 'index' } },
       },
     });
-    expect(node.composite?.body.inputs).toEqual([
+    expect(requireComposite(node).body.inputs).toEqual([
       { name: 'text', type: StringType, required: true },
       { name: 'index', type: NumberType, required: true },
     ]);
-    expect(node.composite?.bodyInputMapping).toEqual([
+    expect(requireComposite(node).bodyInputMapping).toEqual([
       { target: 'text', source: { type: 'current_item' } },
       { target: 'index', source: { type: 'current_index' } },
     ]);
 
     node = updateBodyInput(node, 'text', { name: 'copy' }, manifests);
-    expect(node.composite?.bodyInputMapping[0]).toEqual({
+    expect(requireComposite(node).bodyInputMapping[0]).toEqual({
       target: 'copy',
       source: { type: 'current_item' },
     });
-    expect(node.composite?.body.nodes[0]?.inputs.text).toEqual({
+    expect(requireComposite(node).body.nodes[0]?.inputs.text).toEqual({
       type: 'workflow_input',
       key: 'copy',
     });
 
     node = updateBodyInput(node, 'index', { name: 'nth' }, manifests);
-    expect(node.composite?.body.nodes[0]?.inputs.index).toEqual({
+    expect(requireComposite(node).body.nodes[0]?.inputs.index).toEqual({
       type: 'template',
       value: '序号 {{label}}',
       variables: { label: { type: 'workflow_input', key: 'nth' } },
     });
 
     node = updateBodyInput(node, 'copy', { type: NumberType }, manifests);
-    expect(node.composite?.bodyInputMapping.map((item) => item.target)).toEqual(['nth']);
-    expect(node.composite?.body.nodes[0]?.inputs.text).toBeUndefined();
+    expect(requireComposite(node).bodyInputMapping.map((item) => item.target)).toEqual(['nth']);
+    expect(requireComposite(node).body.nodes[0]?.inputs.text).toBeUndefined();
 
     node = removeBodyInput(node, 'nth');
-    expect(node.composite?.bodyInputMapping).toEqual([]);
-    expect(node.composite?.body.nodes[0]?.inputs.index).toEqual({
+    expect(requireComposite(node).bodyInputMapping).toEqual([]);
+    expect(requireComposite(node).body.nodes[0]?.inputs.index).toEqual({
       type: 'constant',
       value: '序号',
     });
-    expect(node.composite?.body.inputs.map((input) => input.name)).toEqual(['copy']);
+    expect(requireComposite(node).body.inputs.map((input) => input.name)).toEqual(['copy']);
     node = updateBodyInput(node, 'copy', { required: false });
-    expect(node.composite?.body.inputs[0]?.required).toBe(false);
+    expect(requireComposite(node).body.inputs[0]?.required).toBe(false);
     node = withFormat(node, { text: { type: 'workflow_input', key: 'copy' } });
     node = removeBodyInput(node, 'copy');
-    expect(node.composite?.body.nodes[0]?.inputs.text).toBeUndefined();
+    expect(requireComposite(node).body.nodes[0]?.inputs.text).toBeUndefined();
     expect(() => updateBodyInput(node, 'missing', { name: 'other' })).toThrow(/不存在/);
     node = addBodyInput(node);
     node = addBodyInput(node);
@@ -261,24 +262,23 @@ describe('Iteration Body 输入编辑', () => {
     node = updateInvariantInput(node, 'input', { name: 'index' });
     node = addBodyInput(node);
     node = updateBodyInput(node, 'input', { name: 'value', type: NumberType });
-    expect(bodyInputSourceOptions(node.composite!, NumberType).map((option) => option.id)).toEqual([
-      'current_index',
-    ]);
+    expect(
+      bodyInputSourceOptions(requireComposite(node), NumberType).map((option) => option.id),
+    ).toEqual(['current_index']);
     node = updateBodyInput(node, 'value', { type: StringType });
-    expect(bodyInputSourceOptions(node.composite!, StringType).map((option) => option.id)).toEqual([
-      'current_item',
-      'iteration_input:index',
-    ]);
+    expect(
+      bodyInputSourceOptions(requireComposite(node), StringType).map((option) => option.id),
+    ).toEqual(['current_item', 'iteration_input:index']);
     node = setIterationItemType(node, array(StringType));
     node = updateBodyInput(node, 'value', { type: array(StringType) });
     expect(
-      bodyInputSourceOptions(node.composite!, array(StringType)).some(
+      bodyInputSourceOptions(requireComposite(node), array(StringType)).some(
         (option) => option.id === 'current_item',
       ),
     ).toBe(true);
     node = updateBodyInput(node, 'value', { type: StringType });
     expect(
-      bodyInputSourceOptions(node.composite!, StringType).some(
+      bodyInputSourceOptions(requireComposite(node), StringType).some(
         (option) => option.id === 'current_item',
       ),
     ).toBe(false);
@@ -286,13 +286,13 @@ describe('Iteration Body 输入编辑', () => {
     node = setIterationItemType(node, StringType);
     node = setBodyInputMapping(node, 'value', { type: 'current_item' });
     node = setBodyInputMapping(node, 'value', { type: 'iteration_input', key: 'index' });
-    expect(node.composite?.bodyInputMapping).toEqual([
+    expect(requireComposite(node).bodyInputMapping).toEqual([
       { target: 'value', source: { type: 'iteration_input', key: 'index' } },
     ]);
     expect(() => setBodyInputMapping(node, 'value', { type: 'current_index' })).toThrow(/不兼容/);
     node = updateBodyInput(node, 'value', { required: false });
-    expect(node.composite?.body.inputs[0]?.required).toBe(false);
-    expect(node.composite?.bodyInputMapping).toHaveLength(1);
+    expect(requireComposite(node).body.inputs[0]?.required).toBe(false);
+    expect(requireComposite(node).bodyInputMapping).toHaveLength(1);
   });
 
   it('不变输入增删改会更新父端口和映射', () => {
@@ -310,7 +310,7 @@ describe('Iteration Body 输入编辑', () => {
     expect(card(node)).toContain('data-handleid="items"');
 
     node = updateInvariantInput(node, 'style', { name: 'tone' });
-    expect(node.composite?.bodyInputMapping).toEqual([
+    expect(requireComposite(node).bodyInputMapping).toEqual([
       { target: 'style', source: { type: 'iteration_input', key: 'tone' } },
     ]);
     expect(() => updateInvariantInput(node, 'tone', { name: 'items' })).toThrow(/items/);
@@ -319,12 +319,12 @@ describe('Iteration Body 输入编辑', () => {
     ).toEqual(['items', 'tone']);
 
     node = updateInvariantInput(node, 'tone', { type: NumberType });
-    expect(node.composite?.bodyInputMapping).toEqual([]);
+    expect(requireComposite(node).bodyInputMapping).toEqual([]);
     node = setIterationItemType(node, NumberType);
     node = updateBodyInput(node, 'style', { type: NumberType });
     node = setBodyInputMapping(node, 'style', { type: 'iteration_input', key: 'tone' });
     node = removeInvariantInput(node, 'tone');
-    expect(node.composite?.bodyInputMapping).toEqual([]);
+    expect(requireComposite(node).bodyInputMapping).toEqual([]);
     expect(card(node)).not.toContain('data-handleid="tone"');
     expect(card(node)).toContain('data-handleid="items"');
   });
@@ -336,7 +336,7 @@ describe('Iteration Body 输入编辑', () => {
     node = addBodyInput(node);
     node = updateBodyInput(node, 'input', { name: 'index', type: NumberType });
     node = withFormat(node, {});
-    const body = node.composite!.body;
+    const body = requireComposite(node).body;
     const bound = bindGraphInput(body, manifests, 'format', 'text', 'text');
     expect(bound.edges).toEqual([]);
     expect(bound.nodes[0]?.inputs.text).toEqual({ type: 'workflow_input', key: 'text' });
@@ -403,7 +403,7 @@ describe('Iteration Body 输入编辑', () => {
     node = addBodyInput(node);
     node = updateBodyInput(node, 'input', { name: 'text' });
     node = setBodyInputMapping(node, 'text', { type: 'current_item' });
-    expect(node.composite?.body.outputs).toEqual([
+    expect(requireComposite(node).body.outputs).toEqual([
       { name: 'text', type: StringType, source: { nodeId: 'format', outputKey: 'text' } },
     ]);
     expect(resolveWorkflowNodePorts(node, iterationManifest).outputs).toEqual([
@@ -411,7 +411,7 @@ describe('Iteration Body 输入编辑', () => {
     ]);
 
     const named = setWorkflowOutput(
-      node.composite!.body,
+      requireComposite(node).body,
       { name: 'text', source: { nodeId: 'format', outputKey: 'text' } },
       manifests,
       'text',
@@ -547,7 +547,7 @@ describe('Iteration Inspector 与 Body 画布', () => {
     expect(screen.getByRole('button', { name: '编辑 Body' })).toHaveProperty('disabled', true);
     fireEvent.click(screen.getByRole('button', { name: '初始化 Body' }));
     expect(screen.getByRole('button', { name: '编辑 Body' })).toHaveProperty('disabled', false);
-    expect(owner(view.definition()).composite?.body.nodes).toEqual([]);
+    expect(requireComposite(owner(view.definition())).body.nodes).toEqual([]);
     const rootConnection = {
       source: rootBoundary.id,
       sourceHandle: 'items',
@@ -604,7 +604,7 @@ describe('Iteration Inspector 与 Body 画布', () => {
     ]);
     expect(card(owner(view.definition()))).toContain('data-handleid="style"');
 
-    expect(owner(view.definition()).composite?.bodyInputMapping).toEqual([
+    expect(requireComposite(owner(view.definition())).bodyInputMapping).toEqual([
       { target: 'text', source: { type: 'current_item' } },
       { target: 'index', source: { type: 'current_index' } },
     ]);
@@ -621,7 +621,7 @@ describe('Iteration Inspector 与 Body 画布', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '添加节点' }));
     fireEvent.click(await screen.findByRole('button', { name: '添加 文本格式化 · v1' }));
-    const format = owner(view.definition()).composite?.body.nodes.find(
+    const format = requireComposite(owner(view.definition())).body.nodes.find(
       (node) => node.type === 'data.format_text',
     );
     expect(format?.config).toEqual({ template: '{{text}}-{{index}}' });
@@ -647,7 +647,7 @@ describe('Iteration Inspector 与 Body 画布', () => {
         targetHandle: 'index',
       });
     });
-    const body = owner(view.definition()).composite!.body;
+    const body = requireComposite(owner(view.definition())).body;
     expect(body.edges).toEqual([]);
     expect(body.nodes[0]?.inputs).toEqual({
       text: { type: 'workflow_input', key: 'text' },
@@ -659,8 +659,8 @@ describe('Iteration Inspector 与 Body 画布', () => {
       ['index', 'index'],
     ]);
     act(() => flow.onEdgesDelete?.([projection![0]!]));
-    expect(owner(view.definition()).composite?.body.nodes[0]?.inputs.text).toBeUndefined();
-    expect(owner(view.definition()).composite?.body.edges).toEqual([]);
+    expect(requireComposite(owner(view.definition())).body.nodes[0]?.inputs.text).toBeUndefined();
+    expect(requireComposite(owner(view.definition())).body.edges).toEqual([]);
     expect(flow.edges?.some((edge) => edge.sourceHandle === 'text' && edge.data?.projection)).toBe(
       false,
     );
@@ -688,15 +688,15 @@ describe('Iteration Inspector 与 Body 画布', () => {
     const saved = workflowDraftDefinitionSchema.parse(
       JSON.parse(JSON.stringify(view.definition())),
     );
-    expect(saved.nodes[0]?.composite?.bodyInputMapping).toEqual([
+    expect(requireComposite(saved.nodes[0]!).bodyInputMapping).toEqual([
       { target: 'text', source: { type: 'current_item' } },
       { target: 'index', source: { type: 'current_index' } },
     ]);
-    expect(saved.nodes[0]?.composite?.body.inputs.map((input) => input.name)).toEqual([
+    expect(requireComposite(saved.nodes[0]!).body.inputs.map((input) => input.name)).toEqual([
       'text',
       'index',
     ]);
-    expect(saved.nodes[0]?.composite?.invariantInputs.map((input) => input.name)).toEqual([
+    expect(requireComposite(saved.nodes[0]!).invariantInputs.map((input) => input.name)).toEqual([
       'style',
     ]);
 

@@ -80,7 +80,7 @@ export interface IterationCompilationContext {
   ): void;
 }
 export function iterationRecursionLimit(node: NodeDefinition): number {
-  if (!node.composite) throw new Error('Iteration composite 定义缺失');
+  if (node.composite?.kind !== 'iteration') throw new Error('Iteration composite 定义缺失');
   // 父图、Iteration 图和 body 图各自计数。Send 的 item 数不是 superstep。
   // body 预算是静态深度加 item 审计入口与 declared-output；prepare / fan-out / collect 由下限覆盖。
   // 编译器再取它和父图静态预算的较大值，避免把动态 item 数加进递归上限。
@@ -94,7 +94,7 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
 
   compile(context: IterationCompilationContext): void {
     const { node, workflow, registry, executor, services, run, scopeKey, runs } = context;
-    if (!this.supports(context.declaration.manifest) || !node.composite)
+    if (!this.supports(context.declaration.manifest) || node.composite?.kind !== 'iteration')
       throw new Error('Iteration strategy 仅支持 flow.iteration@1');
     const composite = node.composite;
     const body = composite.body;

@@ -76,7 +76,7 @@ export function indexDefinitionNodeNames(
       const names = found.get(node.id);
       if (names) names.push(node.name);
       else found.set(node.id, [node.name]);
-      if (node.composite?.body) visit(node.composite.body.nodes);
+      if (node.composite?.kind === 'iteration') visit(node.composite.body.nodes);
     }
   };
   if (definition) visit(definition.nodes);

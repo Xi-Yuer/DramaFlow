@@ -19,12 +19,12 @@ Iteration 单 item 持久化、通用 Execution Tree 只读查询与 Web 运行�
 - Workflow Web 数据依赖可视化仍待人工 Canvas 验收；Template variable candidate、Switch / N-way 和 Nested If 不在当前授权范围。
 
 - Runtime 运维：recovery_required 人工处理、业务记录 / checkpoint 对账、运行删除与保留策略；[独立实验](../experiments/langgraph-iteration-runtime/README.md)已复现 LangGraph 1.5.0 maxConcurrency=1 异常，依赖处理方案待独立评审，本轮不升级或绕过。
-- Human Review 分支区域内审核、并行 pending、子 scope 的定义 / 版本 / 权限绑定待独立设计；嵌套 Iteration、Batch、SubWorkflow 及简单 If 之外的条件拓扑不能直接沿用当前技术预算公式。
+- Human Review 分支区域内审核、并行 pending、子 scope 的定义 / 版本 / 权限绑定待独立设计；嵌套 Iteration、Batch、SubWorkflow 及简单 If 之外的条件拓扑不能直接沿用当前技术预算公式。SubWorkflow 的执行接入仍需独立任务；当前 Definition / 静态校验基础不授权 Compiler Strategy、通用 Child Execution 持久化或 Web 编辑扩展。
 - Artifact 内容 HTTP、Asset / Promote、媒体能力、Tool / Agent 和上下文构建均待独立任务；声明或测试夹具不代表产品已交付。
 
 ## Execution Tree 演进设计
 
-本节是基于[当前执行归属审计](architecture.md#execution-归属审计)的后续持久化推荐设计；只读查询已交付，见[当前架构](architecture.md#execution-tree-只读查询)。通用 scope、迁移和新 Composite 尚未实施，本方案不构成授权。现有 IterationItemRun、NodeRun 归属字段、checkpoint 与 schema 保持不变。长期遵循[业务解耦原则](platform-model.md#workflow-通用性与业务解耦)，复用身份和审计，不另建调度器。
+本节是基于[当前执行归属审计](architecture.md#execution-归属审计)的后续持久化推荐设计；只读查询已交付，见[当前架构](architecture.md#execution-tree-只读查询)。通用 scope 持久化、迁移和新 Composite 执行尚未实施；内嵌 SubWorkflow 目前仅有 Definition / 静态校验基础，本方案不构成后续执行授权。现有 IterationItemRun、NodeRun 归属字段、checkpoint 与 schema 保持不变。长期遵循[业务解耦原则](platform-model.md#workflow-通用性与业务解耦)，复用身份和审计，不另建调度器。
 
 ### 结论与模型定位
 

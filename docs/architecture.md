@@ -58,7 +58,9 @@ Graph Invocation input mapping 与 WorkflowOutputResolver 直接接受统一 Run
 
 `flow.iteration@1` 已注册为 composite 声明，新增受校验的实例 body / 输入映射和 body-derived 数组端口；正式协议、Draft / Publish 差异与 v1 capability 见[Node 模型](node-model.md#iteration-composite-contract)。统一 resolveNodePorts 参与 Publish 的 DataEdge、Candidate、Template、类型与 WorkflowOutput 检查，不伪造静态输出。
 
-validateGraphForPublish / validateGraphDefinitionSemantics 与旧 Workflow 入口共用同一管线，递归验证独立 body，并返回带 definitionPath 的后代节点供现有发布事务统一检查模型权限；同名节点按所属局部定义查找，不覆盖父节点。Draft 配置字段边界也递归检查 body 已知 Action，Iteration config 不接受额外字段，仍允许映射 / 必填配置未完成，不把 Publish 门禁前移到保存。
+Composite Definition 现以 kind 区分 Iteration.body 与 SubWorkflow.graph；后者只有 Definition / Manifest 身份，尚不能生产发布或执行，协议见[内嵌 SubWorkflow](node-model.md#内嵌-subworkflow-definition)。统一静态 graph slot / path 遍历用于 schema、Definition 语义和 Draft 配置字段检查，不关联运行 scope。
+
+validateGraphDefinitionSemantics 递归检查局部边界并返回带 definitionPath 的全部后代，发布事务先用 assertGraphPublishTopology 保留既有 If / Human Review 拓扑限制，再据此统一检查 capability / 模型权限，最后调用 assertGraphExecutionCapabilities 检查实际执行能力。validateGraphForPublish 包含静态检查与执行门禁；Compiler 使用的旧 validateWorkflowDefinitionSemantics 保留执行种类门禁，根 If / Human Review 拓扑仍由既有 Compiler 分析。Draft 仍允许映射 / 必填配置未完成，不能把完整静态校验当成 Runtime-ready。
 
 body 的嵌套 composite、If / control、Human Review / interaction 均拒绝；根既有 If / Human Review 行为不变。Web Iteration Inspector 支持 itemType、不变输入、Body 输入及映射；Body 内的输入边界与 Root 共用 Graph Input 连接机制，Body 输出通过现有端口推导提升为父 Iteration 的数组输出。Root 数组参数通过通用 Run Form 提交，不为 Iteration 增加专用输入协议。
 

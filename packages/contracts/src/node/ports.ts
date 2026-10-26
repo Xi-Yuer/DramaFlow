@@ -4,6 +4,7 @@ import type { DataType } from '../data/type.js';
 import type { NodeDefinition } from './definition.js';
 import type { InputPortDefinition, OutputPortDefinition, NodeTypeManifest } from './manifest.js';
 import { isIterationNodeManifest } from './iteration.js';
+import { isSubworkflowNodeManifest } from './subworkflow.js';
 
 export interface ResolvedNodePorts {
   readonly inputs: readonly InputPortDefinition[];
@@ -12,6 +13,7 @@ export interface ResolvedNodePorts {
 export class CompositeDefinitionError extends Error {
   constructor(
     readonly code:
+      | 'SUBWORKFLOW_DEFINITION_REQUIRED'
       | 'ITERATION_DEFINITION_REQUIRED'
       | 'ITERATION_ITEM_TYPE_UNRESOLVED'
       | 'ITERATION_INPUT_DUPLICATE'
@@ -23,7 +25,7 @@ export class CompositeDefinitionError extends Error {
       | 'BODY_SOURCE_OPTIONAL',
     readonly portKey?: string,
   ) {
-    super(`Iteration 边界无效：${code}`);
+    super(`Composite 边界无效：${code}`);
     this.name = 'CompositeDefinitionError';
   }
 }
@@ -35,10 +37,29 @@ export function resolveNodePorts(
 ): ResolvedNodePorts {
   if (node.type !== manifest.type || node.typeVersion !== manifest.version)
     throw new Error('节点与端口声明版本不匹配');
+  if (isSubworkflowNodeManifest(manifest)) {
+    const composite = node.composite;
+    if (composite?.kind !== 'subworkflow')
+      throw new CompositeDefinitionError('SUBWORKFLOW_DEFINITION_REQUIRED');
+    return {
+      inputs: composite.graph.inputs.map((input) => ({
+        key: input.name,
+        name: input.name,
+        dataType: input.type,
+        required: input.required,
+      })),
+      outputs: composite.graph.outputs.map((output) => ({
+        key: output.name,
+        name: output.name,
+        dataType: output.type,
+      })),
+    };
+  }
   if (!isIterationNodeManifest(manifest))
     return { inputs: manifest.inputs, outputs: manifest.outputs };
   const composite = node.composite;
-  if (!composite) throw new CompositeDefinitionError('ITERATION_DEFINITION_REQUIRED');
+  if (composite?.kind !== 'iteration')
+    throw new CompositeDefinitionError('ITERATION_DEFINITION_REQUIRED');
   const inputs: InputPortDefinition[] = [
     {
       key: 'items',
@@ -74,7 +95,8 @@ export function validateIterationInputMapping(
   ports: ResolvedNodePorts,
 ): void {
   const composite = node.composite;
-  if (!composite) throw new CompositeDefinitionError('ITERATION_DEFINITION_REQUIRED');
+  if (composite?.kind !== 'iteration')
+    throw new CompositeDefinitionError('ITERATION_DEFINITION_REQUIRED');
   if (composite.itemType.kind === 'any')
     throw new CompositeDefinitionError('ITERATION_ITEM_TYPE_UNRESOLVED', 'items');
   const targets = new Map(composite.body.inputs.map((input) => [input.name, input]));

@@ -216,7 +216,7 @@ const rootRun: NodeRun = {
 
 function bodyOf(definition: WorkflowDefinition) {
   const owner = definition.nodes.find((item) => item.id === 'iterate');
-  if (!owner?.composite) throw new Error('缺少 body');
+  if (owner?.composite?.kind !== 'iteration') throw new Error('缺少 body');
   return owner.composite.body;
 }
 
@@ -340,7 +340,7 @@ describe('图导航模型', () => {
   it('body 输出 text:string 成为父节点的 text:string[]', () => {
     const definition = workflow();
     const owner = definition.nodes.find((item) => item.id === 'iterate');
-    if (!owner?.composite) throw new Error('缺少 Iteration');
+    if (owner?.composite?.kind !== 'iteration') throw new Error('缺少 Iteration');
     owner.composite.body.outputs = [
       { name: 'text', type: StringType, source: { nodeId: 'format', outputKey: 'text' } },
     ];

@@ -4,6 +4,7 @@ import {
   createFormatTextNodeType,
   createIfNodeType,
   createIterationNodeType,
+  createSubworkflowNodeType,
   createHumanReviewNodeType,
 } from '@dramaflow/workflow';
 import { Module } from '@nestjs/common';
@@ -19,6 +20,7 @@ import { Module } from '@nestjs/common';
           createFormatTextNodeType(),
           createIfNodeType(),
           createIterationNodeType(),
+          createSubworkflowNodeType(),
           createHumanReviewNodeType(),
         ]),
     },

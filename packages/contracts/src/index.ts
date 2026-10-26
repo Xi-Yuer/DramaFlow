@@ -30,3 +30,7 @@ export * from './node/iteration.js';
 export * from './node/format-text.js';
 export * from './node/ports.js';
 export * from './workflow/execution-tree.js';
+
+export * from './node/subworkflow.js';
+export * from './node/composite.js';
+export * from './graph/traversal.js';

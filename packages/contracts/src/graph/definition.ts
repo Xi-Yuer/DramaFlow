@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { nestedGraphSlots } from './traversal.js';
 import { dataTypeSchema } from '../data/type.js';
 import { nodeDefinitionSchema, type NodeDefinition } from '../node/definition.js';
 import { workflowEdgeSchema, type WorkflowEdge } from '../workflow/edge-definition.js';
@@ -178,13 +179,13 @@ export type GraphOutputDefinition = z.infer<typeof graphOutputDefinitionSchema>;
 export const graphDefinitionSchema: typeof graphDraftDefinitionSchema =
   graphDraftDefinitionSchema.superRefine((definition, context) => {
     definition.nodes.forEach((node, index) => {
-      if (node.composite) {
-        const body = graphDefinitionSchema.safeParse(node.composite.body);
+      for (const slot of nestedGraphSlots(node)) {
+        const body = graphDefinitionSchema.safeParse(slot.graph);
         if (!body.success)
           for (const issue of body.error.issues)
             context.addIssue({
               ...issue,
-              path: ['nodes', index, 'composite', 'body', ...issue.path],
+              path: ['nodes', index, 'composite', slot.graphKey, ...issue.path],
             });
       }
       for (const [key, binding] of Object.entries(node.inputs)) {
