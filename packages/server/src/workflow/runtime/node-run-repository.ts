@@ -365,16 +365,19 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository, Iteration
     return this.failChild(id, error, false);
   }
   async markIterationItemFailed(id: string, error: NodeRunError) {
+    return this.failChild(id, error, true, 'iteration_item');
+  }
+  async markChildExecutionAndParentFailed(id: string, error: NodeRunError) {
     return this.failChild(id, error, true);
   }
-  private async failChild(id: string, rawError: NodeRunError, failParent: boolean) {
+  private async failChild(id: string, rawError: NodeRunError, failParent: boolean, expectedKind?: string) {
     const error = nodeRunErrorSchema.parse(rawError);
     await this.db.client.$transaction(async (tx) => {
       const child = await tx.childExecution.findFirst({
         where: { ...this.runningChild(id), status: { in: ['running', 'failed'] } },
       });
       if (!child) throw new Error('ChildExecution 不存在、无权访问或已结束');
-      if (failParent && child.kind !== 'iteration_item')
+      if (expectedKind && child.kind !== expectedKind)
         throw new Error('Iteration helper 不接受其他 ChildExecution kind');
       const completedAt = new Date();
       await tx.childExecution.updateMany({

@@ -55,6 +55,7 @@ export class WorkflowRuntimeFactory {
       }),
       async (run) => this.nodeRuns.forRun(ownerId, projectId, run.id),
       async (run) => this.nodeRuns.forRun(ownerId, projectId, run.id),
+      async (run) => this.nodeRuns.forRun(ownerId, projectId, run.id),
     );
     return new DefaultWorkflowRunner(versions, runs, compiler, this.outputs);
   }

@@ -159,6 +159,7 @@ describe.skipIf(!enabled)('ChildExecution PostgreSQL 持久化', () => {
       async () => ({ bindings, codec }),
       async () => repository,
       async () => repository,
+      async () => repository,
     );
     const initial: WorkflowState = {
       run: {
@@ -245,6 +246,37 @@ describe.skipIf(!enabled)('ChildExecution PostgreSQL 持久化', () => {
     const outsider = await fixture();
     expect(await outsider.repository.getChildExecutionById(child.id)).toBeNull();
     await expect(outsider.repository.markChildExecutionCompleted(second.id)).rejects.toThrow();
+  });
+
+  it('SubWorkflow 业务失败同事务结束 child 与父 NodeRun，Iteration helper 不接受该 kind', async () => {
+    const f = await fixture();
+    const owner = await parent(f, 'sub');
+    const child = await f.repository.getOrCreateChildExecutionRunning({
+      workflowRunId: f.run.id,
+      parentNodeRunId: owner.id,
+      parentNodeId: owner.nodeId,
+      kind: 'subworkflow',
+      invocationKey: 'subworkflow:graph',
+      scopeKey: 'opaque-subworkflow',
+      metadata: {},
+    });
+    const error = { stage: 'execute', message: '子图失败' };
+    await expect(f.repository.markIterationItemFailed(child.id, error)).rejects.toThrow(
+      'Iteration helper 不接受其他 ChildExecution kind',
+    );
+    expect((await db().childExecution.findUniqueOrThrow({ where: { id: child.id } })).status).toBe(
+      'running',
+    );
+    expect((await db().nodeRun.findUniqueOrThrow({ where: { id: owner.id } })).status).toBe(
+      'running',
+    );
+    await f.repository.markChildExecutionAndParentFailed(child.id, error);
+    expect(await db().childExecution.findUniqueOrThrow({ where: { id: child.id } })).toMatchObject({
+      status: 'failed',
+    });
+    expect(await db().nodeRun.findUniqueOrThrow({ where: { id: owner.id } })).toMatchObject({
+      status: 'failed',
+    });
   });
 
   it('真实编译执行 [A,B,C]，查询三个 item 与其 Body NodeRun，父 attempt 正确', async () => {

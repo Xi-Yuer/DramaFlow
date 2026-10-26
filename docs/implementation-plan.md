@@ -19,7 +19,7 @@ Canvas 小范围视觉优化待人工验收：运行焦点、人工等待、失�
 - Workflow Web 数据依赖可视化仍待人工 Canvas 验收；Template variable candidate、Switch / N-way 和 Nested If 不在当前授权范围。
 
 - Runtime 运维：recovery_required 人工处理、业务记录 / checkpoint 对账、运行删除与保留策略；[独立实验](../experiments/langgraph-iteration-runtime/README.md)已复现 LangGraph 1.5.0 maxConcurrency=1 异常，依赖处理方案待独立评审，本轮不升级或绕过。
-- Human Review 分支区域内审核、并行 pending、子 scope 的定义 / 版本 / 权限绑定待独立设计；嵌套 Iteration、Batch、SubWorkflow 及简单 If 之外的条件拓扑不能直接沿用当前技术预算公式。SubWorkflow 的执行接入仍需独立任务；当前 Definition / 静态校验基础不授权 Compiler Strategy、后续 Composite Runtime 或 Web 编辑扩展。
+- Human Review 分支区域内审核、并行 pending、子 scope 的定义 / 版本 / 权限绑定待独立设计；嵌套 Iteration、Batch 及简单 If 之外的条件拓扑不能直接沿用当前技术预算公式。SubWorkflow v1 已固定调用一次，子图仍不允许 If、Candidate、Human Review、Iteration 与嵌套 SubWorkflow；Web 编辑和跨版本调用未授权。
 - Artifact 内容 HTTP、Asset / Promote、媒体能力、Tool / Agent 和上下文构建均待独立任务；声明或测试夹具不代表产品已交付。
 
 ## Execution Tree 演进设计
@@ -29,10 +29,10 @@ Canvas 小范围视觉优化待人工验收：运行焦点、人工等待、失�
 ### 后续边界
 
 - ChildExecution 是父 NodeRun attempt 的子图调用身份，不等于已建设覆盖 root / 所有 occurrence 的 ExecutionScope 表。是否需要独立 scope、关系型定义定位和 occurrence 直接归属，应在具体调用需求下决定，不叠加互斥归属字段。
-- SubWorkflow 运行仍需独立任务，复用当前版本内的内嵌 Graph Contract 与通用持久化；不要创建新的 WorkflowRun / Job，也不因本次迁移解除 Iteration body capability gate。
+- SubWorkflow v1 复用当前版本内的内嵌 Graph Contract 与通用 ChildExecution，不创建新的 WorkflowRun / Job，也不解除 Iteration body capability gate。子图 Candidate 与 If 仍不开放。
 - Retry / Resume、子图 Human Review、跨版本或跨项目子图调用与权限解析均未开放；不能从 failed / running 记录自动重放执行。
 - 升级部署先停止旧写入器，迁移与 API / Worker 同步上线。checkpoint 中保留的父 attempt、child ID 与 scope 应继续复用；没有这些真实身份的旧快照不靠 index 猜测回填。
 
 ### 下一步最小独立实施任务
 
-独立评审内嵌 SubWorkflow 的单次局部图编译接入及 checkpoint 验证，明确首期允许的子图节点集合。该方向不构成实施授权；通用 scope 扩展、Web 编辑、Batch、单 item Retry / Resume 继续另行授权。
+SubWorkflow v1 的固定单次调用、持久化与 checkpoint 已接入，允许的子图集合见[当前架构](architecture.md#scoped-graph-compilation)。Web 子图编辑、跨版本或跨项目调用、Batch、单 item Retry / Resume 继续另行授权。

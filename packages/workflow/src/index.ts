@@ -56,3 +56,5 @@ export * from './compiler/iteration/execution-repository.js';
 export * from './compiler/iteration/compatibility.js';
 
 export * from './node/builtin/subworkflow.js';
+
+export * from './compiler/subworkflow/strategy.js';

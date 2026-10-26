@@ -15,8 +15,8 @@ import {
   createHumanReviewNodeType,
   createIfNodeType,
   deriveChildScope,
-  iterationRecursionLimit,
   workflowStateSchema,
+  type NodeExecutionContext,
 } from '../src/index.js';
 import { FRAME, INVOCATION } from '../src/compiler/iteration/state.js';
 import { arrayType, iterationRuntimeFixture } from './iteration-runtime-fixture.js';
@@ -419,6 +419,7 @@ describe('正式 Iteration Send + body subgraph', () => {
 
   it('body 链深度超过父图静态预算时仍完成，预算不随 item 数增长', async () => {
     const depth = 8;
+    let observedLimit: number | undefined;
     const f = iterationRuntimeFixture(3);
     f.registry.register({
       manifest: {
@@ -433,7 +434,14 @@ describe('正式 Iteration Send + body subgraph', () => {
       inputSchema: z.object({ value: z.number() }).strict(),
       outputSchema: z.object({ value: z.number() }).strict(),
       configSchema: z.object({}).strict(),
-      execute: async (input: { value: number }) => ({ value: input.value + 1 }),
+      execute: async (
+        input: { value: number },
+        _config: unknown,
+        context: NodeExecutionContext,
+      ) => {
+        observedLimit = context.runnableConfig?.recursionLimit;
+        return { value: input.value + 1 };
+      },
     });
     const nodes: NodeDefinition[] = [];
     for (let index = 0; index < depth; index += 1) {
@@ -476,12 +484,12 @@ describe('正式 Iteration Send + body subgraph', () => {
     f.definition.nodes = [f.loop];
     f.definition.edges = [];
     f.definition.outputs = [];
-    const limit = iterationRecursionLimit(f.loop);
-    expect(limit).toBeGreaterThan(2);
-    expect(limit).toBeLessThan(depth * 3);
     const compiled = await f.createCompiler().compile(f.definition, f.run);
     const result = workflowStateSchema.parse(await compiled.invoke(f.initial(), f.config));
     expect(result.outputs.iteration!.value).toEqual(inlineNumbers([8, 9, 10]));
+    const limit = observedLimit;
+    expect(limit).toBeGreaterThan(2);
+    expect(limit).toBeLessThan(depth * 3);
   });
 
   it('checkpoint 保存 collection snapshot 与 item scope，重建后不重读容器也不重放 Action', async () => {

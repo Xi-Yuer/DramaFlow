@@ -39,7 +39,7 @@ export type ValidatedPublishNode = ValidatedDefinitionNode;
 
 export interface GraphValidationContext {
   readonly definitionPath: GraphDefinitionPath;
-  readonly capability: 'workflow' | 'iteration_body_v1';
+  readonly capability: 'workflow' | 'iteration_body_v1' | 'subworkflow_graph_v1';
 }
 
 function isSupportedIf(nodeType: NodeDeclaration): boolean {

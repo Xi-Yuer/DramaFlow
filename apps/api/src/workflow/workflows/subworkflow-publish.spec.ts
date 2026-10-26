@@ -89,7 +89,14 @@ function fixture(nested = false) {
     createIterationNodeType(),
     createTextGenerationNodeType(),
   ]);
-  const createVersion = vi.fn();
+  const createVersion = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+    id: 'version',
+    workflowId: data.workflowId,
+    version: data.version,
+    sourceRevision: data.sourceRevision,
+    createdAt: new Date('2026-10-26T00:00:00.000Z'),
+    definition: data.definition,
+  }));
   const updateDraft = vi.fn().mockResolvedValue({ count: 1 });
   const tx = {
     $queryRaw: vi
@@ -100,6 +107,7 @@ function fixture(nested = false) {
     workflow: { updateMany: updateDraft },
     workflowVersion: {
       findUnique: vi.fn().mockResolvedValue(null),
+      aggregate: vi.fn().mockResolvedValue({ _max: { version: null } }),
       create: createVersion,
     },
   };
@@ -149,37 +157,86 @@ describe('SubWorkflow Draft / 正式 Publish 静态边界', () => {
       expect(f.createVersion).not.toHaveBeenCalled();
     },
   );
-  it.each([false, true])(
-    '递归检查 child 模型权限后仍拒绝 Runtime 未支持的 Publish（嵌套=%s）',
-    async (nested) => {
-      const f = fixture(nested);
-      await expect(
-        f.service.publish('owner', {
-          workflowId: 'workflow',
-          expectedRevision: 1,
-        }),
-      ).rejects.toMatchObject({
-        response: {
-          code: 'WORKFLOW_PUBLISH_VALIDATION_FAILED',
-          issues: [
-            expect.objectContaining({
-              code: nested
-                ? 'ITERATION_BODY_CAPABILITY_UNSUPPORTED'
-                : 'NODE_EXECUTION_KIND_UNSUPPORTED',
-              nodeId: 'call',
-            }),
+  it('普通 Action 子图在模型授权后发布，不新增 Run', async () => {
+    const f = fixture(false);
+    await expect(
+      f.service.publish('owner', {
+        workflowId: 'workflow',
+        expectedRevision: 1,
+      }),
+    ).resolves.toMatchObject({ version: 1, workflowId: 'workflow', sourceRevision: 1 });
+    expect(f.assertModel).toHaveBeenCalledExactlyOnceWith(
+      f.tx,
+      'owner',
+      f.modelConfigurationId,
+      'text.generate',
+    );
+    expect(f.createVersion).toHaveBeenCalledOnce();
+  });
+  it('Iteration body 内的 SubWorkflow 在模型授权后仍拒绝发布', async () => {
+    const f = fixture(true);
+    await expect(
+      f.service.publish('owner', {
+        workflowId: 'workflow',
+        expectedRevision: 1,
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'WORKFLOW_PUBLISH_VALIDATION_FAILED',
+        issues: [
+          expect.objectContaining({
+            code: 'ITERATION_BODY_CAPABILITY_UNSUPPORTED',
+            nodeId: 'call',
+          }),
+        ],
+      },
+    });
+    expect(f.assertModel).toHaveBeenCalledExactlyOnceWith(
+      f.tx,
+      'owner',
+      f.modelConfigurationId,
+      'text.generate',
+    );
+    expect(f.createVersion).not.toHaveBeenCalled();
+  });
+  it('子图 Candidate 在发布时拒绝，不创建版本', async () => {
+    const f = fixture();
+    if (f.call.composite?.kind !== 'subworkflow') throw new Error('fixture');
+    const other = { ...f.action, id: 'other', name: '另一来源' };
+    f.call.composite.graph.nodes.push(other, {
+      ...f.action,
+      id: 'join',
+      name: '汇聚',
+      inputs: {
+        prompt: {
+          type: 'candidate',
+          sources: [
+            { type: 'node_output', nodeId: 'generate', portKey: 'text' },
+            { type: 'node_output', nodeId: 'other', portKey: 'text' },
           ],
         },
-      });
-      expect(f.assertModel).toHaveBeenCalledExactlyOnceWith(
-        f.tx,
-        'owner',
-        f.modelConfigurationId,
-        'text.generate',
-      );
-      expect(f.createVersion).not.toHaveBeenCalled();
-    },
-  );
+      },
+    });
+    await expect(
+      f.service.publish('owner', {
+        workflowId: 'workflow',
+        expectedRevision: 1,
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'WORKFLOW_PUBLISH_VALIDATION_FAILED',
+        issues: [
+          expect.objectContaining({
+            code: 'SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED',
+            nodeId: 'join',
+            portKey: 'prompt',
+          }),
+        ],
+      },
+    });
+    expect(f.assertModel).not.toHaveBeenCalled();
+    expect(f.createVersion).not.toHaveBeenCalled();
+  });
   it.each([false, true])(
     '子图模型权限拒绝不能绕过（嵌套=%s）',
     async (nested) => {

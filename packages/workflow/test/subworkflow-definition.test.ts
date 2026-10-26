@@ -9,6 +9,8 @@ import {
 } from '@dramaflow/contracts';
 import {
   NodeRegistry,
+  createHumanReviewNodeType,
+  createIfNodeType,
   createIterationNodeType,
   createSubworkflowNodeType,
   validateGraphDefinitionSemantics,
@@ -231,12 +233,112 @@ describe('SubWorkflow 静态语义 / 执行门禁', () => {
       code('ITERATION_BODY_CAPABILITY_UNSUPPORTED'),
     );
   });
-  it('静态通过的根 SubWorkflow 仍不能 Publish；没有隐式 execute', () => {
+  it('v1 子图的普通 Action 可以 Publish，节点本身仍没有 execute', () => {
     const f = fixture();
     expect(check(f)).toHaveLength(2);
-    expect(() => validateWorkflowForPublish(f.root, f.registry)).toThrow(
-      code('NODE_EXECUTION_KIND_UNSUPPORTED'),
-    );
+    expect(validateWorkflowForPublish(f.root, f.registry)).toHaveLength(2);
     expect(f.execute).not.toHaveBeenCalled();
+    expect(f.registry.get('flow.subworkflow', 1).execute).toBeUndefined();
+  });
+  it.each(['input', 'output'] as const)('子图 %s Candidate 在 Publish 明确拒绝', (kind) => {
+    const f = fixture();
+    const other = { ...structuredClone(f.action), id: 'other', name: '另一来源' };
+    f.child.nodes.push(other);
+    if (kind === 'input')
+      f.child.nodes.push({
+        ...structuredClone(f.action),
+        id: 'join',
+        inputs: {
+          value: {
+            type: 'candidate',
+            sources: [
+              { type: 'node_output', nodeId: 'process', portKey: 'text' },
+              { type: 'node_output', nodeId: 'other', portKey: 'text' },
+            ],
+          },
+        },
+      });
+    else
+      f.child.outputs[0] = {
+        name: 'text',
+        type: StringType,
+        sources: [
+          { nodeId: 'process', outputKey: 'text' },
+          { nodeId: 'other', outputKey: 'text' },
+        ],
+      };
+    expect(() => validateWorkflowForPublish(f.root, f.registry)).toThrow(
+      expect.objectContaining({
+        code: 'SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED',
+        nodeId: kind === 'input' ? 'join' : 'text',
+        ...(kind === 'input' ? { portKey: 'value' } : {}),
+        definitionPath: [{ nodeId: 'call', graphKey: 'graph' }],
+      }),
+    );
+  });
+  it.each([
+    'flow.if',
+    'flow.human_review',
+    'flow.iteration',
+    'flow.subworkflow',
+    'test.control',
+  ] as const)('子图拒绝 %s，不留到运行期', (type) => {
+    const f = fixture();
+    f.registry.register(createIfNodeType());
+    f.registry.register(createHumanReviewNodeType());
+    if (type === 'test.control')
+      f.registry.register({
+        manifest: {
+          type,
+          version: 1,
+          executionKind: 'action',
+          metadata: { name: '带控制出口', category: 'flow' },
+          inputs: [],
+          outputs: [],
+          controlOutputs: [{ key: 'next', name: '下一步' }],
+          config: [],
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        configSchema: z.object({}),
+        execute: async () => ({}),
+      });
+    f.child.nodes = [
+      {
+        id: 'blocked',
+        type,
+        typeVersion: 1,
+        name: '不允许',
+        inputs: {},
+        config: {},
+        ui: { position: { x: 0, y: 0 } },
+        ...(type === 'flow.iteration'
+          ? {
+              composite: {
+                kind: 'iteration' as const,
+                itemType: StringType,
+                invariantInputs: [],
+                bodyInputMapping: [],
+                body: { inputs: [], nodes: [], edges: [], outputs: [] },
+              },
+            }
+          : type === 'flow.subworkflow'
+            ? {
+                composite: {
+                  kind: 'subworkflow' as const,
+                  graph: { inputs: [], nodes: [], edges: [], outputs: [] },
+                },
+              }
+            : {}),
+      },
+    ];
+    f.child.outputs = [];
+    expect(() => validateWorkflowForPublish(f.root, f.registry)).toThrow(
+      expect.objectContaining({
+        code: 'SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED',
+        nodeId: 'blocked',
+        definitionPath: [{ nodeId: 'call', graphKey: 'graph' }],
+      }),
+    );
   });
 });

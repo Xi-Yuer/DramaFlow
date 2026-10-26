@@ -51,6 +51,14 @@ const publishIssueMessages = new Map([
     '条件分支最终输出须使用同一 If 的 true / false 两个分支中保证执行的节点作为候选来源；单来源输出须来自必定执行的节点。',
   ],
   ['NODE_EXECUTION_KIND_UNSUPPORTED', '当前暂不支持运行此类节点，请调整工作流后再发布。'],
+  [
+    'SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED',
+    '子流程目前只支持普通操作，不能放入条件、审核、迭代或其他子流程。',
+  ],
+  [
+    'SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED',
+    '子流程目前不支持候选输入；候选需要条件分支已经证明互斥。',
+  ],
   ['CONTROL_OUTPUT_PORT_REQUIRED', '请从条件节点的 true / false 出口连接分支。'],
   ['CONTROL_OUTPUT_BRANCH_MISSING', '请为条件节点连接 true 和 false 两个分支。'],
 ]);

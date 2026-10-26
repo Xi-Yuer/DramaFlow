@@ -37,6 +37,8 @@ export type WorkflowPublishIssueCode =
   | CompositeDefinitionError['code']
   | 'ITERATION_BODY_CAPABILITY_UNSUPPORTED'
   | 'ITERATION_BODY_EMPTY'
+  | 'SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED'
+  | 'SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED'
   | 'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED'
   | 'NODE_TYPE_UNAVAILABLE'
   | 'NODE_EXECUTION_KIND_UNSUPPORTED'
@@ -64,6 +66,8 @@ export class WorkflowPublishValidationError extends Error {
     readonly definitionPath?: GraphDefinitionPath,
   ) {
     super(
+      (code === 'SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED' ? 'SubWorkflow v1 子图仅允许普通 Action DAG' :
+       code === 'SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED' ? 'SubWorkflow v1 子图不支持 Candidate；它需要已证明互斥的控制分支' : undefined) ??
       ifCapabilityMessage(code) ??
         (code === 'ITERATION_BODY_CAPABILITY_UNSUPPORTED'
           ? 'Iteration v1 body 仅允许普通 Action，尚不支持 control / interaction / composite'

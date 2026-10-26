@@ -1,6 +1,5 @@
 import {
   graphDefinitionSchema,
-  isSubworkflowNodeManifest,
   nestedGraphSlots,
   type GraphDefinition,
 } from '@dramaflow/contracts';
@@ -24,12 +23,63 @@ function isSupportedIf(nodeType: NodeDeclaration): boolean {
   );
 }
 
+// Candidate 先于节点种类拒绝：普通 Action DAG 中两个来源都会执行，不能留到运行期再报歧义。
+function assertSubworkflowGraphBoundary(
+  definition: GraphDefinition,
+  registry: NodeRegistry,
+  context: GraphValidationContext,
+): void {
+  if (context.capability !== 'subworkflow_graph_v1') return;
+  for (const node of definition.nodes)
+    for (const [key, binding] of Object.entries(node.inputs))
+      if (binding.type === 'candidate')
+        throw new WorkflowPublishValidationError(
+          'SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED',
+          node.id,
+          key,
+          context.definitionPath,
+        );
+  for (const output of definition.outputs)
+    if (output.sources !== undefined)
+      throw new WorkflowPublishValidationError(
+        'SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED',
+        output.name,
+        undefined,
+        context.definitionPath,
+      );
+  for (const node of definition.nodes) {
+    let declaration: NodeDeclaration;
+    try {
+      declaration = registry.get(node.type, node.typeVersion);
+    } catch {
+      throw new WorkflowPublishValidationError(
+        'NODE_TYPE_UNAVAILABLE',
+        node.id,
+        undefined,
+        context.definitionPath,
+      );
+    }
+    if (
+      declaration.manifest.executionKind !== 'action' ||
+      !declaration.execute ||
+      (declaration.manifest.controlOutputs?.length ?? 0) > 0
+    )
+      throw new WorkflowPublishValidationError(
+        'SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED',
+        node.id,
+        undefined,
+        context.definitionPath,
+      );
+  }
+}
+
 // 执行准入单独检查；静态遍历完整不代表 Compiler 已能执行。
 function assertGraphExecutionKinds(
   definition: GraphDefinition,
   registry: NodeRegistry,
   context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
 ): void {
+  assertSubworkflowGraphBoundary(definition, registry, context);
   for (const node of definition.nodes) {
     let declaration: NodeDeclaration;
     try {
@@ -54,17 +104,10 @@ function assertGraphExecutionKinds(
         undefined,
         context.definitionPath,
       );
-    if (isSubworkflowNodeManifest(declaration.manifest))
-      throw new WorkflowPublishValidationError(
-        'NODE_EXECUTION_KIND_UNSUPPORTED',
-        node.id,
-        undefined,
-        context.definitionPath,
-      );
     for (const slot of nestedGraphSlots(node))
       assertGraphExecutionKinds(slot.graph, registry, {
         definitionPath: [...context.definitionPath, { nodeId: node.id, graphKey: slot.graphKey }],
-        capability: slot.graphKey === 'body' ? 'iteration_body_v1' : 'workflow',
+        capability: slot.graphKey === 'body' ? 'iteration_body_v1' : 'subworkflow_graph_v1',
       });
   }
 }
@@ -74,6 +117,7 @@ export function assertGraphPublishTopology(
   registry: NodeRegistry,
   context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
 ): void {
+  assertSubworkflowGraphBoundary(definition, registry, context);
   const entries = definition.nodes.map((node) => ({
     node,
     nodeType: registry.get(node.type, node.typeVersion),
@@ -122,7 +166,7 @@ export function assertGraphPublishTopology(
     for (const slot of nestedGraphSlots(node))
       assertGraphPublishTopology(slot.graph, registry, {
         definitionPath: [...context.definitionPath, { nodeId: node.id, graphKey: slot.graphKey }],
-        capability: slot.graphKey === 'body' ? 'iteration_body_v1' : 'workflow',
+        capability: slot.graphKey === 'body' ? 'iteration_body_v1' : 'subworkflow_graph_v1',
       });
 }
 
@@ -163,7 +207,7 @@ export function validateWorkflowDefinitionSemantics(
     for (const slot of nestedGraphSlots(node))
       assertGraphExecutionCapabilities(slot.graph, registry, {
         definitionPath: [{ nodeId: node.id, graphKey: slot.graphKey }],
-        capability: slot.graphKey === 'body' ? 'iteration_body_v1' : 'workflow',
+        capability: slot.graphKey === 'body' ? 'iteration_body_v1' : 'subworkflow_graph_v1',
       });
   return entries;
 }

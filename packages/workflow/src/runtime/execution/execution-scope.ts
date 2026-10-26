@@ -21,7 +21,7 @@ export const childScopeSegmentSchema = z.discriminatedUnion('kind', [
     })
     .strict(),
   z
-    .object({ ...owner, kind: z.literal('subworkflow_call'), callKey: workflowIdentifierSchema })
+    .object({ ...owner, kind: z.literal('subworkflow_call'), callKey: workflowIdentifierSchema, ownerNodeRunId: workflowIdentifierSchema.optional() })
     .strict(),
 ]);
 export type ChildScopeSegment = z.infer<typeof childScopeSegmentSchema>;
@@ -37,7 +37,7 @@ export function deriveChildScope(parentScope: string, input: ChildScopeSegment):
     segment.ownerOccurrenceId,
     segment.slot,
     identity,
-    ...(segment.kind === 'iteration_item' && segment.ownerNodeRunId
+    ...(segment.ownerNodeRunId
       ? [segment.ownerNodeRunId]
       : []),
   ]);

@@ -1,3 +1,4 @@
+import type { NodeRunRepository } from './node-run-repository.js';
 import type { ChildExecution, NodeRunError } from '@dramaflow/contracts';
 
 export interface CreateChildExecutionInput {
@@ -15,4 +16,7 @@ export interface ChildExecutionRepository {
   getChildExecutionById(id: string): Promise<ChildExecution | null>;
   markChildExecutionCompleted(id: string): Promise<void>;
   markChildExecutionFailed(id: string, error: NodeRunError): Promise<void>;
+  markChildExecutionAndParentFailed(id: string, error: NodeRunError): Promise<void>;
 }
+
+export interface ChildGraphRunRepository extends NodeRunRepository, ChildExecutionRepository {}

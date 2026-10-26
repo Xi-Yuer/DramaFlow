@@ -28,7 +28,6 @@ import {
   NodeRunRecordingError,
   toNodeRunError,
 } from '../../runtime/node/node-execution-error.js';
-import { DefaultWorkflowOutputResolver } from '../../runtime/state/workflow-output-resolver.js';
 import { deriveChildScope } from '../../runtime/execution/execution-scope.js';
 import {
   createLocalGraphInvocation,
@@ -41,13 +40,12 @@ import {
   OrderedRuntimeCollectionBuilder,
   RuntimeCollectionSnapshot,
 } from '../../runtime/values/runtime-collection.js';
-import { analyzeStaticDagExecution } from '../dependency/action-dag-execution-analysis.js';
-import { collectNodeDependencies, DependencyCompiler } from '../dependency/dependency.compiler.js';
+import { compileGraph } from '../graph/graph-compiler.js';
 import {
-  ActionNodeCompilationStrategy,
-  type NodeCompilationStrategy,
-  type WorkflowValueServices,
-} from '../strategy.js';
+  type GraphCompilationPlan,
+  type GraphStrategyStructure,
+} from '../graph/compilation-plan.js';
+import { type NodeCompilationStrategy, type WorkflowValueServices } from '../strategy.js';
 import type { NodeDeclaration } from '../../node/registry/type.js';
 import {
   AggregateOutput,
@@ -74,22 +72,19 @@ export interface IterationCompilationContext {
   executor: NodeExecutor;
   services: WorkflowValueServices;
   runs: IterationRunRepository;
+  bodyCompilation: GraphCompilationPlan;
   addNode(
     id: string,
     node: RunnableInterface<WorkflowState, WorkflowStateUpdate, LangGraphRunnableConfig>,
   ): void;
 }
-export function iterationRecursionLimit(node: NodeDefinition): number {
-  if (node.composite?.kind !== 'iteration') throw new Error('Iteration composite 定义缺失');
-  // 父图、Iteration 图和 body 图各自计数。Send 的 item 数不是 superstep。
-  // body 预算是静态深度加 item 审计入口与 declared-output；prepare / fan-out / collect 由下限覆盖。
-  // 编译器再取它和父图静态预算的较大值，避免把动态 item 数加进递归上限。
-  return Math.max(4, analyzeStaticDagExecution(node.composite.body).maxDepth + 3);
-}
-
 export class IterationNodeCompilationStrategy implements NodeCompilationStrategy<IterationCompilationContext> {
   supports(manifest: NodeTypeManifest): boolean {
     return isIterationNodeManifest(manifest);
+  }
+
+  graphStructure(): GraphStrategyStructure {
+    return { wrapperNodes: 3, childBoundaries: { body: { entry: true, completion: true } } };
   }
 
   compile(context: IterationCompilationContext): void {
@@ -99,7 +94,6 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
     const composite = node.composite;
     const body = composite.body;
     const ports = registry.resolveNodePorts(node);
-    const outputResolver = new DefaultWorkflowOutputResolver();
     const childScope = (ownerOccurrenceId: string, ownerNodeRunId: string, index: number) =>
       deriveChildScope(scopeKey, {
         kind: 'iteration_item',
@@ -129,94 +123,79 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
       }
       throw cause;
     };
-    let enterNode = '__dramaflow_item_start';
-    while (body.nodes.some((candidate) => candidate.id === enterNode)) enterNode += '_';
-    itemGraph.addNode(enterNode, async (state) => {
-      const invocation = itemInvocationSchema.parse(state[INVOCATION]);
-      const item = await runs.getOrCreateIterationItemRunning({
-        workflowRunId: run.id,
-        parentNodeRunId: invocation.iterationNodeRunId,
-        parentNodeId: node.id,
-        scopeKey: invocation.scopeKey,
-        index: invocation.index,
-      });
-      return { [ITEM_RUN]: item.id };
-    });
-    itemGraph.addEdge(START, enterNode);
-    const action = new ActionNodeCompilationStrategy();
-    for (const bodyNode of body.nodes) {
-      const declaration = registry.get(bodyNode.type, bodyNode.typeVersion);
-      if (!action.supports(declaration.manifest))
-        throw new Error('Iteration body 仅支持已通过 Publish 的 Action');
-      action.compile<typeof ItemState.State>({
-        node: bodyNode,
-        manifest: declaration.manifest,
-        executor,
-        executionContext: (config, state) => ({
-          workflow: body,
+    compileGraph<typeof ItemState.State>({
+      plan: context.bodyCompilation,
+      registry,
+      run,
+      execution: {
+        resolve: (state) => ({
           scopeKey: itemInvocationSchema.parse(state[INVOCATION]).scopeKey,
           childExecutionId: itemId(state),
-          runnableConfig: config,
         }),
+      },
+      runtime: { executor, services, iterationRuns: runs },
+      target: {
         addNode: (id, execute) => {
-          itemGraph.addNode(id, async (state, config) => {
-            try {
-              return await execute(state, config);
-            } catch (cause) {
-              return failItem(state, cause);
-            }
-          });
+          itemGraph.addNode(id, execute);
         },
-      });
-    }
-    let declaredOutputNode = '__dramaflow_body_outputs';
-    while (body.nodes.some((candidate) => candidate.id === declaredOutputNode))
-      declaredOutputNode += '_';
-    itemGraph.addNode(declaredOutputNode, async (state) => {
-      const invocation = itemInvocationSchema.parse(state[INVOCATION]);
-      let outputs: Record<string, RuntimeValue>;
-      try {
-        outputs = outputResolver.resolve(body, state);
-      } catch (cause) {
-        if (cause !== null && isGraphBubbleUp(cause)) throw cause;
-        return failItem(
-          state,
-          new NodeExecutionError(node.id, node.type, 'validate_output', cause),
-        );
-      }
-      await runs.markIterationItemCompleted(itemId(state));
-      return {
-        [RESULTS]: [
-          {
-            index: invocation.index,
-            ownerOccurrenceId: invocation.ownerOccurrenceId,
-            iterationNodeRunId: invocation.iterationNodeRunId,
-            iterationItemRunId: itemId(state),
+        addBoundaryNode: (id, execute) => {
+          itemGraph.addNode(id, execute);
+        },
+        addEdge: (sources, target) => {
+          itemGraph.addEdge(sources, target);
+        },
+        addConditionalEdges: (id, route, paths) => {
+          itemGraph.addConditionalEdges(id, route, paths);
+        },
+      },
+      wrapNode: (execute) => async (state, config) => {
+        try {
+          return await execute(state, config);
+        } catch (cause) {
+          return failItem(state, cause);
+        }
+      },
+      entry: {
+        name: '__dramaflow_item_start',
+        execute: async (state) => {
+          const invocation = itemInvocationSchema.parse(state[INVOCATION]);
+          const item = await runs.getOrCreateIterationItemRunning({
+            workflowRunId: run.id,
+            parentNodeRunId: invocation.iterationNodeRunId,
+            parentNodeId: node.id,
             scopeKey: invocation.scopeKey,
-            outputs,
-          },
-        ],
-      };
-    });
-    const dependencies = collectNodeDependencies(body.edges, body.nodes);
-    new DependencyCompiler().compile({
-      nodes: body.nodes,
-      edges: body.edges,
-      addEdge: (sources, target) => {
-        itemGraph.addEdge(sources, target);
+            index: invocation.index,
+          });
+          return { [ITEM_RUN]: item.id };
+        },
+      },
+      completion: {
+        name: '__dramaflow_body_outputs',
+        onOutputError: async (state, cause) => {
+          if (cause !== null && isGraphBubbleUp(cause)) throw cause;
+          return failItem(
+            state,
+            new NodeExecutionError(node.id, node.type, 'validate_output', cause),
+          );
+        },
+        execute: async (state, outputs) => {
+          const invocation = itemInvocationSchema.parse(state[INVOCATION]);
+          await runs.markIterationItemCompleted(itemId(state));
+          return {
+            [RESULTS]: [
+              {
+                index: invocation.index,
+                ownerOccurrenceId: invocation.ownerOccurrenceId,
+                iterationNodeRunId: invocation.iterationNodeRunId,
+                iterationItemRunId: itemId(state),
+                scopeKey: invocation.scopeKey,
+                outputs,
+              },
+            ],
+          };
+        },
       },
     });
-    const targets = new Set(dependencies.map((dependency) => dependency.targetNodeId));
-    const sources = new Set(dependencies.flatMap((dependency) => dependency.sourceNodeIds));
-    for (const bodyNode of body.nodes) {
-      if (!targets.has(bodyNode.id)) itemGraph.addEdge(enterNode, bodyNode.id);
-    }
-    // 一个 barrier 汇聚所有叶节点，完成后才解析 body declared outputs。
-    itemGraph.addEdge(
-      body.nodes.filter((bodyNode) => !sources.has(bodyNode.id)).map((bodyNode) => bodyNode.id),
-      declaredOutputNode,
-    );
-    itemGraph.addEdge(declaredOutputNode, END);
     const compiledBody = itemGraph.compile();
     const iterationGraph = new StateGraph<
       typeof IterationState.spec,
@@ -346,10 +325,7 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
           }
           const local = createLocalGraphInvocation({
             definition: body,
-            definitionLocation: {
-              workflowVersionId: run.workflowVersionId,
-              path: [{ nodeId: node.id, graphKey: 'body' }],
-            },
+            definitionLocation: context.bodyCompilation.definitionLocation,
             scopeKey: childScope(frame.ownerOccurrenceId, frame.iterationNodeRunId, index),
             run: state.run,
             sources,

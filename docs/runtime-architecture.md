@@ -24,13 +24,19 @@ Repository 故障独立于业务错误；完成记录失败不得反向 markFail
 
 单上游 `addEdge(source, target)`；多上游一次 `addEdge([sources], target)`，全部完成后执行一次，不拆成独立触发边，不自建 ready 计数。Conditional / Send / Batch 不套用静态 ALL。
 
+### Scoped / Recursive Graph 编译
+
+root、Iteration.body 与 SubWorkflow.graph 统一进入内部 compileGraph，由同一策略分发和依赖管线建立图。调用方仍持有各自的原生 StateGraph schema / reducers；显式 entry / declared-output completion 回调承接专属审计，局部调用的 inputs 仍由 Local Graph Invocation 独立映射。compileGraph 不 invoke 子图、不持久化身份、不安装 Saver。Iteration 的 Send、固定集合顺序、失败传播与 checkpoint 状态不变。SubWorkflow 固定调用一次，子图不包含 If。
+
+编译计划分别携带静态 Definition Location 和运行 execution provider，路径使用既有 graph slot abstraction。静态位置不含 item index、scope 或 namespace；相同局部 nodeId 通过隔离 State 和显式运行 scope 区分。技术结构分析可以递归计算图预算，正式 prepare 仍执行当前能力门禁。SubWorkflow v1 已接入；nested Human Review 没有实现。子图 Publish 拒绝 If、Candidate、Human Review、Iteration 与嵌套 SubWorkflow。入口和限制见[架构](architecture.md#scoped-graph-compilation)。
+
 ### Action DAG 技术执行预算
 
 联合依赖图中根节点 level = 1，下游 level = 1 + max(上游 level)，最长静态路径深度 D = max(level)，空图 D = 0。纯分析复用 `collectNodeDependencies`，与依赖编译使用同一规则。
 
-Compiler 在创建 Executor / 图节点前确认节点种类与拓扑受支持（Action 与分支区域外的串行 Human Review），再以官方 `withConfig` 绑定 `recursionLimit = D + 1`。空图为 1，100 个独立节点为 2，100 层串行为 101。Publish 与 Runtime 校验同一联合 DAG，不新增任意节点数或深度上限。
+Compiler 在创建 Executor / 图节点前确认节点种类与拓扑受支持（Action 与分支区域外的串行 Human Review），普通无额外边界的图以官方 `withConfig` 绑定 `recursionLimit = D + 1`。空图为 1，100 个独立节点为 2，100 层串行为 101。Publish 与 Runtime 校验同一联合 DAG，不新增任意节点数或深度上限。
 
-预算按每次 LangGraph 调用计算，不是费用、节点数量或 thread 累计额度。Human Review 的暂停不额外插入完成节点；resume 从原 checkpoint 重入审核，后续路径不超过已证明的最长路径。测试覆盖审核 root 后 0 / 1 / 2 / 30 层后继和实际 resume 的不足 / 足够预算边界。Runner 不分析拓扑，未来执行种类必须独立证明预算。
+预算按每次 LangGraph 调用计算，不是费用、节点数量或 thread 累计额度。Human Review 的暂停不额外插入完成节点；resume 从原 checkpoint 重入审核，后续路径不超过已证明的最长路径。测试覆盖审核 root 后 0 / 1 / 2 / 30 层后继和实际 resume 的不足 / 足够预算边界。通用图预算还计入实际 entry / completion 节点，并取自身、各递归子图与策略 wrapper 上限的最大值；Iteration Body 与 SubWorkflow 子图均为 D+3，wrapper 为 4，item 数和调用次数不参与计算。Runner 不分析拓扑，执行种类必须声明自身结构并证明预算。
 
 ### 简单 If 的条件路由与预算
 

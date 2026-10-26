@@ -2,7 +2,7 @@
 
 产品定位和仍有效的职责边界。已实现能力见 [当前架构](architecture.md)，阶段见 [实施方案](implementation-plan.md)。
 
-DramaFlow 是团队自部署的 AI 视频生产工作流平台，漫剧优先，也可承载广告、产品宣传和口播。当前图为有向无环，普通多上游使用确定性 ALL Join。条件路由、显式迭代和人工审核的实际准入见当前架构；Batch、SubWorkflow 与其他控制能力按后续明确任务加入。任意循环、公开 SaaS、商业计费、长期记忆和知识库不在范围内。成本观察不等于计费。
+DramaFlow 是团队自部署的 AI 视频生产工作流平台，漫剧优先，也可承载广告、产品宣传和口播。当前图为有向无环，普通多上游使用确定性 ALL Join。条件路由、显式迭代、人工审核和内嵌 SubWorkflow v1 的实际准入见当前架构；Batch 与其他控制能力按后续明确任务加入。任意循环、公开 SaaS、商业计费、长期记忆和知识库不在范围内。成本观察不等于计费。
 
 一个项目恰好一张画布、一个逻辑 Workflow，可以有多次运行。Project、Canvas、Workflow 职责不同，不据此增加多画布或多工作流层级。被调用流程属于它自己的项目；组合时引用对方的固定版本，不能因此获得其他项目的权限。
 
@@ -38,7 +38,7 @@ Composite 之间共享的子图调用、Execution Scope、Run Tree、Retry / Res
 
 当 `iterationXXX`、`subWorkflowXXX`、`loopXXX`、`batchXXX` 进入通用 NodeRun / Executor / Repository / 查询协议时，必须先判断是否实际表达通用 Execution 概念。禁止为每种 Composite 复制一组互斥归属字段或一套运行详情基础设施；专属字段可以留在 Strategy、节点 contract 或经校验的 extension。业务名出现在业务节点中、Iteration 名出现在 Iteration Strategy 中，本身都不是抽象缺陷。
 
-实施新能力前先判断它属于业务 Node / Plugin，还是跨节点共享的编排基础能力，并检查已有 Graph、Binding、Scope、Run 和 Artifact 是否可复用。不为了抽象而抽象，不预建尚未获准的 SubWorkflow / Loop / Batch，也不强迫业务节点去业务化。当前执行模型见[架构](architecture.md#execution-归属审计)，演进设计与授权边界见[实施方案](implementation-plan.md#execution-tree-演进设计)。
+实施新能力前先判断它属于业务 Node / Plugin，还是跨节点共享的编排基础能力，并检查已有 Graph、Binding、Scope、Run 和 Artifact 是否可复用。不为了抽象而抽象，不预建尚未获准的 Loop / Batch，也不把已接入的内嵌 SubWorkflow v1 扩展成跨版本调用，不强迫业务节点去业务化。当前执行模型见[架构](architecture.md#execution-归属审计)，演进设计与授权边界见[实施方案](implementation-plan.md#execution-tree-演进设计)。
 
 ## Provider、数据与副作用
 

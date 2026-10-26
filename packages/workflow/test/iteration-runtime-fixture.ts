@@ -247,6 +247,7 @@ export function iterationRuntimeFixture(count = 3, options?: { delay?: boolean }
       async () => services,
       async () => nodeRuns,
       async () => nodeRuns,
+      async () => nodeRuns,
     );
   const initial = (): WorkflowState => ({
     run: {
