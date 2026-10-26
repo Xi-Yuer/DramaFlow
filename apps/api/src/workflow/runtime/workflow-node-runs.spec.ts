@@ -157,7 +157,7 @@ describe('WorkflowRun NodeRun 查询 API', () => {
         workflowRunId: true,
         nodeId: true,
         occurrenceId: true,
-        iterationItemRunId: true,
+        childExecutionId: true,
         occurrence: { select: { scopeKey: true } },
         attempt: true,
         status: true,

@@ -4,13 +4,13 @@
 
 ## 编译与执行分离
 
-核心基础设施遵循[通用性与业务解耦原则](platform-model.md#workflow-通用性与业务解耦)。Binding 解析本图的显式数据来源，Executor 执行当前节点，Composite Strategy 解释控制语义；都不解释剧集、章节、商品或广告。共享子图执行归属与查询应逐步使用通用机制，当前 `iterationItemRunId` 的依赖及边界见[执行归属审计](architecture.md#execution-归属审计)；推荐设计见[实施方案](implementation-plan.md#execution-tree-演进设计)，通用只读 Run Tree DTO / 查询已实现，见[查询边界](architecture.md#execution-tree-只读查询)；通用 ExecutionScope 持久化尚未实现。
+核心基础设施遵循[通用性与业务解耦原则](platform-model.md#workflow-通用性与业务解耦)。Binding 解析本图的显式数据来源，Executor 执行当前节点，Composite Strategy 解释控制语义；都不解释剧集、章节、商品或广告。共享子图执行归属与查询已使用通用 ChildExecution，当前 `childExecutionId` 的依赖及边界见[执行归属审计](architecture.md#execution-归属审计)；推荐设计见[实施方案](implementation-plan.md#execution-tree-演进设计)，通用只读 Run Tree DTO / 查询已实现，见[查询边界](architecture.md#execution-tree-只读查询)；通用 ExecutionScope 持久化尚未实现。
 
 Compiler 冻结定义、校验精确 Registry 版本并连接依赖与 START / END；不创建 Run / thread 或执行业务。普通 Action 只实现 execute，经编译 wrapper 调用统一 NodeExecutor；其他 executionKind 必须使用独立策略。
 
 NodeExecutor 从显式 scopeKey 获取或创建 occurrence，再在该 occurrence 内 createRunning → 解析绑定 → 记录 RuntimeValue 输入 → decode → 校验 input / config → execute → 校验 output → encode → markCompleted。完成记录成功后才写 State。服务对象不进入 State；Codec / Writer 只取得当前项目 / 运行 / 节点 / 输出定位。
 
-Iteration 由独立 composite strategy 编译为 prepare → 原生 Send / compiled Body subgraph → collect。prepare 创建父 NodeRun；每个 Body 审计入口创建 IterationItemRun 并向 Body NodeRun 显式传入关联 ID，declared outputs 成功后完成 item，collect 完成父记录。业务失败记录当前 item 与父 NodeRun；GraphBubbleUp 保持 running，仓储故障独立传播。scope 包含本次父 NodeRun 身份并保存在 checkpoint，详情与嵌套父链见[当前架构](architecture.md#iteration-item-run)。动态端口与 body 门禁见[Node 模型](node-model.md#iteration-composite-contract)。
+Iteration 由独立 composite strategy 编译为 prepare → 原生 Send / compiled Body subgraph → collect。prepare 创建父 NodeRun；每个 Body 审计入口创建 ChildExecution 并向 Body NodeRun 显式传入关联 ID，declared outputs 成功后完成 item，collect 完成父记录。业务失败记录当前 item 与父 NodeRun；GraphBubbleUp 保持 running，仓储故障独立传播。scope 包含本次父 NodeRun 身份并保存在 checkpoint，详情与嵌套父链见[当前架构](architecture.md#child-execution-持久化)。动态端口与 body 门禁见[Node 模型](node-model.md#iteration-composite-contract)。
 
 ### Action 执行错误阶段
 
@@ -84,7 +84,7 @@ Resolver 不返回整份 State，不生成临时 URL；空声明得到 `{}`。
 
 State 与 Annotation 共处 runtime/state.ts。run / inputs / variables / execution 为单值通道，Action wrapper 只返回当前 nodeId 的 outputs 增量，不展开旧 State。非变异 reducer 合并不同节点；重复 nodeId 即报 DUPLICATE_NODE_OUTPUT_WRITE，不合并端口片段或静默覆盖。
 
-这是普通 DAG 的单次有效输出约束，不能推断循环 / 批量 / 审核语义。NodeOccurrence 保存逻辑执行身份，NodeRun 保存其 attempt 与业务历史，IterationItemRun 保存单个 item 的执行身份和生命周期并关联 Body NodeRun，Artifact 保存内容，Checkpoint 保存恢复状态；attempt 不等于函数重入次数。领域 occurrence 不取自 taskId、checkpoint namespace 或 nodeAttempt，也不要求修改已有 checkpoint State。身份与持久约束见[当前架构](architecture.md#node-execution-occurrence)。不把日志、媒体、服务或对话历史塞入 State。输入绑定、decode / encode 和内容失败边界见[数据模型](data-model.md#codec-与-binding)。
+这是普通 DAG 的单次有效输出约束，不能推断循环 / 批量 / 审核语义。NodeOccurrence 保存逻辑执行身份，NodeRun 保存其 attempt 与业务历史，ChildExecution 保存父 attempt 发起的子图调用身份和生命周期，并关联子图 NodeRun；Iteration 的 item index 仅是 typed metadata，Artifact 保存内容，Checkpoint 保存恢复状态；attempt 不等于函数重入次数。领域 occurrence 不取自 taskId、checkpoint namespace 或 nodeAttempt，也不要求修改已有 checkpoint State。身份与持久约束见[当前架构](architecture.md#node-execution-occurrence)。不把日志、媒体、服务或对话历史塞入 State。输入绑定、decode / encode 和内容失败边界见[数据模型](data-model.md#codec-与-binding)。
 
 ## PostgreSQL Checkpointer
 

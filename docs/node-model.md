@@ -42,7 +42,7 @@ Draft 可保存缺少 composite、空 body、未完成映射及既有 sources=[]
 
 v1 Publish 仅允许 body 内普通 Action；拒绝 nested Iteration、其他 composite、If、Human Review、其他 control / interaction，以及带命名控制出口的特殊 Action。Contract 的递归表达能力不代表 Publish 或 Runtime 放行。Candidate 等表达继续受既有互斥来源证明约束，不因为进入 body 放松。
 
-空 items 合法，不调用 body，并为每个声明输出产生对应类型的空集合；当前由独立 Iteration Strategy 执行，空集合完成父 NodeRun，不创建 ItemRun，详见[当前架构](architecture.md#iteration-item-run)。current_index 是固定 snapshot 的从零位置，不是业务 itemKey；Definition 不含 occurrence、scope 或 LangGraph 身份。
+空 items 合法，不调用 body，并为每个声明输出产生对应类型的空集合；当前由独立 Iteration Strategy 执行，空集合完成父 NodeRun，不创建 ChildExecution，详见[当前架构](architecture.md#child-execution-持久化)。current_index 是固定 snapshot 的从零位置，不是业务 itemKey；Definition 不含 occurrence、scope 或 LangGraph 身份。
 
 ## 服务端执行与编译
 

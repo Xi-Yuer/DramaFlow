@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { nodeRunSchema, nodeRunStatusSchema } from '../src/index.js';
+import {
+  nodeRunSchema,
+  nodeRunStatusSchema,
+  childExecutionSchema,
+  iterationItemExecutionMetadataSchema,
+} from '../src/index.js';
 
 describe('NodeRun 记录协议', () => {
   const run = {
@@ -126,4 +131,43 @@ describe('NodeRun 记录协议', () => {
     expect(first.outputs?.script).toMatchObject({ value: '第一版' });
     expect(second.outputs?.script).toMatchObject({ value: '第二版' });
   });
+});
+
+it('NodeRun 以通用 childExecutionId 表达归属，拒绝旧的专用归属字段', () => {
+  const node = {
+    id: 'node',
+    workflowRunId: 'run',
+    nodeId: 'format',
+    occurrenceId: 'occ',
+    scopeKey: 'opaque',
+    attempt: 1,
+    status: 'running',
+    startedAt: '2026-10-26T00:00:00.000Z',
+    childExecutionId: 'child',
+  };
+  expect(nodeRunSchema.parse(node).childExecutionId).toBe('child');
+  expect(nodeRunSchema.safeParse({ ...node, iterationItemRunId: 'legacy' }).success).toBe(false);
+});
+
+it('ChildExecution 通用身份无必填 index；Iteration extension 单独校验位置', () => {
+  const child = {
+    id: 'child',
+    workflowRunId: 'run',
+    parentNodeRunId: 'parent',
+    parentNodeId: 'composite',
+    scopeKey: 'opaque',
+    kind: 'subworkflow',
+    invocationKey: 'fixed-call',
+    metadata: { label: '子调用' },
+    status: 'running',
+    createdAt: '2026-10-26T00:00:00.000Z',
+    startedAt: '2026-10-26T00:00:00.000Z',
+  };
+  expect(childExecutionSchema.parse(child)).not.toHaveProperty('index');
+  expect(
+    childExecutionSchema.safeParse({ ...child, metadata: { 'invalid-key': 'x' } }).success,
+  ).toBe(false);
+  expect(iterationItemExecutionMetadataSchema.parse({ index: 0 })).toEqual({ index: 0 });
+  expect(iterationItemExecutionMetadataSchema.safeParse({}).success).toBe(false);
+  expect(iterationItemExecutionMetadataSchema.safeParse({ index: -1 }).success).toBe(false);
 });

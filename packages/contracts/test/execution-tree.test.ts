@@ -49,6 +49,8 @@ describe('通用 Execution Tree JSON Contract', () => {
     for (const key of [
       'iterationItemRunId',
       'iterationNodeRunId',
+      'childExecutionId',
+      'parentNodeRunId',
       'scopeKey',
       'threadId',
       'checkpointNs',

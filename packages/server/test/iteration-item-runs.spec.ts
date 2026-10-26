@@ -25,7 +25,7 @@ if (enabled) {
     throw new Error('ItemRun 集成测试仅允许本机 dramaflow_test');
 }
 
-describe.skipIf(!enabled)('IterationItemRun PostgreSQL 持久化', () => {
+describe.skipIf(!enabled)('ChildExecution PostgreSQL 持久化', () => {
   const database = enabled ? new DatabaseService() : undefined;
   const ownerId = randomUUID();
   const outsiderId = randomUUID();
@@ -183,33 +183,100 @@ describe.skipIf(!enabled)('IterationItemRun PostgreSQL 持久化', () => {
     };
   }
 
+  it('通用 ChildExecution 不需要 index，按 parent attempt / invocationKey 复用并独立维护生命周期', async () => {
+    const f = await fixture();
+    const owner = await parent(f);
+    const input = {
+      workflowRunId: f.run.id,
+      parentNodeRunId: owner.id,
+      parentNodeId: owner.nodeId,
+      kind: 'subworkflow',
+      invocationKey: 'fixed-call',
+      scopeKey: 'opaque-generic-1',
+      metadata: { label: 'child' },
+    };
+    const concurrent = await Promise.all(
+      Array.from({ length: 4 }, () => f.repository.getOrCreateChildExecutionRunning(input)),
+    );
+    expect(new Set(concurrent.map((child) => child.id)).size).toBe(1);
+    const child = concurrent[0]!;
+    expect(child).not.toHaveProperty('index');
+    expect(
+      (await db().childExecution.findUniqueOrThrow({ where: { id: child.id } })).index,
+    ).toBeNull();
+    expect(await f.repository.getChildExecutionById(child.id)).toEqual(child);
+    expect(
+      (await db().nodeRun.findUniqueOrThrow({ where: { id: owner.id } })).childExecutionId,
+    ).toBeNull();
+    const body = await parent(f, 'format', child.scopeKey, child.id);
+    expect(body.childExecutionId).toBe(child.id);
+    await expect(
+      f.repository.createRunning({
+        workflowRunId: f.run.id,
+        nodeId: body.nodeId,
+        occurrenceId: body.occurrenceId,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      f.repository.getOrCreateChildExecutionRunning({ ...input, scopeKey: 'changed' }),
+    ).rejects.toThrow();
+    await expect(
+      db().childExecution.create({
+        data: { ...input, id: randomUUID(), projectId, scopeKey: 'another' },
+      }),
+    ).rejects.toThrow();
+    const attempt2 = await parent(f);
+    const second = await f.repository.getOrCreateChildExecutionRunning({
+      ...input,
+      parentNodeRunId: attempt2.id,
+      scopeKey: 'opaque-generic-2',
+    });
+    expect(second.id).not.toBe(child.id);
+    await f.repository.markChildExecutionFailed(child.id, {
+      stage: 'execute',
+      message: 'child only',
+    });
+    expect((await db().nodeRun.findUniqueOrThrow({ where: { id: owner.id } })).status).toBe(
+      'running',
+    );
+    await f.repository.markChildExecutionCompleted(second.id);
+    expect((await f.repository.getChildExecutionById(second.id))?.status).toBe('completed');
+    await expect(f.repository.getOrCreateChildExecutionRunning(input)).rejects.toThrow();
+    const outsider = await fixture();
+    expect(await outsider.repository.getChildExecutionById(child.id)).toBeNull();
+    await expect(outsider.repository.markChildExecutionCompleted(second.id)).rejects.toThrow();
+  });
+
   it('真实编译执行 [A,B,C]，查询三个 item 与其 Body NodeRun，父 attempt 正确', async () => {
     const f = await fixture();
     const graph = await f.compiler.compile(f.definition, f.run);
     await graph.invoke(f.initial, { ...f.config, maxConcurrency: 3 });
-    const items = await db().iterationItemRun.findMany({
+    const items = await db().childExecution.findMany({
       where: { workflowRunId: f.run.id },
       orderBy: { index: 'asc' },
-      include: { bodyNodeRuns: true, iterationNodeRun: true },
+      include: { bodyNodeRuns: true, parentNodeRun: true },
     });
     expect(items).toHaveLength(3);
     expect(items.map((item) => item.index)).toEqual([0, 1, 2]);
-    expect(new Set(items.map((item) => item.iterationNodeRunId)).size).toBe(1);
+    expect(items.map((item) => [item.kind, item.invocationKey, item.metadata])).toEqual(
+      [0, 1, 2].map((index) => ['iteration_item', `iteration-item:${index}`, { index }]),
+    );
+    expect(new Set(items.map((item) => item.parentNodeRunId)).size).toBe(1);
     for (const item of items) {
       expect(item.status).toBe('completed');
       expect(item.completedAt).toBeInstanceOf(Date);
       expect(item.createdAt).toBeInstanceOf(Date);
       expect(item.startedAt).toBeInstanceOf(Date);
-      expect(item.iterationNodeRun).toMatchObject({
+      expect(item.parentNodeRun).toMatchObject({
         nodeId: 'iteration',
         attempt: 1,
         status: 'completed',
       });
       expect(item.bodyNodeRuns).toMatchObject([
         {
-          iterationItemRunId: item.id,
+          childExecutionId: item.id,
           status: 'completed',
-          inputs: { item: { value: ['A', 'B', 'C'][item.index] } },
+          inputs: { item: { value: ['A', 'B', 'C'][item.index!] } },
         },
       ]);
     }
@@ -237,7 +304,7 @@ describe.skipIf(!enabled)('IterationItemRun PostgreSQL 持久化', () => {
     try {
       await vi.waitFor(
         async () => {
-          const items = await db().iterationItemRun.findMany({
+          const items = await db().childExecution.findMany({
             where: { workflowRunId: f.run.id },
             orderBy: { index: 'asc' },
           });
@@ -249,7 +316,7 @@ describe.skipIf(!enabled)('IterationItemRun PostgreSQL 持久化', () => {
       fail();
     }
     await result;
-    const items = await db().iterationItemRun.findMany({
+    const items = await db().childExecution.findMany({
       where: { workflowRunId: f.run.id },
       orderBy: { index: 'asc' },
       include: { bodyNodeRuns: true },
@@ -258,7 +325,7 @@ describe.skipIf(!enabled)('IterationItemRun PostgreSQL 持久化', () => {
     for (const item of items) {
       expect(item.bodyNodeRuns).toMatchObject([
         {
-          iterationItemRunId: item.id,
+          childExecutionId: item.id,
           inputs: { index: { value: item.index } },
           status: item.status,
         },
@@ -271,7 +338,7 @@ describe.skipIf(!enabled)('IterationItemRun PostgreSQL 持久化', () => {
     f: Awaited<ReturnType<typeof fixture>>,
     nodeId = 'iteration',
     scopeKey = 'root',
-    iterationItemRunId?: string,
+    childExecutionId?: string,
   ) {
     const occurrence = await f.repository.getOrCreateOccurrence({
       workflowRunId: f.run.id,
@@ -282,7 +349,7 @@ describe.skipIf(!enabled)('IterationItemRun PostgreSQL 持久化', () => {
       workflowRunId: f.run.id,
       nodeId,
       occurrenceId: occurrence.id,
-      ...(iterationItemRunId ? { iterationItemRunId } : {}),
+      ...(childExecutionId ? { childExecutionId } : {}),
     });
   }
   function itemInput(
@@ -292,8 +359,8 @@ describe.skipIf(!enabled)('IterationItemRun PostgreSQL 持久化', () => {
   ) {
     return {
       workflowRunId: f.run.id,
-      iterationNodeRunId: node.id,
-      iterationNodeId: node.nodeId,
+      parentNodeRunId: node.id,
+      parentNodeId: node.nodeId,
       index,
       scopeKey: deriveChildScope(node.scopeKey, {
         kind: 'iteration_item',
@@ -318,7 +385,7 @@ describe.skipIf(!enabled)('IterationItemRun PostgreSQL 持久化', () => {
       Array.from({ length: 4 }, () => parent(f, 'episode', item.scopeKey, item.id)),
     );
     expect(bodies.map((row) => row.attempt).sort()).toEqual([1, 2, 3, 4]);
-    expect(bodies.every((row) => row.iterationItemRunId === item.id)).toBe(true);
+    expect(bodies.every((row) => row.childExecutionId === item.id)).toBe(true);
     const second = await parent(f);
     expect(second.attempt).toBe(2);
     const next = await f.repository.getOrCreateIterationItemRunning(itemInput(f, second, 0));
@@ -336,20 +403,20 @@ describe.skipIf(!enabled)('IterationItemRun PostgreSQL 持久化', () => {
     const row = await db().nodeRun.findUniqueOrThrow({
       where: { id: leaf.id },
       include: {
-        iterationItemRun: {
+        childExecution: {
           include: {
-            iterationNodeRun: {
-              include: { iterationItemRun: { include: { iterationNodeRun: true } } },
+            parentNodeRun: {
+              include: { childExecution: { include: { parentNodeRun: true } } },
             },
           },
         },
       },
     });
-    expect(row.iterationItemRun).toMatchObject({
+    expect(row.childExecution).toMatchObject({
       index: 5,
-      iterationNodeRun: {
+      parentNodeRun: {
         id: b.id,
-        iterationItemRun: { index: 2, iterationNodeRun: { id: a.id } },
+        childExecution: { index: 2, parentNodeRun: { id: a.id } },
       },
     });
   });
@@ -381,27 +448,43 @@ describe.skipIf(!enabled)('IterationItemRun PostgreSQL 持久化', () => {
       f.repository.getOrCreateIterationItemRunning({ ...itemInput(f, p, 2), scopeKey: 'forged' }),
     ).rejects.toThrow();
     await expect(
-      db().nodeRun.create({ data: { ...bodyData, iterationItemRunId: two.id } }),
+      db().nodeRun.create({ data: { ...bodyData, childExecutionId: two.id } }),
     ).rejects.toThrow();
     await expect(db().nodeRun.create({ data: bodyData })).rejects.toThrow();
     const body = await parent(f, 'episode', one.scopeKey, one.id);
     await expect(
-      db().nodeRun.update({ where: { id: body.id }, data: { iterationItemRunId: two.id } }),
+      db().nodeRun.update({ where: { id: body.id }, data: { childExecutionId: two.id } }),
     ).rejects.toThrow();
     await expect(
-      db().iterationItemRun.update({ where: { id: one.id }, data: { index: 8 } }),
+      db().childExecution.update({ where: { id: one.id }, data: { index: 8 } }),
     ).rejects.toThrow();
     await expect(
-      db().iterationItemRun.create({ data: { ...itemInput(f, p, 2), index: -1, projectId } }),
+      db().childExecution.create({
+        data: {
+          ...itemInput(f, p, 2),
+          index: -1,
+          projectId,
+          kind: 'iteration_item',
+          invocationKey: 'iteration-item:-1',
+          metadata: { index: -1 },
+        },
+      }),
     ).rejects.toThrow();
     await expect(
-      db().iterationItemRun.create({
-        data: { ...itemInput(f, p, 2), projectId, workflowRunId: other.run.id },
+      db().childExecution.create({
+        data: {
+          ...itemInput(f, p, 2),
+          projectId,
+          workflowRunId: other.run.id,
+          kind: 'iteration_item',
+          invocationKey: 'iteration-item:2',
+          metadata: { index: 2 },
+        },
       }),
     ).rejects.toThrow();
     await f.repository.markIterationItemCompleted(one.id);
     await expect(
-      db().iterationItemRun.update({
+      db().childExecution.update({
         where: { id: one.id },
         data: { status: 'running', completedAt: null },
       }),
@@ -414,17 +497,17 @@ describe.skipIf(!enabled)('IterationItemRun PostgreSQL 持久化', () => {
       f.repository.markIterationItemFailed(two.id, error),
       f.repository.markIterationItemFailed(two.id, error),
     ]);
-    expect(await db().iterationItemRun.findUnique({ where: { id: two.id } })).toMatchObject({
+    expect(await db().childExecution.findUnique({ where: { id: two.id } })).toMatchObject({
       status: 'failed',
     });
     await expect(
-      db().iterationItemRun.update({
+      db().childExecution.update({
         where: { id: two.id },
         data: { error: { stage: 'execute', message: '改写' } },
       }),
     ).rejects.toThrow();
     await db().workflowRun.delete({ where: { id: f.run.id } });
-    expect(await db().iterationItemRun.count({ where: { workflowRunId: f.run.id } })).toBe(0);
+    expect(await db().childExecution.count({ where: { workflowRunId: f.run.id } })).toBe(0);
     expect(await db().nodeRun.count({ where: { workflowRunId: f.run.id } })).toBe(0);
   });
 });

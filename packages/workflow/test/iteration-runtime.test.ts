@@ -63,7 +63,17 @@ describe('正式 Iteration Send + body subgraph', () => {
       expect(f.nodeRuns.getRecords().filter((row) => row.nodeId === 'iteration')).toMatchObject([
         { attempt: 1, status: 'completed' },
       ]);
-      expect(f.nodeRuns.getItemRecords()).toHaveLength(count);
+      const children = f.nodeRuns.getItemRecords();
+      expect(children).toHaveLength(count);
+      expect(new Set(children.map((child) => child.id)).size).toBe(count);
+      expect(children.map((child) => Number(child.metadata.index)).sort((a, b) => a - b)).toEqual(
+        Array.from({ length: count }, (_, index) => index),
+      );
+      for (const child of children) {
+        expect(child.kind).toBe('iteration_item');
+        expect(child.invocationKey).toBe(`iteration-item:${child.metadata.index}`);
+        expect(rows.find((row) => row.childExecutionId === child.id)).toBeDefined();
+      }
       const owner = f.nodeRuns.getOrCreateOccurrence.mock.calls
         .map((call) => call[0])
         .find((input) => input.nodeId === 'iteration');

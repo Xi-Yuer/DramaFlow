@@ -43,6 +43,15 @@
       "dependsOn": ["^build"],
       "outputs": [],
       "cache": false
+    },
+    "@dramaflow/database#test": {
+      "dependsOn": ["build", "@dramaflow/contracts#build"],
+      "outputs": [],
+      "cache": false
+    },
+    "@dramaflow/database#typecheck": {
+      "dependsOn": ["build", "@dramaflow/contracts#build"],
+      "outputs": []
     }
   }
 }

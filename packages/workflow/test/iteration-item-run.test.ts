@@ -14,7 +14,7 @@ import { arrayType, iterationRuntimeFixture } from './iteration-runtime-fixture.
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-describe('IterationItemRun identity 与生命周期', () => {
+describe('ChildExecution identity 与生命周期', () => {
   it('[A, B, C] 创建三个正式 item，Body NodeRun 按外键关联，同属一次父 NodeRun', async () => {
     const f = iterationRuntimeFixture();
     f.registry.register({
@@ -67,14 +67,14 @@ describe('IterationItemRun identity 与生命周期', () => {
     const items = f.nodeRuns.getItemRecords();
     const nodes = f.nodeRuns.getRecords();
     const parent = nodes.find((row) => row.nodeId === 'iteration')!;
-    expect(items.map((item) => item.index).sort()).toEqual([0, 1, 2]);
+    expect(items.map((item) => Number(item.metadata.index)).sort()).toEqual([0, 1, 2]);
     expect(new Set(items.map((item) => item.id)).size).toBe(3);
     expect(new Set(items.map((item) => item.scopeKey)).size).toBe(3);
     for (const item of items) {
       expect(item).toMatchObject({
         workflowRunId: f.run.id,
-        iterationNodeRunId: parent.id,
-        iterationNodeId: 'iteration',
+        parentNodeRunId: parent.id,
+        parentNodeId: 'iteration',
         status: 'completed',
         createdAt: expect.any(String),
         startedAt: expect.any(String),
@@ -82,13 +82,13 @@ describe('IterationItemRun identity 与生命周期', () => {
       });
       expect(item).not.toHaveProperty('inputs');
       expect(item).not.toHaveProperty('outputs');
-      const body = nodes.filter((row) => row.iterationItemRunId === item.id);
+      const body = nodes.filter((row) => row.childExecutionId === item.id);
       expect(body).toHaveLength(1);
       expect(body[0]).toMatchObject({
         nodeId: 'episode',
         scopeKey: item.scopeKey,
         attempt: 1,
-        inputs: { item: { value: ['A', 'B', 'C'][item.index] } },
+        inputs: { item: { value: ['A', 'B', 'C'][Number(item.metadata.index)] } },
       });
     }
   });
@@ -119,8 +119,8 @@ describe('IterationItemRun identity 与生命周期', () => {
     await running;
     for (const item of f.nodeRuns.getItemRecords()) {
       expect(item.status).toBe('completed');
-      const body = f.nodeRuns.getRecords().find((row) => row.iterationItemRunId === item.id)!;
-      expect(body.inputs?.index).toMatchObject({ value: item.index });
+      const body = f.nodeRuns.getRecords().find((row) => row.childExecutionId === item.id)!;
+      expect(body.inputs?.index).toMatchObject({ value: Number(item.metadata.index) });
       expect(body.scopeKey).toBe(item.scopeKey);
     }
   });
@@ -138,11 +138,13 @@ describe('IterationItemRun identity 与生命周期', () => {
     await expect(compiled.invoke(f.initial(), f.config)).rejects.toMatchObject({
       code: 'NODE_EXECUTION_FAILED',
     });
-    const items = f.nodeRuns.getItemRecords().sort((a, b) => a.index - b.index);
+    const items = f.nodeRuns
+      .getItemRecords()
+      .sort((a, b) => Number(a.metadata.index) - Number(b.metadata.index));
     expect(items.map((row) => row.status)).toEqual(['completed', 'failed', 'completed']);
     for (const item of items) {
-      const body = f.nodeRuns.getRecords().find((row) => row.iterationItemRunId === item.id)!;
-      expect(body.inputs?.index).toMatchObject({ value: item.index });
+      const body = f.nodeRuns.getRecords().find((row) => row.childExecutionId === item.id)!;
+      expect(body.inputs?.index).toMatchObject({ value: Number(item.metadata.index) });
       expect(body.status).toBe(item.status);
     }
     expect(f.nodeRuns.getRecords().find((row) => row.nodeId === 'iteration')?.status).toBe(
@@ -163,7 +165,7 @@ describe('IterationItemRun identity 与生命周期', () => {
     await expect(compiled.invoke(f.initial(), f.config)).rejects.toBeInstanceOf(AggregateError);
     expect(f.nodeRuns.getItemRecords()).toMatchObject([{ status: 'failed' }]);
     const body = f.nodeRuns.getRecords().filter((row) => row.nodeId !== 'iteration');
-    expect(new Set(body.map((row) => row.iterationItemRunId)).size).toBe(1);
+    expect(new Set(body.map((row) => row.childExecutionId)).size).toBe(1);
     expect(body.every((row) => row.status === 'failed')).toBe(true);
   });
 
@@ -244,7 +246,7 @@ describe('IterationItemRun identity 与生命周期', () => {
     const create = f.nodeRuns.createRunning.getMockImplementation()!;
     const failure = new Error('Body 审计创建不可用');
     f.nodeRuns.createRunning.mockImplementation(async (input) => {
-      if (input.iterationItemRunId) throw failure;
+      if (input.childExecutionId) throw failure;
       return create(input);
     });
     const graph = await f.createCompiler().compile(f.definition, f.run);
@@ -261,8 +263,8 @@ describe('IterationItemRun identity 与生命周期', () => {
     f.nodeRuns.markIterationItemFailed.mockRejectedValue(recording);
     const graph = await f.createCompiler().compile(f.definition, f.run);
     await expect(graph.invoke(f.initial(), f.config)).rejects.toMatchObject({
-      name: 'IterationItemRunRecordingError',
-      iterationItemRunId: expect.any(String),
+      name: 'ChildExecutionRecordingError',
+      childExecutionId: expect.any(String),
       executionError: { cause: business },
       recordingError: recording,
     });

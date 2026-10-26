@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { runtimeValueMapSchema } from '../data/runtime-value.js';
-import { workflowIdentifierSchema } from './metadata.js';
+import { workflowIdentifierSchema, workflowPortNameSchema } from './metadata.js';
 
 export const ROOT_EXECUTION_SCOPE_KEY = 'root';
 // 产品执行作用域标识，不是 LangGraph task / checkpoint namespace。
@@ -33,7 +33,7 @@ export const nodeRunSchema = z
     nodeId: workflowIdentifierSchema,
     occurrenceId: workflowIdentifierSchema,
     scopeKey: executionScopeKeySchema,
-    iterationItemRunId: workflowIdentifierSchema.optional(),
+    childExecutionId: workflowIdentifierSchema.optional(),
     attempt: z.number().int().positive(),
     status: nodeRunStatusSchema,
     inputs: runtimeValueMapSchema.optional(),
@@ -48,15 +48,29 @@ export type NodeRunStatus = z.infer<typeof nodeRunStatusSchema>;
 export type NodeRunError = z.infer<typeof nodeRunErrorSchema>;
 export type NodeRun = z.infer<typeof nodeRunSchema>;
 
-// 只保存执行身份与生命周期；item 内容沿用输入 RuntimeValue / checkpoint，不复制 payload。
-export const iterationItemRunSchema = z
+export const executionStructuralMetadataSchema = z
+  .record(
+    workflowPortNameSchema,
+    z.union([z.string().max(200), z.number().finite(), z.boolean(), z.null()]),
+  )
+  .refine((value) => Object.keys(value).length <= 16, '执行结构信息最多 16 项');
+
+// Iteration-specific extension；不会要求其他 ChildExecution 具有 index。
+export const iterationItemExecutionMetadataSchema = z.object({
+  index: z.number().int().min(0).max(2147483647),
+});
+
+// 正式子图调用身份与生命周期；metadata 仅为结构信息，不复制 item payload。
+export const childExecutionSchema = z
   .object({
     id: workflowIdentifierSchema,
     workflowRunId: workflowIdentifierSchema,
-    iterationNodeRunId: workflowIdentifierSchema,
-    iterationNodeId: workflowIdentifierSchema,
+    parentNodeRunId: workflowIdentifierSchema,
+    parentNodeId: workflowIdentifierSchema,
     scopeKey: executionScopeKeySchema,
-    index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    kind: workflowIdentifierSchema,
+    invocationKey: workflowIdentifierSchema,
+    metadata: executionStructuralMetadataSchema,
     status: nodeRunStatusSchema,
     createdAt: z.iso.datetime(),
     startedAt: z.iso.datetime(),
@@ -64,4 +78,4 @@ export const iterationItemRunSchema = z
     error: nodeRunErrorSchema.optional(),
   })
   .strict();
-export type IterationItemRun = z.infer<typeof iterationItemRunSchema>;
+export type ChildExecution = z.infer<typeof childExecutionSchema>;

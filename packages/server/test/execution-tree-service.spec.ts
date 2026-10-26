@@ -29,7 +29,7 @@ function fixture(authorized = true) {
       findFirst: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
     },
-    iterationItemRun: {
+    childExecution: {
       findFirst: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
     },
@@ -54,7 +54,7 @@ describe('Execution Tree 统一授权与失败边界', () => {
       project: { ownerId: 'owner' },
     });
     expect(f.tx.nodeRun.findMany.mock.calls[0]![0]).toMatchObject({
-      where: { projectId: 'project', workflowRunId: 'run', iterationItemRunId: null },
+      where: { projectId: 'project', workflowRunId: 'run', childExecutionId: null },
       take: 51,
     });
     expect(f.transaction).toHaveBeenCalledWith(expect.any(Function), {
@@ -67,7 +67,7 @@ describe('Execution Tree 统一授权与失败边界', () => {
       status: 404,
       response: { code: 'WORKFLOW_RUN_NOT_FOUND' },
     });
-    for (const delegate of [f.tx.nodeRun, f.tx.iterationItemRun]) {
+    for (const delegate of [f.tx.nodeRun, f.tx.childExecution]) {
       expect(delegate.findFirst).not.toHaveBeenCalled();
       expect(delegate.findMany).not.toHaveBeenCalled();
     }
@@ -97,7 +97,7 @@ describe('Execution Tree 统一授权与失败边界', () => {
         workflowRunId: 'run',
         nodeId: 'same',
         occurrenceId: 'o',
-        iterationItemRunId: null,
+        childExecutionId: null,
         occurrence: {
           id: 'o',
           projectId: 'project',
@@ -105,7 +105,7 @@ describe('Execution Tree 统一授权与失败边界', () => {
           nodeId: 'same',
           scopeKey: 'private-orphan-scope',
         },
-        iterationItemRun: null,
+        childExecution: null,
       },
     ]);
     await expect(f.service.query('owner', 'run')).rejects.toMatchObject({
@@ -133,7 +133,7 @@ describe('Execution Tree 统一授权与失败边界', () => {
       workflowRunId: 'run',
       nodeId: 'local',
       occurrenceId: 'o',
-      iterationItemRunId: 'e',
+      childExecutionId: 'e',
       attempt: 1,
       status: 'running',
       error: null,
@@ -146,15 +146,15 @@ describe('Execution Tree 统一授权与失败边界', () => {
         nodeId: 'local',
         scopeKey: 'opaque',
       },
-      iterationItemRun: { id: 'e', projectId: 'project', workflowRunId: 'run', scopeKey: 'opaque' },
+      childExecution: { id: 'e', projectId: 'project', workflowRunId: 'run', scopeKey: 'opaque' },
     };
     for (const row of [
       { ...baseNode, occurrence: { ...baseNode.occurrence, nodeId: 'other' } },
-      { ...baseNode, iterationItemRun: null },
-      { ...baseNode, iterationItemRun: { ...baseNode.iterationItemRun, scopeKey: 'wrong' } },
+      { ...baseNode, childExecution: null },
+      { ...baseNode, childExecution: { ...baseNode.childExecution, scopeKey: 'wrong' } },
       {
         ...baseNode,
-        iterationItemRun: { ...baseNode.iterationItemRun, workflowRunId: 'other-run' },
+        childExecution: { ...baseNode.childExecution, workflowRunId: 'other-run' },
       },
     ]) {
       const f = fixture();
@@ -168,15 +168,15 @@ describe('Execution Tree 统一授权与失败边界', () => {
       });
     }
     const f = fixture();
-    f.tx.iterationItemRun.findFirst.mockResolvedValue({
+    f.tx.childExecution.findFirst.mockResolvedValue({
       id: 'e',
       projectId: 'project',
       workflowRunId: 'run',
-      iterationNodeRunId: 'owner',
-      iterationNodeId: 'A',
+      parentNodeRunId: 'owner',
+      parentNodeId: 'A',
       scopeKey: 'opaque',
       index: 0,
-      iterationNodeRun: { id: 'owner', nodeId: 'B', projectId: 'project', workflowRunId: 'run' },
+      parentNodeRun: { id: 'owner', nodeId: 'B', projectId: 'project', workflowRunId: 'run' },
     });
     const adapter = new PrismaExecutionTreeAdapter(f.tx as unknown as Prisma.TransactionClient, {
       projectId: 'project',
@@ -186,4 +186,41 @@ describe('Execution Tree 统一授权与失败边界', () => {
       code: 'INCONSISTENT',
     });
   });
+});
+
+it('通用 ChildExecution 无 index 也能投影，Tree DTO 不公开 invocation / scope / FK', async () => {
+  const f = fixture();
+  f.tx.childExecution.findFirst.mockResolvedValue({
+    id: 'call',
+    projectId: 'project',
+    workflowRunId: 'run',
+    parentNodeRunId: 'owner',
+    parentNodeId: 'A',
+    parentNodeRun: { id: 'owner', nodeId: 'A', projectId: 'project', workflowRunId: 'run' },
+    kind: 'subworkflow',
+    invocationKey: 'fixed',
+    scopeKey: 'opaque',
+    index: null,
+    metadata: { label: 'child' },
+    status: 'running',
+    error: null,
+    createdAt: time,
+    startedAt: time,
+    completedAt: null,
+  });
+  const adapter = new PrismaExecutionTreeAdapter(f.tx as unknown as Prisma.TransactionClient, {
+    projectId: 'project',
+    workflowRunId: 'run',
+  });
+  const projected = await adapter.get({ type: 'child_execution', id: 'call' });
+  expect(projected).toMatchObject({
+    type: 'child_execution',
+    id: 'call',
+    kind: 'subworkflow',
+    metadata: { label: 'child' },
+    parent: { type: 'node_run', id: 'owner' },
+  });
+  expect(JSON.stringify(projected)).not.toMatch(
+    /scopeKey|invocationKey|parentNodeRunId|childExecutionId/,
+  );
 });

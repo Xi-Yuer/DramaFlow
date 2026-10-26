@@ -50,16 +50,16 @@ export class NodeRunRecordingError extends NodeExecutionError {
   }
 }
 
-export class IterationItemRunRecordingError extends AggregateError {
+export class ChildExecutionRecordingError extends AggregateError {
   constructor(
-    public readonly iterationItemRunId: string,
+    public readonly childExecutionId: string,
     public readonly executionError: NodeExecutionError,
     public readonly recordingError: unknown,
   ) {
-    super([executionError, recordingError], 'Iteration item 失败，且失败记录写入也失败', {
+    super([executionError, recordingError], '子执行失败，且失败记录写入也失败', {
       cause: executionError,
     });
-    this.name = 'IterationItemRunRecordingError';
+    this.name = 'ChildExecutionRecordingError';
   }
 }
 

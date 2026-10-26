@@ -1,6 +1,11 @@
 import { z } from 'zod';
-import { workflowIdentifierSchema, workflowPortNameSchema } from './metadata.js';
-import { nodeRunSchema, nodeRunStatusSchema, nodeRunErrorSchema } from './node-run.js';
+import { workflowIdentifierSchema } from './metadata.js';
+import {
+  nodeRunSchema,
+  nodeRunStatusSchema,
+  nodeRunErrorSchema,
+  executionStructuralMetadataSchema,
+} from './node-run.js';
 import { workflowRunResponseSchema } from './workflow-run-api.js';
 
 const reference = <T extends string>(type: T) =>
@@ -35,12 +40,6 @@ export const executionTreeNodeSchema = nodeRunSchema
   })
   .strict();
 
-const structuralMetadataSchema = z
-  .record(
-    workflowPortNameSchema,
-    z.union([z.string().max(200), z.number().finite(), z.boolean(), z.null()]),
-  )
-  .refine((value) => Object.keys(value).length <= 16, '执行结构信息最多 16 项');
 export const executionTreeExecutionSchema = z
   .object({
     type: z.literal('child_execution'),
@@ -52,7 +51,7 @@ export const executionTreeExecutionSchema = z
     startedAt: z.iso.datetime(),
     completedAt: z.iso.datetime().optional(),
     error: nodeRunErrorSchema.optional(),
-    metadata: structuralMetadataSchema.optional(),
+    metadata: executionStructuralMetadataSchema.optional(),
   })
   .strict();
 export const executionTreeEntrySchema = z.discriminatedUnion('type', [

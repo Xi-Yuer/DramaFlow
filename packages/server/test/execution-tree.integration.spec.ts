@@ -49,7 +49,7 @@ describe.skipIf(!enabled)('只读 Execution Tree PostgreSQL Adapter', () => {
     f: Awaited<ReturnType<typeof fixture>>,
     nodeId: string,
     scopeKey = 'root',
-    iterationItemRunId?: string,
+    childExecutionId?: string,
   ) {
     const occurrence = await f.repository.getOrCreateOccurrence({
       workflowRunId: f.run.id,
@@ -60,14 +60,14 @@ describe.skipIf(!enabled)('只读 Execution Tree PostgreSQL Adapter', () => {
       workflowRunId: f.run.id,
       nodeId,
       occurrenceId: occurrence.id,
-      ...(iterationItemRunId ? { iterationItemRunId } : {}),
+      ...(childExecutionId ? { childExecutionId } : {}),
     });
   }
   async function item(repository: IterationRunRepository, parent: NodeRun, index: number) {
     return repository.getOrCreateIterationItemRunning({
       workflowRunId: parent.workflowRunId,
-      iterationNodeRunId: parent.id,
-      iterationNodeId: parent.nodeId,
+      parentNodeRunId: parent.id,
+      parentNodeId: parent.nodeId,
       index,
       scopeKey: deriveChildScope(parent.scopeKey, {
         kind: 'iteration_item',
@@ -105,7 +105,7 @@ describe.skipIf(!enabled)('只读 Execution Tree PostgreSQL Adapter', () => {
       { id: second.id, attempt: 2, occurrenceId: first.occurrenceId },
     ]);
     expect((await children(f.run.id, 'node_run', first.id)).items).toEqual([]);
-    expect(await db().iterationItemRun.count({ where: { workflowRunId: f.run.id } })).toBe(0);
+    expect(await db().childExecution.count({ where: { workflowRunId: f.run.id } })).toBe(0);
     expect(
       await db().nodeRun.findMany({
         where: { workflowRunId: f.run.id },
@@ -153,9 +153,9 @@ describe.skipIf(!enabled)('只读 Execution Tree PostgreSQL Adapter', () => {
     }
     const serialized = JSON.stringify(first);
     for (const field of [
-      'IterationItemRun',
-      'iterationItemRunId',
-      'iterationNodeRunId',
+      'ChildExecution',
+      'childExecutionId',
+      'parentNodeRunId',
       'scopeKey',
       'threadId',
       'checkpoint',

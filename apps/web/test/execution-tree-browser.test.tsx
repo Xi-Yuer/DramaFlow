@@ -290,7 +290,7 @@ describe('执行浏览模型', () => {
             {
               id: 'same',
               name: '甲',
-              composite: { body: { nodes: [{ id: 'same', name: '乙' }] } },
+              composite: { kind: 'iteration', body: { nodes: [{ id: 'same', name: '乙' }] } },
             },
           ],
         } as Pick<WorkflowDefinition, 'nodes'>),

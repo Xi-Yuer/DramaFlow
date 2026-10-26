@@ -1,7 +1,8 @@
 import { vi } from 'vitest';
-import type { IterationItemRun, NodeOccurrence, NodeRun } from '@dramaflow/contracts';
+import type { ChildExecution, NodeOccurrence, NodeRun } from '@dramaflow/contracts';
 import type {
   CreateNodeRunInput,
+  ChildExecutionRepository,
   IterationRunRepository,
   HumanReviewNodeRunRepository,
   NodeRunRepository,
@@ -57,7 +58,7 @@ export function auditedNodeRunRepositoryFixture() {
       workflowRunId: input.workflowRunId,
       nodeId: input.nodeId,
       occurrenceId: input.occurrenceId,
-      ...(input.iterationItemRunId ? { iterationItemRunId: input.iterationItemRunId } : {}),
+      ...(input.childExecutionId ? { childExecutionId: input.childExecutionId } : {}),
       scopeKey: repository.getOccurrence(input.occurrenceId).scopeKey,
       attempt,
       status: 'running' as const,
@@ -109,20 +110,21 @@ export function auditedNodeRunRepositoryFixture() {
         throw new Error('不能复用审核记录');
       return row ? structuredClone(row) : create(input, 1);
     });
-  const items = new Map<string, IterationItemRun>();
-  const getOrCreateIterationItemRunning = vi
-    .fn<IterationRunRepository['getOrCreateIterationItemRunning']>()
+  const items = new Map<string, ChildExecution>();
+  const getOrCreateChildExecutionRunning = vi
+    .fn<ChildExecutionRepository['getOrCreateChildExecutionRunning']>()
     .mockImplementation(async (input) => {
       const previous = [...items.values()].find(
-        (item) =>
-          item.iterationNodeRunId === input.iterationNodeRunId && item.index === input.index,
+        (child) =>
+          child.parentNodeRunId === input.parentNodeRunId &&
+          child.invocationKey === input.invocationKey,
       );
       if (previous) {
         if (previous.status !== 'running' || previous.scopeKey !== input.scopeKey)
-          throw new Error('Item 已结束');
+          throw new Error('Child 已结束');
         return structuredClone(previous);
       }
-      const row: IterationItemRun = {
+      const row: ChildExecution = {
         ...input,
         id: `item-run-${items.size + 1}`,
         status: 'running',
@@ -132,6 +134,16 @@ export function auditedNodeRunRepositoryFixture() {
       items.set(row.id, row);
       return structuredClone(row);
     });
+  const getOrCreateIterationItemRunning = vi
+    .fn<IterationRunRepository['getOrCreateIterationItemRunning']>()
+    .mockImplementation(async ({ index, ...input }) =>
+      getOrCreateChildExecutionRunning({
+        ...input,
+        kind: 'iteration_item',
+        invocationKey: `iteration-item:${index}`,
+        metadata: { index },
+      }),
+    );
   const markIterationItemCompleted = vi
     .fn<IterationRunRepository['markIterationItemCompleted']>()
     .mockImplementation(async (id) => {
@@ -150,11 +162,23 @@ export function auditedNodeRunRepositoryFixture() {
         row.error = structuredClone(error);
         row.completedAt = '2026-10-26T00:00:02.000Z';
       }
-      const parent = records.get(row.iterationNodeRunId)!;
+      const parent = records.get(row.parentNodeRunId)!;
       if (parent.status === 'running') await repository.markFailed(parent.id, error);
     });
   return {
     ...repository,
+    getOrCreateChildExecutionRunning,
+    getChildExecutionById: vi
+      .fn<ChildExecutionRepository['getChildExecutionById']>()
+      .mockImplementation(async (id) => structuredClone(items.get(id) ?? null)),
+    markChildExecutionCompleted: markIterationItemCompleted,
+    markChildExecutionFailed: vi
+      .fn<ChildExecutionRepository['markChildExecutionFailed']>()
+      .mockImplementation(async (id, error) => {
+        const row = items.get(id)!;
+        row.status = 'failed';
+        row.error = error;
+      }),
     getOrCreateIterationItemRunning,
     markIterationItemCompleted,
     markIterationItemFailed,
@@ -163,7 +187,7 @@ export function auditedNodeRunRepositoryFixture() {
     getRecords: () => structuredClone([...records.values()]),
   } satisfies HumanReviewNodeRunRepository &
     IterationRunRepository & {
-      getItemRecords(): IterationItemRun[];
+      getItemRecords(): ChildExecution[];
       getRecords(): NodeRun[];
     };
 }

@@ -12,9 +12,11 @@
   "scripts": {
     "generate": "prisma generate",
     "build": "prisma generate && tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "migrate:deploy": "prisma migrate deploy",
-    "migrate:dev": "prisma migrate dev"
+    "migrate:dev": "prisma migrate dev",
+    "test": "pnpm -w exec vitest run --root packages/database test",
+    "lint": "eslint src test"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",

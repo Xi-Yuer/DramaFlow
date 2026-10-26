@@ -19,7 +19,7 @@ import {
 import { createWorkflowDefinitionSnapshot } from '../definition/version.js';
 import { NodeRegistry } from '../node/registry.js';
 import type { HumanReviewNodeRunRepository } from '../run/node-run-repository.js';
-import type { IterationRunRepository } from '../run/iteration-item-run-repository.js';
+import type { IterationRunRepository } from '../run/iteration-execution-repository.js';
 import type { NodeExecutor } from '../runtime/node-executor.js';
 import { WorkflowStateAnnotation, type WorkflowState } from '../runtime/state.js';
 import { collectNodeDependencies, DependencyCompiler } from './dependency.compiler.js';

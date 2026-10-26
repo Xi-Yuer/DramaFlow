@@ -20,10 +20,10 @@ import {
   type LangGraphRunnableConfig,
 } from '@langchain/langgraph';
 import { NodeRegistry } from '../../node/registry.js';
-import type { IterationRunRepository } from '../../run/iteration-item-run-repository.js';
+import type { IterationRunRepository } from '../../run/iteration-execution-repository.js';
 import {
   failNodeRun,
-  IterationItemRunRecordingError,
+  ChildExecutionRecordingError,
   NodeExecutionError,
   NodeRunRecordingError,
   toNodeRunError,
@@ -124,7 +124,7 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
         try {
           await runs.markIterationItemFailed(itemId(state), toNodeRunError(cause));
         } catch (recordingError) {
-          throw new IterationItemRunRecordingError(itemId(state), cause, recordingError);
+          throw new ChildExecutionRecordingError(itemId(state), cause, recordingError);
         }
       }
       throw cause;
@@ -135,8 +135,8 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
       const invocation = itemInvocationSchema.parse(state[INVOCATION]);
       const item = await runs.getOrCreateIterationItemRunning({
         workflowRunId: run.id,
-        iterationNodeRunId: invocation.iterationNodeRunId,
-        iterationNodeId: node.id,
+        parentNodeRunId: invocation.iterationNodeRunId,
+        parentNodeId: node.id,
         scopeKey: invocation.scopeKey,
         index: invocation.index,
       });
@@ -155,7 +155,7 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
         executionContext: (config, state) => ({
           workflow: body,
           scopeKey: itemInvocationSchema.parse(state[INVOCATION]).scopeKey,
-          iterationItemRunId: itemId(state),
+          childExecutionId: itemId(state),
           runnableConfig: config,
         }),
         addNode: (id, execute) => {

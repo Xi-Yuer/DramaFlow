@@ -172,7 +172,7 @@ model WorkflowRun {
   project           Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   nodeRuns          NodeRun[]
   nodeOccurrences   NodeOccurrence[]
-  iterationItemRuns IterationItemRun[]
+  childExecutions   ChildExecution[]
   waitingRevision   Int                       @default(0)
   executions        WorkflowExecutionOutbox[]
   artifacts         Artifact[]
@@ -186,7 +186,7 @@ model WorkflowRun {
   @@map("workflow_run")
 }
 
-// scopeKey 当前为 root；未来由受信任的 scoped execution 显式提供，不解析其字符串结构。
+// root 或受信任子图调用的逻辑作用域；不解析 scope 字符串，不以其替代 ChildExecution 外键。
 model NodeOccurrence {
   id            String      @id @default(uuid()) @db.Uuid
   projectId     String      @db.Uuid
@@ -203,32 +203,32 @@ model NodeOccurrence {
 }
 
 model NodeRun {
-  id                 String             @id @default(uuid()) @db.Uuid
-  projectId          String             @db.Uuid
-  workflowRunId      String
-  nodeId             String
-  occurrenceId       String             @db.Uuid
-  iterationItemRunId String?            @db.Uuid
-  attempt            Int
-  status             String             @default("running")
-  inputs             Json?
-  outputs            Json?
-  error              Json?
-  startedAt          DateTime           @default(now())
-  completedAt        DateTime?
-  project            Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  workflowRun        WorkflowRun        @relation(fields: [workflowRunId, projectId], references: [id, projectId], onDelete: Cascade)
-  occurrence         NodeOccurrence     @relation(fields: [occurrenceId, workflowRunId, projectId, nodeId], references: [id, workflowRunId, projectId, nodeId], onDelete: Cascade, onUpdate: Restrict)
-  artifacts          Artifact[]
-  iterationItemRun   IterationItemRun?  @relation("BodyNodeRuns", fields: [iterationItemRunId, workflowRunId, projectId], references: [id, workflowRunId, projectId], onDelete: Cascade, onUpdate: Restrict)
-  iterationItems     IterationItemRun[] @relation("IterationOwner")
+  id               String           @id @default(uuid()) @db.Uuid
+  projectId        String           @db.Uuid
+  workflowRunId    String
+  nodeId           String
+  occurrenceId     String           @db.Uuid
+  childExecutionId String?          @db.Uuid
+  attempt          Int
+  status           String           @default("running")
+  inputs           Json?
+  outputs          Json?
+  error            Json?
+  startedAt        DateTime         @default(now())
+  completedAt      DateTime?
+  project          Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowRun      WorkflowRun      @relation(fields: [workflowRunId, projectId], references: [id, projectId], onDelete: Cascade)
+  occurrence       NodeOccurrence   @relation(fields: [occurrenceId, workflowRunId, projectId, nodeId], references: [id, workflowRunId, projectId, nodeId], onDelete: Cascade, onUpdate: Restrict)
+  artifacts        Artifact[]
+  childExecution   ChildExecution?  @relation("ChildExecutionNodes", fields: [childExecutionId, workflowRunId, projectId], references: [id, workflowRunId, projectId], onDelete: Cascade, onUpdate: Restrict)
+  childExecutions  ChildExecution[] @relation("ChildExecutionOwner")
 
   @@unique([id, workflowRunId, projectId, nodeId])
   @@unique([id, workflowRunId, projectId])
   @@unique([occurrenceId, attempt])
   @@index([workflowRunId])
   @@index([workflowRunId, nodeId])
-  @@index([iterationItemRunId])
+  @@index([childExecutionId])
   @@index([projectId, workflowRunId])
   @@map("node_run")
 }
@@ -322,27 +322,31 @@ model WorkflowExecutionOutbox {
   @@map("workflow_execution_outbox")
 }
 
-// 父 NodeRun 是本次 Iteration attempt；其可选 iterationItemRun 构成嵌套父链。
-model IterationItemRun {
-  id                 String      @id @default(uuid()) @db.Uuid
-  projectId          String      @db.Uuid
-  workflowRunId      String
-  iterationNodeRunId String      @db.Uuid
-  iterationNodeId    String
-  scopeKey           String
-  index              Int
-  status             String      @default("running")
-  error              Json?
-  createdAt          DateTime    @default(now())
-  startedAt          DateTime    @default(now())
-  completedAt        DateTime?
-  workflowRun        WorkflowRun @relation(fields: [workflowRunId, projectId], references: [id, projectId], onDelete: Cascade)
-  iterationNodeRun   NodeRun     @relation("IterationOwner", fields: [iterationNodeRunId, workflowRunId, projectId, iterationNodeId], references: [id, workflowRunId, projectId, nodeId], onDelete: Cascade, onUpdate: Restrict)
-  bodyNodeRuns       NodeRun[]   @relation("BodyNodeRuns")
+// 一次具体父 NodeRun attempt 发起的子图执行；index 仅为 Iteration 的 typed extension。
+model ChildExecution {
+  id              String      @id @default(uuid()) @db.Uuid
+  projectId       String      @db.Uuid
+  workflowRunId   String
+  parentNodeRunId String      @db.Uuid
+  parentNodeId    String
+  scopeKey        String
+  index           Int?
+  kind            String
+  invocationKey   String
+  metadata        Json
+  status          String      @default("running")
+  error           Json?
+  createdAt       DateTime    @default(now())
+  startedAt       DateTime    @default(now())
+  completedAt     DateTime?
+  workflowRun     WorkflowRun @relation(fields: [workflowRunId, projectId], references: [id, projectId], onDelete: Cascade)
+  parentNodeRun   NodeRun     @relation("ChildExecutionOwner", fields: [parentNodeRunId, workflowRunId, projectId, parentNodeId], references: [id, workflowRunId, projectId, nodeId], onDelete: Cascade, onUpdate: Restrict)
+  bodyNodeRuns    NodeRun[]   @relation("ChildExecutionNodes")
 
-  @@unique([iterationNodeRunId, index])
+  @@unique([parentNodeRunId, index])
+  @@unique([parentNodeRunId, invocationKey])
   @@unique([workflowRunId, scopeKey])
   @@unique([id, workflowRunId, projectId])
   @@index([workflowRunId])
-  @@map("iteration_item_run")
+  @@map("child_execution")
 }
