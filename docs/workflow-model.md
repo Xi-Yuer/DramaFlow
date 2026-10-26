@@ -44,6 +44,8 @@ Repository 不判断等价性；运行身份与 inputs 不可改写。lookup 只
 
 inputs / outputs 为 RuntimeValue map，error 仅含安全 stage / 可选 code / message。提交只保存 pending 与 start 意图，恢复只建当前 waiting 周期的唯一意图；执行时 claim。resume 使用原 Run / version / thread，不创建新 invocation，非 waiting 明确拒绝。Human Review 产品 HTTP 使用 Pending 查询返回的 opaque interruptId / waitingRevision，以及严格 approve / reject decision；旧周期请求明确冲突，已提交决策不能修改。具体 HTTP 及 Outbox 边界见[当前架构](architecture.md#human-review-查询与恢复)。
 
+运行树通过统一只读 Execution Tree 接口逐层查询，以明确的 parent 引用关联实际 NodeRun 与子执行；不从数据输出或 DAG 推断已执行层级，协议与分页见[当前架构](architecture.md#execution-tree-只读查询)。
+
 ## 图与组合
 
 Workflow 的通用性与业务边界遵循[平台原则](platform-model.md#workflow-通用性与业务解耦)。宏观业务流程由节点、边、绑定及控制节点组合，Definition 不携带具体业务的隐式执行规则。

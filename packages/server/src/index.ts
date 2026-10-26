@@ -52,3 +52,5 @@ export {
   WorkflowHumanReviewService,
   HumanReviewStateError,
 } from './workflow/human-review.service.js';
+export { WorkflowExecutionTreeModule } from './workflow/execution-tree/workflow-execution-tree.module.js';
+export { WorkflowExecutionTreeService } from './workflow/execution-tree/workflow-execution-tree.service.js';

@@ -4,7 +4,7 @@
 
 ## 编译与执行分离
 
-核心基础设施遵循[通用性与业务解耦原则](platform-model.md#workflow-通用性与业务解耦)。Binding 解析本图的显式数据来源，Executor 执行当前节点，Composite Strategy 解释控制语义；都不解释剧集、章节、商品或广告。共享子图执行归属与查询应逐步使用通用机制，当前 `iterationItemRunId` 的依赖及边界见[执行归属审计](architecture.md#execution-归属审计)；推荐设计见[实施方案](implementation-plan.md#execution-tree-演进设计)，尚未实现通用 ExecutionScope 或 Run Tree DTO。
+核心基础设施遵循[通用性与业务解耦原则](platform-model.md#workflow-通用性与业务解耦)。Binding 解析本图的显式数据来源，Executor 执行当前节点，Composite Strategy 解释控制语义；都不解释剧集、章节、商品或广告。共享子图执行归属与查询应逐步使用通用机制，当前 `iterationItemRunId` 的依赖及边界见[执行归属审计](architecture.md#execution-归属审计)；推荐设计见[实施方案](implementation-plan.md#execution-tree-演进设计)，通用只读 Run Tree DTO / 查询已实现，见[查询边界](architecture.md#execution-tree-只读查询)；通用 ExecutionScope 持久化尚未实现。
 
 Compiler 冻结定义、校验精确 Registry 版本并连接依赖与 START / END；不创建 Run / thread 或执行业务。普通 Action 只实现 execute，经编译 wrapper 调用统一 NodeExecutor；其他 executionKind 必须使用独立策略。
 

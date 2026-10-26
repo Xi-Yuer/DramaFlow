@@ -12,7 +12,7 @@ Human Review 第五阶段已接入现有 Run 面板的单个文本审批闭环�
 
 Canvas 小范围视觉优化待人工验收：运行焦点、人工等待、失败辨识、多个完成节点的安静程度，以及大量 DataEdge 的方向流动强度、ControlEdge 静态表现和投影标识。实现范围见[当前架构](architecture.md#canvas-运行态与连线表现)，不扩展 Editor 功能或执行语义。
 
-Iteration 单 item 持久化进入交付验收；能力与约束见[当前架构](architecture.md#iteration-item-run)。后续 Item 列表、详情、单 item retry / resume、嵌套 Iteration 执行仍需独立任务。
+Iteration 单 item 持久化与通用 Execution Tree 只读查询进入交付验收；能力与约束见[当前架构](architecture.md#execution-tree-只读查询)。后续 Web 运行树、单 item retry / resume、通用 scope 持久化及嵌套 Iteration 执行仍需独立任务。
 
 ## 待决策与后续边界
 
@@ -24,7 +24,7 @@ Iteration 单 item 持久化进入交付验收；能力与约束见[当前架构
 
 ## Execution Tree 演进设计
 
-本节是基于[当前执行归属审计](architecture.md#execution-归属审计)的推荐设计，尚未实现，也不授权迁移、运行入口或新 Composite。本次保留 IterationItemRun、NodeRun 归属字段、现有 checkpoint 与 schema。长期遵循[业务解耦原则](platform-model.md#workflow-通用性与业务解耦)，复用身份和审计，不另建调度器。
+本节是基于[当前执行归属审计](architecture.md#execution-归属审计)的后续持久化推荐设计；只读查询已交付，见[当前架构](architecture.md#execution-tree-只读查询)。通用 scope、迁移和新 Composite 尚未实施，本方案不构成授权。现有 IterationItemRun、NodeRun 归属字段、checkpoint 与 schema 保持不变。长期遵循[业务解耦原则](platform-model.md#workflow-通用性与业务解耦)，复用身份和审计，不另建调度器。
 
 ### 结论与模型定位
 
@@ -88,17 +88,13 @@ Run Tree 是领域审计的查询投影，不是 LangGraph task tree，也不是
 
 Retry / Resume 将来复用这套身份、授权、审计及查询骨架，执行与 checkpoint 路由仍归原引擎和明确策略。审计与 checkpoint 不构成跨系统原子提交；崩溃 / 受理不明仍需 recovery_required 与对账，不能因树中存在 failed / running 记录就自动重放收费调用。当前 Human Review 的根 checkpoint 查询及单 pending 门禁不能据此宣称已支持 nested resume。
 
-### 统一 Run Tree DTO
+### 已交付的查询边界
 
-建议协议在 contracts 中定义与存储模型分离的查询投影，条目只区分 `workflow_run`、`node_run`、`child_execution` 等结构角色，带稳定 id 和显式 parentRef。Node 条目保留 occurrenceId / attempt，Child 条目带通用 kind、生命周期和可选 display / typed extension；定义定位来自不可变定义，不能取 draft 或解析 scopeKey。树形 UI 只沿 parentRef 遍历；特定 extension 只增强显示，不决定走哪个查询 API。
-
-近期 adapter 可以把 WorkflowRun 投影为根、root NodeRun 挂根、IterationItemRun 投影为 child_execution、Body NodeRun 按真实 iterationItemRunId 挂对应 child。新 DTO 的 child id 可直接保留 ItemRun.id，角色区分 id 类型，不必伪造一份已持久化的 ExecutionScope；旧的 node-runs API 保持兼容。遇到孤儿、跨 Run、循环或无法解析的归属应明确报错，不能归到 root 或按最大 attempt 猜测。空 items 返回父 NodeRun 与空 child 列表，已开始但尚无 Body NodeRun 的 item 仍能独立出现。
-
-查询服务统一做 User → Project → Run 授权，再读取持久化父链；Root 与局部同名 nodeId 不能合并。采用根层 / 指定 parent 的逐层加载，固定排序与有界分页，不把无限递归、完整 Definition、RuntimeValue payload、thread、checkpoint namespace、原生 task 或 interrupt token 暴露为 Tree 数据。未来切换存储适配器时保持 DTO 身份和关系稳定，Web 无需分别调用 IterationItemRun / SubWorkflowRun / LoopRun 接口。
+通用 DTO、当前 Prisma source adapter 与统一只读 HTTP 查询已实施，字段、权限、逐层分页、错误及限制只维护在[当前架构](architecture.md#execution-tree-只读查询)。后续通用 scope 迁移必须维持该 DTO 的稳定身份与显式父子关系；不能把存储类型、scopeKey 或 checkpoint token 重新带回查询协议，也不能要求 Web 改成逐种 Composite 查询。
 
 ### 渐进迁移顺序
 
-1. 先实现下述只读 Run Tree DTO 与投影，以现有记录验证通用查询边界；不改写执行记录，不建立替代调度，不开启新 Composite。
+1. 只读 Run Tree DTO 与投影已经实施，以现有记录验证了通用查询边界；后续持久化演进从下一步开始，不借查询入口改写记录、建立替代调度或开启新 Composite。
 2. 再独立确定通用 scope 的持久化 Contract / schema、root 身份、定义定位与 Iteration extension。新增前验证 owner、scope、occurrence 的同 Run / 项目一致性和无环父链；保留现有 ItemRun ID 或建立明确的一对一映射。
 3. 迁移 root 与现有 ItemRun：root occurrence 归到所属 Run 的根 scope，Body occurrence 通过 Run / scopeKey 与 ItemRun 的已有精确关系映射。保留 NodeRun / occurrence / attempt / Artifact ID 和内容、输入输出、时间与错误；index 保留在 extension，不从日志或数组重新猜身份。过渡数据写入须可核对且有单一权威，不能长期维护两份独立生命周期。
 4. 将通用 Executor context、CreateNodeRunInput、Repository 外键校验及记录错误切换为中立 scope 归属；Iteration Strategy 通过 adapter 提供 index 等专属信息。query adapter 改读新归属，但统一 DTO 与旧接口兼容投影不变；再逐个收敛旧专用字段。
@@ -106,6 +102,4 @@ Retry / Resume 将来复用这套身份、授权、审计及查询骨架，执�
 
 ### 下一步最小独立实施任务
 
-**新增只读、通用的 Execution Tree 查询投影。** 范围限于中立 Tree DTO、读取现有 WorkflowRun / NodeRun / IterationItemRun 的 query adapter，以及一个统一授权、逐层查询的 HTTP 入口。现有 ItemRun.id 作为 child_execution id，父子关系必须来自外键。无需先改 schema、Executor 或 Iteration Strategy，不实现 Web 列表、详情、Retry / Resume、新控制节点或新的运行写入口。
-
-验收覆盖 root / Body 同名 nodeId、不同行级 attempt、并行 item 的不同状态、嵌套父链、空集合 / 尚无 Body NodeRun 的 item、权限隔离、有界分页与非法归属报错；普通数组 Action 没有 child。另用查询层测试数据表示一个非 Iteration 的 child_execution，证明遍历 / DTO 不依赖 kind 分支；这是查询协议测试，不能充当尚未实现的 Composite Runtime。对生产 schema / Execution 路径零改动后即可独立交付，为后续持久化泛化提供可评审的消费边界。本次只记录该任务，不实施。
+**实现 Web 通用运行树的只读浏览。** 复用现有 Execution Tree DTO 和逐层分页入口，按显式父引用展开 NodeRun / Child Execution，显示各自真实状态和 attempt；不按 Iteration 存储类型选择查询，不解析 scopeKey，不从数组或 DAG 猜执行事实。范围仅限读取与浏览，不增加 Retry / Resume、执行写入口、新 Composite 或 schema 变更。需独立授权后实施。

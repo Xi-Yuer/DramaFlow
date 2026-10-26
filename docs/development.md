@@ -17,7 +17,7 @@
 
 ## 测试与环境边界
 
-集成测试使用独立 dramaflow_test、随机 dramaflow-test-* 队列前缀，应用现有迁移，只清理自建账号及其项目、模型、对象和 thread；禁止指向业务库或清空共享队列。MemorySaver 仅用于单元测试，Human Review 通过内存 Checkpointer 验证暂停、串行恢复、If 组合和审计生命周期，NodeRun 隔离 PostgreSQL 用例验证 occurrence 身份、各 occurrence 内并发 attempt 分配、审核复用和权限。独立[迁移用例](../packages/server/test/node-occurrence-migration.spec.ts)在 dramaflow_test 的随机 schema 重放旧 DDL 与新迁移，验证审计 / Artifact 保留及约束；该用例仅在显式 DRAMAFLOW_INTEGRATION=1 下运行。[ItemRun 隔离 PostgreSQL 用例](../packages/server/test/iteration-item-runs.spec.ts)执行真实 Iteration 编译图，验证单 item 身份、并行失败、复用与 attempt 隔离、嵌套父链、权限及数据库不可变约束，同样要求 DRAMAFLOW_INTEGRATION=1 与本机 dramaflow_test。Web 单元 / 组件测试覆盖文本审批和恢复交互，真实浏览器仍需人工验收；本机协议替身不代表收费模型验收。
+集成测试使用独立 dramaflow_test、随机 dramaflow-test-* 队列前缀，应用现有迁移，只清理自建账号及其项目、模型、对象和 thread；禁止指向业务库或清空共享队列。MemorySaver 仅用于单元测试，Human Review 通过内存 Checkpointer 验证暂停、串行恢复、If 组合和审计生命周期，NodeRun 隔离 PostgreSQL 用例验证 occurrence 身份、各 occurrence 内并发 attempt 分配、审核复用和权限。独立[迁移用例](../packages/server/test/node-occurrence-migration.spec.ts)在 dramaflow_test 的随机 schema 重放旧 DDL 与新迁移，验证审计 / Artifact 保留及约束；该用例仅在显式 DRAMAFLOW_INTEGRATION=1 下运行。[ItemRun 隔离 PostgreSQL 用例](../packages/server/test/iteration-item-runs.spec.ts)执行真实 Iteration 编译图，验证单 item 身份、并行失败、复用与 attempt 隔离、嵌套父链、权限及数据库不可变约束，同样要求 DRAMAFLOW_INTEGRATION=1 与本机 dramaflow_test。[运行树查询集成用例](../packages/server/test/execution-tree.integration.spec.ts)在同一隔离条件下验证真实外键、嵌套父链、独立状态、权限、分页和查询不改写审计；Contract / 通用查询单测另验证非 Iteration source、非法父链及边界投影。Web 单元 / 组件测试覆盖文本审批和恢复交互，真实浏览器仍需人工验收；本机协议替身不代表收费模型验收。
 
 真实 Provider 调用只在操作者明确授权后运行 `pnpm test:ai:live`。凭证通过受保护环境提供，不写命令行、日志或文档；不会因本机已有 key 自动启用，也不自动重试。变量为 DRAMAFLOW_LIVE_AI_BASE_URL、DRAMAFLOW_LIVE_AI_MODEL、DRAMAFLOW_LIVE_AI_CREDENTIAL_ENV 及后者指向的凭证变量。该入口使用高级兼容插件，不代替普通 Provider 路径。
 
