@@ -7,8 +7,8 @@ import {
   toReactFlowEdges,
   type WorkflowEdge,
 } from '../src/features/workflow/canvas/react-flow-adapter';
-import { getWorkflowEdgePresentation } from '../src/features/workflow/canvas/edge-presentation';
-import { WorkflowCanvasEdge } from '../src/features/workflow/canvas/workflow-edge';
+import { getWorkflowEdgePresentation } from '../src/features/workflow/canvas/rendering/edge-presentation';
+import { WorkflowCanvasEdge } from '../src/features/workflow/canvas/rendering/workflow-edge';
 import { candidateWorkflow } from './fixtures/candidate-input';
 import { templateWorkflow } from './fixtures/template-input';
 

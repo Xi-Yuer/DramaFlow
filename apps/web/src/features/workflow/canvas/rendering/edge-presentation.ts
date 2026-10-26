@@ -1,5 +1,5 @@
 import { MarkerType } from '@xyflow/react';
-import type { WorkflowEdge, WorkflowEdgeData } from './react-flow-adapter';
+import type { WorkflowEdge, WorkflowEdgeData } from '../adapter/types';
 
 // 连线样式只表达依赖类型；不根据 DAG 或节点状态推断实际数据传输。
 export function getWorkflowEdgePresentation(data: WorkflowEdgeData) {

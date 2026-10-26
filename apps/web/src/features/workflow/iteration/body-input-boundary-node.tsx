@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { Button } from 'antd';
-import { formatDataType } from './iteration-body-inputs';
+import { formatDataType } from '../inputs/definitions/graph-input-types';
 import type { WorkflowBodyInputNode } from './body-input-boundary';
 import endStyles from '../outputs/workflow-end.module.css';
 import styles from './body-input-boundary.module.css';

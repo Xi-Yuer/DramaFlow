@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GenericWorkflowNode,
   WorkflowManifestProvider,
-} from '../src/features/workflow/canvas/workflow-node';
+} from '../src/features/workflow/canvas/rendering/workflow-node';
 import {
   toReactFlowNode,
   type WorkflowNode,

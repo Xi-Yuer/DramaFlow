@@ -2,7 +2,7 @@
 
 import { memo } from 'react';
 import { BaseEdge, getBezierPath, type EdgeProps, type EdgeTypes } from '@xyflow/react';
-import type { WorkflowEdge } from './react-flow-adapter';
+import type { WorkflowEdge } from '../adapter/types';
 import { getWorkflowEdgePresentation } from './edge-presentation';
 import styles from './workflow-edge.module.css';
 

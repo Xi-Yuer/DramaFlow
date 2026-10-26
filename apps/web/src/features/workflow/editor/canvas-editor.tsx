@@ -16,7 +16,7 @@ import {
 import type {
   ModelSelectionIntent,
   ModelSelectionResume,
-} from '@/features/workflow/model-selection/model-selector';
+} from '../model-selection/selection/model-selection-context';
 import { useWorkflowPublish } from '@/features/workflow/publish/use-workflow-publish';
 import { useWorkflowRun } from '@/features/workflow/run/use-workflow-run';
 import { useEditorLeaveGuard } from '@/features/workflow/editor/use-editor-leave-guard';

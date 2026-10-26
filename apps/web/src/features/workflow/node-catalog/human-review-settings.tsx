@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState } from 'react';
 import { Input } from 'antd';
-import styles from '../canvas/workflow-node.module.css';
+import styles from '../canvas/rendering/workflow-node.module.css';
 
 export const WorkflowNodeSettingsActions = createContext<{
   disabled: boolean;

@@ -36,19 +36,12 @@
       "outerIndex": -1,
       "results": []
     },
-    "next": [
-      "outerBody",
-      "outerBody"
-    ],
+    "next": ["outerBody", "outerBody"],
     "tasks": [
       {
         "id": "53d0b8a1-8c27-500e-ab36-f7871e04a1de",
         "name": "outerBody",
-        "path": [
-          "__pregel_push",
-          0,
-          false
-        ],
+        "path": ["__pregel_push", 0, false],
         "interrupts": [
           {
             "id": "c8e2f69a0e1d366374bd614503b77470",
@@ -80,19 +73,12 @@
             "outerIndex": 0,
             "results": []
           },
-          "next": [
-            "body",
-            "body"
-          ],
+          "next": ["body", "body"],
           "tasks": [
             {
               "id": "392a25b5-5505-5a26-b552-b84f657c33d7",
               "name": "body",
-              "path": [
-                "__pregel_push",
-                0,
-                false
-              ],
+              "path": ["__pregel_push", 0, false],
               "interrupts": [
                 {
                   "id": "cabf97f4e0dede3d332f7e9b680a1d12",
@@ -116,17 +102,12 @@
                   "outerIndex": 0,
                   "intermediate": 0
                 },
-                "next": [
-                  "review"
-                ],
+                "next": ["review"],
                 "tasks": [
                   {
                     "id": "ef2c0af4-6f80-55b7-af80-3621d7e37b7a",
                     "name": "review",
-                    "path": [
-                      "__pregel_pull",
-                      "review"
-                    ],
+                    "path": ["__pregel_pull", "review"],
                     "interrupts": [
                       {
                         "id": "cabf97f4e0dede3d332f7e9b680a1d12",
@@ -148,11 +129,7 @@
             {
               "id": "9b0e9e30-5e7d-5af6-a566-ef84a500876c",
               "name": "body",
-              "path": [
-                "__pregel_push",
-                1,
-                false
-              ],
+              "path": ["__pregel_push", 1, false],
               "interrupts": [
                 {
                   "id": "c8e2f69a0e1d366374bd614503b77470",
@@ -176,17 +153,12 @@
                   "outerIndex": 0,
                   "intermediate": 2
                 },
-                "next": [
-                  "review"
-                ],
+                "next": ["review"],
                 "tasks": [
                   {
                     "id": "f08c8fab-8963-57a5-8b6e-61c6aa6ca351",
                     "name": "review",
-                    "path": [
-                      "__pregel_pull",
-                      "review"
-                    ],
+                    "path": ["__pregel_pull", "review"],
                     "interrupts": [
                       {
                         "id": "c8e2f69a0e1d366374bd614503b77470",
@@ -211,11 +183,7 @@
       {
         "id": "3996ed57-08b8-5dca-8e93-8acd8b30ac37",
         "name": "outerBody",
-        "path": [
-          "__pregel_push",
-          1,
-          false
-        ],
+        "path": ["__pregel_push", 1, false],
         "interrupts": [
           {
             "id": "130d3aff2ebf2d3f314a85916e265aa4",
@@ -247,19 +215,12 @@
             "outerIndex": 1,
             "results": []
           },
-          "next": [
-            "body",
-            "body"
-          ],
+          "next": ["body", "body"],
           "tasks": [
             {
               "id": "0a064675-2817-51e9-a5cf-046b6a03b146",
               "name": "body",
-              "path": [
-                "__pregel_push",
-                0,
-                false
-              ],
+              "path": ["__pregel_push", 0, false],
               "interrupts": [
                 {
                   "id": "130d3aff2ebf2d3f314a85916e265aa4",
@@ -283,17 +244,12 @@
                   "outerIndex": 1,
                   "intermediate": 20
                 },
-                "next": [
-                  "review"
-                ],
+                "next": ["review"],
                 "tasks": [
                   {
                     "id": "496958a6-cbb3-5ca9-acdf-15c397c6beb5",
                     "name": "review",
-                    "path": [
-                      "__pregel_pull",
-                      "review"
-                    ],
+                    "path": ["__pregel_pull", "review"],
                     "interrupts": [
                       {
                         "id": "130d3aff2ebf2d3f314a85916e265aa4",
@@ -315,11 +271,7 @@
             {
               "id": "c7e93400-8067-5be9-9ae9-a67666678cee",
               "name": "body",
-              "path": [
-                "__pregel_push",
-                1,
-                false
-              ],
+              "path": ["__pregel_push", 1, false],
               "interrupts": [
                 {
                   "id": "736db62d7ff85fa3a7d63e383db82b0c",
@@ -343,17 +295,12 @@
                   "outerIndex": 1,
                   "intermediate": 22
                 },
-                "next": [
-                  "review"
-                ],
+                "next": ["review"],
                 "tasks": [
                   {
                     "id": "e965d0b2-09e4-58cb-8d9e-1b45b49a516e",
                     "name": "review",
-                    "path": [
-                      "__pregel_pull",
-                      "review"
-                    ],
+                    "path": ["__pregel_pull", "review"],
                     "interrupts": [
                       {
                         "id": "736db62d7ff85fa3a7d63e383db82b0c",
@@ -437,19 +384,12 @@
       "outerIndex": -1,
       "results": []
     },
-    "next": [
-      "outerBody",
-      "outerBody"
-    ],
+    "next": ["outerBody", "outerBody"],
     "tasks": [
       {
         "id": "53d0b8a1-8c27-500e-ab36-f7871e04a1de",
         "name": "outerBody",
-        "path": [
-          "__pregel_push",
-          0,
-          false
-        ],
+        "path": ["__pregel_push", 0, false],
         "interrupts": [
           {
             "id": "c8e2f69a0e1d366374bd614503b77470",
@@ -488,18 +428,12 @@
               }
             ]
           },
-          "next": [
-            "body"
-          ],
+          "next": ["body"],
           "tasks": [
             {
               "id": "392a25b5-5505-5a26-b552-b84f657c33d7",
               "name": "body",
-              "path": [
-                "__pregel_push",
-                0,
-                false
-              ],
+              "path": ["__pregel_push", 0, false],
               "interrupts": [
                 {
                   "id": "cabf97f4e0dede3d332f7e9b680a1d12",
@@ -532,11 +466,7 @@
             {
               "id": "9b0e9e30-5e7d-5af6-a566-ef84a500876c",
               "name": "body",
-              "path": [
-                "__pregel_push",
-                1,
-                false
-              ],
+              "path": ["__pregel_push", 1, false],
               "interrupts": [
                 {
                   "id": "c8e2f69a0e1d366374bd614503b77470",
@@ -560,17 +490,12 @@
                   "outerIndex": 0,
                   "intermediate": 2
                 },
-                "next": [
-                  "review"
-                ],
+                "next": ["review"],
                 "tasks": [
                   {
                     "id": "f08c8fab-8963-57a5-8b6e-61c6aa6ca351",
                     "name": "review",
-                    "path": [
-                      "__pregel_pull",
-                      "review"
-                    ],
+                    "path": ["__pregel_pull", "review"],
                     "interrupts": [
                       {
                         "id": "c8e2f69a0e1d366374bd614503b77470",
@@ -595,11 +520,7 @@
       {
         "id": "3996ed57-08b8-5dca-8e93-8acd8b30ac37",
         "name": "outerBody",
-        "path": [
-          "__pregel_push",
-          1,
-          false
-        ],
+        "path": ["__pregel_push", 1, false],
         "interrupts": [
           {
             "id": "130d3aff2ebf2d3f314a85916e265aa4",
@@ -631,19 +552,12 @@
             "outerIndex": 1,
             "results": []
           },
-          "next": [
-            "body",
-            "body"
-          ],
+          "next": ["body", "body"],
           "tasks": [
             {
               "id": "0a064675-2817-51e9-a5cf-046b6a03b146",
               "name": "body",
-              "path": [
-                "__pregel_push",
-                0,
-                false
-              ],
+              "path": ["__pregel_push", 0, false],
               "interrupts": [
                 {
                   "id": "130d3aff2ebf2d3f314a85916e265aa4",
@@ -667,17 +581,12 @@
                   "outerIndex": 1,
                   "intermediate": 20
                 },
-                "next": [
-                  "review"
-                ],
+                "next": ["review"],
                 "tasks": [
                   {
                     "id": "496958a6-cbb3-5ca9-acdf-15c397c6beb5",
                     "name": "review",
-                    "path": [
-                      "__pregel_pull",
-                      "review"
-                    ],
+                    "path": ["__pregel_pull", "review"],
                     "interrupts": [
                       {
                         "id": "130d3aff2ebf2d3f314a85916e265aa4",
@@ -699,11 +608,7 @@
             {
               "id": "c7e93400-8067-5be9-9ae9-a67666678cee",
               "name": "body",
-              "path": [
-                "__pregel_push",
-                1,
-                false
-              ],
+              "path": ["__pregel_push", 1, false],
               "interrupts": [
                 {
                   "id": "736db62d7ff85fa3a7d63e383db82b0c",
@@ -727,17 +632,12 @@
                   "outerIndex": 1,
                   "intermediate": 22
                 },
-                "next": [
-                  "review"
-                ],
+                "next": ["review"],
                 "tasks": [
                   {
                     "id": "e965d0b2-09e4-58cb-8d9e-1b45b49a516e",
                     "name": "review",
-                    "path": [
-                      "__pregel_pull",
-                      "review"
-                    ],
+                    "path": ["__pregel_pull", "review"],
                     "interrupts": [
                       {
                         "id": "736db62d7ff85fa3a7d63e383db82b0c",
@@ -950,11 +850,7 @@
             }
           ]
         ],
-        [
-          "392a25b5-5505-5a26-b552-b84f657c33d7",
-          "branch:to:collect",
-          null
-        ],
+        ["392a25b5-5505-5a26-b552-b84f657c33d7", "branch:to:collect", null],
         [
           "9b0e9e30-5e7d-5af6-a566-ef84a500876c",
           "__interrupt__",
@@ -982,13 +878,7 @@
         "parents": {}
       },
       "pendingWrites": [
-        [
-          "cabf97f4e0dede3d332f7e9b680a1d12",
-          "__resume__",
-          [
-            "approve:0/0"
-          ]
-        ],
+        ["cabf97f4e0dede3d332f7e9b680a1d12", "__resume__", ["approve:0/0"]],
         [
           "53d0b8a1-8c27-500e-ab36-f7871e04a1de",
           "__interrupt__",

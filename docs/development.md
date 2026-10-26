@@ -25,6 +25,28 @@
 
 离开保护、刷新 / 重启后的 invocation recovery、多 Tab storage event、Logout 后重新登录仍需真实浏览器人工验收；使用受控本地能力，避免重复收费。不把本机临时 Workflow、模型配置 ID 或运行内容写成仓库现状。
 
+## 前端职责目录
+
+按业务入口组织 feature，再按实际职责划分内部目录，不把大文件机械切成同层碎片，也不按行数统一拆分。当前画布与检查器的目录边界如下。
+
+| 目录                                                       | 职责                                                                                                       |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `workflow/canvas/adapter/`                                 | 纯转换与领域编辑：节点 / 边序列化、投影、Handle 校验、连接 / 删除 / 重连；不弹窗或持有 React 状态          |
+| `workflow/canvas/editing/`                                 | 用户编辑操作：确认来源替换 / 候选、输入输出边界弹窗、Context 操作装配；领域修改调用 adapter 或已有领域工具 |
+| `workflow/canvas/view/`                                    | 选择、测量、Inspector 模式等会话状态，隔离 React Flow 视图事件与可持久化修改                               |
+| `workflow/canvas/rendering/`                               | 节点 / 连线渲染、呈现规则与相邻 CSS Module                                                                 |
+| `workflow/inspector/design/`                               | 节点配置与草稿输入编辑                                                                                     |
+| `workflow/inspector/runtime/`                              | NodeRun / attempt、运行值与审批呈现，不修改草稿                                                            |
+| `workflow/inputs/definitions/`                             | 通用 Graph Input 定义、校验、类型选项与 Root / Body 共用编辑控件                                           |
+| `workflow/inputs/bindings/`                                | 通用图输入 binding 的写入、重命名及兼容性清理，不依赖 Iteration                                            |
+| `workflow/iteration/inputs/`                               | Iteration composite、Body / 不变输入及映射；依赖通用 Input 能力                                            |
+| `models/settings/`、`catalog/`                             | 设置会话、资源查询与刷新，以及供应商目录展示                                                               |
+| `models/providers/`、`configurations/`                     | 分别维护供应商及凭证表单、模型配置表单与列表；提交和密钥清理就近保留                                       |
+| `workflow/model-selection/selection/`                      | 选择 Context、用户级查询、恢复会话与选项推导，不持有凭证                                                   |
+| `workflow/model-selection/presentation/`、`configuration/` | 选项展示与明确的添加配置操作                                                                               |
+
+Canvas 与 Inspector 根目录保留装配入口及共享类型 / 样式。内部模块直接依赖职责明确的文件；需要兼容调用方的适配导出集中在 `react-flow-adapter.ts`，不为每个搬移的组件增加转发文件。迁移目录时同步更新静态引用、测试 mock 和文档链接；重构优先运行现有行为测试，覆盖投影不持久化、过期删除 / 重连、显式替换确认、导航与运行上下文。
+
 ## 文档维护
 
 - AGENTS.md：稳定边界和按任务阅读入口；README：启动与导航。

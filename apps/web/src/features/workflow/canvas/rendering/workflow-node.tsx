@@ -3,15 +3,15 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { Handle, Position, type NodeProps, type NodeTypes } from '@xyflow/react';
 import type { DataType, NodeTypeManifest } from '@dramaflow/contracts';
-import { conditionToFields, ifConditionOperators } from '../conditions/if-condition';
-import { NodeTypeIcon } from '../node-catalog/node-type-icon';
-import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
-import { canvasNodeDefinition } from './react-flow-adapter';
-import { useWorkflowNodeRuntime } from '../runtime/runtime-status';
-import { runtimeNodeBorderClass } from '../runtime/runtime-status-badge';
-import { RuntimeCanvasStatus } from '../runtime/runtime-canvas-status';
-import type { WorkflowNode } from './react-flow-adapter';
-import { controlHandleId } from './workflow-handles';
+import { conditionToFields, ifConditionOperators } from '../../conditions/if-condition';
+import { NodeTypeIcon } from '../../node-catalog/node-type-icon';
+import { resolveWorkflowNodePorts } from '../../ports/resolve-workflow-node-ports';
+import { canvasNodeDefinition } from '../adapter/node-adapter';
+import { useWorkflowNodeRuntime } from '../../runtime/runtime-status';
+import { runtimeNodeBorderClass } from '../../runtime/runtime-status-badge';
+import { RuntimeCanvasStatus } from '../../runtime/runtime-canvas-status';
+import type { WorkflowNode } from '../adapter/types';
+import { controlHandleId } from '../adapter/workflow-handles';
 import styles from './workflow-node.module.css';
 
 const ManifestContext = createContext<readonly NodeTypeManifest[]>([]);

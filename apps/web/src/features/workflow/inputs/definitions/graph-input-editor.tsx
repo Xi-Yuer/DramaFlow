@@ -4,11 +4,7 @@ import { useState, type ReactNode } from 'react';
 import type { DataType, GraphInputDefinition } from '@dramaflow/contracts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  formatDataType,
-  graphInputTypeChoiceId,
-  graphInputTypeChoices,
-} from './iteration-body-inputs';
+import { formatDataType, graphInputTypeChoiceId, graphInputTypeChoices } from './graph-input-types';
 import styles from './graph-input-editor.module.css';
 
 export function DataTypeSelect({

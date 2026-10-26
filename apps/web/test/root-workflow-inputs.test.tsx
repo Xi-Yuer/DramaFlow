@@ -18,11 +18,11 @@ import {
 import { WorkflowInputDialog } from '../src/features/workflow/inputs/workflow-input-dialog';
 import {
   addGraphInput,
-  bindGraphInput,
-  initializeIterationBody,
   removeGraphInput,
   updateGraphInput,
-} from '../src/features/workflow/iteration/iteration-body-inputs';
+} from '../src/features/workflow/inputs/definitions/graph-inputs';
+import { bindGraphInput } from '../src/features/workflow/inputs/bindings/graph-input-bindings';
+import { initializeIterationBody } from '../src/features/workflow/iteration/iteration-body-inputs';
 import {
   isBodyInputConnection,
   projectBodyInputBoundary,

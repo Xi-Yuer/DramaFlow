@@ -945,11 +945,7 @@
       {
         "id": "d97d235e-7114-57dd-bc9d-add24b2284e1",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          0,
-          false
-        ],
+        "path": ["__pregel_push", 0, false],
         "interrupts": [],
         "state": {
           "checkpointId": "1f1cf528-97ac-6b70-8002-8a0bfaad2cb1",
@@ -968,11 +964,7 @@
       {
         "id": "70c51717-083a-5c1e-a772-d500d994ad37",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          1,
-          false
-        ],
+        "path": ["__pregel_push", 1, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:70c51717-083a-5c1e-a772-d500d994ad37",
@@ -984,11 +976,7 @@
       {
         "id": "e3a26c0d-5fce-5576-be46-31f6508752c1",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          2,
-          false
-        ],
+        "path": ["__pregel_push", 2, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:e3a26c0d-5fce-5576-be46-31f6508752c1",
@@ -1000,11 +988,7 @@
       {
         "id": "9d6d08c1-87c5-59d6-8105-15b0257edc5b",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          3,
-          false
-        ],
+        "path": ["__pregel_push", 3, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:9d6d08c1-87c5-59d6-8105-15b0257edc5b",
@@ -1016,11 +1000,7 @@
       {
         "id": "5244fc42-2af8-5b3a-a506-bdf72cbafefc",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          4,
-          false
-        ],
+        "path": ["__pregel_push", 4, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:5244fc42-2af8-5b3a-a506-bdf72cbafefc",
@@ -1032,11 +1012,7 @@
       {
         "id": "3cf1e446-a19a-514b-a201-25eac3c0e4d5",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          5,
-          false
-        ],
+        "path": ["__pregel_push", 5, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:3cf1e446-a19a-514b-a201-25eac3c0e4d5",
@@ -1048,11 +1024,7 @@
       {
         "id": "62ac5076-f5c7-591f-a00f-888e43e0bb33",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          6,
-          false
-        ],
+        "path": ["__pregel_push", 6, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:62ac5076-f5c7-591f-a00f-888e43e0bb33",
@@ -1064,11 +1036,7 @@
       {
         "id": "9136290c-99b8-5b9d-a4f9-4ffb70fdc34b",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          7,
-          false
-        ],
+        "path": ["__pregel_push", 7, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:9136290c-99b8-5b9d-a4f9-4ffb70fdc34b",
@@ -1080,11 +1048,7 @@
       {
         "id": "f18d730b-a2e6-5097-8cb6-e5bf6f4c9701",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          8,
-          false
-        ],
+        "path": ["__pregel_push", 8, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:f18d730b-a2e6-5097-8cb6-e5bf6f4c9701",
@@ -1096,11 +1060,7 @@
       {
         "id": "f878b4e7-bd08-5b82-98a8-a98124ad1914",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          9,
-          false
-        ],
+        "path": ["__pregel_push", 9, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:f878b4e7-bd08-5b82-98a8-a98124ad1914",
@@ -1112,11 +1072,7 @@
       {
         "id": "7bae5d02-15c3-56db-8fb3-1e697f6b6694",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          10,
-          false
-        ],
+        "path": ["__pregel_push", 10, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:7bae5d02-15c3-56db-8fb3-1e697f6b6694",
@@ -1128,11 +1084,7 @@
       {
         "id": "7eb12f0a-bfca-5cd4-a104-dfa20874d33b",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          11,
-          false
-        ],
+        "path": ["__pregel_push", 11, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:7eb12f0a-bfca-5cd4-a104-dfa20874d33b",
@@ -1144,11 +1096,7 @@
       {
         "id": "a5b9bb2b-a13d-50bf-a32c-77be0ebf858f",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          12,
-          false
-        ],
+        "path": ["__pregel_push", 12, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:a5b9bb2b-a13d-50bf-a32c-77be0ebf858f",
@@ -1160,11 +1108,7 @@
       {
         "id": "d6fb72c0-4274-5ed1-af72-640df731df58",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          13,
-          false
-        ],
+        "path": ["__pregel_push", 13, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:d6fb72c0-4274-5ed1-af72-640df731df58",
@@ -1176,11 +1120,7 @@
       {
         "id": "2bd7fedc-6ffe-5545-9b02-70c5c9de7ce2",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          14,
-          false
-        ],
+        "path": ["__pregel_push", 14, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:2bd7fedc-6ffe-5545-9b02-70c5c9de7ce2",
@@ -1192,11 +1132,7 @@
       {
         "id": "c3a862a3-d46d-514c-9088-2f1070600722",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          15,
-          false
-        ],
+        "path": ["__pregel_push", 15, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:c3a862a3-d46d-514c-9088-2f1070600722",
@@ -1208,11 +1144,7 @@
       {
         "id": "26b72bbc-de86-5d8c-83d6-a502a94b86c4",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          16,
-          false
-        ],
+        "path": ["__pregel_push", 16, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:26b72bbc-de86-5d8c-83d6-a502a94b86c4",
@@ -1224,11 +1156,7 @@
       {
         "id": "99e41cf6-1044-5031-aa96-5e0ade9afcb4",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          17,
-          false
-        ],
+        "path": ["__pregel_push", 17, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:99e41cf6-1044-5031-aa96-5e0ade9afcb4",
@@ -1240,11 +1168,7 @@
       {
         "id": "17505208-1ac0-5f6a-a03a-2b5be0b8a6f3",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          18,
-          false
-        ],
+        "path": ["__pregel_push", 18, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:17505208-1ac0-5f6a-a03a-2b5be0b8a6f3",
@@ -1256,11 +1180,7 @@
       {
         "id": "88852ce4-a698-5825-9e47-8e33a967f1ab",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          19,
-          false
-        ],
+        "path": ["__pregel_push", 19, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:88852ce4-a698-5825-9e47-8e33a967f1ab",
@@ -1272,11 +1192,7 @@
       {
         "id": "f3c5f1d0-4782-5677-a4f3-e6fedde0641a",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          20,
-          false
-        ],
+        "path": ["__pregel_push", 20, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:f3c5f1d0-4782-5677-a4f3-e6fedde0641a",
@@ -1288,11 +1204,7 @@
       {
         "id": "7005bcae-f67f-51aa-b253-099e831cae9d",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          21,
-          false
-        ],
+        "path": ["__pregel_push", 21, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:7005bcae-f67f-51aa-b253-099e831cae9d",
@@ -1304,11 +1216,7 @@
       {
         "id": "0ae1bdf0-4a43-5a6a-8799-c7370b5c84b7",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          22,
-          false
-        ],
+        "path": ["__pregel_push", 22, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:0ae1bdf0-4a43-5a6a-8799-c7370b5c84b7",
@@ -1320,11 +1228,7 @@
       {
         "id": "59af4fe5-70ad-51bc-ae54-4095b6bebf0a",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          23,
-          false
-        ],
+        "path": ["__pregel_push", 23, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:59af4fe5-70ad-51bc-ae54-4095b6bebf0a",
@@ -1336,11 +1240,7 @@
       {
         "id": "6964bc5f-b3b1-5e41-ade7-cbf49fd955e5",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          24,
-          false
-        ],
+        "path": ["__pregel_push", 24, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:6964bc5f-b3b1-5e41-ade7-cbf49fd955e5",
@@ -1352,11 +1252,7 @@
       {
         "id": "fab50ad2-e455-5ef2-ae8d-1b561cb23eff",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          25,
-          false
-        ],
+        "path": ["__pregel_push", 25, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:fab50ad2-e455-5ef2-ae8d-1b561cb23eff",
@@ -1368,11 +1264,7 @@
       {
         "id": "8b5b35d2-3de0-57c0-98d4-735ad3f8ce05",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          26,
-          false
-        ],
+        "path": ["__pregel_push", 26, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:8b5b35d2-3de0-57c0-98d4-735ad3f8ce05",
@@ -1384,11 +1276,7 @@
       {
         "id": "bf7ee7b1-d785-58be-b16b-2991f5d7e40d",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          27,
-          false
-        ],
+        "path": ["__pregel_push", 27, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:bf7ee7b1-d785-58be-b16b-2991f5d7e40d",
@@ -1400,11 +1288,7 @@
       {
         "id": "27cbdc40-190a-503d-b29a-2218562ee991",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          28,
-          false
-        ],
+        "path": ["__pregel_push", 28, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:27cbdc40-190a-503d-b29a-2218562ee991",
@@ -1416,11 +1300,7 @@
       {
         "id": "9985e55f-2806-51da-b7fe-ff6d3cb24ff5",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          29,
-          false
-        ],
+        "path": ["__pregel_push", 29, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:9985e55f-2806-51da-b7fe-ff6d3cb24ff5",
@@ -1432,11 +1312,7 @@
       {
         "id": "8e520f42-f81f-585a-9a91-85a8e7c00cda",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          30,
-          false
-        ],
+        "path": ["__pregel_push", 30, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:8e520f42-f81f-585a-9a91-85a8e7c00cda",
@@ -1448,11 +1324,7 @@
       {
         "id": "0f561ff3-46a4-5589-abc2-f34d35a79427",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          31,
-          false
-        ],
+        "path": ["__pregel_push", 31, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:0f561ff3-46a4-5589-abc2-f34d35a79427",
@@ -1464,11 +1336,7 @@
       {
         "id": "3bb48674-d654-5b25-a511-925bf250ac80",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          32,
-          false
-        ],
+        "path": ["__pregel_push", 32, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:3bb48674-d654-5b25-a511-925bf250ac80",
@@ -1480,11 +1348,7 @@
       {
         "id": "f2e6d51e-9f9b-562f-ab9f-671928fc136a",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          33,
-          false
-        ],
+        "path": ["__pregel_push", 33, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:f2e6d51e-9f9b-562f-ab9f-671928fc136a",
@@ -1496,11 +1360,7 @@
       {
         "id": "0a9423eb-5dd4-5830-ad98-36ee5b51c91f",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          34,
-          false
-        ],
+        "path": ["__pregel_push", 34, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:0a9423eb-5dd4-5830-ad98-36ee5b51c91f",
@@ -1512,11 +1372,7 @@
       {
         "id": "5a0bc999-b2e1-590c-861f-0043670a2cd3",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          35,
-          false
-        ],
+        "path": ["__pregel_push", 35, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:5a0bc999-b2e1-590c-861f-0043670a2cd3",
@@ -1528,11 +1384,7 @@
       {
         "id": "afbce851-9d77-52df-b46e-44d772f24ed2",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          36,
-          false
-        ],
+        "path": ["__pregel_push", 36, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:afbce851-9d77-52df-b46e-44d772f24ed2",
@@ -1544,11 +1396,7 @@
       {
         "id": "d6c08937-9677-5ad4-a55b-77dd6ba647d5",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          37,
-          false
-        ],
+        "path": ["__pregel_push", 37, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:d6c08937-9677-5ad4-a55b-77dd6ba647d5",
@@ -1560,11 +1408,7 @@
       {
         "id": "67f452d8-a6c0-5f26-9db9-d2d0ea707cdc",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          38,
-          false
-        ],
+        "path": ["__pregel_push", 38, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:67f452d8-a6c0-5f26-9db9-d2d0ea707cdc",
@@ -1576,11 +1420,7 @@
       {
         "id": "80bf04c8-ec62-57b7-800c-a0dcfce879bd",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          39,
-          false
-        ],
+        "path": ["__pregel_push", 39, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:80bf04c8-ec62-57b7-800c-a0dcfce879bd",
@@ -1592,11 +1432,7 @@
       {
         "id": "44ccf1c3-1af7-5670-9c8c-182ff340550d",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          40,
-          false
-        ],
+        "path": ["__pregel_push", 40, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:44ccf1c3-1af7-5670-9c8c-182ff340550d",
@@ -1608,11 +1444,7 @@
       {
         "id": "86e32370-ef20-563f-87e3-689da2bea6f6",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          41,
-          false
-        ],
+        "path": ["__pregel_push", 41, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:86e32370-ef20-563f-87e3-689da2bea6f6",
@@ -1624,11 +1456,7 @@
       {
         "id": "38238c4d-84f9-5c5a-a81c-c7be2a76f3cc",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          42,
-          false
-        ],
+        "path": ["__pregel_push", 42, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:38238c4d-84f9-5c5a-a81c-c7be2a76f3cc",
@@ -1640,11 +1468,7 @@
       {
         "id": "bbba0688-3849-50cd-b7ba-3fe3ecd09dc9",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          43,
-          false
-        ],
+        "path": ["__pregel_push", 43, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:bbba0688-3849-50cd-b7ba-3fe3ecd09dc9",
@@ -1656,11 +1480,7 @@
       {
         "id": "f4a80194-a297-5f80-b0ee-f27aef870ddc",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          44,
-          false
-        ],
+        "path": ["__pregel_push", 44, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:f4a80194-a297-5f80-b0ee-f27aef870ddc",
@@ -1672,11 +1492,7 @@
       {
         "id": "e15d9e73-d4df-53de-91a1-4f314e6316f1",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          45,
-          false
-        ],
+        "path": ["__pregel_push", 45, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:e15d9e73-d4df-53de-91a1-4f314e6316f1",
@@ -1688,11 +1504,7 @@
       {
         "id": "053eb0e3-f56a-5a46-9aa9-dc679e582ede",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          46,
-          false
-        ],
+        "path": ["__pregel_push", 46, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:053eb0e3-f56a-5a46-9aa9-dc679e582ede",
@@ -1704,11 +1516,7 @@
       {
         "id": "c5424d59-6f76-55a4-84e5-bfd3127f54bc",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          47,
-          false
-        ],
+        "path": ["__pregel_push", 47, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:c5424d59-6f76-55a4-84e5-bfd3127f54bc",
@@ -1720,11 +1528,7 @@
       {
         "id": "27cecb79-b13d-52e6-9617-c7045f17d018",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          48,
-          false
-        ],
+        "path": ["__pregel_push", 48, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:27cecb79-b13d-52e6-9617-c7045f17d018",
@@ -1736,11 +1540,7 @@
       {
         "id": "2aa90c79-f271-5dc3-8b1d-df0d804eced9",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          49,
-          false
-        ],
+        "path": ["__pregel_push", 49, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:2aa90c79-f271-5dc3-8b1d-df0d804eced9",
@@ -1752,11 +1552,7 @@
       {
         "id": "0445ee3c-5191-5518-b0c7-02d2d8717351",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          50,
-          false
-        ],
+        "path": ["__pregel_push", 50, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:0445ee3c-5191-5518-b0c7-02d2d8717351",
@@ -1768,11 +1564,7 @@
       {
         "id": "e321aa04-014b-5df1-b2bf-6971496669f7",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          51,
-          false
-        ],
+        "path": ["__pregel_push", 51, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:e321aa04-014b-5df1-b2bf-6971496669f7",
@@ -1784,11 +1576,7 @@
       {
         "id": "303ff75e-57f4-5185-87a2-a3921591835f",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          52,
-          false
-        ],
+        "path": ["__pregel_push", 52, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:303ff75e-57f4-5185-87a2-a3921591835f",
@@ -1800,11 +1588,7 @@
       {
         "id": "3c397011-ce56-584b-9cfa-cb9a7b1ae261",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          53,
-          false
-        ],
+        "path": ["__pregel_push", 53, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:3c397011-ce56-584b-9cfa-cb9a7b1ae261",
@@ -1816,11 +1600,7 @@
       {
         "id": "649e434a-b835-5b97-9531-c3bf367e13f7",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          54,
-          false
-        ],
+        "path": ["__pregel_push", 54, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:649e434a-b835-5b97-9531-c3bf367e13f7",
@@ -1832,11 +1612,7 @@
       {
         "id": "c9b42f21-6ee8-5e07-9581-c92b53b16631",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          55,
-          false
-        ],
+        "path": ["__pregel_push", 55, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:c9b42f21-6ee8-5e07-9581-c92b53b16631",
@@ -1848,11 +1624,7 @@
       {
         "id": "a6ce531e-bda3-54ec-be72-8ca08860d82d",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          56,
-          false
-        ],
+        "path": ["__pregel_push", 56, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:a6ce531e-bda3-54ec-be72-8ca08860d82d",
@@ -1864,11 +1636,7 @@
       {
         "id": "0b0ed9ff-4398-57fc-b752-c465befad177",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          57,
-          false
-        ],
+        "path": ["__pregel_push", 57, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:0b0ed9ff-4398-57fc-b752-c465befad177",
@@ -1880,11 +1648,7 @@
       {
         "id": "078b86f9-af9a-52bd-b95d-bb2b02056107",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          58,
-          false
-        ],
+        "path": ["__pregel_push", 58, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:078b86f9-af9a-52bd-b95d-bb2b02056107",
@@ -1896,11 +1660,7 @@
       {
         "id": "62a528cf-d268-5d5d-922a-00c9da489066",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          59,
-          false
-        ],
+        "path": ["__pregel_push", 59, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:62a528cf-d268-5d5d-922a-00c9da489066",
@@ -1912,11 +1672,7 @@
       {
         "id": "923db86d-a428-5c82-a294-40d4f3d7e06f",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          60,
-          false
-        ],
+        "path": ["__pregel_push", 60, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:923db86d-a428-5c82-a294-40d4f3d7e06f",
@@ -1928,11 +1684,7 @@
       {
         "id": "eb6075fd-7f44-592b-8b8e-de3adddc9f3b",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          61,
-          false
-        ],
+        "path": ["__pregel_push", 61, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:eb6075fd-7f44-592b-8b8e-de3adddc9f3b",
@@ -1944,11 +1696,7 @@
       {
         "id": "3dc721dc-1450-57da-9817-87ae6b4cdd45",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          62,
-          false
-        ],
+        "path": ["__pregel_push", 62, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:3dc721dc-1450-57da-9817-87ae6b4cdd45",
@@ -1960,11 +1708,7 @@
       {
         "id": "028474ed-fcd7-576e-8b9a-9b811f033a08",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          63,
-          false
-        ],
+        "path": ["__pregel_push", 63, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:028474ed-fcd7-576e-8b9a-9b811f033a08",
@@ -1976,11 +1720,7 @@
       {
         "id": "f5070010-11af-5374-ad17-90ef8459d77a",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          64,
-          false
-        ],
+        "path": ["__pregel_push", 64, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:f5070010-11af-5374-ad17-90ef8459d77a",
@@ -1992,11 +1732,7 @@
       {
         "id": "ca6115d2-9790-5b60-a364-074616b4f2bc",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          65,
-          false
-        ],
+        "path": ["__pregel_push", 65, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:ca6115d2-9790-5b60-a364-074616b4f2bc",
@@ -2008,11 +1744,7 @@
       {
         "id": "288a8248-4d3f-5e23-bd6b-9d1f0cad4927",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          66,
-          false
-        ],
+        "path": ["__pregel_push", 66, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:288a8248-4d3f-5e23-bd6b-9d1f0cad4927",
@@ -2024,11 +1756,7 @@
       {
         "id": "13014601-4d10-5014-8002-2c0daf3fe1f5",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          67,
-          false
-        ],
+        "path": ["__pregel_push", 67, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:13014601-4d10-5014-8002-2c0daf3fe1f5",
@@ -2040,11 +1768,7 @@
       {
         "id": "d169a430-affb-5055-9ce9-0a3b9efa2eb6",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          68,
-          false
-        ],
+        "path": ["__pregel_push", 68, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:d169a430-affb-5055-9ce9-0a3b9efa2eb6",
@@ -2056,11 +1780,7 @@
       {
         "id": "79cafc10-6026-587e-9fd9-b4643b5ef2f7",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          69,
-          false
-        ],
+        "path": ["__pregel_push", 69, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:79cafc10-6026-587e-9fd9-b4643b5ef2f7",
@@ -2072,11 +1792,7 @@
       {
         "id": "957cfa9c-05d9-5326-b5be-acb21dda9666",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          70,
-          false
-        ],
+        "path": ["__pregel_push", 70, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:957cfa9c-05d9-5326-b5be-acb21dda9666",
@@ -2088,11 +1804,7 @@
       {
         "id": "5d6b0a50-2f40-593d-b239-a19f357aa754",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          71,
-          false
-        ],
+        "path": ["__pregel_push", 71, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:5d6b0a50-2f40-593d-b239-a19f357aa754",
@@ -2104,11 +1816,7 @@
       {
         "id": "27e1cbea-e240-5280-a504-6a7328279872",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          72,
-          false
-        ],
+        "path": ["__pregel_push", 72, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:27e1cbea-e240-5280-a504-6a7328279872",
@@ -2120,11 +1828,7 @@
       {
         "id": "a2cbe1b4-1017-53db-9ea6-9cc440e37ba5",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          73,
-          false
-        ],
+        "path": ["__pregel_push", 73, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:a2cbe1b4-1017-53db-9ea6-9cc440e37ba5",
@@ -2136,11 +1840,7 @@
       {
         "id": "e4f69fbf-9979-503b-9c7c-c6b0278baed9",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          74,
-          false
-        ],
+        "path": ["__pregel_push", 74, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:e4f69fbf-9979-503b-9c7c-c6b0278baed9",
@@ -2152,11 +1852,7 @@
       {
         "id": "74fb8245-574a-50e8-bbe0-211903f2ddb1",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          75,
-          false
-        ],
+        "path": ["__pregel_push", 75, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:74fb8245-574a-50e8-bbe0-211903f2ddb1",
@@ -2168,11 +1864,7 @@
       {
         "id": "f598dd64-61d1-5b24-ae55-6aa9bc9a707e",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          76,
-          false
-        ],
+        "path": ["__pregel_push", 76, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:f598dd64-61d1-5b24-ae55-6aa9bc9a707e",
@@ -2184,11 +1876,7 @@
       {
         "id": "420e4cb8-b275-53fd-9725-d464d9369e25",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          77,
-          false
-        ],
+        "path": ["__pregel_push", 77, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:420e4cb8-b275-53fd-9725-d464d9369e25",
@@ -2200,11 +1888,7 @@
       {
         "id": "0c8503df-317f-5add-8e62-5c2d35963bef",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          78,
-          false
-        ],
+        "path": ["__pregel_push", 78, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:0c8503df-317f-5add-8e62-5c2d35963bef",
@@ -2216,11 +1900,7 @@
       {
         "id": "4690a68f-aff3-5077-b723-d8c707ada7cf",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          79,
-          false
-        ],
+        "path": ["__pregel_push", 79, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:4690a68f-aff3-5077-b723-d8c707ada7cf",
@@ -2232,11 +1912,7 @@
       {
         "id": "d1a5f40a-313a-536c-8d65-96a53eca04ab",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          80,
-          false
-        ],
+        "path": ["__pregel_push", 80, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:d1a5f40a-313a-536c-8d65-96a53eca04ab",
@@ -2248,11 +1924,7 @@
       {
         "id": "bc83df88-81c5-50be-99a1-1443e53a39e9",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          81,
-          false
-        ],
+        "path": ["__pregel_push", 81, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:bc83df88-81c5-50be-99a1-1443e53a39e9",
@@ -2264,11 +1936,7 @@
       {
         "id": "497880d2-930e-580a-bb39-db1c5db5367c",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          82,
-          false
-        ],
+        "path": ["__pregel_push", 82, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:497880d2-930e-580a-bb39-db1c5db5367c",
@@ -2280,11 +1948,7 @@
       {
         "id": "539a9851-be71-5b8c-99b8-ce0cb93aad89",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          83,
-          false
-        ],
+        "path": ["__pregel_push", 83, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:539a9851-be71-5b8c-99b8-ce0cb93aad89",
@@ -2296,11 +1960,7 @@
       {
         "id": "ec24f63b-e397-5502-9abf-3427de31bad1",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          84,
-          false
-        ],
+        "path": ["__pregel_push", 84, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:ec24f63b-e397-5502-9abf-3427de31bad1",
@@ -2312,11 +1972,7 @@
       {
         "id": "99fc843a-bf94-5381-802e-0ea01fb94495",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          85,
-          false
-        ],
+        "path": ["__pregel_push", 85, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:99fc843a-bf94-5381-802e-0ea01fb94495",
@@ -2328,11 +1984,7 @@
       {
         "id": "467a1831-b6f3-575d-a68a-3246793e896d",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          86,
-          false
-        ],
+        "path": ["__pregel_push", 86, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:467a1831-b6f3-575d-a68a-3246793e896d",
@@ -2344,11 +1996,7 @@
       {
         "id": "ba30c12e-7faf-5c3c-b28c-8672b3fab56a",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          87,
-          false
-        ],
+        "path": ["__pregel_push", 87, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:ba30c12e-7faf-5c3c-b28c-8672b3fab56a",
@@ -2360,11 +2008,7 @@
       {
         "id": "e133d4ee-f3a5-5dd9-a2ad-91b83f1f6b71",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          88,
-          false
-        ],
+        "path": ["__pregel_push", 88, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:e133d4ee-f3a5-5dd9-a2ad-91b83f1f6b71",
@@ -2376,11 +2020,7 @@
       {
         "id": "0325631f-5981-5dfe-a1c2-161fea132f70",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          89,
-          false
-        ],
+        "path": ["__pregel_push", 89, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:0325631f-5981-5dfe-a1c2-161fea132f70",
@@ -2392,11 +2032,7 @@
       {
         "id": "e0b5e926-f1bf-50af-b818-9a78b70724e8",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          90,
-          false
-        ],
+        "path": ["__pregel_push", 90, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:e0b5e926-f1bf-50af-b818-9a78b70724e8",
@@ -2408,11 +2044,7 @@
       {
         "id": "a257bd7d-42f7-5058-b4c6-3b3de8b0fc99",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          91,
-          false
-        ],
+        "path": ["__pregel_push", 91, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:a257bd7d-42f7-5058-b4c6-3b3de8b0fc99",
@@ -2424,11 +2056,7 @@
       {
         "id": "94379b5e-8003-51ae-b6eb-2dff8be22651",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          92,
-          false
-        ],
+        "path": ["__pregel_push", 92, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:94379b5e-8003-51ae-b6eb-2dff8be22651",
@@ -2440,11 +2068,7 @@
       {
         "id": "1bfa0d93-fcfe-5e81-81f7-c94c7328c367",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          93,
-          false
-        ],
+        "path": ["__pregel_push", 93, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:1bfa0d93-fcfe-5e81-81f7-c94c7328c367",
@@ -2456,11 +2080,7 @@
       {
         "id": "5dee08de-8697-50eb-bc52-4d4026ff5488",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          94,
-          false
-        ],
+        "path": ["__pregel_push", 94, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:5dee08de-8697-50eb-bc52-4d4026ff5488",
@@ -2472,11 +2092,7 @@
       {
         "id": "e55b6a2a-c081-5ec7-8bec-9a90bfecbc1f",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          95,
-          false
-        ],
+        "path": ["__pregel_push", 95, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:e55b6a2a-c081-5ec7-8bec-9a90bfecbc1f",
@@ -2488,11 +2104,7 @@
       {
         "id": "3206fde9-e4b1-5076-9136-4eae2c38d533",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          96,
-          false
-        ],
+        "path": ["__pregel_push", 96, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:3206fde9-e4b1-5076-9136-4eae2c38d533",
@@ -2504,11 +2116,7 @@
       {
         "id": "42153d6e-2c18-5978-af3d-be5276914ebf",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          97,
-          false
-        ],
+        "path": ["__pregel_push", 97, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:42153d6e-2c18-5978-af3d-be5276914ebf",
@@ -2520,11 +2128,7 @@
       {
         "id": "d7d0d7a3-c81c-58ab-8e06-b2b8e1e6dac9",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          98,
-          false
-        ],
+        "path": ["__pregel_push", 98, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:d7d0d7a3-c81c-58ab-8e06-b2b8e1e6dac9",
@@ -2536,11 +2140,7 @@
       {
         "id": "a508fd64-e9bc-5497-b1e9-32161b5a4918",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          99,
-          false
-        ],
+        "path": ["__pregel_push", 99, false],
         "interrupts": [],
         "state": {
           "checkpointNs": "body:a508fd64-e9bc-5497-b1e9-32161b5a4918",
@@ -2585,11 +2185,7 @@
             }
           ]
         ],
-        [
-          "d97d235e-7114-57dd-bc9d-add24b2284e1",
-          "branch:to:collect",
-          null
-        ]
+        ["d97d235e-7114-57dd-bc9d-add24b2284e1", "branch:to:collect", null]
       ]
     }
   ]

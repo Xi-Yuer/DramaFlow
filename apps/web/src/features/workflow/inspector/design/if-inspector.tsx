@@ -3,11 +3,11 @@
 import { useContext } from 'react';
 import type { NodeDefinition, NodeTypeManifest } from '@dramaflow/contracts';
 import { Badge } from '@/components/ui/badge';
-import { IfConditionEditor } from '../conditions/if-condition-editor';
-import { WorkflowInputContext } from '../inputs/workflow-input-context';
-import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
+import { IfConditionEditor } from '../../conditions/if-condition-editor';
+import { WorkflowInputContext } from '../../inputs/workflow-input-context';
+import { resolveWorkflowNodePorts } from '../../ports/resolve-workflow-node-ports';
 import { NodeInputBindingField } from './node-input-binding-field';
-import styles from './workflow-node-inspector.module.css';
+import styles from '../workflow-node-inspector.module.css';
 
 export function IfInspector({
   node,

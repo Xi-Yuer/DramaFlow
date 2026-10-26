@@ -2,10 +2,11 @@
 
 import { useContext } from 'react';
 import type { NodeDefinition, NodeTypeManifest } from '@dramaflow/contracts';
-import { ModelSelector, WorkflowModelActionsContext } from '../model-selection/model-selector';
-import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
+import { ModelSelector } from '../../model-selection/model-selector';
+import { WorkflowModelActionsContext } from '../../model-selection/selection/model-selection-context';
+import { resolveWorkflowNodePorts } from '../../ports/resolve-workflow-node-ports';
 import { NodeInputBindingField } from './node-input-binding-field';
-import styles from './workflow-node-inspector.module.css';
+import styles from '../workflow-node-inspector.module.css';
 
 export function TextGenerateInspector({
   node,

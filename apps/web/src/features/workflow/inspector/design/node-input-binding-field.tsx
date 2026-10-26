@@ -2,10 +2,10 @@
 
 import { useContext } from 'react';
 import type { InputPortDefinition, StaticInputBinding } from '@dramaflow/contracts';
-import { CandidateInputSummary } from '../inputs/candidate-input-summary';
-import { availableStringOutputs } from '../inputs/template-input';
-import { TemplateInputEditor } from '../inputs/template-input-editor';
-import { WorkflowInputContext } from '../inputs/workflow-input-context';
+import { CandidateInputSummary } from '../../inputs/candidate-input-summary';
+import { availableStringOutputs } from '../../inputs/template-input';
+import { TemplateInputEditor } from '../../inputs/template-input-editor';
+import { WorkflowInputContext } from '../../inputs/workflow-input-context';
 
 export function NodeInputBindingField({
   nodeId,

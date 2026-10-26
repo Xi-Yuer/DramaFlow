@@ -9,22 +9,15 @@
     "storage": "memory",
     "maxConcurrency": 1,
     "threadId": "iteration-experiment-repro-memory-1-fef4f8f5-abb6-4ea4-b501-d57f488b0c6e",
-    "executed": [
-      0
-    ],
+    "executed": [0],
     "outcome": {
       "status": "returned",
       "value": {
-        "items": [
-          0,
-          1
-        ],
+        "items": [0, 1],
         "values": []
       }
     },
-    "next": [
-      "item"
-    ],
+    "next": ["item"],
     "tasks": [
       {
         "id": "c70d1dbe-ab56-58df-9c3b-c6f1f692d521",
@@ -38,13 +31,8 @@
       }
     ],
     "values": {
-      "items": [
-        0,
-        1
-      ],
-      "values": [
-        0
-      ]
+      "items": [0, 1],
+      "values": [0]
     }
   },
   {
@@ -57,34 +45,19 @@
     "storage": "memory",
     "maxConcurrency": 2,
     "threadId": "iteration-experiment-repro-memory-2-d9fd7070-a404-4426-94c6-da8fa7bd3452",
-    "executed": [
-      0,
-      1
-    ],
+    "executed": [0, 1],
     "outcome": {
       "status": "returned",
       "value": {
-        "items": [
-          0,
-          1
-        ],
-        "values": [
-          0,
-          1
-        ]
+        "items": [0, 1],
+        "values": [0, 1]
       }
     },
     "next": [],
     "tasks": [],
     "values": {
-      "items": [
-        0,
-        1
-      ],
-      "values": [
-        0,
-        1
-      ]
+      "items": [0, 1],
+      "values": [0, 1]
     }
   },
   {
@@ -97,34 +70,19 @@
     "storage": "memory",
     "maxConcurrency": 5,
     "threadId": "iteration-experiment-repro-memory-5-cc33485f-71c9-4c3b-8acf-7ed78c95be47",
-    "executed": [
-      0,
-      1
-    ],
+    "executed": [0, 1],
     "outcome": {
       "status": "returned",
       "value": {
-        "items": [
-          0,
-          1
-        ],
-        "values": [
-          0,
-          1
-        ]
+        "items": [0, 1],
+        "values": [0, 1]
       }
     },
     "next": [],
     "tasks": [],
     "values": {
-      "items": [
-        0,
-        1
-      ],
-      "values": [
-        0,
-        1
-      ]
+      "items": [0, 1],
+      "values": [0, 1]
     }
   },
   {
@@ -137,22 +95,15 @@
     "storage": "postgres",
     "maxConcurrency": 1,
     "threadId": "iteration-experiment-repro-postgres-1-770213be-4d43-4355-8e48-c8ba865a8991",
-    "executed": [
-      0
-    ],
+    "executed": [0],
     "outcome": {
       "status": "returned",
       "value": {
-        "items": [
-          0,
-          1
-        ],
+        "items": [0, 1],
         "values": []
       }
     },
-    "next": [
-      "item"
-    ],
+    "next": ["item"],
     "tasks": [
       {
         "id": "72c39311-c3d1-5b94-adb7-dc7f3c2b0953",
@@ -166,13 +117,8 @@
       }
     ],
     "values": {
-      "items": [
-        0,
-        1
-      ],
-      "values": [
-        0
-      ]
+      "items": [0, 1],
+      "values": [0]
     }
   },
   {
@@ -185,34 +131,19 @@
     "storage": "postgres",
     "maxConcurrency": 2,
     "threadId": "iteration-experiment-repro-postgres-2-2ab02f2a-5140-4beb-8c9b-144c6489dc47",
-    "executed": [
-      0,
-      1
-    ],
+    "executed": [0, 1],
     "outcome": {
       "status": "returned",
       "value": {
-        "items": [
-          0,
-          1
-        ],
-        "values": [
-          0,
-          1
-        ]
+        "items": [0, 1],
+        "values": [0, 1]
       }
     },
     "next": [],
     "tasks": [],
     "values": {
-      "items": [
-        0,
-        1
-      ],
-      "values": [
-        0,
-        1
-      ]
+      "items": [0, 1],
+      "values": [0, 1]
     }
   },
   {
@@ -225,34 +156,19 @@
     "storage": "postgres",
     "maxConcurrency": 5,
     "threadId": "iteration-experiment-repro-postgres-5-bd45aa72-72bc-45d1-8a5f-844471def75c",
-    "executed": [
-      0,
-      1
-    ],
+    "executed": [0, 1],
     "outcome": {
       "status": "returned",
       "value": {
-        "items": [
-          0,
-          1
-        ],
-        "values": [
-          0,
-          1
-        ]
+        "items": [0, 1],
+        "values": [0, 1]
       }
     },
     "next": [],
     "tasks": [],
     "values": {
-      "items": [
-        0,
-        1
-      ],
-      "values": [
-        0,
-        1
-      ]
+      "items": [0, 1],
+      "values": [0, 1]
     }
   }
 ]

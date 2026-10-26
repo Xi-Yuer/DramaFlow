@@ -30,7 +30,7 @@ import {
 import {
   GenericWorkflowNode,
   WorkflowManifestProvider,
-} from '../src/features/workflow/canvas/workflow-node';
+} from '../src/features/workflow/canvas/rendering/workflow-node';
 import { GraphCanvasSession } from '../src/features/workflow/editor/graph-canvas-session';
 import { WorkflowBodyInputs } from '../src/features/workflow/iteration/body-input-boundary-node';
 import {
@@ -41,7 +41,6 @@ import { workflowApi } from '../src/features/workflow/workflow-api';
 import {
   addBodyInput,
   addInvariantInput,
-  bindGraphInput,
   bodyInputSourceOptions,
   initializeIterationBody,
   removeBodyInput,
@@ -51,6 +50,7 @@ import {
   updateBodyInput,
   updateInvariantInput,
 } from '../src/features/workflow/iteration/iteration-body-inputs';
+import { bindGraphInput } from '../src/features/workflow/inputs/bindings/graph-input-bindings';
 import { nodeTypeKeys } from '../src/features/workflow/node-catalog/node-type-api';
 import { setWorkflowOutput } from '../src/features/workflow/outputs/workflow-outputs';
 import { resolveWorkflowNodePorts } from '../src/features/workflow/ports/resolve-workflow-node-ports';

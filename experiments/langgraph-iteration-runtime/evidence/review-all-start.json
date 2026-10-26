@@ -96,20 +96,12 @@
       "outerIndex": -1,
       "results": []
     },
-    "next": [
-      "body",
-      "body",
-      "body"
-    ],
+    "next": ["body", "body", "body"],
     "tasks": [
       {
         "id": "e6ace543-685b-5d84-b7f6-6b2b6e378b17",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          0,
-          false
-        ],
+        "path": ["__pregel_push", 0, false],
         "interrupts": [
           {
             "id": "c842f2a4f787dbfea2835e9b53868ea5",
@@ -133,17 +125,12 @@
             "outerIndex": -1,
             "intermediate": 0
           },
-          "next": [
-            "review"
-          ],
+          "next": ["review"],
           "tasks": [
             {
               "id": "8046f313-5901-50f8-85a9-ed3f5feb5b4f",
               "name": "review",
-              "path": [
-                "__pregel_pull",
-                "review"
-              ],
+              "path": ["__pregel_pull", "review"],
               "interrupts": [
                 {
                   "id": "c842f2a4f787dbfea2835e9b53868ea5",
@@ -165,11 +152,7 @@
       {
         "id": "d31b8828-ec44-5f6e-a39f-c7a7b054c7a8",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          1,
-          false
-        ],
+        "path": ["__pregel_push", 1, false],
         "interrupts": [
           {
             "id": "91f28394c3ce145b3b6e1f0787ade43e",
@@ -193,17 +176,12 @@
             "outerIndex": -1,
             "intermediate": 2
           },
-          "next": [
-            "review"
-          ],
+          "next": ["review"],
           "tasks": [
             {
               "id": "a37d10fe-6142-58fe-b429-575e40a9d1f5",
               "name": "review",
-              "path": [
-                "__pregel_pull",
-                "review"
-              ],
+              "path": ["__pregel_pull", "review"],
               "interrupts": [
                 {
                   "id": "91f28394c3ce145b3b6e1f0787ade43e",
@@ -225,11 +203,7 @@
       {
         "id": "7f0131f1-ba3e-56a5-9613-980caf977801",
         "name": "body",
-        "path": [
-          "__pregel_push",
-          2,
-          false
-        ],
+        "path": ["__pregel_push", 2, false],
         "interrupts": [
           {
             "id": "60672458be54e0b9dd85ec9df006b168",
@@ -253,17 +227,12 @@
             "outerIndex": -1,
             "intermediate": 4
           },
-          "next": [
-            "review"
-          ],
+          "next": ["review"],
           "tasks": [
             {
               "id": "f7b51ab6-1736-5632-8467-23853bf71987",
               "name": "review",
-              "path": [
-                "__pregel_pull",
-                "review"
-              ],
+              "path": ["__pregel_pull", "review"],
               "interrupts": [
                 {
                   "id": "60672458be54e0b9dd85ec9df006b168",

@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkflowDefinition, WorkflowResponse } from '@dramaflow/contracts';
 import { WorkflowCanvas } from '../src/features/workflow/canvas/workflow-canvas';
-import { GenericWorkflowNode } from '../src/features/workflow/canvas/workflow-node';
+import { GenericWorkflowNode } from '../src/features/workflow/canvas/rendering/workflow-node';
 import type { WorkflowNodeData } from '../src/features/workflow/canvas/react-flow-adapter';
 import { nodeTypeKeys } from '../src/features/workflow/node-catalog/node-type-api';
 import { useWorkflowDraft } from '../src/features/workflow/editor/use-workflow-draft';

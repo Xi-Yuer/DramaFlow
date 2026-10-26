@@ -7,7 +7,7 @@ import { WorkflowCanvas } from '@/features/workflow/canvas/workflow-canvas';
 import type {
   ModelSelectionIntent,
   ModelSelectionResume,
-} from '@/features/workflow/model-selection/model-selector';
+} from '../model-selection/selection/model-selection-context';
 import type { HumanReviewActions, WorkflowRunStatusState } from '../run/status/workflow-run-status';
 import { clampViewport } from './viewport';
 import {

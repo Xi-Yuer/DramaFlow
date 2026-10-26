@@ -18,7 +18,7 @@ import {
   areWorkflowHandlesCompatible,
   controlHandleId,
   parseWorkflowHandle,
-} from '../src/features/workflow/canvas/workflow-handles';
+} from '../src/features/workflow/canvas/adapter/workflow-handles';
 
 const controlConnection = {
   source: 'A',

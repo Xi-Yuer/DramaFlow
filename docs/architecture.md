@@ -151,11 +151,23 @@ API / Worker 启动时初始化官方 PostgresSaver，不提供内存回退。�
 
 画布内复用同一抽屉配置当前用户的供应商、凭证和模型；所有自有项目（包括后续新建项目）共用，Query 缓存按用户 ID 隔离。Publish 在事务内按 Workflow Owner 校验模型 / Provider；Runtime 先核对 Run 的项目权限，再按相同用户身份读取配置并解密，不接受跨用户 ID 引用。节点从 Model Catalog 选择模型，仅写 modelConfigurationId；从节点进入供应商配置成功后继续原选择意图，取消不写入节点，设置页主动配置则留在设置。已选模型展示配置参数，不在节点另存。Secret 不回填、不进入 Form / Query 缓存或浏览器存储，请求发出及退出表单时清空；配置不触发生成。
 
+[模型设置入口](../apps/web/src/features/models/model-settings.tsx)只负责用户身份和抽屉装配。`models/settings/` 管理查询、刷新、并发锁与表单会话；`models/catalog/` 展示供应商目录；`models/providers/` 维护供应商创建、管理和凭证轮换；`models/configurations/` 管理模型配置表单、列表及可用性；非秘密配置摘要由 `models/shared/` 复用。凭证状态仍就近保存在各提交表单中，保持发送即清空、失败不回填的生命周期。
+
+[模型选择入口](../apps/web/src/features/workflow/model-selection/model-selector.tsx)装配触发器和列表；`model-selection/selection/` 管理 Context、用户级资源查询、选择恢复与选项推导，`presentation/` 展示配置分组与目录状态，`configuration/` 处理明确的「添加并选择」。画布只依赖选择 Context，凭证表单不进入选择会话；配置恢复沿用原意图、可用性与显式选择规则。
+
+## Web Graph Input 编辑职责
+
+`workflow/inputs/definitions/` 提供 Root / Body 共用的输入定义操作、类型选项、名称校验和编辑控件；`inputs/bindings/` 负责本图 workflow_input 的绑定、重命名和兼容性清理。通用 Input 不依赖 Iteration。`iteration/inputs/` 只维护 composite、Body 输入、不变输入及 bodyInputMapping，依赖上述通用能力；原 Iteration 输入入口保留实例编辑导出。协议仍为 GraphInputDefinition / DataType / 原有 binding，修改范围与清理规则不变。
+
 ## Artifact 生产数据通道
 
 PostgreSQL 保存身份与元数据，内容写 RustFS；只有 ready Artifact 可解析。内部 Runtime 可还原 JSON 或生成临时媒体访问资源，规则见[数据模型](data-model.md#artifact-与-asset)与[对象存储](object-storage.md)。Run 查询只返回 reference 身份，不 materialize、不签发 URL；Web 尚不能读取引用内容。Asset / Promote、自动对账与垃圾回收未接入。
 
 ## React Flow 数据适配
+
+[Canvas 入口](../apps/web/src/features/workflow/canvas/workflow-canvas.tsx)只装配目录、viewport、节点添加和画布。`canvas/adapter/` 维护领域与 React Flow 的节点 / 边转换、绑定投影、Handle 协议及连线修改；[原适配入口](../apps/web/src/features/workflow/canvas/react-flow-adapter.ts)保留既有导出。`canvas/editing/` 负责来源替换 / 候选确认、Boundary 编辑与编辑上下文；`canvas/view/` 管理选择、测量和 Inspector 模式等页面状态；`canvas/rendering/` 放节点、边渲染及配套样式。
+
+Inspector 的[入口组件](../apps/web/src/features/workflow/inspector/workflow-node-inspector.tsx)管理面板、标签和 Body 入口；`inspector/design/` 按节点类型编辑草稿，`inspector/runtime/` 展示真实 NodeRun、attempt、运行值与人工审批。二者继续使用原有 Context 与操作边界。
 
 WorkflowDefinition 是唯一持久来源，React Flow 只管理视图；导出不保留 selected / dragging / measured。节点目录、创建与连接行为见 [Node](node-model.md)，界面约束见[前端规范](frontend-ui.md)。
 
@@ -171,7 +183,7 @@ Template 的 `node_output` 变量也由同一适配层投影为数据线，以 `
 
 节点状态仍由真实 NodeRun / PendingHumanReview 合成，经集中式 [runtime-presentation](../apps/web/src/features/workflow/runtime/runtime-presentation.ts)映射到 Canvas；不修改 Runtime Status 数据模型。画布不再显示状态胶囊或独立状态行，改为整节点边框、轻底色和标题区图标。running 使用青色边框、细 ring 与缓慢旋转图标及「正在执行」；waiting 使用琥珀色边框与手形图标、人工操作文字，待审内容摘要及现有 CTA 保留；failed 使用红色边框、轻底色和错误图标 / 文字；completed 仅保留低对比边框与小勾；idle 无可见状态标记，pending 仅有低权重时钟。选中轮廓与运行态边框独立，选中不覆盖等待 / 失败等语义色；Inspector 保留原有状态展示。
 
-[连线渲染器](../apps/web/src/features/workflow/canvas/workflow-edge.tsx)复用 React Flow 的 getBezierPath / BaseEdge 和命中区域。DataEdge 在低对比底线上叠加 SVG 短划线，以 2.8 秒周期的负 stroke-dashoffset 表达 source → target；ControlEdge 使用低权重静态实线箭头。Template / Candidate 投影共用低强度数据流，以虚线底线和「模板」/「候选」标识区分，原有删除、重连与持久化规则不变。动画仅表达数据依赖，不表示实际传输或选中分支，不根据 DAG 猜测 Active Edge；Workflow 输出边界连线沿用原展示。减少动态效果偏好下关闭数据流 overlay 和运行图标旋转，静态边框、图标和箭头仍可识别。
+[连线渲染器](../apps/web/src/features/workflow/canvas/rendering/workflow-edge.tsx)复用 React Flow 的 getBezierPath / BaseEdge 和命中区域。DataEdge 在低对比底线上叠加 SVG 短划线，以 2.8 秒周期的负 stroke-dashoffset 表达 source → target；ControlEdge 使用低权重静态实线箭头。Template / Candidate 投影共用低强度数据流，以虚线底线和「模板」/「候选」标识区分，原有删除、重连与持久化规则不变。动画仅表达数据依赖，不表示实际传输或选中分支，不根据 DAG 猜测 Active Edge；Workflow 输出边界连线沿用原展示。减少动态效果偏好下关闭数据流 overlay 和运行图标旋转，静态边框、图标和箭头仍可识别。
 
 ### Web Workflow Draft 持久化
 

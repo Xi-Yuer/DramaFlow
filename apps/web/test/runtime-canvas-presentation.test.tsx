@@ -5,7 +5,7 @@ import type { NodeRun, WorkflowDefinition } from '@dramaflow/contracts';
 import {
   GenericWorkflowNode,
   WorkflowManifestProvider,
-} from '../src/features/workflow/canvas/workflow-node';
+} from '../src/features/workflow/canvas/rendering/workflow-node';
 import {
   toReactFlowNode,
   type WorkflowNode,

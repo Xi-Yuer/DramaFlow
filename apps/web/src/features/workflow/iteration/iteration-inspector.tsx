@@ -8,17 +8,16 @@ import {
 } from '@dramaflow/contracts';
 import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { NodeInputBindingField } from '../inspector/node-input-binding-field';
+import { NodeInputBindingField } from '../inspector/design/node-input-binding-field';
 import panel from '../inspector/workflow-node-inspector.module.css';
 import { WorkflowInputContext } from '../inputs/workflow-input-context';
 import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
-import { DataTypeSelect, GraphInputEditor } from './graph-input-editor';
-import styles from './graph-input-editor.module.css';
+import { DataTypeSelect, GraphInputEditor } from '../inputs/definitions/graph-input-editor';
+import styles from '../inputs/definitions/graph-input-editor.module.css';
 import {
   addBodyInput,
   addInvariantInput,
   bodyInputSourceOptions,
-  formatDataType,
   initializeIterationBody,
   removeBodyInput,
   removeInvariantInput,
@@ -27,6 +26,7 @@ import {
   updateBodyInput,
   updateInvariantInput,
 } from './iteration-body-inputs';
+import { formatDataType } from '../inputs/definitions/graph-input-types';
 
 export function IterationInspector({
   node,

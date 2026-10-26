@@ -4,7 +4,9 @@
 
 ## 当前阶段
 
-Root Workflow Input → Boundary → Iteration.items 与 Run Form 数组提交进入人工验收；范围见[当前架构](architecture.md#web-workflow-run-inputs)。待人工检查文本 / 数字列表增删、实际提交、Body 映射与数组输出，以及草稿保存重开。本轮只补齐通用运行输入表单，不扩展 Iteration Runtime，不创建验收 Workflow，不运行浏览器 E2E 或真实 Provider。
+Canvas / Adapter / Node Inspector、通用 Input / Iteration 输入、模型设置与模型选择的职责拆分进入结构与交互验收；目录边界见[开发指南](development.md#前端职责目录)，实现入口见[当前架构](architecture.md#web-graph-input-编辑职责)。保持现有协议、提交与显式选择规则，只调整 Web 模块组织。Template 编辑器、Editor 项目元数据会话、后端模型服务与发布校验的集中职责留待后续分别处理，不与本轮通用输入和模型管理迁移混改。
+
+Root Workflow Input → Boundary → Iteration.items 与 Run Form 数组提交等待人工验收；范围见[当前架构](architecture.md#web-workflow-run-inputs)。待人工检查文本 / 数字列表增删、实际提交、Body 映射与数组输出，以及草稿保存重开。本轮不扩展 Iteration Runtime，不创建验收 Workflow，不运行浏览器 E2E 或真实 Provider。
 
 Human Review 第五阶段已接入现有 Run 面板的单个文本审批闭环，等待人工 Canvas / Run 验收。能力与限制见[当前架构](architecture.md#web-human-review)。本轮不运行 Browser E2E 或 Provider。
 

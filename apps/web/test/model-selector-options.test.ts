@@ -10,7 +10,7 @@ import {
   type CatalogModelRef,
   type SelectorConfiguration,
   type SelectorProviderInstance,
-} from '../src/features/workflow/model-selection/model-selector-options';
+} from '../src/features/workflow/model-selection/selection/model-selector-options';
 
 const openai = '00000000-0000-4000-8000-000000000021';
 const anthropic = '00000000-0000-4000-8000-000000000022';

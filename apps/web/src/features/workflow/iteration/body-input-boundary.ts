@@ -5,9 +5,9 @@ import {
 } from '@dramaflow/contracts';
 import type { Node, XYPosition } from '@xyflow/react';
 import { z } from 'zod';
-import { workflowEdgeViewOptions } from '../canvas/edge-presentation';
+import { workflowEdgeViewOptions } from '../canvas/rendering/edge-presentation';
 import type { WorkflowEdge, WorkflowEdgeData } from '../canvas/react-flow-adapter';
-import { parseWorkflowHandle } from '../canvas/workflow-handles';
+import { parseWorkflowHandle } from '../canvas/adapter/workflow-handles';
 import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
 
 export const BODY_INPUT_NODE_TYPE = 'workflowBodyInputs';

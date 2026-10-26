@@ -3,10 +3,10 @@
 import { useContext } from 'react';
 import type { NodeDefinition, NodeTypeManifest } from '@dramaflow/contracts';
 import { Textarea } from '@/components/ui/textarea';
-import { WorkflowNodeSettingsActions } from '../node-catalog/human-review-settings';
-import { resolveWorkflowNodePorts } from '../ports/resolve-workflow-node-ports';
+import { WorkflowNodeSettingsActions } from '../../node-catalog/human-review-settings';
+import { resolveWorkflowNodePorts } from '../../ports/resolve-workflow-node-ports';
 import { NodeInputBindingField } from './node-input-binding-field';
-import styles from './workflow-node-inspector.module.css';
+import styles from '../workflow-node-inspector.module.css';
 
 export function HumanReviewInspector({
   node,

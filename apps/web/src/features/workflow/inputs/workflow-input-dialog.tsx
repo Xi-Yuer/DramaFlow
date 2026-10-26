@@ -3,12 +3,8 @@
 import { useState } from 'react';
 import { Alert, Button, Modal } from 'antd';
 import type { NodeTypeManifest, WorkflowDefinition } from '@dramaflow/contracts';
-import { GraphInputEditor } from '../iteration/graph-input-editor';
-import {
-  addGraphInput,
-  removeGraphInput,
-  updateGraphInput,
-} from '../iteration/iteration-body-inputs';
+import { GraphInputEditor } from './definitions/graph-input-editor';
+import { addGraphInput, removeGraphInput, updateGraphInput } from './definitions/graph-inputs';
 
 export function WorkflowInputDialog({
   definition,

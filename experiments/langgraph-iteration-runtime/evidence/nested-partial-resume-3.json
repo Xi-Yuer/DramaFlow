@@ -49,18 +49,12 @@
         }
       ]
     },
-    "next": [
-      "outerBody"
-    ],
+    "next": ["outerBody"],
     "tasks": [
       {
         "id": "53d0b8a1-8c27-500e-ab36-f7871e04a1de",
         "name": "outerBody",
-        "path": [
-          "__pregel_push",
-          0,
-          false
-        ],
+        "path": ["__pregel_push", 0, false],
         "interrupts": [
           {
             "id": "c8e2f69a0e1d366374bd614503b77470",
@@ -126,11 +120,7 @@
       {
         "id": "3996ed57-08b8-5dca-8e93-8acd8b30ac37",
         "name": "outerBody",
-        "path": [
-          "__pregel_push",
-          1,
-          false
-        ],
+        "path": ["__pregel_push", 1, false],
         "interrupts": [
           {
             "id": "736db62d7ff85fa3a7d63e383db82b0c",
@@ -169,18 +159,12 @@
               }
             ]
           },
-          "next": [
-            "body"
-          ],
+          "next": ["body"],
           "tasks": [
             {
               "id": "0a064675-2817-51e9-a5cf-046b6a03b146",
               "name": "body",
-              "path": [
-                "__pregel_push",
-                0,
-                false
-              ],
+              "path": ["__pregel_push", 0, false],
               "interrupts": [
                 {
                   "id": "130d3aff2ebf2d3f314a85916e265aa4",
@@ -213,11 +197,7 @@
             {
               "id": "c7e93400-8067-5be9-9ae9-a67666678cee",
               "name": "body",
-              "path": [
-                "__pregel_push",
-                1,
-                false
-              ],
+              "path": ["__pregel_push", 1, false],
               "interrupts": [
                 {
                   "id": "736db62d7ff85fa3a7d63e383db82b0c",
@@ -241,17 +221,12 @@
                   "outerIndex": 1,
                   "intermediate": 22
                 },
-                "next": [
-                  "review"
-                ],
+                "next": ["review"],
                 "tasks": [
                   {
                     "id": "e965d0b2-09e4-58cb-8d9e-1b45b49a516e",
                     "name": "review",
-                    "path": [
-                      "__pregel_pull",
-                      "review"
-                    ],
+                    "path": ["__pregel_pull", "review"],
                     "interrupts": [
                       {
                         "id": "736db62d7ff85fa3a7d63e383db82b0c",

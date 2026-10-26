@@ -5,7 +5,7 @@ import {
   reconnectWorkflowEdge,
   toReactFlowEdges,
 } from '../src/features/workflow/canvas/react-flow-adapter';
-import { controlHandleId } from '../src/features/workflow/canvas/workflow-handles';
+import { controlHandleId } from '../src/features/workflow/canvas/adapter/workflow-handles';
 import { ifCatalog, ifWorkflow } from './fixtures/workflow-if';
 
 const route = (port: string | undefined, target = 'b') => ({
