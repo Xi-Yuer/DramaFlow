@@ -51,10 +51,25 @@ class PrismaWorkflowVersionRepository implements WorkflowVersionRepository {
   }
 }
 
-// 只提供有权限作用域的读取实例；发布、版本号分配和草稿更新不属于此接口。
+// 发布、版本号分配和草稿更新不属于此接口。
 @Injectable()
 export class WorkflowVersionRepositories {
   constructor(private readonly db: DatabaseService) {}
+
+  async findOwnedWorkflow(
+    ownerId: string,
+    rawVersionId: string,
+  ): Promise<{ projectId: string; workflowId: string } | null> {
+    const version = await this.db.client.workflowVersion.findFirst({
+      where: {
+        id: workflowIdentifierSchema.parse(rawVersionId),
+        workflow: { project: { ownerId } },
+      },
+      select: { workflow: { select: { id: true, projectId: true } } },
+    });
+    if (!version) return null;
+    return { projectId: version.workflow.projectId, workflowId: version.workflow.id };
+  }
 
   async forProject(ownerId: string, rawProjectId: string): Promise<WorkflowVersionRepository> {
     const projectId = z.uuid().parse(rawProjectId);

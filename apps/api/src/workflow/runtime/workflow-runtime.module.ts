@@ -3,6 +3,7 @@ import {
   WorkflowQueueModule,
   WorkflowHumanReviewModule,
   WorkflowExecutionTreeModule,
+  WorkflowRunQueryModule,
 } from '@dramaflow/server';
 import { Module } from '@nestjs/common';
 import { WorkflowRuntimeService } from './workflow-runtime.service.js';
@@ -15,6 +16,7 @@ import { WorkflowRunsController } from './workflow-runs.controller.js';
     WorkflowQueueModule,
     WorkflowHumanReviewModule,
     WorkflowExecutionTreeModule,
+    WorkflowRunQueryModule,
   ],
   providers: [WorkflowRuntimeService],
   controllers: [WorkflowRunsController, WorkflowExecutionTreeController],

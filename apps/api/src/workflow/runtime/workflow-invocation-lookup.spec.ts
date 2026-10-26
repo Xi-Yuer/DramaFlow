@@ -5,6 +5,8 @@ import {
   WorkflowOutboxDispatcher,
   WorkflowRunSubmissionFactory,
   WorkflowHumanReviewService,
+  WorkflowRunQueryService,
+  WorkflowVersionRepositories,
 } from '@dramaflow/server';
 import { WorkflowRuntimeService } from './workflow-runtime.service.js';
 import { WorkflowRunsController } from './workflow-runs.controller.js';
@@ -56,8 +58,9 @@ function fixture() {
   const service = new WorkflowRuntimeService(
     submissions as unknown as WorkflowRunSubmissionFactory,
     dispatcher as unknown as WorkflowOutboxDispatcher,
-    database as unknown as DatabaseService,
     {} as WorkflowHumanReviewService,
+    new WorkflowRunQueryService(database as unknown as DatabaseService),
+    {} as WorkflowVersionRepositories,
   );
   return { service, workflow, workflowRun, submissions, dispatcher };
 }
