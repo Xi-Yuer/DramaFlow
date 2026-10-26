@@ -14,22 +14,26 @@ import { WorkflowStateAnnotation, type WorkflowState } from '../../runtime/state
 // ':' 不能成为合法 LangGraph 节点名，避免新增内部通道与用户 Definition nodeId 冲突。
 export const FRAME = '__dramaflow:iteration';
 export const INVOCATION = '__dramaflow:invocation';
+export const ITEM_RUN = '__dramaflow:item_run';
 export const RESULTS = '__dramaflow:results';
 export const frameSchema = z
   .object({
     ownerOccurrenceId: workflowIdentifierSchema,
+    iterationNodeRunId: workflowIdentifierSchema,
     snapshot: collectionRuntimeValueSchema,
     invariantInputs: runtimeValueMapSchema,
   })
   .strict();
 export interface IterationFrame {
   ownerOccurrenceId: string;
+  iterationNodeRunId: string;
   snapshot: CollectionRuntimeValue;
   invariantInputs: Record<string, RuntimeValue>;
 }
 export const itemInvocationSchema = z
   .object({
     ownerOccurrenceId: workflowIdentifierSchema,
+    iterationNodeRunId: workflowIdentifierSchema,
     scopeKey: executionScopeKeySchema,
     index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
     definitionLocation: graphDefinitionLocationSchema,
@@ -37,7 +41,7 @@ export const itemInvocationSchema = z
   .strict();
 export const itemResultSchema = itemInvocationSchema
   .omit({ definitionLocation: true })
-  .extend({ outputs: runtimeValueMapSchema })
+  .extend({ iterationItemRunId: workflowIdentifierSchema, outputs: runtimeValueMapSchema })
   .strict();
 export type ItemResult = z.infer<typeof itemResultSchema>;
 export function mergeIterationResults(current: ItemResult[], update: ItemResult[]): ItemResult[] {
@@ -76,5 +80,6 @@ export const ItemOutput = Annotation.Root({ [RESULTS]: Annotation<ItemResult[]>(
 export const ItemState = Annotation.Root({
   ...WorkflowStateAnnotation.spec,
   [INVOCATION]: Annotation<z.infer<typeof itemInvocationSchema>>(),
+  [ITEM_RUN]: Annotation<string>(),
   ...ItemOutput.spec,
 });

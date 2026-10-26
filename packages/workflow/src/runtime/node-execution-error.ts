@@ -50,6 +50,19 @@ export class NodeRunRecordingError extends NodeExecutionError {
   }
 }
 
+export class IterationItemRunRecordingError extends AggregateError {
+  constructor(
+    public readonly iterationItemRunId: string,
+    public readonly executionError: NodeExecutionError,
+    public readonly recordingError: unknown,
+  ) {
+    super([executionError, recordingError], 'Iteration item 失败，且失败记录写入也失败', {
+      cause: executionError,
+    });
+    this.name = 'IterationItemRunRecordingError';
+  }
+}
+
 // Action 与 Human Review 共用失败记录边界，原生图控制流不属于业务失败。
 export async function failNodeRun(
   repository: Pick<NodeRunRepository, 'markFailed'>,

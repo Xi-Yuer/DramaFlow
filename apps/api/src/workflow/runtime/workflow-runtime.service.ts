@@ -178,6 +178,7 @@ export class WorkflowRuntimeService {
           workflowRunId: true,
           nodeId: true,
           occurrenceId: true,
+          iterationItemRunId: true,
           occurrence: { select: { scopeKey: true } },
           attempt: true,
           status: true,
@@ -195,6 +196,9 @@ export class WorkflowRuntimeService {
           nodeId: row.nodeId,
           occurrenceId: row.occurrenceId,
           scopeKey: row.occurrence.scopeKey,
+          ...(row.iterationItemRunId
+            ? { iterationItemRunId: row.iterationItemRunId }
+            : {}),
           attempt: row.attempt,
           status: row.status,
           ...(row.inputs !== null ? { inputs: row.inputs } : {}),

@@ -18,10 +18,8 @@ import {
 } from '../definition/validate-publish.js';
 import { createWorkflowDefinitionSnapshot } from '../definition/version.js';
 import { NodeRegistry } from '../node/registry.js';
-import type {
-  HumanReviewNodeRunRepository,
-  NodeOccurrenceRepository,
-} from '../run/node-run-repository.js';
+import type { HumanReviewNodeRunRepository } from '../run/node-run-repository.js';
+import type { IterationRunRepository } from '../run/iteration-item-run-repository.js';
 import type { NodeExecutor } from '../runtime/node-executor.js';
 import { WorkflowStateAnnotation, type WorkflowState } from '../runtime/state.js';
 import { collectNodeDependencies, DependencyCompiler } from './dependency.compiler.js';
@@ -65,7 +63,7 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     private readonly createHumanReviewRuns?: (
       run: WorkflowRun,
     ) => Promise<HumanReviewNodeRunRepository>,
-    private readonly createOccurrences?: (run: WorkflowRun) => Promise<NodeOccurrenceRepository>,
+    private readonly createIterationRuns?: (run: WorkflowRun) => Promise<IterationRunRepository>,
   ) {}
 
   async compile(input: WorkflowDefinition, run: WorkflowRun): Promise<CompiledWorkflow> {
@@ -148,11 +146,13 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       throw new Error('If / Human Review / Iteration 编译必须显式注入 BindingResolver / Codec');
     if (reviewNodeIds.size && !this.createHumanReviewRuns)
       throw new Error('Human Review 编译必须显式注入 NodeRun Repository');
-    if (iterationEntries.length && !this.createOccurrences)
-      throw new Error('Iteration 编译必须注入 NodeOccurrence Repository');
+    if (iterationEntries.length && !this.createIterationRuns)
+      throw new Error('Iteration 编译必须注入 IterationRun Repository');
     const valueServices = needsValueServices ? await this.createValueServices!(run) : undefined;
     const reviewRuns = reviewNodeIds.size ? await this.createHumanReviewRuns!(run) : undefined;
-    const occurrences = iterationEntries.length ? await this.createOccurrences!(run) : undefined;
+    const iterationRuns = iterationEntries.length
+      ? await this.createIterationRuns!(run)
+      : undefined;
     const executor =
       iterationEntries.length ||
       entries.some((entry) => actionStrategy.supports(entry.declaration.manifest))
@@ -169,7 +169,7 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
     >(WorkflowStateAnnotation);
     for (const { node, declaration } of entries) {
       if (iterationStrategy.supports(declaration.manifest)) {
-        if (!executor || !valueServices || !occurrences)
+        if (!executor || !valueServices || !iterationRuns)
           throw new Error('Iteration 执行服务未配置');
         iterationStrategy.compile({
           node,
@@ -180,7 +180,7 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
           registry: this.registry,
           executor,
           services: valueServices,
-          occurrences,
+          runs: iterationRuns,
           addNode: (id, child) => {
             graph.addNode(id, child);
           },

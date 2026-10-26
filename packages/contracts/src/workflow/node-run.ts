@@ -33,6 +33,7 @@ export const nodeRunSchema = z
     nodeId: workflowIdentifierSchema,
     occurrenceId: workflowIdentifierSchema,
     scopeKey: executionScopeKeySchema,
+    iterationItemRunId: workflowIdentifierSchema.optional(),
     attempt: z.number().int().positive(),
     status: nodeRunStatusSchema,
     inputs: runtimeValueMapSchema.optional(),
@@ -46,3 +47,21 @@ export const nodeRunSchema = z
 export type NodeRunStatus = z.infer<typeof nodeRunStatusSchema>;
 export type NodeRunError = z.infer<typeof nodeRunErrorSchema>;
 export type NodeRun = z.infer<typeof nodeRunSchema>;
+
+// 只保存执行身份与生命周期；item 内容沿用输入 RuntimeValue / checkpoint，不复制 payload。
+export const iterationItemRunSchema = z
+  .object({
+    id: workflowIdentifierSchema,
+    workflowRunId: workflowIdentifierSchema,
+    iterationNodeRunId: workflowIdentifierSchema,
+    iterationNodeId: workflowIdentifierSchema,
+    scopeKey: executionScopeKeySchema,
+    index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    status: nodeRunStatusSchema,
+    createdAt: z.iso.datetime(),
+    startedAt: z.iso.datetime(),
+    completedAt: z.iso.datetime().optional(),
+    error: nodeRunErrorSchema.optional(),
+  })
+  .strict();
+export type IterationItemRun = z.infer<typeof iterationItemRunSchema>;

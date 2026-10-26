@@ -404,7 +404,7 @@ describe('动态端口与局部图校验复用', () => {
       expect(() => check(f)).toThrow(errorCode('ITERATION_BODY_CAPABILITY_UNSUPPORTED'));
     },
   );
-  it('缺少 NodeOccurrence Repository 时，在创建执行服务前拒绝 Iteration', async () => {
+  it('缺少 IterationRun Repository 时，在创建执行服务前拒绝 Iteration', async () => {
     const f = fixture();
     const createExecutor = vi.fn();
     const createServices = vi.fn();
@@ -426,7 +426,7 @@ describe('动态端口与局部图校验复用', () => {
       createdAt: '2026-10-24T00:00:00.000Z',
     };
     await expect(compiler.compile(f.graph, run)).rejects.toThrow(
-      'Iteration 编译必须注入 NodeOccurrence Repository',
+      'Iteration 编译必须注入 IterationRun Repository',
     );
     expect(createExecutor).not.toHaveBeenCalled();
     expect(createServices).not.toHaveBeenCalled();

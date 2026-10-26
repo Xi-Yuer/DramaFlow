@@ -1,6 +1,6 @@
 # 当前架构与目录职责
 
-只记录已实现能力及其入口。协议见 [Workflow](workflow-model.md)、[Node](node-model.md)、[数据模型](data-model.md)、[Runtime](runtime-architecture.md)；当前工作与待决策项见[实施方案](implementation-plan.md)。精确字段以 contracts、Schema 和 Controller 为准。
+只记录已实现能力及其入口。协议见 [Workflow](workflow-model.md)、[Node](node-model.md)、[数据模型](data-model.md)、[Runtime](runtime-architecture.md)；当前工作与待决策项见[实施方案](implementation-plan.md)。精确字段以 contracts、Schema 和 Controller 为准。跨模块设计遵循[Workflow 通用性与业务解耦原则](platform-model.md#workflow-通用性与业务解耦)。
 
 ## 已实现的基础工程
 
@@ -24,7 +24,7 @@ Root 的「工作流输入」边界投影 `definition.inputs`，可打开[输入
 
 ## Node Execution Occurrence
 
-[NodeOccurrence / NodeRun 协议](../packages/contracts/src/workflow/node-run.ts)区分一次逻辑执行与尝试。持久化仅新增 `node_occurrence`，不创建 ExecutionScope 表；occurrence 由固定 WorkflowRun、scopeKey 和 nodeId 唯一定位，并拥有独立 UUID。当前 Compiler 显式使用 root scope，nodeId 归属 Run 的固定 WorkflowVersion；If 仍不创建 NodeRun。scopeKey 是受信任执行上下文提供的产品身份，不解析为 iterationIndex、LangGraph namespace 或权限凭据。
+[NodeOccurrence / NodeRun 协议](../packages/contracts/src/workflow/node-run.ts)区分一次逻辑执行与尝试。`node_occurrence` 保存逻辑执行，不创建通用 ExecutionScope 表；occurrence 由固定 WorkflowRun、scopeKey 和 nodeId 唯一定位，并拥有独立 UUID。根图显式使用 root scope，Iteration Body 使用 ItemRun 对应的子 scope，nodeId 归属 Run 的固定 WorkflowVersion；If 仍不创建 NodeRun。scopeKey 是受信任执行上下文提供的产品身份，不解析为 iterationIndex、LangGraph namespace 或权限凭据。
 
 [NodeRun Repository](../packages/server/src/workflow/runtime/node-run-repository.ts)按授权 Run 获取 / 创建 occurrence；唯一键竞争在事务 advisory lock 内串行化。创建 attempt 时锁定对应 occurrence 行，只在该 occurrence 内分配序号；NodeRun 的唯一键为 occurrenceId / attempt，复合外键保证 occurrence、NodeRun 的项目 / Run / nodeId 一致。数据库禁止修改 occurrence 身份及既有 attempt 的归属、序号和开始时间。Action Executor 通过显式 scopeKey 取得 occurrence，分配 attempt 的操作不新增 retry 策略或重放兜底。
 
@@ -32,7 +32,7 @@ NodeRun 查询新增安全的 occurrenceId / scopeKey，不返回 thread、check
 
 [增量迁移](../packages/database/prisma/migrations/20261024000000_node_occurrences/migration.sql)将旧数据的每组 Run / node 全部 attempt 回填到同一个 root occurrence，保留 NodeRun ID、序号、状态、输入输出、时间和 Artifact 关联，不清空审计记录。旧 checkpoint 的 State 不增加必填字段，现有 root 审核恢复重新查得同一 occurrence。
 
-底座只支持身份解析与审计关联，不执行子 scope，也没有 scope 父链或 SubWorkflow 版本 / 权限解析。未来受信任的 scoped execution 需显式分配稳定 scopeKey、提供对应定义与权限上下文，再调用同一 occurrence / attempt 接口；scopeKey 不能替代这些检查。
+Iteration 的执行作用域通过下述 ItemRun 与 NodeRun 父链关联。其他受信任的 scoped execution 仍需显式提供稳定 scopeKey、对应定义与权限上下文；没有 SubWorkflow 版本 / 权限解析，scopeKey 不能替代这些检查。
 
 ## Local Graph Invocation
 
@@ -42,17 +42,17 @@ NodeRun 查询新增安全的 occurrenceId / scopeKey，不返回 thread、check
 
 每次创建局部调用均独立初始化 inputs map、outputs、variables、execution 与 Run 元数据副本，不接收父 State；只共享明确传入的 RuntimeValue。统一 WorkflowOutputResolver 接收声明 outputs 与局部 outputs，支持多命名结果，继续检查缺失、歧义与类型并保留引用。
 
-[内部 scope 工具](../packages/workflow/src/runtime/execution-scope.ts)将 parent scope 与严格 typed segment 按固定顺序规范编码，再以 SHA-256 生成版本化 opaque scope。segment 包含 owner occurrence、slot，以及 iteration_item 的固定快照 index 或 subworkflow_call 的 callKey；不含 attempt / concurrency / LangGraph 身份。相同输入跨重入稳定，不同父 scope 可组合嵌套；root 仍为 root。调用方负责确认 owner、parent、Run 归属并恢复同一快照，这个纯工具不提供授权或持久化。
+[内部 scope 工具](../packages/workflow/src/runtime/execution-scope.ts)将 parent scope 与严格 typed segment 按固定顺序规范编码，再以 SHA-256 生成版本化 opaque scope。segment 包含 owner occurrence、slot，以及 iteration_item 的固定快照 index 或 subworkflow_call 的 callKey；Iteration Runtime 额外传入本次 ownerNodeRunId，使父 attempt 之间的子 scope 隔离。不含 concurrency 或 LangGraph 身份。相同输入跨重入稳定，不同父 scope 可组合嵌套；root 仍为 root。调用方负责确认 owner、parent、Run 归属并恢复同一快照，这个纯工具不提供授权或持久化。
 
-Definition Location 单独记录不可变 workflowVersionId 与 nodeId / graphKey 路径；根图路径为空，不把 scopeKey 当定义地址。这里只校验定位结构，不解析嵌套版本或授权。局部 scope 直接复用 NodeOccurrence 的 Run / scopeKey / nodeId 身份，无数据库变更。
+Definition Location 单独记录不可变 workflowVersionId 与 nodeId / graphKey 路径；根图路径为空，不把 scopeKey 当定义地址。这里只校验定位结构，不解析嵌套版本或授权。局部节点仍复用 NodeOccurrence 的 Run / scopeKey / nodeId 身份，Iteration 的持久化父子归属见下述 ItemRun。
 
-该基础仅提供定义、输入映射、局部初始 State 与身份工具，尚未接入生产 Compiler / Runner；不提供局部图调度、Human Review nested support、Send、Iteration 或 SubWorkflow。集合承载见下节。
+Iteration Compiler 已使用这些工具构造 Body 调用，经 LangGraph 原生 Send 与 compiled subgraph 执行；Human Review nested support 与 SubWorkflow 尚未接入。集合承载见下节。
 
 ## RuntimeValue Collection
 
 统一 RuntimeValue 增加可递归、可序列化的 collection 表示，与 inline 业务 JSON 数组及整体 reference 分离。Snapshot 提供固定 length / get(index) 与可持久化的 toRuntimeValue；Builder 按 index 验证完整性与类型并有序构造，保留元素引用和嵌套层级。Codec 仅在 decode 时解析元素引用；普通 JSON 数组可继续显式 inline 或整体 Artifact，auto 不新增阈值。语义、媒体约束与接口见[数据模型](data-model.md#固定集合快照与有序构造)。
 
-Graph Invocation input mapping 与 WorkflowOutputResolver 直接接受统一 RuntimeValue，不新增 Binding / Resolver。调用输入校验递归检查 collection 的内联元素，引用仍不读取。Web 只对 collection 显示“集合值暂不支持展示”，不展开元素或新增集合 UI。此基础未接入 Send、Iteration、SubWorkflow 或 Provider media nodes，无数据库变更。
+Graph Invocation input mapping 与 WorkflowOutputResolver 直接接受统一 RuntimeValue，不新增 Binding / Resolver。调用输入校验递归检查 collection 的内联元素，引用仍不读取。Web 只对 collection 显示“集合值暂不支持展示”，不展开元素或新增集合 UI。Iteration 已用 Snapshot 固定输入并按 index 聚合；SubWorkflow 与 Provider media nodes 尚未接入集合执行。Array 本身仅表示数据，不触发多次执行。
 
 ## Iteration Contract 与 Publish
 
@@ -61,6 +61,41 @@ Graph Invocation input mapping 与 WorkflowOutputResolver 直接接受统一 Run
 validateGraphForPublish / validateGraphDefinitionSemantics 与旧 Workflow 入口共用同一管线，递归验证独立 body，并返回带 definitionPath 的后代节点供现有发布事务统一检查模型权限；同名节点按所属局部定义查找，不覆盖父节点。Draft 配置字段边界也递归检查 body 已知 Action，Iteration config 不接受额外字段，仍允许映射 / 必填配置未完成，不把 Publish 门禁前移到保存。
 
 body 的嵌套 composite、If / control、Human Review / interaction 均拒绝；根既有 If / Human Review 行为不变。Web Iteration Inspector 支持 itemType、不变输入、Body 输入及映射；Body 内的输入边界与 Root 共用 Graph Input 连接机制，Body 输出通过现有端口推导提升为父 Iteration 的数组输出。Root 数组参数通过通用 Run Form 提交，不为 Iteration 增加专用输入协议。
+
+## Iteration Item Run
+
+[IterationItemRun 协议](../packages/contracts/src/workflow/node-run.ts)与 [schema](../packages/database/prisma/schema.prisma)为实际执行 `flow.iteration@1` 的每个 item 保存独立 UUID、projectId、workflowRunId、iterationNodeRunId、iterationNodeId、scopeKey、index、status、createdAt、startedAt、completedAt 和可选的安全错误摘要。复用 NodeRun 的 running / completed / failed 与 completedAt 命名；index 是本次固定输入快照的位置，不是 attempt。记录不包含 item payload 或新输入 / 输出快照，父与 Body NodeRun 继续使用既有 RuntimeValue 输入输出审计。
+
+[Iteration strategy](../packages/workflow/src/compiler/iteration/strategy.ts)在 prepare 创建本次父 NodeRun、保存输入并将父 ID 写入 checkpoint frame；每个 Body 子图的审计入口创建或复用同父 attempt / index 的 running ItemRun，局部上下文显式携带 iterationItemRunId。DefaultNodeExecutor 将该 ID 写入 Body NodeRun；Body 的 declared outputs 解析成功后完成 ItemRun，collect 完成父 NodeRun 后才回写聚合输出。空集合只完成父 NodeRun，不创建 ItemRun；普通 Action 输出数组也不创建 ItemRun。
+
+[授权 Repository](../packages/server/src/workflow/runtime/node-run-repository.ts)在同父 NodeRun / index 的 advisory lock 内复用 running ItemRun；不同父 attempt 分配不同 ItemRun 与 scope。Body 业务失败同事务结束对应 ItemRun 与仍 running 的父 NodeRun；同 item 的并行分支重复失败保留首次摘要，其他 item 已有身份和终态不变。调度、取消与整图 WorkflowRun 状态仍由既有 LangGraph / Runner 决定，不保证失败后继续调度未开始的 item。GraphInterrupt / ParentCommand 原样交回原生图，ItemRun 与已有父 / Body NodeRun 保持 running；仓储写入故障不反向制造业务 failed。没有新增 interrupt 状态、item retry 或 item resume 入口。
+
+[增量迁移](../packages/database/prisma/migrations/20261026000000_iteration_item_runs/migration.sql)使用 `iteration_item_run` 表，唯一约束保护 iterationNodeRunId / index 与 Run / scope；复合外键保持项目、Run 和父 nodeId 一致，触发器保护身份、终态及 Body NodeRun 的 scope / ItemRun 一致。嵌套可表达为 NodeRun → IterationItemRun → iterationNodeRun → 上层 IterationItemRun，不靠全局 nodeId / index。数据库父链和组合 scope 已验证；嵌套 composite 的 Publish / Runtime 门禁仍保留，没有新增嵌套执行能力或 Web Item 列表。
+
+ItemRun 审计与 LangGraph checkpoint 不构成跨系统原子提交。原生 checkpoint 恢复保留父 NodeRun 和 ItemRun 身份；崩溃后审计先落库、checkpoint 未落库的窗口仍需现有 recovery_required / 对账处理，不以自动重放修复受理不明的副作用。
+
+## Execution 归属审计
+
+当前持久化链为 WorkflowRun → Iteration NodeRun → IterationItemRun → Body NodeRun，可沿相同关系继续表示下一层。另有 NodeOccurrence 按 Run / scopeKey / nodeId 定位逻辑节点，NodeRun 的 attempt 只在该 occurrence 内编号。scopeKey 是稳定的 opaque 身份材料，不能从哈希还原父链或定义路径；root 目前是约定字符串，没有独立 scope 表。WorkflowExecutionOutbox 的 executionId 是 start / resume 命令交付身份，与子图执行实例不同。
+
+当前主要依赖分布如下；这些是源码现状，不表示凡有 Iteration 字样都需要抽象。
+
+| 入口                                                                                                                                                                                                                                     | 明确依赖与当前职责                                                                                                                                               | 审计分类                                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| [运行 Contract](../packages/contracts/src/workflow/node-run.ts)、[Prisma schema](../packages/database/prisma/schema.prisma) 与 [item migration](../packages/database/prisma/migrations/20261026000000_iteration_item_runs/migration.sql) | NodeRun.iterationItemRunId；ItemRun 的 iterationNodeRunId、scopeKey、index、状态；唯一键、外键及身份 / scope 触发器                                              | index 与 Iteration 归属语义合理；共享 NodeRun 的归属字段和父子约束目前只支持这一种 Composite                              |
+| [Iteration Strategy](../packages/workflow/src/compiler/iteration/strategy.ts) 与 [checkpoint channels](../packages/workflow/src/compiler/iteration/state.ts)                                                                             | 固定集合快照、current_item / current_index 映射、Send、Body barrier、有序聚合；frame / invocation / result 携带父 NodeRun、ItemRun 和 scope                      | 元素调度与聚合应保留专属；子调用身份、生命周期记录和错误记录边界可复用                                                    |
+| [NodeExecutor](../packages/workflow/src/runtime/node-executor.ts)、[CreateNodeRunInput](../packages/workflow/src/run/node-run-repository.ts) 与 [记录错误](../packages/workflow/src/runtime/node-execution-error.ts)                     | 通用 context / 入库参数透传 iterationItemRunId，共用错误模块声明 IterationItemRunRecordingError                                                                  | 执行上下文与运行归属已出现类型专属字段；后续应由通用 scope 身份和记录协议承接                                             |
+| [NodeRun Repository](../packages/server/src/workflow/runtime/node-run-repository.ts) 与 [IterationRunRepository](../packages/workflow/src/run/iteration-item-run-repository.ts)                                                          | 普通 createRunning 的 occurrence 校验也查询 ItemRun；item 创建、结束及失败；失败事务更新 item 与父 NodeRun                                                       | 授权、幂等创建、父子一致性、生命周期写入可复用；index 校验与失败即结束父节点的政策属于 Iteration 语义                     |
+| [WorkflowCompiler](../packages/workflow/src/compiler/workflow-compiler.ts) 与 [生产装配](../packages/server/src/workflow/runtime/workflow-runtime.factory.ts)                                                                            | 注册独立 Iteration Strategy、注入专用 Repository factory，根节点显式使用 root scope                                                                              | 精确控制节点策略与 capability gate 合理；共享执行记录服务不宜随每种 Composite 增加一套注入接口                            |
+| [scope 工具](../packages/workflow/src/runtime/execution-scope.ts)、[Graph Invocation](../packages/workflow/src/runtime/graph-invocation.ts) 与 [BindingResolver](../packages/workflow/src/runtime/binding-resolver.ts)                   | 规范编码 parent / owner / slot / 局部身份；scope 工具包含 iteration_item 与 subworkflow_call 两种 segment；局部调用隔离 State，Binding 不认识 ItemRun 或业务实体 | 已有可复用基础；segment 是明确结构策略，不是业务渗透。subworkflow_call 只存在于身份工具，不代表已有 SubWorkflow 执行能力  |
+| [NodeRun 查询](../apps/api/src/workflow/runtime/workflow-runtime.service.ts)、[路由](../apps/api/src/workflow/runtime/workflow-runs.controller.ts) 与 [Web 分组](../apps/web/src/features/workflow/runtime/runtime-status.ts)            | 已授权的 node-runs 返回扁平 NodeRun[]，包含可选 iterationItemRunId；Web 只消费 root occurrence                                                                   | 尚无 ItemRun 列表、通用子执行查询或 Run Tree DTO；仅凭当前 NodeRun 响应无法还原尚未产生 Body NodeRun 的 item 及其独立状态 |
+| [Runner](../packages/workflow/src/run/workflow-runner.ts)、[官方 Checkpointer 装配](../packages/server/src/checkpoint/workflow-checkpointer.service.ts) 与 [Human Review 查询](../packages/server/src/workflow/human-review.service.ts)  | 原生 checkpoint / interrupt / resume；审核查询核对根 checkpoint 与根版本节点；GraphBubbleUp 不写 failed                                                          | 应保留引擎分工，审核的 root 限制不是通用嵌套恢复能力；scope 审计不能取代 checkpoint 或恢复 token                          |
+
+现状中的三类边界需要区分。第一，Iteration、If、Human Review 对应不同结构 / 交互语义，独立策略与当前能力门禁合理；If 目前没有 NodeRun 或 Child Execution，不应为凑树形结构制造运行记录。第二，固定集合位置、输入映射和有序聚合不属于业务领域，仍可以是 Iteration extension。第三，NodeRun 的执行归属、子执行状态、父链、定义定位与查询骨架具有共享价值；若继续按当前专用字段扩展，SubWorkflow / Loop / Batch 等就可能各加一个可空归属外键，并复制事务、查询和详情适配。这是扩展成本风险，不是已发生了多套字段。
+
+ItemRun 的父 NodeRun 外键和组合 scope 已能表达嵌套；复用障碍是父链只能通过专用表表达、scopeKey 本身没有持久化的通用父对象，以及通用 Repository 已耦合具体子类型。GraphDefinitionLocation 已分离不可变版本 / 路径和运行身份，但目前在局部 invocation / checkpoint 中，NodeOccurrence / ItemRun 没有通用的关系型定义定位。未来跨版本 SubWorkflow 不能只靠 root workflowVersionId 或重复 nodeId 找定义。当前 scope 工具的 ownerNodeRunId 仅在 iteration_item segment 中可选，subworkflow_call 尚无同样的父 attempt 段；它是可复用编码基础，尚不是所有 Composite 的完整调用身份协议。
+
+当前生产核心的上述执行路径未发现 Episode / Chapter / 剧集 / 商品 / 广告等领域分支；测试中的分集样例是普通节点 contract，不是 Runtime 的特殊语义。通用性原则见[平台边界](platform-model.md#workflow-通用性与业务解耦)。推荐长期定位、Metadata 边界、迁移顺序与最小下一步只维护在[实施方案](implementation-plan.md#execution-tree-演进设计)，当前模型保持不变。
 
 ## Human Review 声明与纯业务边界
 

@@ -1,6 +1,6 @@
 # DramaFlow
 
-团队自部署的 AI 视频生产工作流平台，漫剧优先。React Flow 编辑、LangGraph 执行、受信任插件接入生成能力。
+团队自部署的 AI 视频生产工作流平台，漫剧优先。React Flow 编辑、LangGraph 执行、受信任插件接入生成能力。Workflow Engine 保持业务无关，业务通过节点扩展，流程通过图组合；开发前遵循[通用性与业务解耦原则](docs/platform-model.md#workflow-通用性与业务解耦)。
 
 开始任务先读 [AGENTS.md](AGENTS.md) 的按任务入口，不默认通读 docs。当前能力见[架构](docs/architecture.md)，当前工作见[实施方案](docs/implementation-plan.md)，检查见[开发指南](docs/development.md)。
 

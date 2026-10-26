@@ -60,7 +60,10 @@ describe('正式 Iteration Send + body subgraph', () => {
       expect(new Set(rows.map((row) => row.occurrenceId)).size).toBe(count);
       expect(new Set(rows.map((row) => row.scopeKey)).size).toBe(count);
       expect(rows.every((row) => row.attempt === 1)).toBe(true);
-      expect(f.nodeRuns.getRecords().some((row) => row.nodeId === 'iteration')).toBe(false);
+      expect(f.nodeRuns.getRecords().filter((row) => row.nodeId === 'iteration')).toMatchObject([
+        { attempt: 1, status: 'completed' },
+      ]);
+      expect(f.nodeRuns.getItemRecords()).toHaveLength(count);
       const owner = f.nodeRuns.getOrCreateOccurrence.mock.calls
         .map((call) => call[0])
         .find((input) => input.nodeId === 'iteration');
@@ -70,6 +73,7 @@ describe('正式 Iteration Send + body subgraph', () => {
           deriveChildScope(ROOT_EXECUTION_SCOPE_KEY, {
             kind: 'iteration_item',
             ownerOccurrenceId: 'occurrence-1',
+            ownerNodeRunId: 'node-run-1',
             slot: 'body',
             index,
           }),
@@ -514,6 +518,7 @@ describe('正式 Iteration Send + body subgraph', () => {
           deriveChildScope(ROOT_EXECUTION_SCOPE_KEY, {
             kind: 'iteration_item',
             ownerOccurrenceId: 'occurrence-1',
+            ownerNodeRunId: 'node-run-1',
             slot: 'body',
             index,
           }),

@@ -49,7 +49,7 @@ storagePolicy 为 inline、reference 或 auto，省略按 auto。auto 只由 Dat
 
 ## Artifact 与 Asset
 
-Artifact 保存项目、运行、可选 NodeRun、DataType、contentKind（json / blob）和对象位置。位置使用 provider / key，不以 URL 为身份。只有 ready 可解析；内容身份不可更新。NodeRun 已关联逻辑 occurrence，Artifact 经 nodeRunId 反查，不重复存储 scopeKey / occurrenceId。
+Artifact 保存项目、运行、可选 NodeRun、DataType、contentKind（json / blob）和对象位置。位置使用 provider / key，不以 URL 为身份。只有 ready 可解析；内容身份不可更新。NodeRun 已关联逻辑 occurrence，Artifact 经 nodeRunId 反查，不重复存储 scopeKey / occurrenceId；Iteration Body 产物也经 NodeRun.iterationItemRunId 追溯对应 item，不复制完整 item payload。
 
 需要引用承载的输出先成为 Artifact。inline 不创建 Artifact。进入资产库必须显式 Promote。Asset 保存项目、名字、DataType、明确 versionId、来源（upload / artifact / external）和内容。Asset 的数据库、版本读取和 Promote 尚未接入。解析 Asset 引用报 REFERENCE_RESOLUTION_FAILED，cause.code 为 ASSET_REFERENCE_NOT_CONFIGURED。
 

@@ -32,9 +32,11 @@ Draft 可保存缺少 composite、空 body、未完成映射及既有 sources=[]
 
 v1 Publish 仅允许 body 内普通 Action；拒绝 nested Iteration、其他 composite、If、Human Review、其他 control / interaction，以及带命名控制出口的特殊 Action。Contract 的递归表达能力不代表 Publish 或 Runtime 放行。Candidate 等表达继续受既有互斥来源证明约束，不因为进入 body 放松。
 
-空 items 合法，语义为不调用 body，并为每个声明输出产生对应类型的空集合；本阶段仅锁定语义，Compiler 尚无 Iteration 策略，执行前明确拒绝，不产生占位结果。current_index 是固定 snapshot 的从零位置，不是业务 itemKey；Definition 不含 occurrence、scope 或 LangGraph 身份。
+空 items 合法，不调用 body，并为每个声明输出产生对应类型的空集合；当前由独立 Iteration Strategy 执行，空集合完成父 NodeRun，不创建 ItemRun，详见[当前架构](architecture.md#iteration-item-run)。current_index 是固定 snapshot 的从零位置，不是业务 itemKey；Definition 不含 occurrence、scope 或 LangGraph 身份。
 
 ## 服务端执行与编译
+
+业务节点可以拥有小说拆集、分镜生成、视频生成等领域 contract，并通过受信任 Plugin 执行所需能力；引擎遵循[业务解耦原则](platform-model.md#workflow-通用性与业务解耦)。新增业务优先新增或组合 Node / Plugin；只有新的通用控制语义才需要独立 Strategy / 编译适配，不能把业务名的判断加进 Executor、Binding 或通用 Execution 归属。
 
 普通 Action NodeType 持 manifest、三组 Zod Schema 和 execute(input, config, context)，不取得 Graph builder、BindingResolver、内容 Store 或 Checkpoint。普通业务只接收已校验输入与配置并返回结果，不自行调度、解析绑定或持久化输出。非 Action 使用不带 execute 的 NodeDeclaration，由独立策略决定是否可执行；正式目录注册不等于获准 Publish / Compile。
 
@@ -52,7 +54,7 @@ Action 编译策略只调用统一 Executor，返回当前 nodeId 的 outputs �
 
 Preset 只是所属 type / typeVersion 的配置模板，applyNodePreset 验证归属并合并实例覆盖，不构成新的运行身份或执行器。
 
-NodeRun 保存 running / completed / failed 业务历史，inputs / outputs 为 RuntimeValue map，error 为安全 stage / 可选 code / message。Action Repository 按 workflowRunId + nodeId 原子分配正整数 attempt，新执行新建记录，终态不可覆盖。共享协议的 stage 可扩展，不要求使用 Runtime 的固定枚举。
+NodeRun 保存 running / completed / failed 业务历史，inputs / outputs 为 RuntimeValue map，error 为安全 stage / 可选 code / message。Action Repository 先按 workflowRunId / scopeKey / nodeId 定位 NodeOccurrence，再在该 occurrence 内原子分配正整数 attempt，新执行新建记录，终态不可覆盖。共享协议的 stage 可扩展，不要求使用 Runtime 的固定枚举。
 
 State 只保留当前有效值，Artifact 保存内容，Checkpoint 负责恢复，NodeRun 不驱动调度。普通 Action 不主动 interrupt；Human Review 在当前单次逻辑审核边界下复用 attempt 1 running，恢复不算新 attempt。完整审计、输入漂移检测和未来 occurrence 限制见[当前架构](architecture.md#human-review-声明与纯业务边界)。
 

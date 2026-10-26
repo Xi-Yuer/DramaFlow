@@ -16,6 +16,7 @@ export const childScopeSegmentSchema = z.discriminatedUnion('kind', [
     .object({
       ...owner,
       kind: z.literal('iteration_item'),
+      ownerNodeRunId: workflowIdentifierSchema.optional(),
       index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
     })
     .strict(),
@@ -36,6 +37,9 @@ export function deriveChildScope(parentScope: string, input: ChildScopeSegment):
     segment.ownerOccurrenceId,
     segment.slot,
     identity,
+    ...(segment.kind === 'iteration_item' && segment.ownerNodeRunId
+      ? [segment.ownerNodeRunId]
+      : []),
   ]);
   return `scope:v1:${createHash('sha256').update(canonical).digest('hex')}`;
 }

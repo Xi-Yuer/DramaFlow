@@ -1,7 +1,8 @@
 import { vi } from 'vitest';
-import type { NodeOccurrence, NodeRun } from '@dramaflow/contracts';
+import type { IterationItemRun, NodeOccurrence, NodeRun } from '@dramaflow/contracts';
 import type {
   CreateNodeRunInput,
+  IterationRunRepository,
   HumanReviewNodeRunRepository,
   NodeRunRepository,
 } from '../src/index.js';
@@ -56,6 +57,7 @@ export function auditedNodeRunRepositoryFixture() {
       workflowRunId: input.workflowRunId,
       nodeId: input.nodeId,
       occurrenceId: input.occurrenceId,
+      ...(input.iterationItemRunId ? { iterationItemRunId: input.iterationItemRunId } : {}),
       scopeKey: repository.getOccurrence(input.occurrenceId).scopeKey,
       attempt,
       status: 'running' as const,
@@ -107,11 +109,61 @@ export function auditedNodeRunRepositoryFixture() {
         throw new Error('不能复用审核记录');
       return row ? structuredClone(row) : create(input, 1);
     });
+  const items = new Map<string, IterationItemRun>();
+  const getOrCreateIterationItemRunning = vi
+    .fn<IterationRunRepository['getOrCreateIterationItemRunning']>()
+    .mockImplementation(async (input) => {
+      const previous = [...items.values()].find(
+        (item) =>
+          item.iterationNodeRunId === input.iterationNodeRunId && item.index === input.index,
+      );
+      if (previous) {
+        if (previous.status !== 'running' || previous.scopeKey !== input.scopeKey)
+          throw new Error('Item 已结束');
+        return structuredClone(previous);
+      }
+      const row: IterationItemRun = {
+        ...input,
+        id: `item-run-${items.size + 1}`,
+        status: 'running',
+        createdAt: '2026-10-26T00:00:00.000Z',
+        startedAt: '2026-10-26T00:00:00.000Z',
+      };
+      items.set(row.id, row);
+      return structuredClone(row);
+    });
+  const markIterationItemCompleted = vi
+    .fn<IterationRunRepository['markIterationItemCompleted']>()
+    .mockImplementation(async (id) => {
+      const row = items.get(id);
+      if (!row || row.status !== 'running') throw new Error('Item 不是 running');
+      row.status = 'completed';
+      row.completedAt = '2026-10-26T00:00:02.000Z';
+    });
+  const markIterationItemFailed = vi
+    .fn<IterationRunRepository['markIterationItemFailed']>()
+    .mockImplementation(async (id, error) => {
+      const row = items.get(id);
+      if (!row || row.status === 'completed') throw new Error('Item 不是 running / failed');
+      if (row.status === 'running') {
+        row.status = 'failed';
+        row.error = structuredClone(error);
+        row.completedAt = '2026-10-26T00:00:02.000Z';
+      }
+      const parent = records.get(row.iterationNodeRunId)!;
+      if (parent.status === 'running') await repository.markFailed(parent.id, error);
+    });
   return {
     ...repository,
+    getOrCreateIterationItemRunning,
+    markIterationItemCompleted,
+    markIterationItemFailed,
+    getItemRecords: () => structuredClone([...items.values()]),
     getOrCreateHumanReviewRunning,
     getRecords: () => structuredClone([...records.values()]),
-  } satisfies HumanReviewNodeRunRepository & {
-    getRecords(): NodeRun[];
-  };
+  } satisfies HumanReviewNodeRunRepository &
+    IterationRunRepository & {
+      getItemRecords(): IterationItemRun[];
+      getRecords(): NodeRun[];
+    };
 }

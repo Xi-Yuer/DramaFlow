@@ -8,7 +8,7 @@ Compose 先迁移并幂等创建初始管理员、初始化存储桶，再启动
 
 ## 当前库约束
 
-Prisma 迁移保存身份、资料、会话、项目、Workflow / WorkflowVersion、Run、NodeRun、Outbox、Artifact 元数据和模型 Provider / 配置。当前模型不含工作空间。完整 DSL 在发布和读取边界校验，不在数据库里拼接。
+Prisma 迁移保存身份、资料、会话、项目、Workflow / WorkflowVersion、Run、NodeRun、IterationItemRun、Outbox、Artifact 元数据和模型 Provider / 配置。当前模型不含工作空间。完整 DSL 在发布和读取边界校验，不在数据库里拼接。
 
 需要遵守的约束：
 
@@ -16,6 +16,7 @@ Prisma 迁移保存身份、资料、会话、项目、Workflow / WorkflowVersio
 - 每项目一个 Workflow。版本不可更新，workflowId / version 与 workflowId / sourceRevision 唯一。
 - Run 的身份、invocationKey、版本和输入不可改写；状态转换由数据库约束保护。threadId 唯一，workflowId / invocationKey 唯一。Start key 随 Run 生命周期保留，新建无数据库默认 key。
 - NodeOccurrence 的 workflowRunId / scopeKey / nodeId 唯一；NodeRun 的 occurrenceId / attempt 唯一，attempt 为正数，复合外键保护项目 / Run / nodeId 归属，终态字段一致。
+- IterationItemRun 的父 NodeRun / index、Run / scopeKey 唯一；Body NodeRun 显式外键关联 ItemRun，复合外键与触发器保护项目 / Run / nodeId / scope 归属、不可变身份和终态。index 不等于 attempt，结束时间沿用 completedAt。
 - Artifact 只有 writing / ready / failed；内容身份不可改，终态不可覆盖。对象本体不在数据库。删除项目时按已登记的 storageKey 删除对应对象。
 - Provider / ModelConfiguration 归用户所有，两者 Owner 由复合外键保持一致；删除项目不删除模型资源。Provider 的插件版本、configuration，以及模型的 Provider、capability、model、settings 创建后不可改。enabled 和凭证密文可以按服务操作更新。删除配置不是已交付的产品入口。
 - Outbox 与 start 同事务写入；恢复意图按 waiting 周期唯一。running → waiting 时由数据库递增 waitingRevision，也作为 Human Review 产品乐观锁返回；客户端只提交 expectedWaitingRevision，不能改写周期。targeted token / decision 复用现有 value JSON，未新增数据库字段或约束。
@@ -89,6 +90,8 @@ pnpm model:configure /受保护目录/model-provider.json
 ## 数据保留与排障
 
 Node occurrence 增量迁移保留已有节点审计：每组 workflowRunId / nodeId 的全部 attempt 映射到一个 root occurrence，原 NodeRun ID 与 Artifact 外键不变。部署时先停止旧 Worker 消费，再应用迁移并同步更新 API / Worker / Web；新写入要求 occurrenceId，不能与旧写入器混用，NodeRun DTO 新增必填身份，旧 Web 客户端需刷新。该迁移无需清空开发数据，也不重写历史迁移。
+
+Iteration item 增量迁移新增 `iteration_item_run` 与 NodeRun 的可空关联，保留已有 root 审计。部署时同步更新 API / Worker；旧 Iteration checkpoint 没有本次父 NodeRun / ItemRun 身份，不能仅按 index 自动回填或宣称可恢复，应先核对活动运行并按既有 recovery_required / 对账流程处理。
 
 持久化卷保留 PostgreSQL、Redis、RustFS 和日志。不要用 `down -v` 排障。备份覆盖数据库、langgraph schema、对象和需要保留的秘密，恢复先在独立环境验证。
 

@@ -14,6 +14,7 @@ export interface CapabilityInvoker {
 
 export interface NodeExecutionContext extends RuntimeValueContext {
   readonly scopeKey: string;
+  readonly iterationItemRunId?: string;
   readonly workflow: WorkflowDefinition;
   readonly state: WorkflowState;
   readonly signal?: AbortSignal;
@@ -48,6 +49,7 @@ export class DefaultNodeExecutor implements NodeExecutor {
       workflowRunId: context.workflowRunId,
       nodeId: node.id,
       occurrenceId: occurrence.id,
+      ...(context.iterationItemRunId ? { iterationItemRunId: context.iterationItemRunId } : {}),
     });
     let nodeType: ReturnType<NodeRegistry['getAction']>;
     let runtimeInputs: Record<string, RuntimeValue>;

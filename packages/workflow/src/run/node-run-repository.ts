@@ -10,6 +10,7 @@ export interface CreateNodeRunInput {
   readonly workflowRunId: string;
   readonly nodeId: string;
   readonly occurrenceId: string;
+  readonly iterationItemRunId?: string;
 }
 
 export interface NodeOccurrenceRepository {

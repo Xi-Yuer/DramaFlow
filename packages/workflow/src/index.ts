@@ -50,3 +50,4 @@ export {
 } from '@dramaflow/contracts';
 export * from './compiler/iteration/strategy.js';
 export * from './runtime/iteration-compatibility.js';
+export * from './run/iteration-item-run-repository.js';

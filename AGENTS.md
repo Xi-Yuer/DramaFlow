@@ -11,6 +11,8 @@
 ## 稳定边界
 
 - 产品是团队自部署的 AI 视频生产工作流平台，漫剧优先；每项目一张画布、一个逻辑 Workflow。首期范围见平台模型，不因候选清单提前建设功能。
+- Workflow / Compiler / Runtime / Execution / Binding 保持业务无关；业务能力通过 Node + Plugin + Contract 扩展，宏观业务流程通过 Node + Edge + Binding + Control Node 组合表达。实施前先判断是业务节点能力还是通用编排能力，新增业务不应要求修改 Workflow Engine；完整原则见[平台边界](docs/platform-model.md#workflow-通用性与业务解耦)。
+- 数据基数不等于执行基数，数组输出不自动创建多次执行。Composite 的子图调用、执行归属、Run Tree、Retry / Resume 与观测应复用通用机制；专用字段进入通用 NodeRun / Runtime 前先审查是否属于通用 Execution 概念。具体控制语义留在对应 Strategy，业务节点允许业务化，不为尚未需要的能力预建抽象。
 - React Flow 负责编辑，LangGraph 负责图执行。LangChain 在需要时提供 Tool / Agent 抽象。平台实现领域协议及编译适配，不自建画布引擎、图调度器或暂停恢复状态机。
 - TypeScript 严格模式，外部数据在边界校验；不用无依据的 any、@ts-ignore、关闭检查或空 catch 隐藏问题。contracts 不依赖 React Flow、NestJS、Prisma 或 LangGraph；后端保持模块化单体与独立 worker。
 - API 默认认证，业务读写在服务端校验权限；密钥仅服务端加密保存，不进入客户端、导出、模型上下文或日志，不提交真实凭证及本地环境文件。

@@ -172,6 +172,7 @@ model WorkflowRun {
   project           Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   nodeRuns          NodeRun[]
   nodeOccurrences   NodeOccurrence[]
+  iterationItemRuns IterationItemRun[]
   waitingRevision   Int                       @default(0)
   executions        WorkflowExecutionOutbox[]
   artifacts         Artifact[]
@@ -202,27 +203,32 @@ model NodeOccurrence {
 }
 
 model NodeRun {
-  id            String         @id @default(uuid()) @db.Uuid
-  projectId     String         @db.Uuid
-  workflowRunId String
-  nodeId        String
-  occurrenceId  String         @db.Uuid
-  attempt       Int
-  status        String         @default("running")
-  inputs        Json?
-  outputs       Json?
-  error         Json?
-  startedAt     DateTime       @default(now())
-  completedAt   DateTime?
-  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  workflowRun   WorkflowRun    @relation(fields: [workflowRunId, projectId], references: [id, projectId], onDelete: Cascade)
-  occurrence    NodeOccurrence @relation(fields: [occurrenceId, workflowRunId, projectId, nodeId], references: [id, workflowRunId, projectId, nodeId], onDelete: Cascade, onUpdate: Restrict)
-  artifacts     Artifact[]
+  id                 String             @id @default(uuid()) @db.Uuid
+  projectId          String             @db.Uuid
+  workflowRunId      String
+  nodeId             String
+  occurrenceId       String             @db.Uuid
+  iterationItemRunId String?            @db.Uuid
+  attempt            Int
+  status             String             @default("running")
+  inputs             Json?
+  outputs            Json?
+  error              Json?
+  startedAt          DateTime           @default(now())
+  completedAt        DateTime?
+  project            Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowRun        WorkflowRun        @relation(fields: [workflowRunId, projectId], references: [id, projectId], onDelete: Cascade)
+  occurrence         NodeOccurrence     @relation(fields: [occurrenceId, workflowRunId, projectId, nodeId], references: [id, workflowRunId, projectId, nodeId], onDelete: Cascade, onUpdate: Restrict)
+  artifacts          Artifact[]
+  iterationItemRun   IterationItemRun?  @relation("BodyNodeRuns", fields: [iterationItemRunId, workflowRunId, projectId], references: [id, workflowRunId, projectId], onDelete: Cascade, onUpdate: Restrict)
+  iterationItems     IterationItemRun[] @relation("IterationOwner")
 
+  @@unique([id, workflowRunId, projectId, nodeId])
   @@unique([id, workflowRunId, projectId])
   @@unique([occurrenceId, attempt])
   @@index([workflowRunId])
   @@index([workflowRunId, nodeId])
+  @@index([iterationItemRunId])
   @@index([projectId, workflowRunId])
   @@map("node_run")
 }
@@ -314,4 +320,29 @@ model WorkflowExecutionOutbox {
   @@unique([workflowRunId, kind, waitingRevision])
   @@index([status, availableAt, createdAt])
   @@map("workflow_execution_outbox")
+}
+
+// 父 NodeRun 是本次 Iteration attempt；其可选 iterationItemRun 构成嵌套父链。
+model IterationItemRun {
+  id                 String      @id @default(uuid()) @db.Uuid
+  projectId          String      @db.Uuid
+  workflowRunId      String
+  iterationNodeRunId String      @db.Uuid
+  iterationNodeId    String
+  scopeKey           String
+  index              Int
+  status             String      @default("running")
+  error              Json?
+  createdAt          DateTime    @default(now())
+  startedAt          DateTime    @default(now())
+  completedAt        DateTime?
+  workflowRun        WorkflowRun @relation(fields: [workflowRunId, projectId], references: [id, projectId], onDelete: Cascade)
+  iterationNodeRun   NodeRun     @relation("IterationOwner", fields: [iterationNodeRunId, workflowRunId, projectId, iterationNodeId], references: [id, workflowRunId, projectId, nodeId], onDelete: Cascade, onUpdate: Restrict)
+  bodyNodeRuns       NodeRun[]   @relation("BodyNodeRuns")
+
+  @@unique([iterationNodeRunId, index])
+  @@unique([workflowRunId, scopeKey])
+  @@unique([id, workflowRunId, projectId])
+  @@index([workflowRunId])
+  @@map("iteration_item_run")
 }

@@ -1,4 +1,5 @@
 import {
+  iterationItemRunSchema,
   nodeRunErrorSchema,
   nodeOccurrenceSchema,
   nodeRunSchema,
@@ -12,10 +13,13 @@ import {
 } from '@dramaflow/contracts';
 import { Prisma } from '@dramaflow/database';
 import { DatabaseService } from '../../database/database.service.js';
+import { deriveChildScope } from '@dramaflow/workflow';
 import type {
   CreateNodeRunInput,
   GetNodeOccurrenceInput,
   HumanReviewNodeRunRepository,
+  IterationRunRepository,
+  CreateIterationItemRunInput,
 } from '@dramaflow/workflow';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
@@ -31,7 +35,7 @@ function snapshot(values: Record<string, RuntimeValue>): Prisma.InputJsonObject 
 }
 
 // 不提供未限定项目 / 运行的公开 Repository 实例，也不增加 HTTP 运行入口。
-class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
+class PrismaNodeRunRepository implements HumanReviewNodeRunRepository, IterationRunRepository {
   constructor(
     private readonly db: DatabaseService,
     private readonly scope: RepositoryScope,
@@ -82,6 +86,11 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
     if (locked.length !== 1)
       throw new NotFoundException('节点 occurrence 不存在或与执行身份不匹配');
     const occurrence = await tx.nodeOccurrence.findUniqueOrThrow({ where: { id: occurrenceId } });
+    const item = await tx.iterationItemRun.findUnique({
+      where: { workflowRunId_scopeKey: { workflowRunId, scopeKey: occurrence.scopeKey } },
+    });
+    if (input.iterationItemRunId !== item?.id || (item && item.status !== 'running'))
+      throw new Error('Body NodeRun 与 item execution 作用域不匹配或 item 已结束');
     return { run, occurrence };
   }
 
@@ -101,6 +110,7 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
             workflowRunId,
             nodeId: occurrence.nodeId,
             occurrenceId: occurrence.id,
+            iterationItemRunId: input.iterationItemRunId,
             attempt: (previous._max.attempt ?? 0) + 1,
           },
         });
@@ -110,6 +120,7 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
           nodeId: row.nodeId,
           occurrenceId: occurrence.id,
           scopeKey: occurrence.scopeKey,
+          ...(row.iterationItemRunId ? { iterationItemRunId: row.iterationItemRunId } : {}),
           attempt: row.attempt,
           status: row.status,
           startedAt: row.startedAt.toISOString(),
@@ -161,7 +172,14 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
         const row =
           previous ??
           (await tx.nodeRun.create({
-            data: { projectId, workflowRunId, nodeId, occurrenceId: occurrence.id, attempt: 1 },
+            data: {
+              projectId,
+              workflowRunId,
+              nodeId,
+              occurrenceId: occurrence.id,
+              iterationItemRunId: input.iterationItemRunId,
+              attempt: 1,
+            },
           }));
         return nodeRunSchema.parse({
           id: row.id,
@@ -169,6 +187,7 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
           nodeId: row.nodeId,
           occurrenceId: occurrence.id,
           scopeKey: occurrence.scopeKey,
+          ...(row.iterationItemRunId ? { iterationItemRunId: row.iterationItemRunId } : {}),
           attempt: row.attempt,
           status: row.status,
           startedAt: row.startedAt.toISOString(),
@@ -177,6 +196,97 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
     );
+  }
+
+  async getOrCreateIterationItemRunning(raw: CreateIterationItemRunInput) {
+    const input = iterationItemRunSchema
+      .pick({
+        workflowRunId: true,
+        iterationNodeRunId: true,
+        iterationNodeId: true,
+        scopeKey: true,
+        index: true,
+      })
+      .parse(raw);
+    const { projectId, workflowRunId } = this.scope;
+    if (input.workflowRunId !== workflowRunId) throw new Error('Item 与已授权运行不匹配');
+    return this.db.client.$transaction(
+      async (tx) => {
+        const parent = await tx.nodeRun.findFirst({
+          where: { ...this.running(input.iterationNodeRunId), nodeId: input.iterationNodeId },
+          include: { occurrence: true },
+        });
+        if (!parent) throw new NotFoundException('Iteration NodeRun 不存在、已结束或无权访问');
+        const expectedScope = deriveChildScope(parent.occurrence.scopeKey, {
+          kind: 'iteration_item',
+          ownerOccurrenceId: parent.occurrenceId,
+          ownerNodeRunId: parent.id,
+          slot: 'body',
+          index: input.index,
+        });
+        if (input.scopeKey !== expectedScope) throw new Error('Item scope 与父 NodeRun 不匹配');
+        const lockKey = JSON.stringify([workflowRunId, input.iterationNodeRunId, input.index]);
+        await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+        const existing = await tx.iterationItemRun.findUnique({
+          where: {
+            iterationNodeRunId_index: {
+              iterationNodeRunId: input.iterationNodeRunId,
+              index: input.index,
+            },
+          },
+        });
+        if (existing && (existing.status !== 'running' || existing.scopeKey !== input.scopeKey))
+          throw new Error('Item execution 已结束或身份不匹配');
+        const row =
+          existing ?? (await tx.iterationItemRun.create({ data: { ...input, projectId } }));
+        return iterationItemRunSchema.parse({
+          id: row.id,
+          ...input,
+          status: row.status,
+          createdAt: row.createdAt.toISOString(),
+          startedAt: row.startedAt.toISOString(),
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+    );
+  }
+
+  private runningItem(id: string): Prisma.IterationItemRunWhereInput {
+    return {
+      id: z.uuid().parse(id),
+      projectId: this.scope.projectId,
+      workflowRunId: this.scope.workflowRunId,
+      workflowRun: { project: { ownerId: this.scope.ownerId } },
+      status: 'running',
+    };
+  }
+
+  async markIterationItemCompleted(id: string): Promise<void> {
+    const result = await this.db.client.iterationItemRun.updateMany({
+      where: this.runningItem(id),
+      data: { status: 'completed', completedAt: new Date() },
+    });
+    this.assertChanged(result.count);
+  }
+
+  async markIterationItemFailed(id: string, rawError: NodeRunError): Promise<void> {
+    const error = nodeRunErrorSchema.parse(rawError);
+    await this.db.client.$transaction(async (tx) => {
+      const item = await tx.iterationItemRun.findFirst({
+        where: { ...this.runningItem(id), status: { in: ['running', 'failed'] } },
+      });
+      if (!item) throw new Error('Item execution 不存在、无权访问或已结束');
+      const completedAt = new Date();
+      // 同一 item 的并行 body 分支可同时失败；只首次更新，保留首个错误。
+      await tx.iterationItemRun.updateMany({
+        where: this.runningItem(id),
+        data: { status: 'failed', error, completedAt },
+      });
+      await tx.nodeRun.updateMany({
+        where: this.running(item.iterationNodeRunId),
+        data: { status: 'failed', error, completedAt },
+      });
+    });
   }
 
   private running(nodeRunId: string): Prisma.NodeRunWhereInput {
@@ -234,7 +344,7 @@ export class NodeRunRepositories {
     ownerId: string,
     rawProjectId: string,
     rawWorkflowRunId: string,
-  ): Promise<HumanReviewNodeRunRepository> {
+  ): Promise<HumanReviewNodeRunRepository & IterationRunRepository> {
     const projectId = z.uuid().parse(rawProjectId);
     const workflowRunId = workflowIdentifierSchema.parse(rawWorkflowRunId);
     const run = await this.db.client.workflowRun.findFirst({
