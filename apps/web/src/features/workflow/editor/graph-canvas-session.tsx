@@ -11,17 +11,19 @@ import type {
 import type { HumanReviewActions, WorkflowRunStatusState } from '../run/status/workflow-run-status';
 import { clampViewport } from './viewport';
 import {
-  canEnterIterationBody,
   createGraphNavigation,
   currentGraphLocation,
   editLocatedGraph,
+  enterNestedGraph,
   type GraphNavigationState,
-  enterIterationBody,
-  exitToRoot,
   graphLocationKey,
   isIterationBodyAction,
+  jumpToGraph,
+  navigationCrumbs,
   patchGraphView,
+  popGraph,
   readLocatedGraph,
+  retreatToExistingGraph,
   rootGraphLocation,
   type GraphViewport,
   type GraphViewportController,
@@ -98,15 +100,15 @@ export const GraphCanvasSession = forwardRef<
   const graph = readLocatedGraph(workflow, location);
 
   useEffect(() => {
-    if (location.kind === 'nested' && !graph) commit((state) => exitToRoot(state));
-  }, [commit, graph, location]);
+    if (location.length > 0 && !graph) commit((state) => retreatToExistingGraph(state, workflow));
+  }, [commit, graph, location.length, workflow]);
 
   useImperativeHandle(
     ref,
     () => ({
       getRootViewport() {
         const state = navigationRef.current;
-        if (currentGraphLocation(state).kind === 'root' && viewportControllerRef.current)
+        if (currentGraphLocation(state).length === 0 && viewportControllerRef.current)
           return clampViewport(viewportControllerRef.current.getViewport());
         return (
           state.views[graphLocationKey(rootGraphLocation)]?.viewport ?? {
@@ -119,39 +121,31 @@ export const GraphCanvasSession = forwardRef<
       setRootViewport(viewport) {
         const next = clampViewport(viewport);
         commit((state) => patchGraphView(state, rootGraphLocation, { viewport: next }));
-        if (currentGraphLocation(navigationRef.current).kind === 'root')
+        if (currentGraphLocation(navigationRef.current).length === 0)
           viewportControllerRef.current?.setViewport(next);
       },
     }),
     [commit],
   );
 
-  function enter(ownerNodeId: string) {
-    const owner = workflow.nodes.find((node) => node.id === ownerNodeId);
-    if (!canEnterIterationBody(owner)) return;
+  function withLiveViewport(state: GraphNavigationState) {
     const live = viewportControllerRef.current?.getViewport();
-    commit((state) => {
-      const withViewport = live
-        ? patchGraphView(state, rootGraphLocation, { viewport: clampViewport(live) })
-        : state;
-      return enterIterationBody(withViewport, ownerNodeId);
-    });
+    return live
+      ? patchGraphView(state, currentGraphLocation(state), { viewport: clampViewport(live) })
+      : state;
   }
 
-  function backToRoot() {
-    const live = viewportControllerRef.current?.getViewport();
-    commit((state) => {
-      const current = currentGraphLocation(state);
-      const withViewport = live
-        ? patchGraphView(state, current, { viewport: clampViewport(live) })
-        : state;
-      return exitToRoot(withViewport);
-    });
+  function enter(ownerNodeId: string) {
+    commit((state) => enterNestedGraph(withLiveViewport(state), workflow, ownerNodeId));
+  }
+
+  function leave(apply: (state: GraphNavigationState) => GraphNavigationState) {
+    commit((state) => apply(withLiveViewport(state)));
   }
 
   if (!graph) return null;
-  const atRoot = location.kind === 'root';
-  const owner = atRoot ? null : workflow.nodes.find((node) => node.id === location.ownerNodeId);
+  const atRoot = location.length === 0;
+  const crumbs = navigationCrumbs(workflow, navigation);
 
   return (
     <ReactFlowProvider key={graphLocationKey(location)}>
@@ -177,14 +171,26 @@ export const GraphCanvasSession = forwardRef<
           let atRoot = false;
           commit((state) => {
             const current = currentGraphLocation(state);
-            atRoot = current.kind === 'root';
+            atRoot = current.length === 0;
             return patchGraphView(state, current, { viewport });
           });
           if (atRoot) onRootViewportChange(event, viewport);
         }}
-        manifestFilter={atRoot ? undefined : isIterationBodyAction}
-        onEnterBody={atRoot ? enter : undefined}
-        navigation={atRoot || !owner ? null : { ownerName: owner.name, onBackToRoot: backToRoot }}
+        locationName={atRoot ? 'root' : location.at(-1)!.graphKey}
+        manifestFilter={location.at(-1)?.graphKey === 'body' ? isIterationBodyAction : undefined}
+        onEnterGraph={enter}
+        navigation={
+          atRoot
+            ? null
+            : {
+                crumbs: crumbs.map((crumb, index) => ({
+                  label: crumb.label,
+                  current: index === crumbs.length - 1,
+                  onSelect: () => leave((state) => jumpToGraph(state, index)),
+                })),
+                onBack: () => leave(popGraph),
+              }
+        }
         viewportControllerRef={viewportControllerRef}
         runStatus={atRoot ? runStatus : null}
         reviewActions={atRoot ? reviewActions : undefined}

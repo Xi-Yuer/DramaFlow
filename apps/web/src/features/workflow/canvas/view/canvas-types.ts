@@ -38,8 +38,12 @@ export type WorkflowCanvasProps = {
     selectedEdgeIds: readonly string[];
   }) => void;
   manifestFilter?: (manifest: NodeTypeManifest) => boolean;
-  onEnterBody?: (ownerNodeId: string) => void;
-  navigation?: { ownerName: string; onBackToRoot: () => void } | null;
+  locationName?: 'root' | 'body' | 'graph';
+  onEnterGraph?: (ownerNodeId: string) => void;
+  navigation?: {
+    crumbs: readonly { label: string; current: boolean; onSelect: () => void }[];
+    onBack: () => void;
+  } | null;
   viewportControllerRef?: { current: GraphViewportController | null };
   runStatus?: WorkflowRunStatusState | null;
   reviewActions?: HumanReviewActions;

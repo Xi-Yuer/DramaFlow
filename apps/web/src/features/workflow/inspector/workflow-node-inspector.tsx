@@ -29,7 +29,7 @@ export function WorkflowNodeInspector({
   onModeChange: (next: InspectorContextMode) => void;
   onClose: () => void;
   onUpdateNode?: (node: NodeDefinition) => void;
-  bodyEntry?: { enabled: boolean; onEnter: () => void };
+  bodyEntry?: { enabled: boolean; label: string; disabledHint?: string; onEnter: () => void };
 }) {
   const runtime = useWorkflowNodeRuntime(node.id);
   const isHumanReview =
@@ -73,16 +73,16 @@ export function WorkflowNodeInspector({
       </header>
 
       {bodyEntry ? (
-        <section className={styles.bodyEntry} aria-label="Iteration Body">
+        <section className={styles.bodyEntry} aria-label="嵌套图">
           <Button
             type="button"
             variant="outline"
             disabled={!bodyEntry.enabled}
             onClick={bodyEntry.onEnter}
           >
-            编辑 Body
+            {bodyEntry.label}
           </Button>
-          {bodyEntry.enabled ? null : <p>尚未配置 Body</p>}
+          {bodyEntry.enabled || !bodyEntry.disabledHint ? null : <p>{bodyEntry.disabledHint}</p>}
         </section>
       ) : null}
       <Tabs

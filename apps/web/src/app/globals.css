@@ -697,7 +697,7 @@ a {
   display: flex;
   align-items: center;
   gap: 6px;
-  max-width: min(420px, calc(100% - 160px));
+  max-width: min(640px, calc(100% - 160px));
   padding: 4px 10px;
   border: 1px solid #ffffff14;
   border-radius: 999px;

@@ -1,5 +1,5 @@
 import {
-  iterationCompositeDefinitionSchema,
+  compositeDefinitionSchema,
   nodeDefinitionSchema,
   workflowDraftDefinitionSchema,
   type NodeDefinition,
@@ -20,7 +20,7 @@ const reactFlowNodeSchema = z.object({
     inputs: nodeDefinitionSchema.shape.inputs,
     config: nodeDefinitionSchema.shape.config,
     preset: nodeDefinitionSchema.shape.preset,
-    composite: iterationCompositeDefinitionSchema.optional(),
+    composite: compositeDefinitionSchema.optional(),
   }),
 });
 

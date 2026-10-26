@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Background, BackgroundVariant, Controls, ReactFlow, useReactFlow } from '@xyflow/react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from 'antd';
-import type { NodeTypeManifest } from '@dramaflow/contracts';
+import { nestedGraphSlots, type NodeDefinition, type NodeTypeManifest } from '@dramaflow/contracts';
 import { NodePicker } from '../node-catalog/node-picker';
 import { createWorkflowNode } from '../node-catalog/create-workflow-node';
 import { nodeTypeApi, nodeTypeKeys } from '../node-catalog/node-type-api';
@@ -11,7 +11,6 @@ import { WorkflowEnd } from '../outputs/workflow-end';
 import { WorkflowBodyInputs } from '../iteration/body-input-boundary-node';
 import { WorkflowNodeInspector } from '../inspector/workflow-node-inspector';
 import { resolveWorkflowRuntimeNodes, WorkflowRuntimeProvider } from '../runtime/runtime-status';
-import { canEnterIterationBody } from '../editor/graph-navigation';
 import { workflowNodeTypes } from './rendering/workflow-node';
 import { workflowEdgeTypes } from './rendering/workflow-edge';
 import { CanvasEditingProviders } from './editing/canvas-editing-providers';
@@ -19,6 +18,27 @@ import { useCanvasBoundaries } from './editing/use-canvas-boundaries';
 import { useCanvasView } from './view/use-canvas-view';
 import { useCanvasConnections } from './editing/use-canvas-connections';
 import type { CanvasNode, CanvasEdge, WorkflowCanvasProps } from './view/canvas-types';
+
+function nestedGraphEntry(
+  node: NodeDefinition,
+  onEnter: ((ownerNodeId: string) => void) | undefined,
+) {
+  if (!onEnter) return undefined;
+  if (node.type === 'flow.iteration' && node.typeVersion === 1) {
+    const enabled = nestedGraphSlots(node).some((slot) => slot.graphKey === 'body');
+    return {
+      label: '编辑 Body',
+      enabled,
+      disabledHint: enabled ? undefined : '尚未配置 Body',
+      onEnter: () => onEnter(node.id),
+    };
+  }
+  if (node.type === 'flow.subworkflow' && node.typeVersion === 1) {
+    const enabled = nestedGraphSlots(node).some((slot) => slot.graphKey === 'graph');
+    return { label: '进入', enabled, onEnter: () => onEnter(node.id) };
+  }
+  return undefined;
+}
 
 const canvasNodeTypes = {
   ...workflowNodeTypes,
@@ -41,7 +61,8 @@ export function WorkflowCanvas({
   initialSelectedEdgeIds = [],
   onSelectionChange,
   manifestFilter,
-  onEnterBody,
+  locationName = 'root',
+  onEnterGraph,
   navigation = null,
   viewportControllerRef,
   runStatus = null,
@@ -137,16 +158,24 @@ export function WorkflowCanvas({
   }
 
   return (
-    <div className="canvas-stage" data-graph-location={navigation ? 'body' : 'root'}>
+    <div className="canvas-stage" data-graph-location={locationName}>
       {navigation ? (
         <nav className="canvas-breadcrumb" aria-label="图位置">
-          <button type="button" onClick={navigation.onBackToRoot} aria-label="返回工作流">
-            工作流
+          <button type="button" onClick={navigation.onBack}>
+            返回上一层
           </button>
-          <span aria-hidden="true">/</span>
-          <span>{navigation.ownerName}</span>
-          <span aria-hidden="true">/</span>
-          <span aria-current="page">Body</span>
+          {navigation.crumbs.map((crumb, index) => (
+            <span key={`${crumb.label}-${index}`} className="canvas-breadcrumb-crumb">
+              {index > 0 ? <span aria-hidden="true">/</span> : null}
+              {crumb.current ? (
+                <span aria-current="page">{crumb.label}</span>
+              ) : (
+                <button type="button" onClick={crumb.onSelect}>
+                  {crumb.label}
+                </button>
+              )}
+            </span>
+          ))}
         </nav>
       ) : null}
       <WorkflowRuntimeProvider
@@ -188,6 +217,12 @@ export function WorkflowCanvas({
                 if (node.type === 'workflowNode') {
                   selectNode(node.id);
                 }
+              }}
+              onNodeDoubleClick={(_, node) => {
+                if (node.type !== 'workflowNode' || !onEnterGraph) return;
+                const definition = workflow.nodes.find((item) => item.id === node.id);
+                if (definition && nestedGraphSlots(definition).length > 0)
+                  onEnterGraph(definition.id);
               }}
               onPaneClick={() => {
                 setSelectedNodeId(null);
@@ -247,16 +282,7 @@ export function WorkflowCanvas({
                   nodes: current.nodes.map((item) => (item.id === next.id ? next : item)),
                 }))
               }
-              bodyEntry={
-                onEnterBody &&
-                activeSelectedNode.type === 'flow.iteration' &&
-                activeSelectedNode.typeVersion === 1
-                  ? {
-                      enabled: canEnterIterationBody(activeSelectedNode),
-                      onEnter: () => onEnterBody(activeSelectedNode.id),
-                    }
-                  : undefined
-              }
+              bodyEntry={nestedGraphEntry(activeSelectedNode, onEnterGraph)}
             />
           ) : null}
         </CanvasEditingProviders>

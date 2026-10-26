@@ -20,13 +20,19 @@ import {
   createGraphNavigation,
   currentGraphLocation,
   editLocatedGraph,
-  enterIterationBody,
-  exitToRoot,
+  enterNestedGraph,
   graphLocationKey,
   isIterationBodyAction,
+  jumpToGraph,
   patchGraphView,
+  popGraph,
   readLocatedGraph,
+  rootGraphLocation,
 } from '../src/features/workflow/editor/graph-navigation';
+import {
+  fromReactFlowNode,
+  toReactFlowNode,
+} from '../src/features/workflow/canvas/adapter/node-adapter';
 import { replaceNodeInput } from '../src/features/workflow/inputs/template-input';
 import { nodeTypeKeys } from '../src/features/workflow/node-catalog/node-type-api';
 import { END_INPUT_HANDLE } from '../src/features/workflow/outputs/workflow-outputs';
@@ -111,6 +117,16 @@ const reviewManifest = manifest({
   outputs: [{ key: 'content', name: '审核内容', dataType: StringType }],
   config: [],
 });
+const subworkflowManifest = manifest({
+  type: 'flow.subworkflow',
+  version: 1,
+  executionKind: 'composite',
+  portDerivation: 'subworkflow',
+  metadata: { name: '子流程', category: 'flow' },
+  inputs: [],
+  outputs: [],
+  config: [],
+});
 const iterationManifest = manifest({
   type: 'flow.iteration',
   version: 1,
@@ -137,6 +153,7 @@ const manifests = [
   ifManifest,
   reviewManifest,
   iterationManifest,
+  subworkflowManifest,
   controlActionManifest,
 ];
 
@@ -273,6 +290,8 @@ function flowNode(id: string) {
   return flow.nodes?.find((item) => item.id === id);
 }
 
+const bodyLocation = [{ nodeId: 'iterate', graphKey: 'body' as const }];
+
 describe('图导航模型', () => {
   it('用栈记录 root 与 iteration body，不把父节点写进子图 nodeId', () => {
     const rootView = { x: 8, y: 9, zoom: 1.25 };
@@ -281,25 +300,23 @@ describe('图导航模型', () => {
       selectedNodeId: 'iterate',
       selectedEdgeIds: ['e1'],
     });
-    state = enterIterationBody(state, 'iterate');
-    expect(state.stack).toEqual([
-      { kind: 'root' },
-      { kind: 'nested', ownerNodeId: 'iterate', graphKey: 'body' },
-    ]);
-    expect(graphLocationKey(state.stack[1]!)).not.toContain('format');
+    state = enterNestedGraph(state, workflow(), 'iterate');
+    expect(state.stack.map((layer) => layer.location)).toEqual([rootGraphLocation, bodyLocation]);
+    expect(state.stack[1]?.label).toBe('逐项');
+    expect(graphLocationKey(state.stack[1]!.location)).not.toContain('format');
     state = patchGraphView(state, currentGraphLocation(state), {
       selectedNodeId: 'format',
       viewport: { x: 3, y: 4, zoom: 2 },
     });
-    state = exitToRoot(state);
-    expect(currentGraphLocation(state)).toEqual({ kind: 'root' });
+    state = popGraph(state);
+    expect(currentGraphLocation(state)).toEqual(rootGraphLocation);
     expect(state.views.root).toMatchObject({
       selectedNodeId: 'iterate',
       selectedEdgeIds: ['e1'],
       viewport: rootView,
     });
-    expect(state.views[graphLocationKey(state.stack[0]!)]?.viewport).toEqual(rootView);
-    const bodyKey = graphLocationKey({ kind: 'nested', ownerNodeId: 'iterate', graphKey: 'body' });
+    expect(state.views[graphLocationKey(state.stack[0]!.location)]?.viewport).toEqual(rootView);
+    const bodyKey = graphLocationKey(bodyLocation);
     expect(state.views[bodyKey]).toMatchObject({
       selectedNodeId: 'format',
       viewport: { x: 3, y: 4, zoom: 2 },
@@ -309,24 +326,20 @@ describe('图导航模型', () => {
   it('body 编辑只写 composite.body，同名节点和 root 输出互不影响', () => {
     const initial = workflow();
     const edited = workflowDraftDefinitionSchema.parse(
-      editLocatedGraph(
-        initial,
-        { kind: 'nested', ownerNodeId: 'iterate', graphKey: 'body' },
-        (graph) => {
-          const withCaption = {
-            ...graph,
-            nodes: [
-              ...graph.nodes,
-              node('caption', textManifest, '旁白', { ui: { position: { x: 8, y: 8 } } }),
-            ],
-          };
-          return replaceNodeInput(withCaption, 'format', 'text', {
-            type: 'template',
-            value: '局部 {{label}}',
-            variables: { label: { type: 'node_output', nodeId: 'caption', portKey: 'text' } },
-          });
-        },
-      ),
+      editLocatedGraph(initial, bodyLocation, (graph) => {
+        const withCaption = {
+          ...graph,
+          nodes: [
+            ...graph.nodes,
+            node('caption', textManifest, '旁白', { ui: { position: { x: 8, y: 8 } } }),
+          ],
+        };
+        return replaceNodeInput(withCaption, 'format', 'text', {
+          type: 'template',
+          value: '局部 {{label}}',
+          variables: { label: { type: 'node_output', nodeId: 'caption', portKey: 'text' } },
+        });
+      }),
     );
     expect(edited.nodes.find((item) => item.id === 'format')?.inputs).toEqual({});
     expect(edited.outputs).toEqual(initial.outputs);
@@ -334,7 +347,7 @@ describe('图导航模型', () => {
       type: 'template',
       value: '局部 {{label}}',
     });
-    expect(readLocatedGraph(edited, { kind: 'root' })?.outputs).toEqual(initial.outputs);
+    expect(readLocatedGraph(edited, rootGraphLocation)?.outputs).toEqual(initial.outputs);
   });
 
   it('body 输出 text:string 成为父节点的 text:string[]', () => {
@@ -381,9 +394,11 @@ describe('Iteration Body 画布', () => {
     expect(view.rootMoves).toEqual([{ x: 12, y: 18, zoom: 1.2 }]);
 
     fireEvent.click(screen.getByRole('button', { name: '编辑 Body' }));
-    expect(screen.getByRole('navigation', { name: '图位置' }).textContent).toContain('工作流');
-    expect(screen.getByRole('navigation', { name: '图位置' }).textContent).toContain('逐项');
-    expect(screen.getByRole('navigation', { name: '图位置' }).textContent).toContain('Body');
+    const trail = screen.getByRole('navigation', { name: '图位置' });
+    expect(trail.textContent).toContain('主流程');
+    expect(trail.textContent).toContain('逐项');
+    expect(trail.textContent).not.toContain('Body');
+    expect(trail.textContent).not.toContain('iterate');
     expect(document.querySelector('[data-graph-location="body"]')).toBeTruthy();
     expect(flow.defaultViewport).toEqual({ x: 0, y: 0, zoom: 1 });
     expect(flowNode('format')?.data).toMatchObject({ name: '局部格式' });
@@ -486,7 +501,7 @@ describe('Iteration Body 画布', () => {
       ).outputs,
     ).toEqual([{ key: 'result', name: 'result', dataType: array(StringType) }]);
 
-    fireEvent.click(screen.getByRole('button', { name: '返回工作流' }));
+    fireEvent.click(screen.getByRole('button', { name: '返回上一层' }));
     expect(document.querySelector('[data-graph-location="root"]')).toBeTruthy();
     expect(flow.defaultViewport).toEqual({ x: 12, y: 18, zoom: 1.2 });
     expect(flowNode('iterate')?.selected).toBe(true);
@@ -549,5 +564,167 @@ describe('Iteration Body 画布', () => {
     fireEvent.click(screen.getByRole('button', { name: '编辑 Body' }));
     expect(screen.queryByRole('navigation', { name: '图位置' })).toBeNull();
     expect(document.querySelector('[data-graph-location="root"]')).toBeTruthy();
+  });
+});
+
+function graphOf(nodes: WorkflowDefinition['nodes']): WorkflowDefinition {
+  return { inputs: [], nodes, edges: [], outputs: [] };
+}
+
+function subworkflowNode(id: string, name: string, childName: string) {
+  return node(id, subworkflowManifest, name, {
+    composite: {
+      kind: 'subworkflow',
+      graph: graphOf([
+        node('format', formatManifest, childName, { ui: { position: { x: 4, y: 5 } } }),
+      ]),
+    },
+  });
+}
+
+function nestedWorkflow(): WorkflowDefinition {
+  return {
+    inputs: [],
+    nodes: [
+      node('format', textManifest, '根格式'),
+      node('iterate', iterationManifest, '单集生成', {
+        composite: {
+          kind: 'iteration',
+          itemType: StringType,
+          invariantInputs: [],
+          bodyInputMapping: [],
+          body: graphOf([
+            node('format', formatManifest, '局部格式'),
+            subworkflowNode('call', '分镜生成', '子格式'),
+          ]),
+        },
+      }),
+    ],
+    edges: [],
+    outputs: [],
+  };
+}
+
+describe('多层 Definition Location', () => {
+  it('按完整路径解析和更新，同层之外的同名 nodeId 保持不变', () => {
+    const initial = nestedWorkflow();
+    const inner = [
+      { nodeId: 'iterate', graphKey: 'body' as const },
+      { nodeId: 'call', graphKey: 'graph' as const },
+    ];
+    expect(readLocatedGraph(initial, [{ nodeId: 'call', graphKey: 'graph' }])).toBeNull();
+    expect(readLocatedGraph(initial, inner)?.nodes.map((item) => item.name)).toEqual(['子格式']);
+    const edited = editLocatedGraph(initial, inner, (graph) => ({
+      ...graph,
+      nodes: graph.nodes.map((item) =>
+        item.id === 'format' ? { ...item, name: '已改子格式' } : item,
+      ),
+    }));
+    expect(edited.nodes.find((item) => item.id === 'format')?.name).toBe('根格式');
+    expect(bodyOf(edited).nodes.find((item) => item.id === 'format')?.name).toBe('局部格式');
+    expect(readLocatedGraph(edited, inner)?.nodes[0]?.name).toBe('已改子格式');
+    const call = bodyOf(edited).nodes.find((item) => item.id === 'call');
+    expect(fromReactFlowNode(toReactFlowNode(call)).composite).toEqual(call?.composite);
+  });
+
+  it('进入、返回和 breadcrumb 跳转后恢复各层选择与视口', () => {
+    const definition = nestedWorkflow();
+    let state = createGraphNavigation({ x: 1, y: 1, zoom: 1 });
+    state = enterNestedGraph(state, definition, 'iterate');
+    state = patchGraphView(state, currentGraphLocation(state), {
+      selectedNodeId: 'call',
+      viewport: { x: 2, y: 3, zoom: 1.5 },
+    });
+    state = enterNestedGraph(state, definition, 'call');
+    const inner = currentGraphLocation(state);
+    state = patchGraphView(state, inner, {
+      selectedNodeId: 'format',
+      selectedEdgeIds: ['inner'],
+      viewport: { x: 9, y: 8, zoom: 3 },
+    });
+    state = jumpToGraph(state, 0);
+    expect(currentGraphLocation(state)).toEqual(rootGraphLocation);
+    expect(state.views[graphLocationKey(bodyLocation)]).toMatchObject({ selectedNodeId: 'call' });
+    state = enterNestedGraph(state, definition, 'iterate');
+    expect(state.views[graphLocationKey(currentGraphLocation(state))]?.viewport).toEqual({
+      x: 2,
+      y: 3,
+      zoom: 1.5,
+    });
+    state = enterNestedGraph(state, definition, 'call');
+    expect(state.views[graphLocationKey(currentGraphLocation(state))]).toMatchObject({
+      selectedNodeId: 'format',
+      selectedEdgeIds: ['inner'],
+      viewport: { x: 9, y: 8, zoom: 3 },
+    });
+  });
+});
+
+describe('SubWorkflow 画布', () => {
+  it('进入子图后编辑写回根 Definition，并恢复视口与选择', () => {
+    const view = setup({
+      inputs: [],
+      nodes: [
+        node('format', textManifest, '根格式'),
+        subworkflowNode('call', '分镜生成', '子格式'),
+      ],
+      edges: [],
+      outputs: [],
+    });
+    clickNode('call');
+    fireEvent.click(screen.getByRole('button', { name: '进入' }));
+    expect(document.querySelector('[data-graph-location="graph"]')).toBeTruthy();
+    const trail = screen.getByRole('navigation', { name: '图位置' });
+    expect(trail.textContent).toContain('主流程');
+    expect(trail.textContent).toContain('分镜生成');
+    expect(trail.textContent).not.toContain('graph');
+    expect(trail.textContent).not.toContain('call');
+    expect(flowNode('format')?.data).toMatchObject({ name: '子格式' });
+    expect(screen.queryByText('根图失败标记')).toBeNull();
+
+    clickNode('format');
+    move({ x: 6, y: 7, zoom: 1.4 });
+    act(() =>
+      flow.onNodesChange?.([
+        { id: 'format', type: 'position', position: { x: 11, y: 12 }, dragging: false },
+      ]),
+    );
+    const child = view.definition().nodes.find((item) => item.id === 'call');
+    if (child?.composite?.kind !== 'subworkflow') throw new Error('缺少子图');
+    expect(child.composite.graph.nodes.find((item) => item.id === 'format')?.ui.position).toEqual({
+      x: 11,
+      y: 12,
+    });
+    expect(view.definition().nodes.find((item) => item.id === 'format')?.ui.position).toEqual({
+      x: 0,
+      y: 0,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '返回上一层' }));
+    expect(document.querySelector('[data-graph-location="root"]')).toBeTruthy();
+    expect(flowNode('call')?.selected).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '进入' }));
+    expect(flow.defaultViewport).toEqual({ x: 6, y: 7, zoom: 1.4 });
+    expect(flowNode('format')?.selected).toBe(true);
+  });
+
+  it('breadcrumb 可以回到任意中间层', () => {
+    const view = setup(nestedWorkflow());
+    clickNode('iterate');
+    fireEvent.click(screen.getByRole('button', { name: '编辑 Body' }));
+    clickNode('call');
+    fireEvent.click(screen.getByRole('button', { name: '进入' }));
+    const trail = screen.getByRole('navigation', { name: '图位置' }).textContent;
+    expect(trail).toContain('主流程');
+    expect(trail).toContain('单集生成');
+    expect(trail).toContain('分镜生成');
+    fireEvent.click(screen.getByRole('button', { name: '单集生成' }));
+    expect(document.querySelector('[data-graph-location="body"]')).toBeTruthy();
+    expect(flowNode('format')?.data).toMatchObject({ name: '局部格式' });
+    expect(flowNode('call')?.selected).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '主流程' }));
+    expect(document.querySelector('[data-graph-location="root"]')).toBeTruthy();
+    expect(flowNode('iterate')?.selected).toBe(true);
+    expect(view.definition().nodes.map((item) => item.id)).toEqual(['format', 'iterate']);
   });
 });
