@@ -19,8 +19,8 @@ import {
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@dramaflow/database';
 import { z } from 'zod';
-import { DatabaseService } from '../database/database.service.js';
-import { WorkflowCheckpointerService } from '../checkpoint/workflow-checkpointer.service.js';
+import { DatabaseService } from '../../database/database.service.js';
+import { WorkflowCheckpointerService } from '../../checkpoint/workflow-checkpointer.service.js';
 
 export class HumanReviewStateError extends ConflictException {
   constructor(

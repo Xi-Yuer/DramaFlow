@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '../database/database.service.js';
-import { WorkflowCheckpointerModule } from '../checkpoint/workflow-checkpointer.module.js';
+import { DatabaseModule } from '../../database/database.service.js';
+import { WorkflowCheckpointerModule } from '../../checkpoint/workflow-checkpointer.module.js';
 import { WorkflowHumanReviewService } from './human-review.service.js';
 
 @Module({

@@ -1,4 +1,4 @@
-import { fieldLabel } from '../schema-fields';
+import { fieldLabel } from './schema-fields';
 
 export function ConfigSummary({
   values,

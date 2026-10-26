@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compileSchemaFields, trySchemaFields } from '../src/features/models/schema-fields';
+import { compileSchemaFields, trySchemaFields } from '../src/features/models/shared/schema-fields';
 
 const schema = () => ({
   $schema: 'https://json-schema.org/draft/2020-12/schema',

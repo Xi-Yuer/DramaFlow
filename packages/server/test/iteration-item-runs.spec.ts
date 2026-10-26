@@ -15,8 +15,8 @@ import {
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { DatabaseService } from '../src/database/database.service.js';
-import { NodeRunRepositories } from '../src/workflow/runtime/node-run-repository.js';
-import { WorkflowRunRepositories } from '../src/workflow/workflow-run-repository.js';
+import { NodeRunRepositories } from '../src/workflow/runtime/execution/node-run-repository.js';
+import { WorkflowRunRepositories } from '../src/workflow/run/repository/workflow-run-repository.js';
 
 const enabled = process.env.DRAMAFLOW_INTEGRATION === '1';
 if (enabled) {

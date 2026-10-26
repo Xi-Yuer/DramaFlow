@@ -13,7 +13,7 @@ import {
   type RuntimeValue,
 } from '@dramaflow/contracts';
 import { Prisma } from '@dramaflow/database';
-import { DatabaseService } from '../../database/database.service.js';
+import { DatabaseService } from '../../../database/database.service.js';
 import { iterationItemInvocationKey, deriveChildScope } from '@dramaflow/workflow';
 import type {
   CreateNodeRunInput,
@@ -370,7 +370,12 @@ class PrismaNodeRunRepository implements HumanReviewNodeRunRepository, Iteration
   async markChildExecutionAndParentFailed(id: string, error: NodeRunError) {
     return this.failChild(id, error, true);
   }
-  private async failChild(id: string, rawError: NodeRunError, failParent: boolean, expectedKind?: string) {
+  private async failChild(
+    id: string,
+    rawError: NodeRunError,
+    failParent: boolean,
+    expectedKind?: string,
+  ) {
     const error = nodeRunErrorSchema.parse(rawError);
     await this.db.client.$transaction(async (tx) => {
       const child = await tx.childExecution.findFirst({

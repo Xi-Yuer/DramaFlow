@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { workflowIdentifierSchema } from './metadata.js';
+import { workflowIdentifierSchema } from '../metadata.js';
 import {
   nodeRunSchema,
   nodeRunStatusSchema,

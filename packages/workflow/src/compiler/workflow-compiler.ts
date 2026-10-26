@@ -58,7 +58,7 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       run: WorkflowRun,
     ) => Promise<HumanReviewNodeRunRepository>,
     private readonly createIterationRuns?: (run: WorkflowRun) => Promise<IterationRunRepository>,
-    private readonly createChildGraphRuns?: (run:WorkflowRun)=>Promise<ChildGraphRunRepository>,
+    private readonly createChildGraphRuns?: (run: WorkflowRun) => Promise<ChildGraphRunRepository>,
   ) {}
 
   async compile(input: WorkflowDefinition, run: WorkflowRun): Promise<CompiledWorkflow> {
@@ -77,7 +77,7 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
         if: ifStrategy,
         review: reviewStrategy,
         iteration: iterationStrategy,
-        subworkflow:new SubWorkflowNodeCompilationStrategy(),
+        subworkflow: new SubWorkflowNodeCompilationStrategy(),
       },
     });
     const recursionLimit = plan.budget.recursionLimit;
@@ -88,8 +88,11 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       throw new Error('Human Review 编译必须显式注入 NodeRun Repository');
     if (plan.requirements.iterationRuns && !this.createIterationRuns)
       throw new Error('Iteration 编译必须注入 IterationRun Repository');
-    if(plan.requirements.childGraphRuns && !this.createChildGraphRuns) throw new Error('Composite 编译必须注入 ChildGraphRun Repository');
-    const childGraphRuns=plan.requirements.childGraphRuns ? await this.createChildGraphRuns!(run) : undefined;
+    if (plan.requirements.childGraphRuns && !this.createChildGraphRuns)
+      throw new Error('Composite 编译必须注入 ChildGraphRun Repository');
+    const childGraphRuns = plan.requirements.childGraphRuns
+      ? await this.createChildGraphRuns!(run)
+      : undefined;
     const valueServices = needsValueServices ? await this.createValueServices!(run) : undefined;
     const reviewRuns = plan.requirements.reviewRuns
       ? await this.createHumanReviewRuns!(run)
@@ -114,7 +117,7 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       registry: this.registry,
       run,
       execution: { identity: { scopeKey: ROOT_EXECUTION_SCOPE_KEY } },
-      runtime: { executor, services: valueServices, reviewRuns, iterationRuns,childGraphRuns },
+      runtime: { executor, services: valueServices, reviewRuns, iterationRuns, childGraphRuns },
       target: {
         addNode: (id, execute) => {
           graph.addNode(id, execute);

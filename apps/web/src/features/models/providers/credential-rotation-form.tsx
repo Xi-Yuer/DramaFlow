@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { Alert, Button, Modal } from 'antd';
 import type { ModelProvider, ProviderCatalogItem } from '@dramaflow/contracts';
 import { modelApi } from '../model-api';
-import { CredentialInputs, validateCredentials } from '../schema-form';
+import { CredentialInputs, validateCredentials } from '../shared/schema-form';
 import { failure } from './provider-form-helpers';
 
 export function CredentialRotationForm({

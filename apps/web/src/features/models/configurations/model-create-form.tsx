@@ -9,8 +9,8 @@ import {
   type ManagedModelConfiguration,
 } from '@dramaflow/contracts';
 import { modelApi } from '../model-api';
-import { trySchemaFields } from '../schema-fields';
-import { SchemaFormFields } from '../schema-form';
+import { trySchemaFields } from '../shared/schema-fields';
+import { SchemaFormFields } from '../shared/schema-form';
 import { findPlugin, failure } from '../providers/provider-form-helpers';
 
 export function ModelCreateForm({

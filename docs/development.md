@@ -40,7 +40,7 @@
 | `workflow/inputs/definitions/`                             | 通用 Graph Input 定义、校验、类型选项与 Root / Body 共用编辑控件                                           |
 | `workflow/inputs/bindings/`                                | 通用图输入 binding 的写入、重命名及兼容性清理，不依赖 Iteration                                            |
 | `workflow/iteration/inputs/`                               | Iteration composite、Body / 不变输入及映射；依赖通用 Input 能力                                            |
-| `models/settings/`、`catalog/`                             | 设置会话、资源查询与刷新，以及供应商目录展示                                                               |
+| `models/settings/`、`catalog/`、`shared/`                  | 设置会话与目录展示；`shared/` 放配置摘要和供应商 / 模型配置共用的 Schema 字段表单                          |
 | `models/providers/`、`configurations/`                     | 分别维护供应商及凭证表单、模型配置表单与列表；提交和密钥清理就近保留                                       |
 | `workflow/model-selection/selection/`                      | 选择 Context、用户级查询、恢复会话与选项推导，不持有凭证                                                   |
 | `workflow/model-selection/presentation/`、`configuration/` | 选项展示与明确的添加配置操作                                                                               |

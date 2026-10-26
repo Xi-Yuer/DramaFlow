@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { workflowDefinitionSchema, workflowDraftDefinitionSchema } from './definition.js';
+import {
+  workflowDefinitionSchema,
+  workflowDraftDefinitionSchema,
+} from './definition/definition.js';
 import { workflowMetadataSchema, workflowVersionMetadataSchema } from './metadata.js';
 
 // 项目默认工作流是应用访问入口；身份、草稿和修订仍属于独立 Workflow。

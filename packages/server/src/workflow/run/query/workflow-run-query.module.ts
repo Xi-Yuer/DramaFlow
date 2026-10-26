@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '../../database/database.service.js';
+import { DatabaseModule } from '../../../database/database.service.js';
 import { WorkflowRunQueryService } from './workflow-run-query.service.js';
 
 @Module({

@@ -27,7 +27,7 @@ import {
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import type { WorkflowRuntimeService } from '../src/workflow/runtime/workflow-runtime.service.js';
+import type { WorkflowRuntimeService } from '../src/workflow/runs/workflow-runtime.service.js';
 import {
   createWorkflowService,
   storeRuntimeTestVersion,
@@ -65,7 +65,7 @@ beforeAll(async () => {
   await api.get(WorkflowExecutionQueue).queue.pause();
   const runtimeSource: unknown = await import(
     new URL(
-      '../dist/workflow/runtime/workflow-runtime.service.js',
+      '../dist/workflow/runs/workflow-runtime.service.js',
       import.meta.url,
     ).href
   );

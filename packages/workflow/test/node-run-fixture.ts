@@ -167,12 +167,16 @@ export function auditedNodeRunRepositoryFixture() {
     });
   return {
     ...repository,
-    markChildExecutionAndParentFailed:vi.fn<ChildExecutionRepository['markChildExecutionAndParentFailed']>().mockImplementation(async (id,error)=>{
-      const child=items.get(id)!;
-      child.status='failed';child.error=structuredClone(error);child.completedAt='2026-10-26T00:00:02.000Z';
-      const parent=records.get(child.parentNodeRunId)!;
-      if(parent.status==='running') await repository.markFailed(parent.id,error);
-    }),
+    markChildExecutionAndParentFailed: vi
+      .fn<ChildExecutionRepository['markChildExecutionAndParentFailed']>()
+      .mockImplementation(async (id, error) => {
+        const child = items.get(id)!;
+        child.status = 'failed';
+        child.error = structuredClone(error);
+        child.completedAt = '2026-10-26T00:00:02.000Z';
+        const parent = records.get(child.parentNodeRunId)!;
+        if (parent.status === 'running') await repository.markFailed(parent.id, error);
+      }),
     getOrCreateChildExecutionRunning,
     getChildExecutionById: vi
       .fn<ChildExecutionRepository['getChildExecutionById']>()

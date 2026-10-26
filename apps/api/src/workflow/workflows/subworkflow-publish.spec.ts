@@ -89,14 +89,16 @@ function fixture(nested = false) {
     createIterationNodeType(),
     createTextGenerationNodeType(),
   ]);
-  const createVersion = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
-    id: 'version',
-    workflowId: data.workflowId,
-    version: data.version,
-    sourceRevision: data.sourceRevision,
-    createdAt: new Date('2026-10-26T00:00:00.000Z'),
-    definition: data.definition,
-  }));
+  const createVersion = vi.fn(
+    async ({ data }: { data: Record<string, unknown> }) => ({
+      id: 'version',
+      workflowId: data.workflowId,
+      version: data.version,
+      sourceRevision: data.sourceRevision,
+      createdAt: new Date('2026-10-26T00:00:00.000Z'),
+      definition: data.definition,
+    }),
+  );
   const updateDraft = vi.fn().mockResolvedValue({ count: 1 });
   const tx = {
     $queryRaw: vi
@@ -164,7 +166,11 @@ describe('SubWorkflow Draft / 正式 Publish 静态边界', () => {
         workflowId: 'workflow',
         expectedRevision: 1,
       }),
-    ).resolves.toMatchObject({ version: 1, workflowId: 'workflow', sourceRevision: 1 });
+    ).resolves.toMatchObject({
+      version: 1,
+      workflowId: 'workflow',
+      sourceRevision: 1,
+    });
     expect(f.assertModel).toHaveBeenCalledExactlyOnceWith(
       f.tx,
       'owner',

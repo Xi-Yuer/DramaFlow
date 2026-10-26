@@ -36,9 +36,9 @@ Definition Location 沿既有 nestedGraphSlots 与 GraphDefinitionPath 追加 no
 
 ## Node Execution Occurrence
 
-[NodeOccurrence / NodeRun 协议](../packages/contracts/src/workflow/node-run.ts)区分一次逻辑执行与尝试。`node_occurrence` 保存逻辑执行，不创建通用 ExecutionScope 表；occurrence 由固定 WorkflowRun、scopeKey 和 nodeId 唯一定位，并拥有独立 UUID。根图显式使用 root scope，Iteration Body 使用 ChildExecution 对应的子 scope，nodeId 归属 Run 的固定 WorkflowVersion；If 仍不创建 NodeRun。scopeKey 是受信任执行上下文提供的产品身份，不解析为 iterationIndex、LangGraph namespace 或权限凭据。
+[NodeOccurrence / NodeRun 协议](../packages/contracts/src/workflow/run/node-run.ts)区分一次逻辑执行与尝试。`node_occurrence` 保存逻辑执行，不创建通用 ExecutionScope 表；occurrence 由固定 WorkflowRun、scopeKey 和 nodeId 唯一定位，并拥有独立 UUID。根图显式使用 root scope，Iteration Body 使用 ChildExecution 对应的子 scope，nodeId 归属 Run 的固定 WorkflowVersion；If 仍不创建 NodeRun。scopeKey 是受信任执行上下文提供的产品身份，不解析为 iterationIndex、LangGraph namespace 或权限凭据。
 
-[NodeRun Repository](../packages/server/src/workflow/runtime/node-run-repository.ts)按授权 Run 获取 / 创建 occurrence；唯一键竞争在事务 advisory lock 内串行化。创建 attempt 时锁定对应 occurrence 行，只在该 occurrence 内分配序号；NodeRun 的唯一键为 occurrenceId / attempt，复合外键保证 occurrence、NodeRun 的项目 / Run / nodeId 一致。数据库禁止修改 occurrence 身份及既有 attempt 的归属、序号和开始时间。Action Executor 通过显式 scopeKey 取得 occurrence，分配 attempt 的操作不新增 retry 策略或重放兜底。
+[NodeRun Repository](../packages/server/src/workflow/runtime/execution/node-run-repository.ts)按授权 Run 获取 / 创建 occurrence；唯一键竞争在事务 advisory lock 内串行化。创建 attempt 时锁定对应 occurrence 行，只在该 occurrence 内分配序号；NodeRun 的唯一键为 occurrenceId / attempt，复合外键保证 occurrence、NodeRun 的项目 / Run / nodeId 一致。数据库禁止修改 occurrence 身份及既有 attempt 的归属、序号和开始时间。Action Executor 通过显式 scopeKey 取得 occurrence，分配 attempt 的操作不新增 retry 策略或重放兜底。
 
 NodeRun 查询新增安全的 occurrenceId / scopeKey，不返回 thread、checkpoint 或原生 task metadata。当前 Runtime Inspector 仅展示 root scope 的唯一 occurrence，再按其 attempt 排序；不以跨 occurrence 的最大 attempt 猜最新执行，不增加 Iteration UI。Artifact 继续只关联 nodeRunId，经 NodeRun 反查 occurrence，不复制 scope / occurrence 字段。
 
@@ -78,7 +78,7 @@ body 的嵌套 composite、If / control、Human Review / interaction 均拒绝�
 
 ## Child Execution 持久化
 
-[ChildExecution 协议](../packages/contracts/src/workflow/node-run.ts)与 [schema](../packages/database/prisma/schema.prisma)正式保存某个 Parent NodeRun attempt 发起的一次子图调用。字段为 id、projectId、workflowRunId、parentNodeRunId、parentNodeId、scopeKey、kind、invocationKey、metadata、status、error 和 createdAt / startedAt / completedAt；可空 typed index 只服务 Iteration extension。parentNodeId 从旧模型保留，用于复合父外键，避免弱化 Run / 项目 / 节点归属。NodeRun.childExecutionId 为可空外键：root 为 null，子图 NodeRun 明确关联对应 ChildExecution；不再增加各 Composite 的专用归属字段。
+[ChildExecution 协议](../packages/contracts/src/workflow/run/node-run.ts)与 [schema](../packages/database/prisma/schema.prisma)正式保存某个 Parent NodeRun attempt 发起的一次子图调用。字段为 id、projectId、workflowRunId、parentNodeRunId、parentNodeId、scopeKey、kind、invocationKey、metadata、status、error 和 createdAt / startedAt / completedAt；可空 typed index 只服务 Iteration extension。parentNodeId 从旧模型保留，用于复合父外键，避免弱化 Run / 项目 / 节点归属。NodeRun.childExecutionId 为可空外键：root 为 null，子图 NodeRun 明确关联对应 ChildExecution；不再增加各 Composite 的专用归属字段。
 
 唯一键 parentNodeRunId / invocationKey 是调用身份权威。Iteration 使用 kind=iteration_item、invocationKey=iteration-item:<index> 和 metadata.index；数据库保留可空 index 列，检查其与 metadata、invocationKey 一致，并保持 parent / index 与 Run / scope 唯一。其他 kind 不要求 index。UUID 主键独立于 index，scopeKey 也不等于 invocationKey。
 
@@ -98,11 +98,11 @@ body 的嵌套 composite、If / control、Human Review / interaction 均拒绝�
 
 ## Execution Tree 只读查询
 
-[通用 Contract](../packages/contracts/src/workflow/execution-tree.ts)定义 `ExecutionTreeResponse`，包含 Run 摘要 `run`、本次父引用 `parent`、该层子项 `items` 和 `nextCursor`。`parent` 由 `workflow_run / node_run / child_execution` 与稳定 id 构成；NodeRun 条目包含 nodeId、occurrenceId、attempt、状态、时间和安全错误，Child Execution 包含 id、kind、父 NodeRun、状态、时间和可选结构 metadata。所有子项显式携带 parent，不按 nodeId 合并 attempt；调用方用同一协议逐层读取，不需要知道底层归属字段。DTO 不含 scopeKey、ChildExecution 外键、LangGraph 类型或内部 token，也不复制输入输出 payload；运行值继续使用既有 NodeRun 查询。
+[通用 Contract](../packages/contracts/src/workflow/run/execution-tree.ts)定义 `ExecutionTreeResponse`，包含 Run 摘要 `run`、本次父引用 `parent`、该层子项 `items` 和 `nextCursor`。`parent` 由 `workflow_run / node_run / child_execution` 与稳定 id 构成；NodeRun 条目包含 nodeId、occurrenceId、attempt、状态、时间和安全错误，Child Execution 包含 id、kind、父 NodeRun、状态、时间和可选结构 metadata。所有子项显式携带 parent，不按 nodeId 合并 attempt；调用方用同一协议逐层读取，不需要知道底层归属字段。DTO 不含 scopeKey、ChildExecution 外键、LangGraph 类型或内部 token，也不复制输入输出 payload；运行值继续使用既有 NodeRun 查询。
 
 `GET /api/v1/workflow-runs/:runId/execution-tree` 默认返回 root NodeRun；指定 `parentType=node_run&parentId=...` 读取子 Execution，指定 `parentType=child_execution&parentId=...` 读取其中的 NodeRun。`parentType=workflow_run` 的 parentId 可省略，若提供则必须是当前 Run。`limit` 默认 50、范围 1—100，`after` 接收上页 nextCursor；游标绑定 Run、父引用和最后一个稳定条目 ID。源适配器对 NodeRun 按 startedAt / attempt / id、对当前 item 执行按 index / id 排序，分页不生成新的执行身份。返回只是一层，不一次展开整树。
 
-[独立 Controller](../apps/api/src/workflow/runtime/workflow-execution-tree.controller.ts)使用既有默认认证与 no-store。[WorkflowExecutionTreeService](../packages/server/src/workflow/execution-tree/workflow-execution-tree.service.ts)统一按 User → Project Owner → WorkflowRun 授权，再在同一 RepeatableRead 只读事务快照中访问该 Run / Project 的 source；每种 Composite 不各自实现授权。跨 Run / 不存在的父引用返回 404，非法查询或失效 / 跨父游标返回 400，归属数据不一致返回安全的 WORKFLOW_EXECUTION_TREE_INCONSISTENT（500），不伪造或补挂 root。查询不编译、不 invoke、不读取 checkpoint、不回写运行状态。
+[独立 Controller](../apps/api/src/workflow/execution-tree/workflow-execution-tree.controller.ts)使用既有默认认证与 no-store。[WorkflowExecutionTreeService](../packages/server/src/workflow/execution-tree/workflow-execution-tree.service.ts)统一按 User → Project Owner → WorkflowRun 授权，再在同一 RepeatableRead 只读事务快照中访问该 Run / Project 的 source；每种 Composite 不各自实现授权。跨 Run / 不存在的父引用返回 404，非法查询或失效 / 跨父游标返回 400，归属数据不一致返回安全的 WORKFLOW_EXECUTION_TREE_INCONSISTENT（500），不伪造或补挂 root。查询不编译、不 invoke、不读取 checkpoint、不回写运行状态。
 
 [PrismaExecutionTreeAdapter](../packages/server/src/workflow/execution-tree/prisma-execution-tree-adapter.ts)直接读取通用 ChildExecution：root occurrence 的 NodeRun 归到 WorkflowRun；ChildExecution.id 原样成为 child_execution.id，parentNodeRunId 映射为父 NodeRun，kind / metadata 来自正式结构记录；Iteration 继续返回 kind=iteration_item 与 metadata.index，Body NodeRun 按 childExecutionId 归属。Adapter 校验 occurrence、项目 / Run、scope 等值及父节点外键，不解析 scopeKey 编码，不复制完整 item。普通数组输出、空集合不会制造 child；已开始但尚无 Body NodeRun 的 item 仍可独立返回 running 状态。
 
@@ -114,7 +114,7 @@ body 的嵌套 composite、If / control、Human Review / interaction 均拒绝�
 
 `flow.human_review@1` 已进入生产 Registry / 节点目录，执行种类为 interaction，不提供 Action execute 或审批控制出口；Draft、Publish / Compile / Run 已接入独立 HumanReviewNodeCompilationStrategy；其他未知 interaction 仍以 NODE_EXECUTION_KIND_UNSUPPORTED 拒绝。节点标题使用 NodeDefinition.name，不另加 title config。
 
-[Human Review V1 协议](../packages/contracts/src/workflow/human-review.ts)定义严格文本 input、可选静态 instruction、approve / reject decision 与稳定业务 output。合法 reject 是正常业务结果；content 原样透传，缺省 feedback 归一化为空字符串。payload 固定 human_review / schemaVersion 1，保留 RuntimeValue 结构及未来 reference 表达；[纯转换函数](../packages/workflow/src/node/builtin/human-review.ts)只接受 string 业务输入，构造 inline string payload，不解释 instruction 模板、不读取 Artifact，也不调用 interrupt。payload 不含 Run / thread / NodeRun / interrupt 身份；Decision 的版本由 V1 Schema/type 名称明确。
+[Human Review V1 协议](../packages/contracts/src/workflow/run/human-review.ts)定义严格文本 input、可选静态 instruction、approve / reject decision 与稳定业务 output。合法 reject 是正常业务结果；content 原样透传，缺省 feedback 归一化为空字符串。payload 固定 human_review / schemaVersion 1，保留 RuntimeValue 结构及未来 reference 表达；[纯转换函数](../packages/workflow/src/node/builtin/human-review.ts)只接受 string 业务输入，构造 inline string payload，不解释 instruction 模板、不读取 Artifact，也不调用 interrupt。payload 不含 Run / thread / NodeRun / interrupt 身份；Decision 的版本由 V1 Schema/type 名称明确。
 
 [专用策略](../packages/workflow/src/compiler/human-review/strategy.ts)复用 BindingResolver、Codec 和节点 Schema，解码前拒绝 reference content，再调用官方 interrupt(payload)。恢复值经 V1 decision Schema 校验后输出三个 RuntimeValue；缺省 feedback 为空，reject 正常完成，可把 action DataEdge 接入 If.value 控制后续分支。Runner 继续负责 checkpoint 检测、WorkflowRun waiting 与 Command.resume，正式 HTTP 恢复必须携带当前审核 token / waitingRevision，协议见下方 [Human Review 查询与恢复](#human-review-查询与恢复)。
 
@@ -122,7 +122,7 @@ Publish / Compile 共用 Human Review 能力门禁：支持分支区域外有明
 
 Human Review 已有正式 NodeRun 审计：首次进入创建 attempt 1 running、首次记录 RuntimeValue inputs；WorkflowRun waiting 时 NodeRun 保持 running，interrupt 身份以 checkpoint 为权威，不写入 NodeRun outputs。resume 重入获取同一记录，比较重新解析的 inputs 与首次快照（对象键顺序无关），不再次 updateInputs。decision / 输出校验及编码成功后 markCompleted，再提交 State；approve 和 reject 均正常 completed。业务错误将原记录记 failed，原生 GraphInterrupt / ParentCommand 不记失败；仓储失败不反向标记业务 failed。
 
-[审核专用 Repository](../packages/server/src/workflow/runtime/node-run-repository.ts)锁定明确 occurrence 获取 / 创建记录，核对 Owner / Project / Run、已 claim 的 running Run、固定 WorkflowVersion 中的精确 Human Review node，以及该 occurrence 唯一 attempt 1 running 历史；终态、多 attempt 或错误节点 / 版本明确拒绝，不按 latest running 猜测，也不自动新建 attempt 2。inputs 仍受原有一次写约束保护，完整执行的串行性依赖 Run / Outbox 的数据库 claim，获取 / 创建本身的唯一性由 occurrence 行锁与唯一约束保证。不同 scope 的同名节点不交叉复用审计；本轮未开放并行审核。
+[审核专用 Repository](../packages/server/src/workflow/runtime/execution/node-run-repository.ts)锁定明确 occurrence 获取 / 创建记录，核对 Owner / Project / Run、已 claim 的 running Run、固定 WorkflowVersion 中的精确 Human Review node，以及该 occurrence 唯一 attempt 1 running 历史；终态、多 attempt 或错误节点 / 版本明确拒绝，不按 latest running 猜测，也不自动新建 attempt 2。inputs 仍受原有一次写约束保护，完整执行的串行性依赖 Run / Outbox 的数据库 claim，获取 / 创建本身的唯一性由 occurrence 行锁与唯一约束保证。不同 scope 的同名节点不交叉复用审计；本轮未开放并行审核。
 
 审核首次进入与 resume 通过同一 root scope 找到同一 occurrence，复用同一 running NodeRun attempt；本轮没有新增 NodeRun waiting、并行 pending projection、重试或恢复产品能力。审计 completed 与 Graph checkpoint 不构成跨系统原子提交；异常中断后的对账 / recovery_required 仍沿用既有边界，不重放终态记录。待审批查询与 targeted resume HTTP 已接入，Web 已提供单个文本审批闭环，Artifact 预览待后续任务。
 
@@ -159,9 +159,9 @@ Start key 的等价性与终态保留规则见 [Workflow](workflow-model.md#star
 
 ### Human Review 查询与恢复
 
-[HTTP Contract](../packages/contracts/src/workflow/workflow-run-api.ts)的 Pending 响应为 `{ items }`，每项包含 opaque interruptId、waitingRevision、固定 WorkflowVersion 的 node id / name、纯文本 content、可选 instruction 与 submissionStatus（pending / submitted）。Run 非 waiting 返回空数组；没有通用 checkpoint inspection API，不返回 RuntimeValue wrapper、thread、task、namespace、NodeRunId 或完整 Definition。所有查询和提交均按 User → Project Owner → Run 授权，token 不能代替权限。
+[HTTP Contract](../packages/contracts/src/workflow/run/workflow-run-api.ts)的 Pending 响应为 `{ items }`，每项包含 opaque interruptId、waitingRevision、固定 WorkflowVersion 的 node id / name、纯文本 content、可选 instruction 与 submissionStatus（pending / submitted）。Run 非 waiting 返回空数组；没有通用 checkpoint inspection API，不返回 RuntimeValue wrapper、thread、task、namespace、NodeRunId 或完整 Definition。所有查询和提交均按 User → Project Owner → Run 授权，token 不能代替权限。
 
-[产品服务](../packages/server/src/workflow/human-review.service.ts)在授权 Run 行锁内使用官方 Saver.getTuple 读取原 thread 的 head checkpoint，验证运行身份，并适配 LangGraph 1.5.0 的 INTERRUPT pending write。只接受 HumanReviewInterrupt V1 与 inline string；名称读取原版本，不读 Draft / latest。多个 pending interrupt 返回 HUMAN_REVIEW_CAPABILITY_UNSUPPORTED；未知 kind 或损坏 payload 返回明确的 HUMAN_REVIEW_INTERRUPT_UNSUPPORTED / INVALID（409），不伪装成审核。
+[产品服务](../packages/server/src/workflow/human-review/human-review.service.ts)在授权 Run 行锁内使用官方 Saver.getTuple 读取原 thread 的 head checkpoint，验证运行身份，并适配 LangGraph 1.5.0 的 INTERRUPT pending write。只接受 HumanReviewInterrupt V1 与 inline string；名称读取原版本，不读 Draft / latest。多个 pending interrupt 返回 HUMAN_REVIEW_CAPABILITY_UNSUPPORTED；未知 kind 或损坏 payload 返回明确的 HUMAN_REVIEW_INTERRUPT_UNSUPPORTED / INVALID（409），不伪装成审核。
 
 POST `/resume` 的严格请求为 `{ interruptId, expectedWaitingRevision, value: { action: "approve" | "reject", feedback?: string } }`。旧裸 `{ value }` 不再属于产品 HTTP 协议；底层通用 Submission / Runner 仍供内部运行与测试使用。服务在同一 Run 行锁内验证 waiting、revision 完全相等、token 为当前 pending 审核，再原子写 Outbox。陈旧 token / revision 返回 HUMAN_REVIEW_STALE（409），不会创建恢复意图。
 
@@ -200,7 +200,7 @@ API / Worker 启动时初始化官方 PostgresSaver，不提供内存回退。�
 
 画布内复用同一抽屉配置当前用户的供应商、凭证和模型；所有自有项目（包括后续新建项目）共用，Query 缓存按用户 ID 隔离。Publish 在事务内按 Workflow Owner 校验模型 / Provider；Runtime 先核对 Run 的项目权限，再按相同用户身份读取配置并解密，不接受跨用户 ID 引用。节点从 Model Catalog 选择模型，仅写 modelConfigurationId；从节点进入供应商配置成功后继续原选择意图，取消不写入节点，设置页主动配置则留在设置。已选模型展示配置参数，不在节点另存。Secret 不回填、不进入 Form / Query 缓存或浏览器存储，请求发出及退出表单时清空；配置不触发生成。
 
-[模型设置入口](../apps/web/src/features/models/model-settings.tsx)只负责用户身份和抽屉装配。`models/settings/` 管理查询、刷新、并发锁与表单会话；`models/catalog/` 展示供应商目录；`models/providers/` 维护供应商创建、管理和凭证轮换；`models/configurations/` 管理模型配置表单、列表及可用性；非秘密配置摘要由 `models/shared/` 复用。凭证状态仍就近保存在各提交表单中，保持发送即清空、失败不回填的生命周期。
+[模型设置入口](../apps/web/src/features/models/model-settings.tsx)只负责用户身份和抽屉装配。`models/settings/` 管理查询、刷新、并发锁与表单会话；`models/catalog/` 展示供应商目录；`models/providers/` 维护供应商创建、管理和凭证轮换；`models/configurations/` 管理模型配置表单、列表及可用性；`models/shared/` 复用非秘密配置摘要，以及供应商与模型配置共用的 Schema 字段表单。凭证状态仍就近保存在各提交表单中，保持发送即清空、失败不回填的生命周期。
 
 [模型选择入口](../apps/web/src/features/workflow/model-selection/model-selector.tsx)装配触发器和列表；`model-selection/selection/` 管理 Context、用户级资源查询、选择恢复与选项推导，`presentation/` 展示配置分组与目录状态，`configuration/` 处理明确的「添加并选择」。画布只依赖选择 Context，凭证表单不进入选择会话；配置恢复沿用原意图、可用性与显式选择规则。
 
@@ -290,7 +290,7 @@ reference 只展示类型、kind 与 ID（Asset 包含版本），提示暂不�
 | apps/api / apps/worker               | 认证 HTTP 与提交 / 持久投递与执行                                                                                                                                         |
 | packages/contracts                   | 无框架依赖的 JSON 协议和 Schema                                                                                                                                           |
 | packages/workflow                    | 领域校验、编译、执行。definition 管静态语义，compiler 管编译与执行能力门禁，runtime 管执行原语、运行值和执行归属端口，run/submission 管受理与 Runner。内部分工见包 README |
-| packages/server                      | 授权 Repository、基础设施和生产装配；workflow/runtime 与 queue 分工                                                                                                       |
+| packages/server                      | 授权 Repository、基础设施和生产装配。workflow 内 node、run、runtime、human-review、execution-tree、queue 分责，见包 README                                                |
 | packages/plugins / packages/database | 受信任插件（plugin 注册、catalog 目录、text 实现）/ Prisma 模型与迁移                                                                                                     |
 
 run 内部区分 status、result、recovery 与 execution。execution 只读取 Execution Tree，并把当前层 NodeRun 保留为可投影结构；跨职责 API 留在 Workflow 根目录。已实现模块按领域归类，不按技术类型机械拆分，不保留重复入口。`packages/context` 仍为空入口。

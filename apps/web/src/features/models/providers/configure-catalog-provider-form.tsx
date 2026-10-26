@@ -8,8 +8,8 @@ import {
   type ProviderCatalogItem,
 } from '@dramaflow/contracts';
 import { modelApi } from '../model-api';
-import { trySchemaFields } from '../schema-fields';
-import { CredentialInputs, SchemaFormFields, validateCredentials } from '../schema-form';
+import { trySchemaFields } from '../shared/schema-fields';
+import { CredentialInputs, SchemaFormFields, validateCredentials } from '../shared/schema-form';
 import { blankConfiguration, failure, credentialSubmitLabel } from './provider-form-helpers';
 
 export function ConfigureCatalogProviderForm({

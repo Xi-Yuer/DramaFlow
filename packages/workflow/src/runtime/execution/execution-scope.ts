@@ -21,7 +21,12 @@ export const childScopeSegmentSchema = z.discriminatedUnion('kind', [
     })
     .strict(),
   z
-    .object({ ...owner, kind: z.literal('subworkflow_call'), callKey: workflowIdentifierSchema, ownerNodeRunId: workflowIdentifierSchema.optional() })
+    .object({
+      ...owner,
+      kind: z.literal('subworkflow_call'),
+      callKey: workflowIdentifierSchema,
+      ownerNodeRunId: workflowIdentifierSchema.optional(),
+    })
     .strict(),
 ]);
 export type ChildScopeSegment = z.infer<typeof childScopeSegmentSchema>;
@@ -37,9 +42,7 @@ export function deriveChildScope(parentScope: string, input: ChildScopeSegment):
     segment.ownerOccurrenceId,
     segment.slot,
     identity,
-    ...(segment.ownerNodeRunId
-      ? [segment.ownerNodeRunId]
-      : []),
+    ...(segment.ownerNodeRunId ? [segment.ownerNodeRunId] : []),
   ]);
   return `scope:v1:${createHash('sha256').update(canonical).digest('hex')}`;
 }

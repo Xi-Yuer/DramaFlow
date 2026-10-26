@@ -3,8 +3,8 @@ import { describe, beforeAll, afterAll, expect, it } from 'vitest';
 import { StringType, type NodeRun } from '@dramaflow/contracts';
 import { deriveChildScope, type IterationRunRepository } from '@dramaflow/workflow';
 import { DatabaseService } from '../src/database/database.service.js';
-import { WorkflowRunRepositories } from '../src/workflow/workflow-run-repository.js';
-import { NodeRunRepositories } from '../src/workflow/runtime/node-run-repository.js';
+import { WorkflowRunRepositories } from '../src/workflow/run/repository/workflow-run-repository.js';
+import { NodeRunRepositories } from '../src/workflow/runtime/execution/node-run-repository.js';
 import { WorkflowExecutionTreeService } from '../src/workflow/execution-tree/workflow-execution-tree.service.js';
 
 const enabled = process.env.DRAMAFLOW_INTEGRATION === '1';

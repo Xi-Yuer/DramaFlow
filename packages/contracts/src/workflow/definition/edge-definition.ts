@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { workflowIdentifierSchema, workflowPortNameSchema } from './metadata.js';
+import { workflowIdentifierSchema, workflowPortNameSchema } from '../metadata.js';
 
 const dataEdgeEndpointSchema = z
   .object({ nodeId: workflowIdentifierSchema, portKey: workflowPortNameSchema })

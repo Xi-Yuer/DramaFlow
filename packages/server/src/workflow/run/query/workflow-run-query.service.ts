@@ -8,7 +8,7 @@ import {
 } from '@dramaflow/contracts';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
-import { DatabaseService } from '../../database/database.service.js';
+import { DatabaseService } from '../../../database/database.service.js';
 
 const workflowNodeRunsResponseSchema = z.object({ items: z.array(nodeRunSchema) }).strict();
 

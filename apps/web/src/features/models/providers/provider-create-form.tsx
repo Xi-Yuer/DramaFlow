@@ -8,8 +8,8 @@ import {
   type ProviderPluginDescription,
 } from '@dramaflow/contracts';
 import { modelApi } from '../model-api';
-import { trySchemaFields } from '../schema-fields';
-import { CredentialInputs, SchemaFormFields, validateCredentials } from '../schema-form';
+import { trySchemaFields } from '../shared/schema-fields';
+import { CredentialInputs, SchemaFormFields, validateCredentials } from '../shared/schema-form';
 import { pluginKey, failure } from './provider-form-helpers';
 
 export function ProviderCreateForm({

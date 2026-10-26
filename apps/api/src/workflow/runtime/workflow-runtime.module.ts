@@ -6,9 +6,9 @@ import {
   WorkflowRunQueryModule,
 } from '@dramaflow/server';
 import { Module } from '@nestjs/common';
-import { WorkflowRuntimeService } from './workflow-runtime.service.js';
-import { WorkflowExecutionTreeController } from './workflow-execution-tree.controller.js';
-import { WorkflowRunsController } from './workflow-runs.controller.js';
+import { WorkflowRuntimeService } from '../runs/workflow-runtime.service.js';
+import { WorkflowExecutionTreeController } from '../execution-tree/workflow-execution-tree.controller.js';
+import { WorkflowRunsController } from '../runs/workflow-runs.controller.js';
 
 @Module({
   imports: [

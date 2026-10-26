@@ -6,8 +6,8 @@ import { z } from 'zod';
 import type { ManagedModelConfiguration, ModelProvider } from '@dramaflow/contracts';
 import { ApiError } from '../../../../lib/http';
 import { modelApi, modelKeys } from '../../../models/model-api';
-import { SchemaFormFields } from '../../../models/schema-form';
-import { trySchemaFields } from '../../../models/schema-fields';
+import { SchemaFormFields } from '../../../models/shared/schema-form';
+import { trySchemaFields } from '../../../models/shared/schema-fields';
 import { failure, queryOptions } from '../selection/model-selection-resources';
 
 export function AddCatalogModel({

@@ -1,5 +1,5 @@
 import { workflowIdentifierSchema } from '@dramaflow/contracts';
-import { DatabaseService } from '../database/database.service.js';
+import { DatabaseService } from '../../../database/database.service.js';
 import {
   workflowVersionRecordSchema,
   type WorkflowVersionRecord,

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { runtimeValueMapSchema } from '../data/runtime-value.js';
-import { workflowIdentifierSchema } from './metadata.js';
+import { runtimeValueMapSchema } from '../../data/runtime-value.js';
+import { workflowIdentifierSchema } from '../metadata.js';
 import { humanReviewDecisionV1Schema } from './human-review.js';
 import { workflowInvocationKeySchema, workflowRunSchema } from './workflow-run.js';
 

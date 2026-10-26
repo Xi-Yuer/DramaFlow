@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DatabaseService } from '../src/database/database.service.js';
-import { WorkflowVersionRepositories } from '../src/workflow/workflow-version-repository.js';
+import { WorkflowVersionRepositories } from '../src/workflow/run/repository/workflow-version-repository.js';
 
 describe('WorkflowVersionRepositories.findOwnedWorkflow', () => {
   it('按 owner 定位版本所属工作流，找不到时返回 null', async () => {

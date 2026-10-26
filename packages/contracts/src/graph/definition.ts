@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { nestedGraphSlots } from './traversal.js';
 import { dataTypeSchema } from '../data/type.js';
 import { nodeDefinitionSchema, type NodeDefinition } from '../node/definition.js';
-import { workflowEdgeSchema, type WorkflowEdge } from '../workflow/edge-definition.js';
+import { workflowEdgeSchema, type WorkflowEdge } from '../workflow/definition/edge-definition.js';
 import { createWorkflowSchemas } from '../workflow/metadata.js';
 
 const schemas = createWorkflowSchemas({

@@ -9,9 +9,9 @@ import {
 } from '@dramaflow/workflow';
 import { Injectable } from '@nestjs/common';
 import { WorkflowCheckpointerService } from '../../checkpoint/workflow-checkpointer.service.js';
-import { NodeRunRepositories } from './node-run-repository.js';
-import { WorkflowRunRepositories } from '../workflow-run-repository.js';
-import { WorkflowVersionRepositories } from '../workflow-version-repository.js';
+import { NodeRunRepositories } from './execution/node-run-repository.js';
+import { WorkflowRunRepositories } from '../run/repository/workflow-run-repository.js';
+import { WorkflowVersionRepositories } from '../run/repository/workflow-version-repository.js';
 import { ArtifactRuntimeFactory } from '../../artifacts/artifact-runtime.factory.js';
 import { WorkflowCapabilitiesFactory } from '../../models/workflow-capabilities.factory.js';
 

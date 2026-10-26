@@ -12,7 +12,7 @@ import {
   type ResumeWorkflowExecutionJob,
 } from '@dramaflow/contracts';
 import { Prisma } from '@dramaflow/database';
-import { DatabaseService } from '../database/database.service.js';
+import { DatabaseService } from '../../../database/database.service.js';
 import {
   WorkflowRunNotWaitingError,
   WorkflowResumeAlreadySubmittedError,

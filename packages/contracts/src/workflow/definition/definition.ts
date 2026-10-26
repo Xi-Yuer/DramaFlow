@@ -7,4 +7,4 @@ export {
   type GraphInputDefinition as WorkflowInputDefinition,
   type GraphOutputDefinition as WorkflowOutputDefinition,
   type GraphDefinition as WorkflowDefinition,
-} from '../graph/definition.js';
+} from '../../graph/definition.js';

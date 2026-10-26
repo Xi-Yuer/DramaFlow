@@ -63,7 +63,13 @@ export interface GraphCompilationPlan {
   ifAnalysis?: SimpleIfExecutionAnalysis;
   children: readonly { ownerNodeId: string; graphKey: string; plan: GraphCompilationPlan }[];
   budget: GraphCompilationBudget;
-  requirements: { values: boolean; executor: boolean; reviewRuns: boolean; iterationRuns: boolean; childGraphRuns:boolean };
+  requirements: {
+    values: boolean;
+    executor: boolean;
+    reviewRuns: boolean;
+    iterationRuns: boolean;
+    childGraphRuns: boolean;
+  };
 }
 
 // 只追加已有静态 slot；不把运行 scope、index 或引擎身份变成定义地址。
@@ -199,7 +205,9 @@ export function analyzeGraphCompilation(input: GraphCompilationInput): GraphComp
       values:
         ifAnalysis !== undefined ||
         reviewNodes.size > 0 ||
-        entries.some((entry) => (entry.strategy === 'iteration' || entry.strategy === 'subworkflow')) ||
+        entries.some(
+          (entry) => entry.strategy === 'iteration' || entry.strategy === 'subworkflow',
+        ) ||
         children.some((child) => child.plan.requirements.values),
       executor:
         entries.some((entry) => entry.strategy === 'action' || entry.strategy === 'iteration') ||
@@ -209,7 +217,9 @@ export function analyzeGraphCompilation(input: GraphCompilationInput): GraphComp
       iterationRuns:
         entries.some((entry) => entry.strategy === 'iteration') ||
         children.some((child) => child.plan.requirements.iterationRuns),
-      childGraphRuns:entries.some(entry=>entry.strategy==='subworkflow') || children.some(child=>child.plan.requirements.childGraphRuns),
+      childGraphRuns:
+        entries.some((entry) => entry.strategy === 'subworkflow') ||
+        children.some((child) => child.plan.requirements.childGraphRuns),
     },
   };
 }

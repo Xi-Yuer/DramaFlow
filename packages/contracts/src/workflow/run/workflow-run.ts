@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { runtimeValueMapSchema } from '../data/runtime-value.js';
-import { workflowIdentifierSchema, workflowRunMetadataSchema } from './metadata.js';
+import { runtimeValueMapSchema } from '../../data/runtime-value.js';
+import { workflowIdentifierSchema, workflowRunMetadataSchema } from '../metadata.js';
 
-export { workflowRunStatusSchema, type WorkflowRunStatus } from './metadata.js';
+export { workflowRunStatusSchema, type WorkflowRunStatus } from '../metadata.js';
 
 // 调用方在首次提交前持有的逻辑调用身份；不修剪、不自动生成。
 export const workflowInvocationKeySchema = workflowIdentifierSchema.max(200);

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { runtimeValueSchema } from '../data/runtime-value.js';
-import { workflowIdentifierSchema } from './metadata.js';
+import { runtimeValueSchema } from '../../data/runtime-value.js';
+import { workflowIdentifierSchema } from '../metadata.js';
 
 // V1 对应 flow.human_review@1；不向 decision 增加传输身份或重复决策字段。
 export const humanReviewInputV1Schema = z.object({ content: z.string() }).strict();

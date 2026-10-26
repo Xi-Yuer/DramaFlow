@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { runtimeValueMapSchema } from '../data/runtime-value.js';
-import { workflowIdentifierSchema, workflowPortNameSchema } from './metadata.js';
+import { runtimeValueMapSchema } from '../../data/runtime-value.js';
+import { workflowIdentifierSchema, workflowPortNameSchema } from '../metadata.js';
 
 export const ROOT_EXECUTION_SCOPE_KEY = 'root';
 // 产品执行作用域标识，不是 LangGraph task / checkpoint namespace。

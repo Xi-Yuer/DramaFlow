@@ -46,7 +46,7 @@ export interface GraphCompilationContext<State extends WorkflowState> {
     services?: WorkflowValueServices;
     reviewRuns?: HumanReviewNodeRunRepository;
     iterationRuns?: IterationRunRepository;
-    childGraphRuns?:ChildGraphRunRepository;
+    childGraphRuns?: ChildGraphRunRepository;
   };
   target: GraphCompilationTarget<State>;
   entry?: {
@@ -141,12 +141,25 @@ export function compileGraph<State extends WorkflowState>(
         });
         break;
       case 'subworkflow': {
-        if(!strategies.subworkflow || !runtime.services || !runtime.childGraphRuns) throw new Error('SubWorkflow 执行服务未配置');
-        const child=plan.children.find(child=>child.ownerNodeId===node.id&&child.graphKey==='graph');
-        if(!child) throw new Error('SubWorkflow child 编译计划缺失');
-        strategies.subworkflow.compile({node,declaration,workflow:definition,run,scopeKey:fixedIdentity(execution).scopeKey,
-          registry,executor:runtime.executor,services:runtime.services,runs:runtime.childGraphRuns,childCompilation:child.plan,
-          addNode:(id,graph)=>target.addNode(id,graph)});
+        if (!strategies.subworkflow || !runtime.services || !runtime.childGraphRuns)
+          throw new Error('SubWorkflow 执行服务未配置');
+        const child = plan.children.find(
+          (child) => child.ownerNodeId === node.id && child.graphKey === 'graph',
+        );
+        if (!child) throw new Error('SubWorkflow child 编译计划缺失');
+        strategies.subworkflow.compile({
+          node,
+          declaration,
+          workflow: definition,
+          run,
+          scopeKey: fixedIdentity(execution).scopeKey,
+          registry,
+          executor: runtime.executor,
+          services: runtime.services,
+          runs: runtime.childGraphRuns,
+          childCompilation: child.plan,
+          addNode: (id, graph) => target.addNode(id, graph),
+        });
         break;
       }
       case 'iteration': {

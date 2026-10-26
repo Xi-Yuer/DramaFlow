@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { workflowIdentifierSchema } from './metadata.js';
+import { workflowIdentifierSchema } from '../metadata.js';
 
 // 执行意图只携带业务身份；版本、thread 和 State 均由执行者从持久记录恢复。
 export const workflowExecutionJobSchema = z.discriminatedUnion('kind', [
