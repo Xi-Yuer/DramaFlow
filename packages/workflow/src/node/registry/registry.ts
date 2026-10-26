@@ -9,7 +9,7 @@ import type { NodeDefinition } from '@dramaflow/contracts';
 import type { NodeType, NodeDeclaration } from './type.js';
 import { assertNodeSchemas, parseNodeManifest, type NodeSchemas } from './schemas.js';
 import type { NodeOperation } from './operation.js';
-import type { NodeExecutionContext } from '../runtime/node-executor.js';
+import type { NodeExecutionContext } from '../../runtime/node/node-execution-context.js';
 export class NodeRegistrationError extends Error {
   constructor(
     public readonly code: 'duplicate_type' | 'unavailable_type',

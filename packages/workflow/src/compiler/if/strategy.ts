@@ -5,10 +5,10 @@ import {
   type NodeTypeManifest,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
-import type { NodeDeclaration } from '../../node/type.js';
-import { evaluateCondition } from '../../runtime/condition-evaluator.js';
+import type { NodeDeclaration } from '../../node/registry/type.js';
+import { evaluateCondition } from './condition-evaluator.js';
 import type { LangGraphNode, NodeCompilationStrategy, WorkflowValueServices } from '../strategy.js';
-import type { WorkflowState } from '../../runtime/state.js';
+import type { WorkflowState } from '../../runtime/state/state.js';
 
 export type IfExecutionServices = WorkflowValueServices;
 interface IfCompilationContext {

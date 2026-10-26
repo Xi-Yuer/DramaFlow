@@ -10,23 +10,23 @@ import {
 import { Command, isGraphBubbleUp, isInterrupted, type StateSnapshot } from '@langchain/langgraph';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
-import { IterationRuntimeCompatibilityError } from '../runtime/iteration-compatibility.js';
+import { IterationRuntimeCompatibilityError } from '../../compiler/iteration/compatibility.js';
 import type {
   CompiledWorkflow,
   WorkflowCompiler,
   WorkflowResumeCommand,
-} from '../compiler/workflow-compiler.js';
-import { workflowStateSchema, type WorkflowState } from '../runtime/state.js';
+} from '../../compiler/workflow-compiler.js';
+import { workflowStateSchema, type WorkflowState } from '../../runtime/state/state.js';
 import { createWorkflowRunConfig } from './config.js';
-import type { WorkflowOutputResolver } from './workflow-output-resolver.js';
-import type { WorkflowRunRepository } from './workflow-run-repository.js';
+import type { WorkflowOutputResolver } from '../../runtime/state/workflow-output-resolver.js';
+import type { WorkflowRunRepository } from '../repository/workflow-run-repository.js';
 import { WorkflowRunNotPendingError, WorkflowRunNotWaitingError } from './workflow-run-error.js';
-import type { ResumeWorkflowRunInput } from './submission/workflow-run-submission.js';
+import type { ResumeWorkflowRunInput } from '../submission/workflow-run-submission.js';
 import {
   loadWorkflowVersion,
   type WorkflowVersionRecord,
   type WorkflowVersionRepository,
-} from './workflow-version-repository.js';
+} from '../repository/workflow-version-repository.js';
 
 const resumeInputSchema = z
   .object({

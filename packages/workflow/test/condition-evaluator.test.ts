@@ -1,7 +1,7 @@
 import { describe, expect, it, afterEach, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { LogicEngine } from 'json-logic-engine';
-import { evaluateCondition } from '../src/runtime/condition-evaluator.js';
+import { evaluateCondition } from '../src/compiler/if/condition-evaluator.js';
 
 const variable = { var: 'value' };
 const equals = { '===': [variable, 'approved'] };
@@ -82,7 +82,7 @@ describe('Condition evaluator 安全边界', () => {
     }
   });
   it('真实生产 evaluator 在 Node 禁止 eval / Function 的进程内解释执行所有运算', () => {
-    const url = new URL('../src/runtime/condition-evaluator.ts', import.meta.url).href;
+    const url = new URL('../src/compiler/if/condition-evaluator.ts', import.meta.url).href;
     const program = `import assert from 'node:assert/strict';
       const { evaluateCondition } = await import(${JSON.stringify(url)});
       for (const expression of [

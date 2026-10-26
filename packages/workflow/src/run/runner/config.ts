@@ -5,7 +5,7 @@ import {
   type WorkflowVersionMetadata,
 } from '@dramaflow/contracts';
 import type { RunnableConfig } from '@langchain/core/runnables';
-import { assertWorkflowRunVersion } from '../definition/values.js';
+import { assertWorkflowRunVersion } from '../../definition/contract/values.js';
 
 // 服务端为根 Run 绑定 LangGraph thread；不创建任务、不选择 Checkpointer、不执行或恢复图。
 export function createWorkflowRunConfig(

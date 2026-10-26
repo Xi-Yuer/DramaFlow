@@ -1,5 +1,5 @@
 import type { WorkflowDefinition } from '@dramaflow/contracts';
-import { collectNodeDependencies } from '../dependency.compiler.js';
+import { collectNodeDependencies } from '../dependency/dependency.compiler.js';
 import type { BranchRegionAnalysis } from '../if/branch-regions.js';
 
 // 只做能力门禁，不负责调度。分支区域仍由现有 If 分析证明。

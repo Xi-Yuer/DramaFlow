@@ -19,36 +19,36 @@ import {
   isGraphBubbleUp,
   type LangGraphRunnableConfig,
 } from '@langchain/langgraph';
-import { NodeRegistry } from '../../node/registry.js';
-import type { IterationRunRepository } from '../../run/iteration-execution-repository.js';
+import { NodeRegistry } from '../../node/registry/registry.js';
+import type { IterationRunRepository } from './execution-repository.js';
 import {
   failNodeRun,
   ChildExecutionRecordingError,
   NodeExecutionError,
   NodeRunRecordingError,
   toNodeRunError,
-} from '../../runtime/node-execution-error.js';
-import { DefaultWorkflowOutputResolver } from '../../run/workflow-output-resolver.js';
-import { deriveChildScope } from '../../runtime/execution-scope.js';
+} from '../../runtime/node/node-execution-error.js';
+import { DefaultWorkflowOutputResolver } from '../../runtime/state/workflow-output-resolver.js';
+import { deriveChildScope } from '../../runtime/execution/execution-scope.js';
 import {
   createLocalGraphInvocation,
   type GraphInputMapping,
-} from '../../runtime/graph-invocation.js';
-import { assertIterationCompatibility } from '../../runtime/iteration-compatibility.js';
-import type { NodeExecutor } from '../../runtime/node-executor.js';
-import type { WorkflowState, WorkflowStateUpdate } from '../../runtime/state.js';
+} from '../../runtime/execution/graph-invocation.js';
+import { assertIterationCompatibility } from './compatibility.js';
+import type { NodeExecutor } from '../../runtime/node/node-executor.js';
+import type { WorkflowState, WorkflowStateUpdate } from '../../runtime/state/state.js';
 import {
   OrderedRuntimeCollectionBuilder,
   RuntimeCollectionSnapshot,
 } from '../../runtime/values/runtime-collection.js';
-import { analyzeStaticDagExecution } from '../action-dag-execution-analysis.js';
-import { collectNodeDependencies, DependencyCompiler } from '../dependency.compiler.js';
+import { analyzeStaticDagExecution } from '../dependency/action-dag-execution-analysis.js';
+import { collectNodeDependencies, DependencyCompiler } from '../dependency/dependency.compiler.js';
 import {
   ActionNodeCompilationStrategy,
   type NodeCompilationStrategy,
   type WorkflowValueServices,
 } from '../strategy.js';
-import type { NodeDeclaration } from '../../node/type.js';
+import type { NodeDeclaration } from '../../node/registry/type.js';
 import {
   AggregateOutput,
   FRAME,

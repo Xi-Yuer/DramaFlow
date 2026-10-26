@@ -2,7 +2,7 @@ import { StringType, type NodeDefinition, type WorkflowDefinition } from '@drama
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createWorkflowDefinitionSnapshot, validateWorkflowForPublish } from '../src/index.js';
-import { analyzeActionDagExecution } from '../src/compiler/action-dag-execution-analysis.js';
+import { analyzeActionDagExecution } from '../src/compiler/dependency/action-dag-execution-analysis.js';
 import { workflowRunnerFixture } from './workflow-runner-fixture.js';
 
 function fixture() {

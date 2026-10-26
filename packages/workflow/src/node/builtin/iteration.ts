@@ -1,6 +1,6 @@
 import { AnyType } from '@dramaflow/contracts';
 import { z } from 'zod';
-import type { NodeDeclaration } from './type.js';
+import type { NodeDeclaration } from '../registry/type.js';
 
 export { isIterationNodeManifest } from '@dramaflow/contracts';
 

@@ -10,73 +10,22 @@ import {
   type GraphDefinition,
 } from '@dramaflow/contracts';
 import { StateGraph } from '@langchain/langgraph';
-import { NodeRegistry } from '../node/registry.js';
-import type { NodeDeclaration } from '../node/type.js';
-import { DefaultDataStoragePolicyResolver } from '../runtime/values/data-storage-policy-resolver.js';
-import {
-  analyzeSimpleIfExecution,
-  SimpleIfCapabilityError,
-  ifCapabilityMessage,
-  type IfCapabilityIssueCode,
-} from '../compiler/if/analysis.js';
-import { isHumanReviewNodeManifest } from '../node/human-review.js';
-import { findUnsupportedHumanReviewTopology } from '../compiler/human-review/analysis.js';
-import { isIterationNodeManifest } from '../node/iteration.js';
+import { NodeRegistry } from '../../node/registry/registry.js';
+import type { NodeDeclaration } from '../../node/registry/type.js';
+import { DefaultDataStoragePolicyResolver } from '../../runtime/values/data-storage-policy-resolver.js';
+import { isHumanReviewNodeManifest } from '../../node/builtin/human-review.js';
+import { isIterationNodeManifest } from '../../node/builtin/iteration.js';
 import {
   resolveNodePorts,
   validateIterationInputMapping,
   CompositeDefinitionError,
   type ResolvedNodePorts,
 } from '@dramaflow/contracts';
-import { WorkflowInvocationContractValidator } from './validate-invocation.js';
-import { WorkflowStateAnnotation } from '../runtime/state.js';
+import { WorkflowInvocationContractValidator } from '../contract/validate-invocation.js';
+import { WorkflowStateAnnotation } from '../../runtime/state/state.js';
+import { WorkflowPublishValidationError, type WorkflowPublishIssueCode } from './publish-issue.js';
 
-export type WorkflowPublishIssueCode =
-  | CompositeDefinitionError['code']
-  | 'ITERATION_BODY_CAPABILITY_UNSUPPORTED'
-  | 'ITERATION_BODY_EMPTY'
-  | 'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED'
-  | 'NODE_TYPE_UNAVAILABLE'
-  | 'NODE_EXECUTION_KIND_UNSUPPORTED'
-  | 'NODE_ID_INVALID'
-  | 'NODE_CONFIG_INVALID'
-  | 'INPUT_PORT_NOT_FOUND'
-  | 'OUTPUT_PORT_NOT_FOUND'
-  | 'INPUT_SOURCE_MISSING'
-  | 'INPUT_SOURCE_OPTIONAL'
-  | 'INPUT_VALUE_INVALID'
-  | 'INPUT_TYPE_MISMATCH'
-  | 'WORKFLOW_OUTPUT_TYPE_MISMATCH'
-  | 'NAMED_CONTROL_PORT_UNSUPPORTED'
-  | 'CONTROL_OUTPUT_PORT_REQUIRED'
-  | 'CONTROL_OUTPUT_BRANCH_MISSING'
-  | 'ASSET_BINDING_UNSUPPORTED'
-  | 'OUTPUT_STORAGE_UNSUPPORTED'
-  | IfCapabilityIssueCode;
-
-export class WorkflowPublishValidationError extends Error {
-  constructor(
-    readonly code: WorkflowPublishIssueCode,
-    readonly nodeId: string,
-    readonly portKey?: string,
-    readonly definitionPath?: GraphDefinitionPath,
-  ) {
-    super(
-      ifCapabilityMessage(code) ??
-        (code === 'ITERATION_BODY_CAPABILITY_UNSUPPORTED'
-          ? 'Iteration v1 body 仅允许普通 Action，尚不支持 control / interaction / composite'
-          : code === 'ITERATION_BODY_EMPTY'
-            ? 'Iteration body 至少需要一个 Action 节点'
-            : undefined) ??
-        (code === 'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED'
-          ? '当前 Human Review 仅支持分支区域外的串行审核，不支持并行待审批'
-          : code === 'NODE_EXECUTION_KIND_UNSUPPORTED'
-            ? '当前 Compiler 尚不支持该节点执行种类'
-            : '工作流不满足静态发布条件'),
-    );
-    this.name = 'WorkflowPublishValidationError';
-  }
-}
+export { WorkflowPublishValidationError, type WorkflowPublishIssueCode } from './publish-issue.js';
 
 export interface ValidatedDefinitionNode {
   readonly node: NodeDefinition;
@@ -88,7 +37,7 @@ export interface ValidatedDefinitionNode {
 
 export type ValidatedPublishNode = ValidatedDefinitionNode;
 
-interface GraphValidationContext {
+export interface GraphValidationContext {
   readonly definitionPath: GraphDefinitionPath;
   readonly capability: 'workflow' | 'iteration_body_v1';
 }
@@ -110,7 +59,7 @@ function staticOnlyNode(): never {
 }
 
 // 正式 Definition Schema 统一校验引用、来源冲突和联合 DAG。
-// 这里只检查 Registry / Schema 静态语义，不代表允许生产发布；生产调用下方门禁入口。
+// 这里只检查 Registry / Schema 静态语义，不代表允许生产发布；执行能力门禁由 Compiler 负责。
 // 资源归属仍由应用层在发布事务内检查。
 export function validateGraphDefinitionSemantics(
   definition: GraphDefinition,
@@ -340,148 +289,3 @@ export function validateGraphDefinitionSemantics(
   }
   return [...entries, ...descendants];
 }
-
-// 执行准入单独检查；静态遍历完整不代表 Compiler 已能执行。
-function assertGraphExecutionKinds(
-  definition: GraphDefinition,
-  registry: NodeRegistry,
-  context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
-): void {
-  for (const node of definition.nodes) {
-    let declaration: NodeDeclaration;
-    try {
-      declaration = registry.get(node.type, node.typeVersion);
-    } catch {
-      throw new WorkflowPublishValidationError(
-        'NODE_TYPE_UNAVAILABLE',
-        node.id,
-        undefined,
-        context.definitionPath,
-      );
-    }
-    if (
-      context.capability === 'iteration_body_v1' &&
-      (declaration.manifest.executionKind !== 'action' ||
-        !declaration.execute ||
-        (declaration.manifest.controlOutputs?.length ?? 0) > 0)
-    )
-      throw new WorkflowPublishValidationError(
-        'ITERATION_BODY_CAPABILITY_UNSUPPORTED',
-        node.id,
-        undefined,
-        context.definitionPath,
-      );
-    if (isSubworkflowNodeManifest(declaration.manifest))
-      throw new WorkflowPublishValidationError(
-        'NODE_EXECUTION_KIND_UNSUPPORTED',
-        node.id,
-        undefined,
-        context.definitionPath,
-      );
-    for (const slot of nestedGraphSlots(node))
-      assertGraphExecutionKinds(slot.graph, registry, {
-        definitionPath: [...context.definitionPath, { nodeId: node.id, graphKey: slot.graphKey }],
-        capability: slot.graphKey === 'body' ? 'iteration_body_v1' : 'workflow',
-      });
-  }
-}
-
-export function assertGraphPublishTopology(
-  definition: GraphDefinition,
-  registry: NodeRegistry,
-  context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
-): void {
-  const entries = definition.nodes.map((node) => ({
-    node,
-    nodeType: registry.get(node.type, node.typeVersion),
-  }));
-  const ifNodeIds = new Set(
-    entries.filter((entry) => isSupportedIf(entry.nodeType)).map((entry) => entry.node.id),
-  );
-  let ifAnalysis: ReturnType<typeof analyzeSimpleIfExecution> | undefined;
-  if (
-    ifNodeIds.size ||
-    definition.nodes.some((node) =>
-      Object.values(node.inputs).some((binding) => binding.type === 'candidate'),
-    ) ||
-    definition.outputs.some((output) => output.sources !== undefined)
-  ) {
-    try {
-      ifAnalysis = analyzeSimpleIfExecution(definition, ifNodeIds);
-    } catch (error) {
-      if (error instanceof SimpleIfCapabilityError)
-        throw new WorkflowPublishValidationError(
-          error.code,
-          error.nodeId,
-          undefined,
-          context.definitionPath,
-        );
-      throw error;
-    }
-  }
-  const unsupportedReview = findUnsupportedHumanReviewTopology(
-    definition,
-    new Set(
-      entries
-        .filter((entry) => isHumanReviewNodeManifest(entry.nodeType.manifest))
-        .map((entry) => entry.node.id),
-    ),
-    ifAnalysis?.branchRegions,
-  );
-  if (unsupportedReview)
-    throw new WorkflowPublishValidationError(
-      'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED',
-      unsupportedReview,
-      undefined,
-      context.definitionPath,
-    );
-  for (const node of definition.nodes)
-    for (const slot of nestedGraphSlots(node))
-      assertGraphPublishTopology(slot.graph, registry, {
-        definitionPath: [...context.definitionPath, { nodeId: node.id, graphKey: slot.graphKey }],
-        capability: slot.graphKey === 'body' ? 'iteration_body_v1' : 'workflow',
-      });
-}
-
-// 拓扑、执行种类分别可复用；完整执行准入始终同时检查两者。
-export function assertGraphExecutionCapabilities(
-  definition: GraphDefinition,
-  registry: NodeRegistry,
-  context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
-): void {
-  assertGraphExecutionKinds(definition, registry, context);
-  assertGraphPublishTopology(definition, registry, context);
-}
-
-// 正式 Publish / Compiler 的完整入口始终包含 execution capability gate。
-export function validateGraphForPublish(
-  definition: GraphDefinition,
-  registry: NodeRegistry,
-  context: GraphValidationContext = { definitionPath: [], capability: 'workflow' },
-): ValidatedPublishNode[] {
-  definition = graphDefinitionSchema.parse(definition);
-  assertGraphExecutionKinds(definition, registry, context);
-  const entries = validateGraphDefinitionSemantics(definition, registry, context);
-  assertGraphExecutionCapabilities(definition, registry, context);
-  return entries;
-}
-
-// 根 Workflow 与局部图共用静态协议；资源授权后仍必须执行 capability gate。
-// 旧入口被 Compiler 使用，保留其执行准入及错误优先级。
-export function validateWorkflowDefinitionSemantics(
-  definition: GraphDefinition,
-  registry: NodeRegistry,
-): ValidatedDefinitionNode[] {
-  definition = graphDefinitionSchema.parse(definition);
-  assertGraphExecutionKinds(definition, registry);
-  const entries = validateGraphDefinitionSemantics(definition, registry);
-  // 旧入口对子图使用完整发布门禁；根图的拓扑分析仍由 Compiler 自身执行。
-  for (const node of definition.nodes)
-    for (const slot of nestedGraphSlots(node))
-      assertGraphExecutionCapabilities(slot.graph, registry, {
-        definitionPath: [{ nodeId: node.id, graphKey: slot.graphKey }],
-        capability: slot.graphKey === 'body' ? 'iteration_body_v1' : 'workflow',
-      });
-  return entries;
-}
-export const validateWorkflowForPublish = validateGraphForPublish;

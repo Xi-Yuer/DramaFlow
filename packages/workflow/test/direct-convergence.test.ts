@@ -8,7 +8,7 @@ import {
   workflowStateSchema,
 } from '../src/index.js';
 import { analyzeSimpleIfExecution } from '../src/compiler/if/analysis.js';
-import { DependencyCompiler } from '../src/compiler/dependency.compiler.js';
+import { DependencyCompiler } from '../src/compiler/dependency/dependency.compiler.js';
 import { workflowRunnerFixture } from './workflow-runner-fixture.js';
 
 afterEach(() => vi.restoreAllMocks());

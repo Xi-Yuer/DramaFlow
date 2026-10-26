@@ -6,7 +6,7 @@
 
 核心基础设施遵循[通用性与业务解耦原则](platform-model.md#workflow-通用性与业务解耦)。Binding 解析本图的显式数据来源，Executor 执行当前节点，Composite Strategy 解释控制语义；都不解释剧集、章节、商品或广告。共享子图执行归属与查询已使用通用 ChildExecution，当前 `childExecutionId` 的依赖及边界见[执行归属审计](architecture.md#execution-归属审计)；推荐设计见[实施方案](implementation-plan.md#execution-tree-演进设计)，通用只读 Run Tree DTO / 查询已实现，见[查询边界](architecture.md#execution-tree-只读查询)；通用 ExecutionScope 持久化尚未实现。
 
-Compiler 冻结定义、校验精确 Registry 版本并连接依赖与 START / END；不创建 Run / thread 或执行业务。普通 Action 只实现 execute，经编译 wrapper 调用统一 NodeExecutor；其他 executionKind 必须使用独立策略。
+Compiler 冻结定义、校验精确 Registry 版本并连接依赖与 START / END；不创建 Run / thread 或执行业务。静态端口与 Schema 语义留在 definition；Publish 与 Compile 共用的执行种类和拓扑门禁在 `compiler/execution-capabilities.ts`。普通 Action 只实现 execute，经编译 wrapper 调用统一 NodeExecutor；其他 executionKind 必须使用独立策略。
 
 NodeExecutor 从显式 scopeKey 获取或创建 occurrence，再在该 occurrence 内 createRunning → 解析绑定 → 记录 RuntimeValue 输入 → decode → 校验 input / config → execute → 校验 output → encode → markCompleted。完成记录成功后才写 State。服务对象不进入 State；Codec / Writer 只取得当前项目 / 运行 / 节点 / 输出定位。
 
@@ -66,7 +66,7 @@ Graph 返回后核对 checkpoint 身份、next / tasks、任务错误和 interru
 
 ### 最终输出
 
-OutputResolver 仅按最终 State 解析声明：单 source 维持原行为；sources 恰好一个自身来源存在才返回原 RuntimeValue，零个报 WORKFLOW_OUTPUT_MISSING，多个报 WORKFLOW_OUTPUT_AMBIGUOUS，类型不符报 WORKFLOW_OUTPUT_TYPE_MISMATCH。不读取条件、ControlEdge 或 controlResults，不做优先选择、内容合并或 Artifact materialization。这些异常沿现有 resolve_output 失败路径记录 WORKFLOW_OUTPUT_RESOLUTION_FAILED，不返回部分结果。
+[OutputResolver](../packages/workflow/src/runtime/state/workflow-output-resolver.ts)仅按最终 State 解析声明：单 source 维持原行为；sources 恰好一个自身来源存在才返回原 RuntimeValue，零个报 WORKFLOW_OUTPUT_MISSING，多个报 WORKFLOW_OUTPUT_AMBIGUOUS，类型不符报 WORKFLOW_OUTPUT_TYPE_MISMATCH。不读取条件、ControlEdge 或 controlResults，不做优先选择、内容合并或 Artifact materialization。这些异常沿现有 resolve_output 失败路径记录 WORKFLOW_OUTPUT_RESOLUTION_FAILED，不返回部分结果。
 
 Resolver 不返回整份 State，不生成临时 URL；空声明得到 `{}`。
 
@@ -82,7 +82,7 @@ Resolver 不返回整份 State，不生成临时 URL；空声明得到 `{}`。
 | variables | 显式变量，不开放节点任意读写                                       |
 | execution | 内部 controlResults boolean map，按 If nodeId 保存条件结果         |
 
-State 与 Annotation 共处 runtime/state.ts。run / inputs / variables / execution 为单值通道，Action wrapper 只返回当前 nodeId 的 outputs 增量，不展开旧 State。非变异 reducer 合并不同节点；重复 nodeId 即报 DUPLICATE_NODE_OUTPUT_WRITE，不合并端口片段或静默覆盖。
+State 与 Annotation 共处 runtime/state/state.ts。run / inputs / variables / execution 为单值通道，Action wrapper 只返回当前 nodeId 的 outputs 增量，不展开旧 State。非变异 reducer 合并不同节点；重复 nodeId 即报 DUPLICATE_NODE_OUTPUT_WRITE，不合并端口片段或静默覆盖。
 
 这是普通 DAG 的单次有效输出约束，不能推断循环 / 批量 / 审核语义。NodeOccurrence 保存逻辑执行身份，NodeRun 保存其 attempt 与业务历史，ChildExecution 保存父 attempt 发起的子图调用身份和生命周期，并关联子图 NodeRun；Iteration 的 item index 仅是 typed metadata，Artifact 保存内容，Checkpoint 保存恢复状态；attempt 不等于函数重入次数。领域 occurrence 不取自 taskId、checkpoint namespace 或 nodeAttempt，也不要求修改已有 checkpoint State。身份与持久约束见[当前架构](architecture.md#node-execution-occurrence)。不把日志、媒体、服务或对话历史塞入 State。输入绑定、decode / encode 和内容失败边界见[数据模型](data-model.md#codec-与-binding)。
 

@@ -9,7 +9,11 @@ import {
   type RuntimeValue,
 } from '@dramaflow/contracts';
 import { graphDefinitionLocationSchema, type GraphDefinitionLocation } from './execution-scope.js';
-import { workflowStateSchema, type WorkflowRunContext, type WorkflowState } from './state.js';
+import {
+  workflowStateSchema,
+  type WorkflowRunContext,
+  type WorkflowState,
+} from '../state/state.js';
 
 export interface GraphInputMapping {
   readonly source: string;

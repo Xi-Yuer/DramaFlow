@@ -1,7 +1,7 @@
 import type { WorkflowDefinition } from '@dramaflow/contracts';
-import type { NodeDependency } from '../dependency.compiler.js';
+import type { IfCapabilityIssueCode } from '../../definition/publish/publish-issue.js';
+import type { NodeDependency } from '../dependency/dependency.compiler.js';
 import type { BranchRegionAnalysis, SimpleIfRoute } from './branch-regions.js';
-import type { IfCapabilityIssueCode } from './analysis.js';
 
 type Reject = (code: IfCapabilityIssueCode, nodeId: string) => never;
 export interface IfConvergence {

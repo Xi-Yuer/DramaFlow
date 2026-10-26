@@ -14,7 +14,7 @@ import {
   workflowStateSchema,
   DefaultWorkflowOutputResolver,
 } from '../src/index.js';
-import * as condition from '../src/runtime/condition-evaluator.js';
+import * as condition from '../src/compiler/if/condition-evaluator.js';
 import { analyzeSimpleIfExecution } from '../src/compiler/if/analysis.js';
 import { workflowRunnerFixture } from './workflow-runner-fixture.js';
 

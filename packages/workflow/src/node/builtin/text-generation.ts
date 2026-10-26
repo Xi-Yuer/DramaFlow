@@ -5,7 +5,7 @@ import {
   type TextGenerationInput,
 } from '@dramaflow/contracts';
 import { z } from 'zod';
-import type { NodeType } from './type.js';
+import type { NodeType } from '../registry/type.js';
 
 export const textGenerationConfigSchema = z.object({ modelConfigurationId: z.uuid() }).strict();
 type TextGenerationConfig = z.infer<typeof textGenerationConfigSchema>;

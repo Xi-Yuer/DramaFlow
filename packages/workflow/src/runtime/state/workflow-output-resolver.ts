@@ -4,7 +4,7 @@ import {
   type RuntimeValue,
   type GraphDefinition,
 } from '@dramaflow/contracts';
-import type { WorkflowState } from '../runtime/state.js';
+import type { WorkflowState } from './state.js';
 
 export interface WorkflowOutputResolver {
   resolve<State extends Pick<WorkflowState, 'outputs'>>(

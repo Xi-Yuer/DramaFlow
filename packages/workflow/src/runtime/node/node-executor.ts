@@ -1,26 +1,11 @@
-import type { NodeDefinition, RuntimeValue, WorkflowDefinition } from '@dramaflow/contracts';
-import type { RunnableConfig } from '@langchain/core/runnables';
-import { NodeRegistry } from '../node/registry.js';
-import type { BindingResolver } from './binding-resolver.js';
+import type { NodeDefinition, RuntimeValue } from '@dramaflow/contracts';
+import { NodeRegistry } from '../../node/registry/registry.js';
+import type { BindingResolver } from '../binding/binding-resolver.js';
+import type { CapabilityInvoker, NodeExecutionContext } from './node-execution-context.js';
 import { failNodeRun, type NodeExecutionStage } from './node-execution-error.js';
-import type { NodeRunRepository } from '../run/node-run-repository.js';
-import type { RuntimeValueCodec } from './values/runtime-value-codec.js';
-import type { RuntimeValueContext } from './values/value-codec.js';
-import type { WorkflowState } from './state.js';
+import type { NodeRunRepository } from '../execution/node-run-repository.js';
+import type { RuntimeValueCodec } from '../values/runtime-value-codec.js';
 
-export interface CapabilityInvoker {
-  invoke(capability: string, input: unknown): Promise<unknown>;
-}
-
-export interface NodeExecutionContext extends RuntimeValueContext {
-  readonly scopeKey: string;
-  readonly childExecutionId?: string;
-  readonly workflow: WorkflowDefinition;
-  readonly state: WorkflowState;
-  readonly signal?: AbortSignal;
-  readonly capabilities?: CapabilityInvoker;
-  readonly runnableConfig?: RunnableConfig;
-}
 export interface NodeExecutionResult {
   readonly output: Record<string, RuntimeValue>;
 }

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { NodeDeclaration } from './type.js';
+import type { NodeDeclaration } from '../registry/type.js';
 export { isSubworkflowNodeManifest } from '@dramaflow/contracts';
 
 // Definition / Manifest 身份；尚无执行策略，生产 Publish 必须拒绝。

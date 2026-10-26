@@ -1,6 +1,6 @@
 import type { ChildExecution, NodeRunError } from '@dramaflow/contracts';
-import type { NodeRunRepository } from './node-run-repository.js';
-import type { ChildExecutionRepository } from './child-execution-repository.js';
+import type { ChildExecutionRepository } from '../../runtime/execution/child-execution-repository.js';
+import type { NodeRunRepository } from '../../runtime/execution/node-run-repository.js';
 
 export interface CreateIterationItemRunInput {
   readonly workflowRunId: string;

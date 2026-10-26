@@ -7,7 +7,7 @@ import {
   type WorkflowInputDefinition,
 } from '@dramaflow/contracts';
 import { z } from 'zod';
-import { DataTypeRegistry, DataTypeSchemaUnavailableError } from '../data/registry.js';
+import { DataTypeRegistry, DataTypeSchemaUnavailableError } from '../../data/registry.js';
 
 const messages = {
   WORKFLOW_INVOCATION_CONTRACT_INVALID: '工作流调用契约无效',

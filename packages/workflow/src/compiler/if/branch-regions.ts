@@ -1,4 +1,4 @@
-import type { NodeDependency } from '../dependency.compiler.js';
+import type { NodeDependency } from '../dependency/dependency.compiler.js';
 
 export interface SimpleIfRoute {
   nodeId: string;

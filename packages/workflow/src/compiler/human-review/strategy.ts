@@ -12,11 +12,11 @@ import {
   createHumanReviewInterruptPayload,
   humanReviewOutputFromDecision,
   isHumanReviewNodeManifest,
-} from '../../node/human-review.js';
-import type { NodeDeclaration } from '../../node/type.js';
-import type { HumanReviewNodeRunRepository } from '../../run/node-run-repository.js';
+} from '../../node/builtin/human-review.js';
+import type { NodeDeclaration } from '../../node/registry/type.js';
+import type { HumanReviewNodeRunRepository } from '../../runtime/execution/node-run-repository.js';
 import { areRuntimeValueMapsEqual } from '../../runtime/values/runtime-value-equivalence.js';
-import { failNodeRun, type NodeExecutionStage } from '../../runtime/node-execution-error.js';
+import { failNodeRun, type NodeExecutionStage } from '../../runtime/node/node-execution-error.js';
 import type { LangGraphNode, NodeCompilationStrategy, WorkflowValueServices } from '../strategy.js';
 
 interface HumanReviewCompilationContext {

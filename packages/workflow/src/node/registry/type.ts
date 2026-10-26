@@ -1,6 +1,6 @@
 import type { NodeTypeManifest } from '@dramaflow/contracts';
 import type { NodeSchemas } from './schemas.js';
-import type { NodeExecutionContext } from '../runtime/node-executor.js';
+import type { NodeExecutionContext } from '../../runtime/node/node-execution-context.js';
 import type { z } from 'zod';
 
 export interface NodeDeclaration extends NodeSchemas {

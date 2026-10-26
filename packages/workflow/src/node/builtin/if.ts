@@ -1,6 +1,6 @@
 import { StringType, conditionExpressionSchema } from '@dramaflow/contracts';
 import { z } from 'zod';
-import type { NodeDeclaration } from './type.js';
+import type { NodeDeclaration } from '../registry/type.js';
 
 // 只描述值契约：原样保留字符串，不 trim / coerce，不注入条件默认值。
 // 条件由共享安全子集验证；此声明不执行条件，也不参与路由。

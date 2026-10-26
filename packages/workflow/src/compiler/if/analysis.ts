@@ -1,47 +1,22 @@
 import type { WorkflowDefinition } from '@dramaflow/contracts';
 import {
-  inferConvergenceBoundaries,
+  ifCapabilityMessage,
+  type IfCapabilityIssueCode,
+} from '../../definition/publish/publish-issue.js';
+import { collectNodeDependencies, type NodeDependency } from '../dependency/dependency.compiler.js';
+import {
   analyzeConvergenceDependencies,
+  inferConvergenceBoundaries,
   type IfConvergence,
 } from './convergence.js';
-import { collectNodeDependencies, type NodeDependency } from '../dependency.compiler.js';
-
 import {
   analyzeBranchRegions,
   type BranchRegionAnalysis,
   type SimpleIfRoute,
 } from './branch-regions.js';
-export type { SimpleIfRoute } from './branch-regions.js';
 
-export type IfCapabilityIssueCode =
-  | 'IF_TOPOLOGY_UNSUPPORTED'
-  | 'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED'
-  | 'IF_CONVERGENCE_UNSUPPORTED'
-  | 'IF_CONVERGENCE_INPUT_UNSUPPORTED'
-  | 'IF_NESTED_UNSUPPORTED'
-  | 'IF_REGION_INTERSECTION_UNSUPPORTED'
-  | 'IF_BRANCH_DEPENDENCY_UNSUPPORTED';
-const messages = new Map<string, string>([
-  ['IF_TOPOLOGY_UNSUPPORTED', '当前 Compiler 要求 If 的 true / false 各有一个 Action 入口'],
-  [
-    'CONDITIONAL_WORKFLOW_OUTPUT_UNSUPPORTED',
-    '当前 Compiler 要求候选分别覆盖同一 If 的 true / false region；单来源须必定执行',
-  ],
-  [
-    'IF_CONVERGENCE_UNSUPPORTED',
-    '当前 Compiler 要求唯一汇聚边界完整覆盖两侧分支末端，不能交叉或绕行',
-  ],
-  [
-    'IF_CONVERGENCE_INPUT_UNSUPPORTED',
-    '汇聚输入须由候选绑定分别覆盖同一 If 的 true / false 分支；单来源不能直接读取互斥分支',
-  ],
-  ['IF_NESTED_UNSUPPORTED', '当前版本暂不支持嵌套 If'],
-  ['IF_REGION_INTERSECTION_UNSUPPORTED', '当前版本暂不支持不同 If 的分支区域交叉'],
-  ['IF_BRANCH_DEPENDENCY_UNSUPPORTED', '分支输入必须来自本分支或所属 If 之前保证完成的祖先'],
-]);
-export function ifCapabilityMessage(code: string): string | undefined {
-  return messages.get(code);
-}
+export type { SimpleIfRoute } from './branch-regions.js';
+export type { IfCapabilityIssueCode };
 export class SimpleIfCapabilityError extends Error {
   constructor(
     readonly code: IfCapabilityIssueCode,

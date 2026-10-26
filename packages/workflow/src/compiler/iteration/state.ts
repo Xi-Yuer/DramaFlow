@@ -8,8 +8,8 @@ import {
 } from '@dramaflow/contracts';
 import { Annotation } from '@langchain/langgraph';
 import { z } from 'zod';
-import { graphDefinitionLocationSchema } from '../../runtime/execution-scope.js';
-import { WorkflowStateAnnotation, type WorkflowState } from '../../runtime/state.js';
+import { graphDefinitionLocationSchema } from '../../runtime/execution/execution-scope.js';
+import { WorkflowStateAnnotation, type WorkflowState } from '../../runtime/state/state.js';
 
 // ':' 不能成为合法 LangGraph 节点名，避免新增内部通道与用户 Definition nodeId 冲突。
 export const FRAME = '__dramaflow:iteration';

@@ -9,7 +9,7 @@ import {
   type FormatTextInput,
   type FormatTextOutput,
 } from '@dramaflow/contracts';
-import type { NodeType } from './type.js';
+import type { NodeType } from '../registry/type.js';
 
 export const formatTextTemplateDefault = '{{text}}-{{index}}';
 

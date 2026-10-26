@@ -5,7 +5,7 @@ import {
   type WorkflowRun,
 } from '@dramaflow/contracts';
 import { z } from 'zod';
-import { createWorkflowDefinitionSnapshot } from '../definition/version.js';
+import { createWorkflowDefinitionSnapshot } from '../../definition/contract/version.js';
 
 // 读取完整的已发布版本及归属，不能仅返回无法核对项目 / 工作流身份的 Definition。
 export const workflowVersionRecordSchema = workflowVersionMetadataSchema.extend({

@@ -12,25 +12,23 @@ import {
   type BaseCheckpointSaver,
   type StateSnapshot,
 } from '@langchain/langgraph';
-import {
-  validateWorkflowDefinitionSemantics,
-  WorkflowPublishValidationError,
-} from '../definition/validate-publish.js';
-import { createWorkflowDefinitionSnapshot } from '../definition/version.js';
-import { NodeRegistry } from '../node/registry.js';
-import type { HumanReviewNodeRunRepository } from '../run/node-run-repository.js';
-import type { IterationRunRepository } from '../run/iteration-execution-repository.js';
-import type { NodeExecutor } from '../runtime/node-executor.js';
-import { WorkflowStateAnnotation, type WorkflowState } from '../runtime/state.js';
-import { collectNodeDependencies, DependencyCompiler } from './dependency.compiler.js';
+import { WorkflowPublishValidationError } from '../definition/publish/validate-publish.js';
+import { createWorkflowDefinitionSnapshot } from '../definition/contract/version.js';
+import { NodeRegistry } from '../node/registry/registry.js';
+import type { HumanReviewNodeRunRepository } from '../runtime/execution/node-run-repository.js';
+import { validateWorkflowDefinitionSemantics } from './execution-capabilities.js';
+import type { IterationRunRepository } from './iteration/execution-repository.js';
+import type { NodeExecutor } from '../runtime/node/node-executor.js';
+import { WorkflowStateAnnotation, type WorkflowState } from '../runtime/state/state.js';
+import { collectNodeDependencies, DependencyCompiler } from './dependency/dependency.compiler.js';
 import { ActionNodeCompilationStrategy, type WorkflowValueServices } from './strategy.js';
 import { IfNodeCompilationStrategy, readIfRoute } from './if/strategy.js';
 import { analyzeSimpleIfExecution } from './if/analysis.js';
 import { HumanReviewNodeCompilationStrategy } from './human-review/strategy.js';
 import { findUnsupportedHumanReviewTopology } from './human-review/analysis.js';
 import { IterationNodeCompilationStrategy, iterationRecursionLimit } from './iteration/strategy.js';
-import { assertIterationCompatibility } from '../runtime/iteration-compatibility.js';
-import { analyzeStaticDagExecution } from './action-dag-execution-analysis.js';
+import { assertIterationCompatibility } from './iteration/compatibility.js';
+import { analyzeStaticDagExecution } from './dependency/action-dag-execution-analysis.js';
 
 // Runner 仅发送 resume，不开放 Command.update / goto 的状态写入或路由能力。
 export type WorkflowResumeCommand = Command<unknown, never, never>;

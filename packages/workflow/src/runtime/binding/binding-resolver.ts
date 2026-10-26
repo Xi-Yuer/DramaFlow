@@ -17,7 +17,7 @@ import {
   type BindingResolutionErrorDetails,
 } from './binding-resolution-error.js';
 import type { ResolvedNodePorts } from '@dramaflow/contracts';
-import type { WorkflowState } from './state.js';
+import type { WorkflowState } from '../state/state.js';
 
 export interface BindingResolverContext {
   readonly node: NodeDefinition;

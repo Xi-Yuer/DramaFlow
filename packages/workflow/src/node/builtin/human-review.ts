@@ -9,7 +9,7 @@ import {
   type HumanReviewOutputV1,
   type NodeTypeManifest,
 } from '@dramaflow/contracts';
-import type { NodeDeclaration } from './type.js';
+import type { NodeDeclaration } from '../registry/type.js';
 
 export function isHumanReviewNodeManifest(manifest: NodeTypeManifest): boolean {
   return (

@@ -1,5 +1,5 @@
 import { isGraphBubbleUp } from '@langchain/langgraph';
-import type { NodeRunRepository } from '../run/node-run-repository.js';
+import type { NodeRunRepository } from '../execution/node-run-repository.js';
 import type { NodeDefinition, NodeRunError } from '@dramaflow/contracts';
 
 const stageCodes = {

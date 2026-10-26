@@ -7,14 +7,14 @@ import {
   type ResumeWorkflowExecutionJob,
 } from '@dramaflow/contracts';
 import { z } from 'zod';
-import { WorkflowInvocationContractValidator } from '../../definition/validate-invocation.js';
+import { WorkflowInvocationContractValidator } from '../../definition/contract/validate-invocation.js';
 import type { WorkflowRunSubmissionRepository } from './workflow-run-submission-repository.js';
 import { isWorkflowInvocationEquivalent } from './workflow-invocation-equivalence.js';
-import { WorkflowInvocationConflictError } from '../workflow-run-error.js';
+import { WorkflowInvocationConflictError } from '../runner/workflow-run-error.js';
 import {
   loadWorkflowVersion,
   type WorkflowVersionRepository,
-} from '../workflow-version-repository.js';
+} from '../repository/workflow-version-repository.js';
 
 const startInputSchema = z
   .object({

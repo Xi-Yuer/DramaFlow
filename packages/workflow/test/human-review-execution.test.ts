@@ -11,7 +11,7 @@ import {
 } from '../src/index.js';
 import { HumanReviewNodeCompilationStrategy } from '../src/compiler/human-review/strategy.js';
 import type { LangGraphNode } from '../src/index.js';
-import { analyzeStaticDagExecution } from '../src/compiler/action-dag-execution-analysis.js';
+import { analyzeStaticDagExecution } from '../src/compiler/dependency/action-dag-execution-analysis.js';
 import { analyzeSimpleIfExecution } from '../src/compiler/if/analysis.js';
 import { workflowRunnerFixture } from './workflow-runner-fixture.js';
 

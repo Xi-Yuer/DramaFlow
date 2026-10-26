@@ -5,10 +5,11 @@ import {
   type NodeTypeManifest,
 } from '@dramaflow/contracts';
 import type { LangGraphRunnableConfig } from '@langchain/langgraph';
-import type { NodeExecutor, NodeExecutionContext } from '../runtime/node-executor.js';
-import type { BindingResolver } from '../runtime/binding-resolver.js';
+import type { NodeExecutionContext } from '../runtime/node/node-execution-context.js';
+import type { NodeExecutor } from '../runtime/node/node-executor.js';
+import type { BindingResolver } from '../runtime/binding/binding-resolver.js';
 import type { RuntimeValueCodec } from '../runtime/values/runtime-value-codec.js';
-import type { WorkflowState, WorkflowStateUpdate } from '../runtime/state.js';
+import type { WorkflowState, WorkflowStateUpdate } from '../runtime/state/state.js';
 
 export interface WorkflowValueServices {
   bindings: BindingResolver;
