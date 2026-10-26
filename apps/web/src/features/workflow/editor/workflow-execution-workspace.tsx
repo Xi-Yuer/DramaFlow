@@ -2,6 +2,7 @@
 import { useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { Button, Empty, Space, Tabs, Tag, Typography } from 'antd';
 import { PanelRightClose, PanelRightOpen, Play, X } from 'lucide-react';
+import { ExecutionTreeBrowser } from '../run/execution/execution-tree-browser';
 import { WorkflowRunControls } from '../run/workflow-run-controls';
 import { InvocationRecoveryControls } from '../run/recovery/invocation-recovery-controls';
 import type { InvocationRecoveryState } from '../run/recovery/invocation-recovery';
@@ -30,6 +31,7 @@ export function WorkflowExecutionWorkspace({
   onRetryRecovery,
   onSelectRecovered,
 }: WorkflowExecutionWorkspaceProps) {
+  const [executionReload, setExecutionReload] = useState(0);
   const [view, setView] = useState({
     open: false,
     tab: 'settings' as PanelTab,
@@ -74,6 +76,11 @@ export function WorkflowExecutionWorkspace({
   }
   const status = run.runStatus.run?.status;
   const display = status ? workflowRunStatusDisplay[status] : null;
+  const currentRun = run.runStatus.run;
+  const executionDefinition =
+    run.version && currentRun && run.version.id === currentRun.workflowVersionId
+      ? run.version.definition
+      : null;
   return (
     <>
       <div className={styles.toolbar} role="group" aria-label="工作流执行工具栏">
@@ -159,11 +166,23 @@ export function WorkflowExecutionWorkspace({
                           description="尚无运行状态，请先选择版本并运行工作流"
                         />
                       ) : (
-                        <WorkflowRunStatusView
-                          state={run.runStatus}
-                          onRefresh={run.onRefreshRunStatus}
-                          reviewActions={run.reviewActions}
-                        />
+                        <>
+                          <WorkflowRunStatusView
+                            state={run.runStatus}
+                            onRefresh={() => {
+                              setExecutionReload((value) => value + 1);
+                              run.onRefreshRunStatus();
+                            }}
+                            reviewActions={run.reviewActions}
+                          />
+                          {currentRun ? (
+                            <ExecutionTreeBrowser
+                              runId={currentRun.id}
+                              definition={executionDefinition}
+                              reloadToken={executionReload}
+                            />
+                          ) : null}
+                        </>
                       ),
                   },
                 ]}

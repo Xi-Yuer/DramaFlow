@@ -1,8 +1,11 @@
 import {
+  executionTreeQuerySchema,
+  executionTreeResponseSchema,
   nodeRunSchema,
   publishWorkflowRequestSchema,
   pendingHumanReviewsResponseSchema,
   resumeWorkflowRunRequestSchema,
+  type ExecutionTreeQuery,
   type ResumeWorkflowRunRequest,
   startWorkflowRunRequestSchema,
   workflowRunResponseSchema,
@@ -51,6 +54,19 @@ export const workflowApi = {
       workflowNodeRunsResponseSchema,
       { signal },
     ),
+  getExecutionTree: (runId: string, query: ExecutionTreeQuery, signal?: AbortSignal) => {
+    const parsed = executionTreeQuerySchema.parse(query);
+    const params = new URLSearchParams();
+    params.set('parentType', parsed.parentType);
+    if (parsed.parentId !== undefined) params.set('parentId', parsed.parentId);
+    params.set('limit', String(parsed.limit));
+    if (parsed.after !== undefined) params.set('after', parsed.after);
+    return request(
+      `/workflow-runs/${encodeURIComponent(runId)}/execution-tree?${params.toString()}`,
+      executionTreeResponseSchema,
+      { signal },
+    );
+  },
   resumeRun: (runId: string, input: ResumeWorkflowRunRequest) =>
     request(`/workflow-runs/${encodeURIComponent(runId)}/resume`, workflowRunResponseSchema, {
       method: 'POST',

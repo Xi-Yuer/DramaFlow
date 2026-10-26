@@ -12,7 +12,7 @@ Human Review 第五阶段已接入现有 Run 面板的单个文本审批闭环�
 
 Canvas 小范围视觉优化待人工验收：运行焦点、人工等待、失败辨识、多个完成节点的安静程度，以及大量 DataEdge 的方向流动强度、ControlEdge 静态表现和投影标识。实现范围见[当前架构](architecture.md#canvas-运行态与连线表现)，不扩展 Editor 功能或执行语义。
 
-Iteration 单 item 持久化与通用 Execution Tree 只读查询进入交付验收；能力与约束见[当前架构](architecture.md#execution-tree-只读查询)。后续 Web 运行树、单 item retry / resume、通用 scope 持久化及嵌套 Iteration 执行仍需独立任务。
+Iteration 单 item 持久化、通用 Execution Tree 只读查询与 Web 运行树只读浏览进入交付验收；能力与约束见[当前架构](architecture.md#execution-tree-只读查询)。单 item retry / resume、通用 scope 持久化及嵌套 Iteration 执行仍需独立任务。
 
 ## 待决策与后续边界
 
@@ -102,4 +102,4 @@ Retry / Resume 将来复用这套身份、授权、审计及查询骨架，执�
 
 ### 下一步最小独立实施任务
 
-**实现 Web 通用运行树的只读浏览。** 复用现有 Execution Tree DTO 和逐层分页入口，按显式父引用展开 NodeRun / Child Execution，显示各自真实状态和 attempt；不按 Iteration 存储类型选择查询，不解析 scopeKey，不从数组或 DAG 猜执行事实。范围仅限读取与浏览，不增加 Retry / Resume、执行写入口、新 Composite 或 schema 变更。需独立授权后实施。
+Web 通用运行树只读浏览已实施。下一步仍是独立确定通用 scope 的持久化 Contract / schema、root 身份与定义定位；本方案不构成该步授权。单 item Retry / Resume 与嵌套 Iteration 执行继续单独授权。

@@ -2,14 +2,32 @@
 import { useState } from 'react';
 import { App, ConfigProvider } from 'antd';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StringType, type WorkflowRunResponse } from '@dramaflow/contracts';
 import {
   WorkflowExecutionWorkspace,
   type WorkflowExecutionWorkspaceProps,
 } from '../src/features/workflow/editor/workflow-execution-workspace';
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        const abort = () => reject(new DOMException('The operation was aborted.', 'AbortError'));
+        if (init?.signal?.aborted) {
+          abort();
+          return;
+        }
+        init?.signal?.addEventListener('abort', abort, { once: true });
+      });
+    }),
+  );
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 const completed: WorkflowRunResponse = {
   id: 'run-workspace',
   workflowId: 'workflow-a',
