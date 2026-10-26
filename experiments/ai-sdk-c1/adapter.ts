@@ -2,7 +2,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { generateText, isStepCount } from 'ai';
 import { z } from 'zod';
-import type { CapabilityInvocationContext } from '../../packages/plugins/src/provider-plugin.ts';
+import type { CapabilityInvocationContext } from '../../packages/plugins/src/plugin/provider-plugin.ts';
 
 // 只在实验使用，未注册到生产 PluginRegistry。
 const configurationSchema = z

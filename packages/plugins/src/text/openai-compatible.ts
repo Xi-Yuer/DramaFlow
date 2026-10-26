@@ -4,41 +4,14 @@ import { ChatOpenAICompletions } from '@langchain/openai';
 import { RunTree } from 'langsmith';
 import { withRunTree } from 'langsmith/traceable';
 import { z } from 'zod';
-import { CapabilityError } from './capability-error.js';
+import { CapabilityError } from '../plugin/capability-error.js';
+import type { ProviderPlugin } from '../plugin/provider-plugin.js';
+import {
+  openAICompatibleConfigurationSchema,
+  openAICompatibleCredentialsSchema,
+  textGenerationSettingsSchema,
+} from './parameters.js';
 import { assertTextDoesNotEchoCredential } from './text-output.js';
-import type { ProviderPlugin } from './provider-plugin.js';
-
-export const openAICompatibleConfigurationSchema = z
-  .object({
-    baseURL: z
-      .url()
-      .max(2048)
-      .refine((value) => {
-        const url = new URL(value);
-        return (
-          (url.protocol === 'https:' || url.protocol === 'http:') &&
-          !url.username &&
-          !url.password &&
-          !url.search &&
-          !url.hash
-        );
-      }, '模型地址须为不含认证、查询参数或 fragment 的 HTTP(S) 地址'),
-    timeoutMs: z.number().int().min(100).max(180_000).default(60_000),
-  })
-  .strict();
-
-export const openAICompatibleCredentialsSchema = z
-  .object({
-    apiKey: z.string().trim().min(1).max(4096),
-  })
-  .strict();
-
-export const textGenerationSettingsSchema = z
-  .object({
-    temperature: z.number().finite().min(0).max(2).optional(),
-    maxOutputTokens: z.number().int().min(1).max(65_536).optional(),
-  })
-  .strict();
 
 // 当前 LangChain 转换器会丢弃 message.refusal；仅在适配器内检查原始协议字段。
 const completionResponseSchema = z.object({

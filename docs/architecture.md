@@ -189,7 +189,7 @@ API / Worker 启动时初始化官方 PostgresSaver，不提供内存回退。�
 | text_generation@1   | 正式 OpenAI / Anthropic 文本实现，SDK 只在插件内部使用  |
 | openai_compatible@1 | 高级 Custom OpenAI-Compatible，可显式配置兼容地址与模型 |
 
-两个插件关闭自动重试并隔离日志 / tracing，拒绝 redirect、空白、截断、过滤、工具调用等无效文本；成功正文包含本次实际 API credential 时以 `CAPABILITY_OUTPUT_INVALID` 拒绝，不返回正文、不重发。错误投影不带原始请求、响应或凭证。参数边界以[插件 Schema](../packages/plugins/src)为准；CapabilityInvoker 尚未透传取消信号，调用依赖插件 deadline。它们不构成通用媒体或内容安全框架。
+两个插件关闭自动重试并隔离日志 / tracing，拒绝 redirect、空白、截断、过滤、工具调用等无效文本；成功正文包含本次实际 API credential 时以 `CAPABILITY_OUTPUT_INVALID` 拒绝，不返回正文、不重发。错误投影不带原始请求、响应或凭证。共用参数边界在[文本参数 Schema](../packages/plugins/src/text/parameters.ts)，各插件在此基础上收紧自己的配置。CapabilityInvoker 尚未透传取消信号，调用依赖插件 deadline。它们不构成通用媒体或内容安全框架。
 
 ## Plugin / Provider / 模型配置管理 HTTP
 
@@ -292,6 +292,6 @@ reference 只展示类型、kind 与 ID（Asset 包含版本），提示暂不�
 | packages/contracts                   | 无框架依赖的 JSON 协议和 Schema                                                                                      |
 | packages/workflow                    | 领域校验、编译、执行；runtime/values 管运行值，run/submission 管受理                                                 |
 | packages/server                      | 授权 Repository、基础设施和生产装配；workflow/runtime 与 queue 分工                                                  |
-| packages/plugins / packages/database | 受信任插件与目录 / Prisma 模型与迁移                                                                                 |
+| packages/plugins / packages/database | 受信任插件（plugin 注册、catalog 目录、text 实现）/ Prisma 模型与迁移                                                |
 
 run 内部区分 status、result、recovery 与 execution。execution 只读取 Execution Tree，并把当前层 NodeRun 保留为可投影结构；跨职责 API 留在 Workflow 根目录。已实现模块按领域归类，不按技术类型机械拆分，不保留重复入口。`packages/context` 仍为空入口。

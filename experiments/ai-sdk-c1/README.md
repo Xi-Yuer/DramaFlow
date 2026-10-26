@@ -2,7 +2,7 @@
 
 历史结论：GO，仅针对当时固定版本的文本协议、单次出站及安全投影；不表示媒体、模型发现或收费模型已验收。当前生产实现见[架构](../../docs/architecture.md#文本-ai-与-provider-plugin)，不使用本实验作为 Runtime。
 
-- [result.json](result.json)：脱敏结果；[source-audit.json](source-audit.json)：控制点核查。
+- [result.json](result.json)：脱敏结果；[source-audit.json](source-audit.json)：控制点核查，路径与摘要属于当时的源码布局。
 - [versions.lock.json](versions.lock.json) 与 [runtime.lock.json](runtime.lock.json)：实际验证版本。
 - [run.ts](run.ts)：复现入口。只使用本机协议替身，不加载项目 `.env`，不访问业务库或收费模型。
 

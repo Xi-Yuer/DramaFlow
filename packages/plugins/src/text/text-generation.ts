@@ -3,14 +3,14 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { APICallError, generateText, isStepCount, wrapLanguageModel } from 'ai';
 import { z } from 'zod';
-import { CapabilityError, externalCapabilityError } from './capability-error.js';
-import { assertTextDoesNotEchoCredential } from './text-output.js';
+import { CapabilityError, externalCapabilityError } from '../plugin/capability-error.js';
+import type { ProviderPlugin } from '../plugin/provider-plugin.js';
 import {
   openAICompatibleConfigurationSchema,
   openAICompatibleCredentialsSchema,
   textGenerationSettingsSchema,
-} from './openai-compatible.js';
-import type { ProviderPlugin } from './provider-plugin.js';
+} from './parameters.js';
+import { assertTextDoesNotEchoCredential } from './text-output.js';
 
 const configurationSchema = openAICompatibleConfigurationSchema.extend({
   provider: z.enum(['openai', 'anthropic']),

@@ -170,8 +170,8 @@ export function WorkflowRunControls({
                   <div className={styles.fieldHeading}>
                     <Space size={6}>
                       <Typography.Text>{definition.name}</Typography.Text>
-                      <Tag bordered={false}>{definition.required ? '必填' : '可选'}</Tag>
-                      {editor.nullable ? <Tag bordered={false}>可为 null</Tag> : null}
+                      <Tag variant="filled">{definition.required ? '必填' : '可选'}</Tag>
+                      {editor.nullable ? <Tag variant="filled">可为 null</Tag> : null}
                     </Space>
                     {!definition.required ? (
                       <Checkbox

@@ -3,7 +3,7 @@ import {
   modelCatalogModelIdSchema,
   type ModelCatalogItem,
 } from '@dramaflow/contracts';
-import { CapabilityError } from './capability-error.js';
+import { CapabilityError } from '../plugin/capability-error.js';
 import { ANTHROPIC_PROVIDER_ID, OPENAI_PROVIDER_ID, ProviderCatalog } from './provider-catalog.js';
 
 export interface ModelDefinitionInput {

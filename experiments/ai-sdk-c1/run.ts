@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { APICallError } from 'ai';
 import { invokeText } from './adapter.ts';
 import { createOracle, type Protocol } from './upstream.ts';
-import type { CapabilityInvocationContext } from '../../packages/plugins/src/provider-plugin.ts';
+import type { CapabilityInvocationContext } from '../../packages/plugins/src/plugin/provider-plugin.ts';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const batch = randomBytes(8).toString('hex');

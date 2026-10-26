@@ -4,9 +4,9 @@ import {
   type ProviderCatalogItem,
 } from '@dramaflow/contracts';
 import { z } from 'zod';
-import { CapabilityError } from './capability-error.js';
-import { credentialFieldsFromSchema, PluginRegistry } from './plugin-registry.js';
-import type { ProviderPlugin } from './provider-plugin.js';
+import { CapabilityError } from '../plugin/capability-error.js';
+import { credentialFieldsFromSchema, PluginRegistry } from '../plugin/plugin-registry.js';
+import type { ProviderPlugin } from '../plugin/provider-plugin.js';
 
 const jsonObjectSchema = z.record(z.string(), z.json());
 const emptyUserConfigurationSchema = z.object({}).strict();
