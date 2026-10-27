@@ -25,7 +25,6 @@ export function createFormatTextNodeType(): NodeType<
       version: 1,
       executionKind: 'action',
       metadata: {
-        catalog: { exposure: 'public', category: 'data' },
         name: '文本格式化',
         category: 'data',
         description: '按模板把已声明输入插值为一段文本',

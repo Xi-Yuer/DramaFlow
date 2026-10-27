@@ -29,7 +29,6 @@ export function createTextGenerationNodeType(): NodeType<
       version: 1,
       executionKind: 'action',
       metadata: {
-        catalog: { exposure: 'public', category: 'ai' },
         name: '文本生成',
         category: 'ai',
         description: '使用明确选择的模型配置生成文本',

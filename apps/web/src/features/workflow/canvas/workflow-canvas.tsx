@@ -4,13 +4,14 @@ import { Background, BackgroundVariant, Controls, ReactFlow, useReactFlow } from
 import { useQuery } from '@tanstack/react-query';
 import { Button } from 'antd';
 import {
-  isNodeVisibleInCatalog,
+  isNodeCatalogEntryVisible,
+  instantiateNodeCatalogEntry,
   nestedGraphSlots,
   type NodeDefinition,
-  type NodeTypeManifest,
+  type NodeCatalogEntry,
 } from '@dramaflow/contracts';
 import { NodePicker } from '../node-catalog/node-picker';
-import { createWorkflowNode } from '../node-catalog/create-workflow-node';
+import { nodeCatalogApi, nodeCatalogKeys } from '../node-catalog/node-catalog-api';
 import { nodeTypeApi, nodeTypeKeys } from '../node-catalog/node-type-api';
 import { WorkflowEnd } from '../outputs/workflow-end';
 import { WorkflowBodyInputs } from '../iteration/body-input-boundary-node';
@@ -79,6 +80,9 @@ export function WorkflowCanvas({
   const { screenToFlowPosition, getViewport, setViewport } = useReactFlow<CanvasNode, CanvasEdge>();
   const locked = reloading || interactionLocked;
   const nodeTypes = useQuery({ queryKey: nodeTypeKeys.list, queryFn: nodeTypeApi.list });
+  const entries = useQuery({ queryKey: nodeCatalogKeys.list, queryFn: nodeCatalogApi.list });
+  const pickerPending = nodeTypes.isPending || entries.isPending;
+  const pickerError = nodeTypes.isError || entries.isError;
   const atRoot = navigation === null;
   const boundaries = useCanvasBoundaries({
     workflow,
@@ -97,11 +101,17 @@ export function WorkflowCanvas({
   }, [getViewport, setViewport, viewportControllerRef]);
   const catalog = useMemo(
     () =>
-      (nodeTypes.data ?? []).filter(
-        (manifest) =>
-          isNodeVisibleInCatalog(manifest) && (!manifestFilter || manifestFilter(manifest)),
-      ),
-    [manifestFilter, nodeTypes.data],
+      (entries.data ?? []).filter((entry) => {
+        const manifest = nodeTypes.data?.find(
+          (item) => item.type === entry.target.type && item.version === entry.target.version,
+        );
+        return (
+          isNodeCatalogEntryVisible(entry) &&
+          manifest !== undefined &&
+          (!manifestFilter || manifestFilter(manifest))
+        );
+      }),
+    [entries.data, manifestFilter, nodeTypes.data],
   );
 
   const runtimeNodes = useMemo(
@@ -142,11 +152,13 @@ export function WorkflowCanvas({
     onEdit,
   });
 
-  function addNode(selection: NodeTypeManifest) {
-    if (locked || nodeTypes.isPending || nodeTypes.isError || !stageRef.current) return;
-    // 只接受当前目录中精确匹配的版本，目录失败时不使用兜底节点。
-    const manifest = catalog.find(
-      (item) => item.type === selection.type && item.version === selection.version,
+  function addNode(selection: NodeCatalogEntry) {
+    if (locked || pickerPending || pickerError || !stageRef.current) return;
+    // Entry identity 与 Runtime identity 独立；只实例化当前目录中的条目。
+    const entry = catalog.find((item) => item.id === selection.id);
+    if (!entry) return;
+    const manifest = nodeTypes.data?.find(
+      (item) => item.type === entry.target.type && item.version === entry.target.version,
     );
     if (!manifest) return;
     const bounds = stageRef.current.getBoundingClientRect();
@@ -156,12 +168,10 @@ export function WorkflowCanvas({
       x: bounds.left + Math.max(24, (bounds.width - 300) / 2) + offset,
       y: bounds.top + Math.min(120, bounds.height / 3) + offset,
     });
-    const node = createWorkflowNode(
-      manifest,
-      `node_${crypto.randomUUID()}`,
-      manifest.metadata.name,
+    const node = instantiateNodeCatalogEntry(entry, manifest, {
+      id: `node_${crypto.randomUUID()}`,
       position,
-    );
+    });
     onEdit((current) => ({ ...current, nodes: [...current.nodes, node] }));
     selectNode(node.id, 'design');
   }
@@ -209,8 +219,8 @@ export function WorkflowCanvas({
         >
           <div className="canvas-flow" ref={stageRef}>
             <NodePicker
-              manifests={catalog}
-              disabled={locked || nodeTypes.isPending || nodeTypes.isError || catalog.length === 0}
+              entries={catalog}
+              disabled={locked || pickerPending || pickerError || catalog.length === 0}
               onSelect={addNode}
             />
             <ReactFlow<CanvasNode, CanvasEdge>
@@ -257,9 +267,9 @@ export function WorkflowCanvas({
               <div className="canvas-empty">
                 <p>空白画布</p>
                 <span role="status">
-                  {nodeTypes.isPending
+                  {pickerPending
                     ? '正在加载节点目录…'
-                    : nodeTypes.isError
+                    : pickerError
                       ? '节点目录加载失败，请重试加载目录。'
                       : catalog.length === 0
                         ? '当前暂无可用节点。'
@@ -269,10 +279,16 @@ export function WorkflowCanvas({
                 </span>
               </div>
             ) : null}
-            {nodeTypes.isError ? (
+            {pickerError ? (
               <div className="canvas-catalog-error" role="status">
                 节点目录加载失败，已有草稿仍保留。
-                <Button size="small" onClick={() => void nodeTypes.refetch()}>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    void nodeTypes.refetch();
+                    void entries.refetch();
+                  }}
+                >
                   重试加载目录
                 </Button>
               </div>

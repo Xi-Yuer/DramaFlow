@@ -12,7 +12,7 @@ Data Edge 提供输入值来源，Control Edge 提供先后关系，不自动相
 
 ## Manifest 与端口
 
-Manifest 固定 type / version 与 executionKind（action / control / composite / interaction）。metadata.category 保留八类节点视觉分类；metadata.catalog 独立表达产品暴露和产品分类；图标和 component 使用受控映射。只公开 JSON，不携带 Zod、execute、编译器或服务实例。
+Manifest 固定 type / version 与 executionKind（action / control / composite / interaction）。metadata.category 保留八类节点视觉分类；独立 Catalog Entry 表达产品暴露、分类与创建描述；图标和 component 使用受控映射。只公开 JSON，不携带 Zod、execute、编译器或服务实例。
 
 数据端口使用正式 DataType，Handle.id 等于端口 key，同方向唯一。required 表示可省略，null 用 union 表达；集合用 array.itemType，没有 multiple。输出 storagePolicy 为 inline / reference / auto，缺省 auto，不改变端口类型。
 
@@ -57,7 +57,7 @@ Action 编译策略只调用统一 Executor，返回当前 nodeId 的 outputs �
 ## 节点类型开发
 
 1. 声明纯 JSON Manifest、三组严格 Zod 和业务 execute；可使用 createOperationNodeType 组合。invokeNodeOperation 只是独立值校验工具，不是另一套 Runtime。
-2. 在受信任 Registry 注册精确版本，并显式声明 metadata.catalog。GET /api/v1/workflow/node-types 默认认证、no-store，返回完整 Manifest（包含 Catalog metadata），供已有 Definition 渲染与编辑；创建入口按产品 surface 过滤。缺少版本时界面显示不可用，不按目录顺序猜测。
+2. 在受信任 Registry 注册精确版本；需要产品创建入口时独立声明 Catalog Entry 的身份、显示信息、exposure、target 与 creation。GET /api/v1/workflow/node-types 提供完整 Manifest，GET /api/v1/workflow/node-catalog 提供 Entry，均认证、no-store。共享 instantiateNodeCatalogEntry 将纯数据创建描述复制为标准实例，不把 GraphDefinition 放入 Manifest，也不把 Entry ID 写入 WorkflowDefinition；边界见[架构](architecture.md#node-catalog-产品暴露)。缺少版本时不猜测或替换。
 3. 通过静态发布校验和运行时三组 Schema 验证真实行为。能力 / 资源绑定须补齐相应发布授权检查，不能仅靠 UI 控件推断。
 
 ## Preset 与 NodeRun

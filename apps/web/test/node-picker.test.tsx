@@ -2,38 +2,33 @@
 import { ConfigProvider } from 'antd';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { nodeTypeManifestSchema } from '@dramaflow/contracts';
+import { nodeCatalogEntrySchema } from '@dramaflow/contracts';
 import { NodePicker } from '../src/features/workflow/node-catalog/node-picker';
 
-const manifest = (type: string, exposure?: 'public' | 'advanced' | 'internal') =>
-  nodeTypeManifestSchema.parse({
-    type,
-    version: 1,
-    executionKind: 'action',
-    metadata: {
-      name: type,
-      category: 'data',
-      ...(exposure ? { catalog: { exposure, category: 'data' } } : {}),
-    },
-    inputs: [],
-    outputs: [],
-    config: [],
+const entry = (id: string, exposure: 'public' | 'advanced' | 'internal') =>
+  nodeCatalogEntrySchema.parse({
+    id,
+    exposure,
+    metadata: { name: id },
+    category: 'data',
+    target: { type: 'test.shared', version: 1 },
+    creation: {},
   });
-
 afterEach(cleanup);
 
-describe('普通 Node Picker 产品暴露', () => {
-  it('按 metadata 显示 public 并创建精确版本，隐藏 advanced / internal / 未声明类型', async () => {
-    const publicNode = manifest('test.visible', 'public');
+describe('普通 Node Picker 产品条目', () => {
+  it('独立 Entry 身份展示、选择；多个条目可以共用 target，隐藏 advanced / internal', async () => {
+    const publicEntry = entry('visible', 'public'),
+      second = entry('alternative', 'public');
     const onSelect = vi.fn();
     render(
       <ConfigProvider theme={{ token: { motion: false } }}>
         <NodePicker
-          manifests={[
-            publicNode,
-            manifest('test.advanced', 'advanced'),
-            manifest('test.primitive', 'internal'),
-            manifest('test.undeclared'),
+          entries={[
+            publicEntry,
+            second,
+            entry('advanced', 'advanced'),
+            entry('primitive', 'internal'),
           ]}
           disabled={false}
           onSelect={onSelect}
@@ -41,23 +36,28 @@ describe('普通 Node Picker 产品暴露', () => {
       </ConfigProvider>,
     );
     fireEvent.click(screen.getByRole('button', { name: '添加节点' }));
-    const option = await screen.findByRole('button', { name: '添加 test.visible · v1' });
-    expect(screen.getByText('数据处理 · v1')).toBeTruthy();
-    expect(
-      screen.queryByRole('button', { name: /添加 test\.(advanced|primitive|undeclared)/ }),
-    ).toBeNull();
+    const option = await screen.findByRole('button', { name: '添加 visible · v1' });
+    expect(screen.getByRole('button', { name: '添加 alternative · v1' })).toBeTruthy();
+    expect(screen.getAllByText('数据处理 · v1')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: /添加 (advanced|primitive)/ })).toBeNull();
     fireEvent.click(option);
-    expect(onSelect).toHaveBeenCalledExactlyOnceWith(publicNode);
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(publicEntry);
   });
 
-  it('完整目录没有普通节点时禁用添加入口', () => {
+  it('data.format_text internal 条目不出现在普通 Picker', () => {
     render(
       <NodePicker
-        manifests={[manifest('test.hidden', 'internal')]}
+        entries={[
+          {
+            ...entry('text-formatting', 'internal'),
+            target: { type: 'data.format_text', version: 1 },
+          },
+        ]}
         disabled={false}
         onSelect={vi.fn()}
       />,
     );
     expect(screen.getByRole('button', { name: '添加节点' })).toHaveProperty('disabled', true);
+    expect(screen.queryByRole('button', { name: /添加 text-formatting/ })).toBeNull();
   });
 });

@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Button, Popover } from 'antd';
 import { Plus } from 'lucide-react';
 import {
-  isNodeVisibleInCatalog,
+  isNodeCatalogEntryVisible,
   type NodeCatalogCategory,
-  type NodeTypeManifest,
+  type NodeCatalogEntry,
 } from '@dramaflow/contracts';
 import { NodeTypeIcon } from './node-type-icon';
 import styles from './node-picker.module.css';
@@ -17,15 +17,15 @@ const categoryNames: Record<NodeCatalogCategory, string> = {
 };
 
 export function NodePicker({
-  manifests,
+  entries,
   disabled,
   onSelect,
 }: {
-  manifests: readonly NodeTypeManifest[];
+  entries: readonly NodeCatalogEntry[];
   disabled: boolean;
-  onSelect: (manifest: NodeTypeManifest) => void;
+  onSelect: (entry: NodeCatalogEntry) => void;
 }) {
-  const catalog = manifests.filter((manifest) => isNodeVisibleInCatalog(manifest));
+  const catalog = entries.filter((entry) => isNodeCatalogEntryVisible(entry));
   const [open, setOpen] = useState(false);
   return (
     <div className={styles.toolbar}>
@@ -37,29 +37,27 @@ export function NodePicker({
         title="选择节点"
         content={
           <div className={styles.list} aria-label="节点目录">
-            {catalog.map((manifest) => (
+            {catalog.map((entry) => (
               <Button
-                key={`${manifest.type}@${manifest.version}`}
+                key={entry.id}
                 className={styles.option}
                 type="text"
                 block
-                aria-label={`添加 ${manifest.metadata.name} · v${manifest.version}`}
+                aria-label={`添加 ${entry.metadata.name} · v${entry.target.version}`}
                 disabled={disabled}
                 onClick={() => {
-                  onSelect(manifest);
+                  onSelect(entry);
                   setOpen(false);
                 }}
               >
                 <span className={styles.icon} aria-hidden="true">
-                  <NodeTypeIcon metadata={manifest.metadata} />
+                  <NodeTypeIcon metadata={entry.metadata} />
                 </span>
                 <span className={styles.details}>
-                  <strong>{manifest.metadata.name}</strong>
-                  {manifest.metadata.description ? (
-                    <span>{manifest.metadata.description}</span>
-                  ) : null}
+                  <strong>{entry.metadata.name}</strong>
+                  {entry.metadata.description ? <span>{entry.metadata.description}</span> : null}
                   <small>
-                    {categoryNames[manifest.metadata.catalog.category]} · v{manifest.version}
+                    {categoryNames[entry.category]} · v{entry.target.version}
                   </small>
                 </span>
               </Button>

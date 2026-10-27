@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { createTestCatalogEntry } from './fixtures/node-catalog';
+import { nodeCatalogKeys } from '../src/features/workflow/node-catalog/node-catalog-api';
 import { App, Button, ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactFlowProvider, type Node, type Edge, type ReactFlowProps } from '@xyflow/react';
@@ -13,7 +15,7 @@ import { useWorkflowDraft } from '../src/features/workflow/editor/use-workflow-d
 import { workflowApi } from '../src/features/workflow/workflow-api';
 import { ifCatalog, ifWorkflow } from './fixtures/workflow-if';
 import { humanReviewManifest } from './fixtures/human-review';
-import { createWorkflowNode } from '../src/features/workflow/node-catalog/create-workflow-node';
+import { createTestWorkflowNode as createWorkflowNode } from './fixtures/node-catalog';
 
 let flow: ReactFlowProps<Node, Edge>;
 let draft: ReturnType<typeof useWorkflowDraft>;
@@ -65,6 +67,7 @@ function setup(definition = ifWorkflow(), locked = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
+  client.setQueryData(nodeCatalogKeys.list, [createTestCatalogEntry(humanReviewManifest)]);
   client.setQueryData(nodeTypeKeys.list, [...ifCatalog, humanReviewManifest]);
   function Editor() {
     draft = useWorkflowDraft({ ...workflow, draft: definition });

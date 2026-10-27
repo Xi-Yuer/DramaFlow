@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { nodeCatalogKeys } from '../src/features/workflow/node-catalog/node-catalog-api';
 import { useContext, useEffect, useState } from 'react';
 import { App, ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -43,6 +44,7 @@ function setup(initial = templateWorkflow()) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
+  client.setQueryData(nodeCatalogKeys.list, []);
   client.setQueryData(nodeTypeKeys.list, [templateManifest]);
   function Editor() {
     const [workflow, setWorkflow] = useState(initial);

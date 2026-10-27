@@ -11,7 +11,6 @@ export function createIfNodeType(): NodeDeclaration {
       version: 1,
       executionKind: 'control',
       metadata: {
-        catalog: { exposure: 'advanced', category: 'workflow' },
         name: '条件分支',
         category: 'flow',
         description: '按字符串条件选择 true 或 false 分支',

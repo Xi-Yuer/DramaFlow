@@ -1,6 +1,6 @@
 import { workflowDraftDefinitionSchema, type WorkflowDefinition } from '@dramaflow/contracts';
 import { manifest } from './workflow-output';
-import { createWorkflowNode } from '../../src/features/workflow/node-catalog/create-workflow-node';
+import { createTestWorkflowNode as createWorkflowNode } from './node-catalog';
 
 export const templateManifest = {
   ...manifest,

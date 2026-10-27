@@ -3,7 +3,7 @@ export const manifest: NodeTypeManifest = {
   type: 'text.test',
   version: 1,
   executionKind: 'action',
-  metadata: { name: '文本', category: 'ai', catalog: { exposure: 'public', category: 'ai' } },
+  metadata: { name: '文本', category: 'ai' },
   inputs: [{ key: 'prompt', name: '提示词', dataType: { kind: 'primitive', name: 'string' } }],
   outputs: [
     { key: 'text', name: '文本', dataType: { kind: 'primitive', name: 'string' } },

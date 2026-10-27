@@ -1,5 +1,5 @@
 import type { NodeTypeManifest, WorkflowDefinition } from '@dramaflow/contracts';
-import { createWorkflowNode } from '../../src/features/workflow/node-catalog/create-workflow-node';
+import { createTestWorkflowNode as createWorkflowNode } from './node-catalog';
 import { manifest as actionManifest } from './workflow-output';
 
 export const ifManifest: NodeTypeManifest = {
@@ -9,7 +9,6 @@ export const ifManifest: NodeTypeManifest = {
   metadata: {
     name: '条件分支',
     category: 'flow',
-    catalog: { exposure: 'advanced', category: 'workflow' },
   },
   inputs: [
     {

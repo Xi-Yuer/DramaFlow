@@ -27,9 +27,14 @@ const metadataIcons = new Map([
   ...Object.entries(nodeIcons),
 ]);
 
-export function NodeTypeIcon({ metadata }: { metadata?: NodeMetadata }) {
+export function NodeTypeIcon({
+  metadata,
+}: {
+  metadata?: Pick<NodeMetadata, 'icon'> & Partial<Pick<NodeMetadata, 'category'>>;
+}) {
   return metadata ? (
-    (metadataIcons.get(metadata.icon ?? '') ?? nodeIcons[metadata.category])
+    (metadataIcons.get(metadata.icon ?? '') ??
+      (metadata.category ? nodeIcons[metadata.category] : <Box size={16} />))
   ) : (
     <Box size={16} />
   );

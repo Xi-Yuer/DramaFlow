@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import type { NodeCatalogEntry } from '@dramaflow/contracts';
+import { createTestCatalogEntry } from './fixtures/node-catalog';
+import { nodeCatalogKeys } from '../src/features/workflow/node-catalog/node-catalog-api';
 import { useState } from 'react';
 import { App, ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -79,7 +82,7 @@ const textManifest = manifest({
   type: 'ai.text_generate',
   version: 1,
   executionKind: 'action',
-  metadata: { name: '文本生成', category: 'ai', catalog: { exposure: 'public', category: 'ai' } },
+  metadata: { name: '文本生成', category: 'ai' },
   inputs: [{ key: 'prompt', name: '提示词', dataType: StringType, required: true }],
   outputs: [{ key: 'text', name: '生成文本', dataType: StringType }],
   config: [],
@@ -91,7 +94,6 @@ const formatManifest = manifest({
   metadata: {
     name: '文本格式化',
     category: 'data',
-    catalog: { exposure: 'public', category: 'data' },
   },
   inputs: [
     { key: 'text', name: '文本', dataType: StringType, required: true },
@@ -107,7 +109,6 @@ const ifManifest = manifest({
   metadata: {
     name: '条件分支',
     category: 'flow',
-    catalog: { exposure: 'advanced', category: 'workflow' },
   },
   inputs: [{ key: 'value', name: '输入值', dataType: StringType, required: true }],
   outputs: [],
@@ -124,7 +125,6 @@ const reviewManifest = manifest({
   metadata: {
     name: '人工审批',
     category: 'flow',
-    catalog: { exposure: 'public', category: 'workflow' },
   },
   inputs: [{ key: 'content', name: '待审核内容', dataType: StringType, required: true }],
   outputs: [{ key: 'content', name: '审核内容', dataType: StringType }],
@@ -138,7 +138,6 @@ const subworkflowManifest = manifest({
   metadata: {
     name: '子流程',
     category: 'flow',
-    catalog: { exposure: 'internal', category: 'advanced' },
   },
   inputs: [],
   outputs: [],
@@ -152,7 +151,6 @@ const iterationManifest = manifest({
   metadata: {
     name: '逐项处理',
     category: 'flow',
-    catalog: { exposure: 'internal', category: 'advanced' },
   },
   inputs: [{ key: 'items', name: '集合', dataType: array(AnyType), required: true }],
   outputs: [],
@@ -165,14 +163,19 @@ const controlActionManifest = manifest({
   metadata: {
     name: '带控制出口',
     category: 'data',
-    catalog: { exposure: 'public', category: 'data' },
   },
   inputs: [],
   outputs: [],
   controlOutputs: [{ key: 'done', name: '完成' }],
   config: [],
 });
+const publicActionManifest = {
+  ...formatManifest,
+  type: 'test.format',
+  metadata: { name: '测试文本处理', category: 'data' as const },
+};
 const manifests = [
+  publicActionManifest,
   textManifest,
   formatManifest,
   ifManifest,
@@ -262,8 +265,21 @@ function bodyOf(definition: WorkflowDefinition) {
   return owner.composite.body;
 }
 
-function setup(initial = workflow()) {
+function setup(initial = workflow(), catalogEntries?: readonly NodeCatalogEntry[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(
+    nodeCatalogKeys.list,
+    catalogEntries ?? [
+      createTestCatalogEntry(textManifest),
+      createTestCatalogEntry(publicActionManifest),
+      createTestCatalogEntry(formatManifest, { exposure: 'internal' }),
+      createTestCatalogEntry(ifManifest, { exposure: 'advanced' }),
+      createTestCatalogEntry(reviewManifest),
+      createTestCatalogEntry(iterationManifest, { exposure: 'internal' }),
+      createTestCatalogEntry(subworkflowManifest, { exposure: 'internal' }),
+      createTestCatalogEntry(controlActionManifest),
+    ],
+  );
   client.setQueryData(nodeTypeKeys.list, manifests);
   const rootMoves: Viewport[] = [];
   let current = initial;
@@ -387,8 +403,9 @@ describe('图导航模型', () => {
     ]);
   });
 
-  it('Body 目录只保留没有控制出口的 Action', () => {
+  it('Body Runtime 能力过滤只保留没有控制出口的 Action', () => {
     expect(manifests.filter(isIterationBodyAction).map((item) => item.type)).toEqual([
+      'test.format',
       'ai.text_generate',
       'data.format_text',
     ]);
@@ -441,18 +458,17 @@ describe('Iteration Body 画布', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '添加节点' }));
     expect(await screen.findByRole('button', { name: '添加 文本生成 · v1' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '添加 文本格式化 · v1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '添加 测试文本处理 · v1' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '添加 文本格式化 · v1' })).toBeNull();
     expect(screen.queryByRole('button', { name: '添加 条件分支 · v1' })).toBeNull();
     expect(screen.queryByRole('button', { name: '添加 人工审批 · v1' })).toBeNull();
     expect(screen.queryByRole('button', { name: '添加 逐项处理 · v1' })).toBeNull();
     expect(screen.queryByRole('button', { name: '添加 带控制出口 · v1' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '添加 文本格式化 · v1' }));
+    fireEvent.click(screen.getByRole('button', { name: '添加 测试文本处理 · v1' }));
     fireEvent.click(screen.getByRole('button', { name: '添加节点' }));
     fireEvent.click(await screen.findByRole('button', { name: '添加 文本生成 · v1' }));
 
-    const addedFormat = bodyOf(view.definition()).nodes.find(
-      (item) => item.type === 'data.format_text' && item.id !== 'format',
-    );
+    const addedFormat = bodyOf(view.definition()).nodes.find((item) => item.type === 'test.format');
     const addedText = bodyOf(view.definition()).nodes.find(
       (item) => item.type === 'ai.text_generate',
     );
@@ -573,7 +589,7 @@ describe('Iteration Body 画布', () => {
       bodyOf(reloaded.definition)
         .nodes.map((item) => item.name)
         .sort(),
-    ).toEqual(['局部格式', '文本格式化'].sort());
+    ).toEqual(['局部格式', '测试文本处理'].sort());
     expect(bodyOf(reloaded.definition).outputs[0]).toMatchObject({
       name: 'result',
       source: { nodeId: 'format', outputKey: 'text' },
@@ -686,6 +702,35 @@ describe('多层 Definition Location', () => {
 });
 
 describe('SubWorkflow 画布', () => {
+  it('独立 public Entry 可创建 internal Runtime 类型的内嵌图，名称与 identity 来自 Entry', async () => {
+    const entry = createTestCatalogEntry(subworkflowManifest, {
+      id: 'fixture-composite-entry',
+      metadata: { name: '测试组合入口' },
+      creation: {
+        composite: {
+          kind: 'subworkflow',
+          graph: graphOf([node('format', formatManifest, '预配置内部节点')]),
+        },
+      },
+    });
+    const view = setup(graphOf([]), [entry]);
+    fireEvent.click(screen.getByRole('button', { name: '添加节点' }));
+    fireEvent.click(await screen.findByRole('button', { name: '添加 测试组合入口 · v1' }));
+    const created = view.definition().nodes[0]!;
+    expect(created).toMatchObject({
+      type: 'flow.subworkflow',
+      typeVersion: 1,
+      name: '测试组合入口',
+    });
+    expect(created).not.toHaveProperty('entryId');
+    expect(created.composite).toEqual(entry.creation.composite);
+    expect(created.composite).not.toBe(entry.creation.composite);
+    expect(flowNode(created.id)?.selected).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '进入' }));
+    expect(flowNode('format')?.data).toMatchObject({ name: '预配置内部节点' });
+    expect(document.querySelector('[data-graph-location="graph"]')).toBeTruthy();
+  });
+
   it('进入子图后编辑写回根 Definition，并恢复视口与选择', () => {
     const view = setup({
       inputs: [],

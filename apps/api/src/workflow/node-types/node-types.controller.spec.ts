@@ -1,9 +1,12 @@
 import 'reflect-metadata';
 import {
-  isNodeVisibleInCatalog,
   nodeTypeManifestListSchema,
+  nodeCatalogEntryListSchema,
+  isNodeCatalogEntryVisible,
+  type NodeCatalogEntry,
   type NodeTypeManifest,
 } from '@dramaflow/contracts';
+import { NodeCatalog } from '@dramaflow/server';
 import { NodeRegistry } from '@dramaflow/workflow';
 import { UnauthorizedException, type INestApplication } from '@nestjs/common';
 import { APP_GUARD, Reflector } from '@nestjs/core';
@@ -22,7 +25,10 @@ afterEach(async () => {
   app = undefined;
 });
 
-async function setup(registry?: NodeRegistry) {
+async function setup(
+  registry?: NodeRegistry,
+  entries: NodeCatalogEntry[] = [],
+) {
   // 只替换会话读取，保留真实全局 AuthGuard 与控制器路由。
   const requireSession = vi.fn(async () => ({ user: { role: 'user' } }));
   const builder = Test.createTestingModule({
@@ -38,7 +44,12 @@ async function setup(registry?: NodeRegistry) {
       },
     ],
   });
-  if (registry) builder.overrideProvider(NodeRegistry).useValue(registry);
+  if (registry) {
+    builder.overrideProvider(NodeRegistry).useValue(registry);
+    builder
+      .overrideProvider(NodeCatalog)
+      .useValue(new NodeCatalog(entries, registry));
+  }
   const module = await builder.compile();
   app = module.createNestApplication();
   app.setGlobalPrefix('api/v1');
@@ -47,6 +58,7 @@ async function setup(registry?: NodeRegistry) {
     app,
     requireSession,
     registry: module.get<NodeRegistry>(NodeRegistry),
+    catalog: module.get<NodeCatalog>(NodeCatalog),
   };
 }
 
@@ -72,30 +84,10 @@ describe('节点类型目录 API', () => {
       .expect('Cache-Control', 'no-store');
     const manifests = nodeTypeManifestListSchema.parse(response.body);
     expect(
-      manifests.map(({ type, metadata }) => [type, metadata.catalog]),
-    ).toEqual([
-      ['ai.text_generate', { exposure: 'public', category: 'ai' }],
-      ['data.format_text', { exposure: 'public', category: 'data' }],
-      ['flow.if', { exposure: 'advanced', category: 'workflow' }],
-      ['flow.iteration', { exposure: 'internal', category: 'advanced' }],
-      ['flow.subworkflow', { exposure: 'internal', category: 'advanced' }],
-      ['flow.human_review', { exposure: 'public', category: 'workflow' }],
-    ]);
-    expect(
-      manifests
-        .filter((manifest) => isNodeVisibleInCatalog(manifest))
-        .map(({ type }) => type),
-    ).toEqual(['ai.text_generate', 'data.format_text', 'flow.human_review']);
-    expect(
-      manifests
-        .filter((manifest) => isNodeVisibleInCatalog(manifest, 'advanced'))
-        .map(({ type }) => type),
-    ).toEqual([
-      'ai.text_generate',
-      'data.format_text',
-      'flow.if',
-      'flow.human_review',
-    ]);
+      manifests.every(
+        (manifest) => !Object.hasOwn(manifest.metadata, 'catalog'),
+      ),
+    ).toBe(true);
     expect(response.body).toMatchObject([
       { type: 'ai.text_generate', version: 1, executionKind: 'action' },
       {
@@ -176,7 +168,6 @@ describe('节点类型目录 API', () => {
       metadata: {
         name: '测试节点',
         category: 'data',
-        catalog: { exposure: 'internal', category: 'advanced' },
       },
       inputs: [],
       outputs: [],
@@ -201,6 +192,48 @@ describe('节点类型目录 API', () => {
       /configSchema|inputSchema|outputSchema|execute|serverCredential|test-only-provider-key/,
     );
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('独立 Entry API 保留产品身份、分类、创建描述与精确 Runtime target', async () => {
+    const context = await setup();
+    const response = await request(context.app.getHttpServer())
+      .get('/api/v1/workflow/node-catalog')
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+    const entries = nodeCatalogEntryListSchema.parse(response.body);
+    expect(
+      entries.map(({ id, target, exposure }) => [id, target.type, exposure]),
+    ).toEqual([
+      ['text-generation', 'ai.text_generate', 'public'],
+      ['text-formatting', 'data.format_text', 'internal'],
+      ['conditional-branch', 'flow.if', 'advanced'],
+      ['iteration', 'flow.iteration', 'internal'],
+      ['subworkflow', 'flow.subworkflow', 'internal'],
+      ['human-review', 'flow.human_review', 'public'],
+    ]);
+    expect(
+      entries
+        .filter((entry) => isNodeCatalogEntryVisible(entry))
+        .map(({ id }) => id),
+    ).toEqual(['text-generation', 'human-review']);
+    expect(
+      entries
+        .filter((entry) => isNodeCatalogEntryVisible(entry, 'advanced'))
+        .map(({ id }) => id),
+    ).toEqual(['text-generation', 'conditional-branch', 'human-review']);
+    expect(entries.every((entry) => entry.creation !== undefined)).toBe(true);
+  });
+
+  it('Entry API 同样鉴权，拒绝时不读取产品目录', async () => {
+    const context = await setup();
+    context.requireSession.mockRejectedValue(
+      new UnauthorizedException('请先登录'),
+    );
+    const list = vi.spyOn(context.catalog, 'list');
+    await request(context.app.getHttpServer())
+      .get('/api/v1/workflow/node-catalog')
+      .expect(401);
+    expect(list).not.toHaveBeenCalled();
   });
 
   it('目录没有写入或执行接口', async () => {

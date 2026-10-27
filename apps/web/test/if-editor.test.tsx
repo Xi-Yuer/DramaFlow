@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { createTestCatalogEntry } from './fixtures/node-catalog';
+import { nodeCatalogKeys } from '../src/features/workflow/node-catalog/node-catalog-api';
 import { App, Button, ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactFlowProvider, type Node, type Edge, type ReactFlowProps } from '@xyflow/react';
@@ -64,6 +66,14 @@ function setup(definition = ifWorkflow(), locked = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
+  client.setQueryData(
+    nodeCatalogKeys.list,
+    ifCatalog.map((manifest) =>
+      createTestCatalogEntry(manifest, {
+        exposure: manifest.executionKind === 'control' ? 'advanced' : 'public',
+      }),
+    ),
+  );
   client.setQueryData(nodeTypeKeys.list, ifCatalog);
   function Editor() {
     draft = useWorkflowDraft({ ...workflow, draft: definition });

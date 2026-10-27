@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { MemorySaver, Command, interrupt } from '@langchain/langgraph';
 import {
   StringType,
-  isNodeVisibleInCatalog,
   NumberType,
   type RuntimeValue,
   type NodeDefinition,
@@ -28,9 +27,6 @@ describe('正式 SubWorkflow Runtime v1', () => {
     '固定一次调用，原类型输出和正式身份（maxConcurrency=%s）',
     async (concurrency) => {
       const f = subworkflowRuntimeFixture();
-      expect(
-        isNodeVisibleInCatalog(f.registry.get('flow.subworkflow', 1).manifest, 'advanced'),
-      ).toBe(false);
       expect(validateWorkflowForPublish(f.definition, f.registry)).toHaveLength(2);
       const result = await execute(f, concurrency);
       expect(new DefaultWorkflowOutputResolver().resolve(f.definition, result)).toEqual({

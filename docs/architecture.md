@@ -254,20 +254,24 @@ unsafe 注册标准 beforeunload，safe / 卸载时解除。不改写 Router / h
 
 ### Node Catalog 产品暴露
 
-NodeRegistry 负责注册可供系统解析与执行的类型；Node Catalog 负责产品创建入口；WorkflowDefinition 只持久化实例。Manifest 的 `metadata.catalog` 包含 `exposure: public | advanced | internal` 与产品 `category: ai | data | workflow | advanced`（AI 能力、数据处理、工作流控制、高级能力）。原 `metadata.category` 继续用于节点视觉分类，两者均不决定 Compiler / Runtime 准入。未声明 Catalog metadata 的类型不自动进入任何 Picker surface。
+NodeRegistry 负责 Runtime 类型声明与实现；独立 NodeCatalog 负责产品创建条目；WorkflowDefinition 只持久化标准实例。`NodeCatalogEntry` 包含稳定 `id`、显示 `metadata`、产品 `category`、`exposure`、精确 `target: { type, version }` 与纯数据 `creation: { config?, inputs?, composite? }`。Entry ID 不充当 Runtime 类型身份，多个 Entry 可以 target 同一类型版本。生产条目随部署显式装配；新增 Runtime 注册不会自动生成 Entry。
 
-| 当前生产 NodeType     | 暴露     | 产品分类   |
-| --------------------- | -------- | ---------- |
-| `ai.text_generate@1`  | public   | AI 能力    |
-| `data.format_text@1`  | public   | 数据处理   |
-| `flow.human_review@1` | public   | 工作流控制 |
-| `flow.if@1`           | advanced | 工作流控制 |
-| `flow.iteration@1`    | internal | 高级能力   |
-| `flow.subworkflow@1`  | internal | 高级能力   |
+| Entry ID             | Runtime target        | 暴露     | 产品分类   |
+| -------------------- | --------------------- | -------- | ---------- |
+| `text-generation`    | `ai.text_generate@1`  | public   | AI 能力    |
+| `text-formatting`    | `data.format_text@1`  | internal | 数据处理   |
+| `human-review`       | `flow.human_review@1` | public   | 工作流控制 |
+| `conditional-branch` | `flow.if@1`           | advanced | 工作流控制 |
+| `iteration`          | `flow.iteration@1`    | internal | 高级能力   |
+| `subworkflow`        | `flow.subworkflow@1`  | internal | 高级能力   |
 
-`GET /api/v1/workflow/node-types` 保持认证、no-store 与完整 JSON Manifest 响应，包含所有暴露级别，供已有节点渲染、Inspector、端口及 nested graph 编辑使用。Web 普通 Picker 通过共享 `isNodeVisibleInCatalog` 策略只显示 public；添加回调也只接受当前过滤目录中的精确类型版本，并继续叠加 Body 等局部图能力约束。策略支持 advanced surface（public + advanced），当前没有 Advanced Mode UI；internal 始终不供 Picker 创建。该可见性不是权限或 Definition 校验 gate。
+`GET /api/v1/workflow/node-types` 继续返回完整 Runtime Manifest，供已有节点渲染、Inspector、端口及 nested graph 编辑使用。Manifest 保留 Runtime 类型版本、端口、配置字段、executionKind、capabilities 与显示信息，不包含产品 exposure 或完整 GraphDefinition。独立 `GET /api/v1/workflow/node-catalog` 返回 Entry；两者均认证、no-store。Catalog 装配校验唯一 Entry ID、精确目标版本与实例 contract，返回独立数据副本，不公开服务实现。
 
-已有 Iteration / SubWorkflow 可继续加载、选择、Inspector 编辑、进入嵌套图、保存与发布；发布及运行仍遵循各 Strategy 的既有能力限制。没有删除类型、扩展嵌套能力或引入业务 Composite Template。
+Web 普通 Picker 使用 `isNodeCatalogEntryVisible` 只显示 public，并按 Entry ID 选择；创建回调重新查找当前条目及其精确 target Manifest，继续叠加 Body 等局部图能力约束。两份查询独立，Entry 失败只禁用创建，已有节点仍使用完整 Manifest 编辑。advanced surface 策略可表达 public + advanced，当前没有模式切换 UI；internal 不供普通 Picker 创建。`data.format_text` 用于确定性 Runtime / 验收，不在普通 Picker 展示。
+
+共享 `instantiateNodeCatalogEntry` 负责创建标准 NodeDefinition：Manifest 配置默认值由 Entry config 显式覆盖，inputs 来自 Entry（缺省为空），composite 来自 Entry；调用方只提供实例 ID、位置与可选名称覆盖。完整输入数据经深复制与既有 NodeDefinition contract 校验，子图 copy-on-create 后归当前父 Draft，来源与不同实例不共享可变数据。Entry 后续变化不更新已有节点；实例不保存 Entry ID 或来源引用。Draft / Publish / Compiler / Runtime 继续使用已有协议与能力门禁，不读取 Catalog。
+
+已有 Iteration / SubWorkflow 可继续加载、选择、Inspector 编辑、进入嵌套图、保存与发布。没有数据库 Template / TemplateVersion、共享子图引用或真实业务 Composite Entry；也未开放 Iteration → SubWorkflow 等嵌套执行能力。
 
 ### Web Human Review
 

@@ -34,3 +34,5 @@ export * from './workflow/run/execution-tree.js';
 export * from './node/subworkflow.js';
 export * from './node/composite.js';
 export * from './graph/traversal.js';
+
+export * from './node/catalog.js';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { nodeTypeManifestSchema } from '@dramaflow/contracts';
-import { createWorkflowNode } from '../src/features/workflow/node-catalog/create-workflow-node';
+import { createTestWorkflowNode as createWorkflowNode } from './fixtures/node-catalog';
 
 const manifest = nodeTypeManifestSchema.parse({
   type: 'data.transform',

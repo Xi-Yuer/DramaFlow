@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { nodeCatalogKeys } from '../src/features/workflow/node-catalog/node-catalog-api';
 import { App, Button, ConfigProvider } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactFlowProvider, type Edge, type Node, type ReactFlowProps } from '@xyflow/react';
@@ -222,6 +223,7 @@ function setupCanvas({
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
+  client.setQueryData(nodeCatalogKeys.list, []);
   client.setQueryData(nodeTypeKeys.list, catalog);
 
   function Harness() {
@@ -613,6 +615,7 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
     const client = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity, retry: false } },
     });
+    client.setQueryData(nodeCatalogKeys.list, []);
     client.setQueryData(nodeTypeKeys.list, catalog);
 
     function LiveRuntimeEditor() {

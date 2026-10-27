@@ -23,22 +23,11 @@ export const nodeCategorySchema = z.enum([
   'output',
 ]);
 
-// Catalog 是产品创建策略；缺少声明的 Runtime 类型不自动暴露。
-export const nodeCatalogExposureSchema = z.enum(['public', 'advanced', 'internal']);
-export const nodeCatalogCategorySchema = z.enum(['ai', 'data', 'workflow', 'advanced']);
-export const nodeCatalogMetadataSchema = z
-  .object({
-    exposure: nodeCatalogExposureSchema,
-    category: nodeCatalogCategorySchema,
-  })
-  .strict();
-
 export const nodeMetadataSchema = z
   .object({
     name: displayNameSchema,
     description: descriptionSchema.optional(),
     category: nodeCategorySchema,
-    catalog: nodeCatalogMetadataSchema.optional(),
     icon: workflowIdentifierSchema.optional(),
   })
   .strict();
@@ -322,17 +311,3 @@ export type FieldUI = z.infer<typeof fieldUISchema>;
 export type ConfigFieldDefinition = z.infer<typeof configFieldDefinitionSchema>;
 export type NodeUI = z.infer<typeof nodeUISchema>;
 export type NodeTypeManifest = z.infer<typeof nodeTypeManifestSchema>;
-
-export type NodeCatalogMetadata = z.infer<typeof nodeCatalogMetadataSchema>;
-export type NodeCatalogCategory = z.infer<typeof nodeCatalogCategorySchema>;
-export type NodeCatalogExposure = z.infer<typeof nodeCatalogExposureSchema>;
-export type NodeCatalogSurface = 'standard' | 'advanced';
-
-// 仅供产品创建入口使用，不能用作 Definition / Publish / Runtime 的能力校验。
-export function isNodeVisibleInCatalog(
-  manifest: NodeTypeManifest,
-  surface: NodeCatalogSurface = 'standard',
-): manifest is NodeTypeManifest & { metadata: { catalog: NodeCatalogMetadata } } {
-  const exposure = manifest.metadata.catalog?.exposure;
-  return exposure === 'public' || (surface === 'advanced' && exposure === 'advanced');
-}

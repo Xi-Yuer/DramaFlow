@@ -1,5 +1,7 @@
-import { requireComposite } from '../src/features/workflow/iteration/inputs/composite';
 // @vitest-environment happy-dom
+import { createTestCatalogEntry } from './fixtures/node-catalog';
+import { nodeCatalogKeys } from '../src/features/workflow/node-catalog/node-catalog-api';
+import { requireComposite } from '../src/features/workflow/iteration/inputs/composite';
 import { useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { App, ConfigProvider } from 'antd';
@@ -91,7 +93,6 @@ const formatManifest = manifest({
   metadata: {
     name: '文本格式化',
     category: 'data',
-    catalog: { exposure: 'public', category: 'data' },
   },
   inputs: [
     { key: 'text', name: '文本', dataType: StringType, required: true },
@@ -116,7 +117,6 @@ const iterationManifest = manifest({
   metadata: {
     name: '逐项处理',
     category: 'flow',
-    catalog: { exposure: 'internal', category: 'advanced' },
   },
   inputs: [
     { key: 'items', name: '集合', dataType: { kind: 'array', itemType: AnyType }, required: true },
@@ -124,7 +124,12 @@ const iterationManifest = manifest({
   outputs: [],
   config: [],
 });
-const manifests = [formatManifest, iterationManifest];
+const publicActionManifest = {
+  ...formatManifest,
+  type: 'test.format',
+  metadata: { name: '测试文本处理', category: 'data' as const },
+};
+const manifests = [publicActionManifest, formatManifest, iterationManifest];
 
 function iteration(extra: Record<string, unknown> = {}): NodeDefinition {
   return {
@@ -484,6 +489,11 @@ describe('Iteration Inspector 与 Body 画布', () => {
     const client = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity, retry: false } },
     });
+    client.setQueryData(nodeCatalogKeys.list, [
+      createTestCatalogEntry(publicActionManifest),
+      createTestCatalogEntry(formatManifest, { exposure: 'internal' }),
+      createTestCatalogEntry(iterationManifest, { exposure: 'internal' }),
+    ]);
     client.setQueryData(nodeTypeKeys.list, manifests);
     let current = initial;
     function Editor() {
@@ -628,9 +638,9 @@ describe('Iteration Inspector 与 Body 画布', () => {
     expect(JSON.stringify(boundary?.data)).not.toContain('current_item');
 
     fireEvent.click(screen.getByRole('button', { name: '添加节点' }));
-    fireEvent.click(await screen.findByRole('button', { name: '添加 文本格式化 · v1' }));
+    fireEvent.click(await screen.findByRole('button', { name: '添加 测试文本处理 · v1' }));
     const format = requireComposite(owner(view.definition())).body.nodes.find(
-      (node) => node.type === 'data.format_text',
+      (node) => node.type === 'test.format',
     );
     expect(format?.config).toEqual({ template: '{{text}}-{{index}}' });
     expect(

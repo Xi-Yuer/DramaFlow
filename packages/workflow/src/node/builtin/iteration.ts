@@ -13,7 +13,6 @@ export function createIterationNodeType(): NodeDeclaration {
       executionKind: 'composite',
       portDerivation: 'iteration',
       metadata: {
-        catalog: { exposure: 'internal', category: 'advanced' },
         name: '逐项处理',
         category: 'flow',
         description: '固定集合中每个元素调用局部 body，按原位置聚合声明输出；空集合不执行 body',

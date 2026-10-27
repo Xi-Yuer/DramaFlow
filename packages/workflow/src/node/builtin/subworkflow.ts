@@ -11,7 +11,6 @@ export function createSubworkflowNodeType(): NodeDeclaration {
       executionKind: 'composite',
       portDerivation: 'subworkflow',
       metadata: {
-        catalog: { exposure: 'internal', category: 'advanced' },
         name: '子流程',
         category: 'flow',
         description: '在当前版本内固定调用一次普通 Action 子图',

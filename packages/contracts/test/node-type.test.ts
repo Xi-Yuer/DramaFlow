@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   configFieldDefinitionSchema,
-  isNodeVisibleInCatalog,
   dataTypeSchema,
   inputPortDefinitionSchema,
   isTypeAssignable,
@@ -211,37 +210,6 @@ describe('配置字段声明', () => {
 });
 
 describe('NodeTypeManifest 公开协议', () => {
-  it('Catalog 暴露和产品分类是独立 JSON metadata；未声明类型默认不可创建', () => {
-    const source = manifest();
-    const undeclared = nodeTypeManifestSchema.parse(source);
-    expect(isNodeVisibleInCatalog(undeclared)).toBe(false);
-    expect(isNodeVisibleInCatalog(undeclared, 'advanced')).toBe(false);
-    for (const exposure of ['public', 'advanced', 'internal'] as const) {
-      for (const category of ['ai', 'data', 'workflow', 'advanced'] as const) {
-        const value = {
-          ...source,
-          metadata: { ...source.metadata, catalog: { exposure, category } },
-        };
-        const parsed = nodeTypeManifestSchema.parse(JSON.parse(JSON.stringify(value)));
-        expect(parsed).toEqual(value);
-        expect(isNodeVisibleInCatalog(parsed)).toBe(exposure === 'public');
-        expect(isNodeVisibleInCatalog(parsed, 'advanced')).toBe(exposure !== 'internal');
-      }
-    }
-    for (const catalog of [
-      {},
-      { exposure: 'public' },
-      { exposure: 'unknown', category: 'data' },
-      { exposure: 'public', category: 'runtime' },
-      { exposure: 'public', category: 'data', execute: true },
-    ]) {
-      expect(
-        nodeTypeManifestSchema.safeParse({ ...source, metadata: { ...source.metadata, catalog } })
-          .success,
-      ).toBe(false);
-    }
-  });
-
   it('输出端口可声明存储策略，省略时保持省略，由 Runtime 采用 auto', () => {
     const port = { key: 'video', name: '视频', dataType: { kind: 'named', name: 'media.video' } };
     expect(outputPortDefinitionSchema.parse(port)).toEqual(port);

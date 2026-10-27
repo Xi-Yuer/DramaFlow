@@ -12,7 +12,6 @@ export const humanReviewManifest: NodeTypeManifest = {
   metadata: {
     name: '人工审批',
     category: 'flow',
-    catalog: { exposure: 'public', category: 'workflow' },
     description: '审核文本并返回通过或拒绝结果',
   },
   inputs: [{ key: 'content', name: '待审核内容', dataType: StringType, required: true }],

@@ -27,7 +27,6 @@ export function createHumanReviewNodeType(): NodeDeclaration {
       version: 1,
       executionKind: 'interaction',
       metadata: {
-        catalog: { exposure: 'public', category: 'workflow' },
         name: '人工审批',
         category: 'flow',
         description: '审核文本并返回通过或拒绝结果',

@@ -6,7 +6,6 @@ import {
   NumberType,
   ROOT_EXECUTION_SCOPE_KEY,
   StringType,
-  isNodeVisibleInCatalog,
   type NodeDefinition,
   type RuntimeValue,
 } from '@dramaflow/contracts';
@@ -35,9 +34,6 @@ describe('正式 Iteration Send + body subgraph', () => {
     '%i items 完整、有序且隔离，实际 occurrence / attempt 正确',
     async (count) => {
       const f = iterationRuntimeFixture(count);
-      expect(isNodeVisibleInCatalog(f.registry.get('flow.iteration', 1).manifest, 'advanced')).toBe(
-        false,
-      );
       const compiled = await f.createCompiler().compile(f.definition, f.run);
       const result = workflowStateSchema.parse(await compiled.invoke(f.initial(), f.config));
       const iteration = result.outputs.iteration!;
