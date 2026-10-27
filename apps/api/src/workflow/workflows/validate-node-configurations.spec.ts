@@ -14,9 +14,7 @@ import { validateWorkflowNodeConfigurations } from './validate-node-configuratio
 
 const modelConfigurationId = 'da054b80-9d86-4d23-a1c9-31bc416f91f1';
 
-function definition(
-  config: WorkflowDefinition['nodes'][number]['config'],
-): WorkflowDefinition {
+function definition(config: WorkflowDefinition['nodes'][number]['config']): WorkflowDefinition {
   return {
     inputs: [],
     nodes: [
@@ -43,24 +41,17 @@ function definition(
 
 describe('Draft 配置字段边界', () => {
   it('正式 Human Review 的完整或未完成草稿均可通过保存前配置边界', () => {
-    const types = new NodeRegistry([
-      createTextGenerationNodeType(),
-      createHumanReviewNodeType(),
-    ]);
+    const types = new NodeRegistry([createTextGenerationNodeType(), createHumanReviewNodeType()]);
     for (const complete of [false, true]) {
       const draft = definition(complete ? { instruction: '核对人物' } : {});
       const node = draft.nodes[0]!;
       node.type = 'flow.human_review';
       node.name = '人工审核标题';
-      node.inputs = complete
-        ? { content: { type: 'constant', value: '待审核文本' } }
-        : {};
+      node.inputs = complete ? { content: { type: 'constant', value: '待审核文本' } } : {};
       draft.outputs = [];
       const request = { expectedRevision: 1, definition: draft };
       expect(saveWorkflowDraftRequestSchema.parse(request)).toEqual(request);
-      expect(() =>
-        validateWorkflowNodeConfigurations(draft, types),
-      ).not.toThrow();
+      expect(() => validateWorkflowNodeConfigurations(draft, types)).not.toThrow();
     }
   });
   const registry = new NodeRegistry([createTextGenerationNodeType()]);
@@ -86,25 +77,18 @@ describe('Draft 配置字段边界', () => {
   it('Draft 可暂缺模型和必填输入，完整校验只在发布发生', () => {
     const draft = definition({});
     draft.nodes[0]!.inputs = {};
-    expect(() =>
-      validateWorkflowNodeConfigurations(draft, registry),
-    ).not.toThrow();
+    expect(() => validateWorkflowNodeConfigurations(draft, registry)).not.toThrow();
   });
 
   it('未知类型可保留在编辑草稿中', () => {
     const draft = definition({ arbitrary: '编辑中' });
     draft.nodes[0]!.type = 'test.unregistered';
-    expect(() =>
-      validateWorkflowNodeConfigurations(draft, registry),
-    ).not.toThrow();
+    expect(() => validateWorkflowNodeConfigurations(draft, registry)).not.toThrow();
   });
 });
 
 it('Iteration Draft 不要求完成映射，但递归拒绝 body 与 composite config 中的额外密钥字段', () => {
-  const types = new NodeRegistry([
-    createIterationNodeType(),
-    createTextGenerationNodeType(),
-  ]);
+  const types = new NodeRegistry([createIterationNodeType(), createTextGenerationNodeType()]);
   const body = definition({});
   const draft: WorkflowDefinition = {
     inputs: [],

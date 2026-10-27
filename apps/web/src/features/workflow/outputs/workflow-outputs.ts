@@ -8,7 +8,7 @@ import {
   type WorkflowOutputSource,
 } from '@dramaflow/contracts';
 import type { Edge, Node, XYPosition } from '@xyflow/react';
-import { removeTemplateNodeSources } from '../inputs/template-input';
+import { removeTemplateNodeSources } from '../inputs/template/binding';
 import { findResolvedNodePorts } from '../ports/resolve-workflow-node-ports';
 
 export const END_INPUT_HANDLE = 'workflow-output';

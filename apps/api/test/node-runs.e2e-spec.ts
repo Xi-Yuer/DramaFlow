@@ -39,8 +39,7 @@ import { z } from 'zod';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test'
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test'
 )
   throw new Error('NodeRun 集成测试仅允许在 DramaFlow 的隔离测试数据库运行');
 
@@ -82,10 +81,7 @@ afterAll(async () => {
   await database.onModuleDestroy();
 });
 
-async function createParentRun(
-  owner = ownerId,
-  project = projectId,
-): Promise<string> {
+async function createParentRun(owner = ownerId, project = projectId): Promise<string> {
   const repository = await workflowRuns.forProject(owner, project);
   const run = await repository.create({
     projectId: project,
@@ -112,11 +108,7 @@ async function createRootAttempt(
 
 async function videoFixture() {
   const workflowRunId = await createParentRun();
-  const repository = await repositories.forRun(
-    ownerId,
-    projectId,
-    workflowRunId,
-  );
+  const repository = await repositories.forRun(ownerId, projectId, workflowRunId);
   const node: NodeDefinition = {
     id: 'video_1',
     type: 'video.image_to_video',
@@ -173,11 +165,7 @@ async function videoFixture() {
   const executor = new DefaultNodeExecutor(
     registry,
     createBindingResolver(),
-    new DefaultRuntimeValueCodec(
-      { resolve },
-      { write },
-      new DefaultDataStoragePolicyResolver(),
-    ),
+    new DefaultRuntimeValueCodec({ resolve }, { write }, new DefaultDataStoragePolicyResolver()),
     repository,
   );
   const workflow: WorkflowDefinition = {
@@ -363,15 +351,13 @@ describe('真实 PostgreSQL occurrence 身份与 attempt 分配', () => {
       ),
     );
     for (const [index, occurrence] of [root, child].entries()) {
-      expect(
-        rows[index]!.map((row) => row.attempt).sort((a, b) => a - b),
-      ).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(rows[index]!.map((row) => row.attempt).sort((a, b) => a - b)).toEqual([
+        1, 2, 3, 4, 5, 6, 7, 8,
+      ]);
       expect(new Set(rows[index]!.map((row) => row.occurrenceId))).toEqual(
         new Set([occurrence.id]),
       );
-      expect(
-        rows[index]!.every((row) => row.scopeKey === occurrence.scopeKey),
-      ).toBe(true);
+      expect(rows[index]!.every((row) => row.scopeKey === occurrence.scopeKey)).toBe(true);
     }
     expect(await second.getOrCreateOccurrence(identity)).toEqual(root);
     expect(await db.nodeOccurrence.count({ where: { workflowRunId } })).toBe(2);
@@ -390,11 +376,7 @@ describe('真实 PostgreSQL occurrence 身份与 attempt 分配', () => {
 
   it('occurrence 不能跨 node / Run 拼接，数据库外键独立于仓储校验', async () => {
     const workflowRunId = await createParentRun();
-    const repository = await repositories.forRun(
-      ownerId,
-      projectId,
-      workflowRunId,
-    );
+    const repository = await repositories.forRun(ownerId, projectId, workflowRunId);
     const occurrence = await repository.getOrCreateOccurrence({
       workflowRunId,
       nodeId: 'A',
@@ -454,9 +436,7 @@ describe('真实 PostgreSQL Human Review 重入审计', () => {
       status: 'running',
     });
     expect(other.id).not.toBe(root.id);
-    expect(
-      await f.repository.getOrCreateHumanReviewRunning(f.input),
-    ).toMatchObject({
+    expect(await f.repository.getOrCreateHumanReviewRunning(f.input)).toMatchObject({
       id: root.id,
       occurrenceId: root.occurrenceId,
       attempt: 1,
@@ -477,22 +457,19 @@ describe('真实 PostgreSQL Human Review 重入审计', () => {
       ),
     );
     expect(new Set(rows.map((row) => row.id)).size).toBe(1);
-    expect(new Set(rows.map((row) => row.occurrenceId))).toEqual(
-      new Set([f.input.occurrenceId]),
-    );
-    expect(
-      rows.every((row) => row.attempt === 1 && row.status === 'running'),
-    ).toBe(true);
+    expect(new Set(rows.map((row) => row.occurrenceId))).toEqual(new Set([f.input.occurrenceId]));
+    expect(rows.every((row) => row.attempt === 1 && row.status === 'running')).toBe(true);
     const id = rows[0]!.id;
     await f.repository.updateInputs(id, reviewInput);
     await expect(other.updateInputs(id, reviewInput)).rejects.toThrow();
     await f.runs.markWaiting(f.run.id);
-    expect(await db.nodeRun.findUniqueOrThrow({ where: { id } })).toMatchObject(
-      { status: 'running', inputs: reviewInput, outputs: null, error: null },
-    );
-    await expect(other.getOrCreateHumanReviewRunning(f.input)).rejects.toThrow(
-      'claim',
-    );
+    expect(await db.nodeRun.findUniqueOrThrow({ where: { id } })).toMatchObject({
+      status: 'running',
+      inputs: reviewInput,
+      outputs: null,
+      error: null,
+    });
+    await expect(other.getOrCreateHumanReviewRunning(f.input)).rejects.toThrow('claim');
     await f.runs.claimWaitingForResume(f.run.id);
     expect(await other.getOrCreateHumanReviewRunning(f.input)).toMatchObject({
       id,
@@ -512,16 +489,13 @@ describe('真实 PostgreSQL Human Review 重入审计', () => {
       const f = await reviewFixture();
       const first = await f.repository.getOrCreateHumanReviewRunning(f.input);
       await f.repository.updateInputs(first.id, reviewInput);
-      if (terminal === 'completed')
-        await f.repository.markCompleted(first.id, {});
+      if (terminal === 'completed') await f.repository.markCompleted(first.id, {});
       else
         await f.repository.markFailed(first.id, {
           stage: 'execute',
           message: '决策无效',
         });
-      await expect(
-        f.repository.getOrCreateHumanReviewRunning(f.input),
-      ).rejects.toThrow('已结束');
+      await expect(f.repository.getOrCreateHumanReviewRunning(f.input)).rejects.toThrow('已结束');
       expect(
         await db.nodeRun.count({
           where: { workflowRunId: f.run.id, nodeId: 'R1' },
@@ -549,15 +523,13 @@ describe('真实 PostgreSQL Human Review 重入审计', () => {
         workflowRunId: randomUUID(),
       }),
     ).rejects.toThrow('不匹配');
-    await expect(
-      repositories.forRun(otherId, projectId, f.run.id),
-    ).rejects.toThrow('无权访问');
+    await expect(repositories.forRun(otherId, projectId, f.run.id)).rejects.toThrow('无权访问');
     // 即使已有普通 Action 风格 attempt 历史，也不能猜 latest running 来复用。
     await createRootAttempt(f.repository, f.input);
     await createRootAttempt(f.repository, f.input);
-    await expect(
-      f.repository.getOrCreateHumanReviewRunning(f.input),
-    ).rejects.toThrow('attempt 历史');
+    await expect(f.repository.getOrCreateHumanReviewRunning(f.input)).rejects.toThrow(
+      'attempt 历史',
+    );
     expect(
       await db.nodeRun.count({
         where: { workflowRunId: f.run.id, nodeId: 'R1' },
@@ -582,9 +554,10 @@ describe('真实 PostgreSQL Human Review 重入审计', () => {
         async () => ({ bindings: createBindingResolver(), codec }),
         async () => f.repository,
       );
-      const versions = await new WorkflowVersionRepositories(
-        database,
-      ).forProject(ownerId, projectId);
+      const versions = await new WorkflowVersionRepositories(database).forProject(
+        ownerId,
+        projectId,
+      );
       const runner = new DefaultWorkflowRunner(
         versions,
         f.runs,
@@ -672,10 +645,7 @@ describe('真实 PostgreSQL Human Review 重入审计', () => {
       async () => ({ bindings: createBindingResolver(), codec }),
       async () => f.repository,
     );
-    const versions = await new WorkflowVersionRepositories(database).forProject(
-      ownerId,
-      projectId,
-    );
+    const versions = await new WorkflowVersionRepositories(database).forProject(ownerId, projectId);
     const runner = new DefaultWorkflowRunner(
       versions,
       f.runs,
@@ -729,11 +699,7 @@ describe('真实 PostgreSQL NodeRun', () => {
 
   it('最小创建参数连续分配 attempt 1/2，并持久化完成与失败两条记录', async () => {
     const workflowRunId = await createParentRun();
-    const repository = await repositories.forRun(
-      ownerId,
-      projectId,
-      workflowRunId,
-    );
+    const repository = await repositories.forRun(ownerId, projectId, workflowRunId);
     const first = await createRootAttempt(repository, {
       workflowRunId,
       nodeId: 'image-1',
@@ -786,9 +752,7 @@ describe('真实 PostgreSQL NodeRun', () => {
 
   it('第一次业务失败、第二次成功形成两条历史，State 仅包含成功输出引用', async () => {
     const f = await videoFixture();
-    f.execute.mockRejectedValueOnce(
-      new Error('provider-credential-test-marker'),
-    );
+    f.execute.mockRejectedValueOnce(new Error('provider-credential-test-marker'));
     await expect(f.graph.invoke(f.initial)).rejects.toMatchObject({
       stage: 'execute',
     });
@@ -822,9 +786,7 @@ describe('真实 PostgreSQL NodeRun', () => {
         prompt: { storage: 'inline', type: StringType, value: '人物向前走' },
       });
       expect(row.completedAt).toBeInstanceOf(Date);
-      expect(row.completedAt!.getTime()).toBeGreaterThanOrEqual(
-        row.startedAt.getTime(),
-      );
+      expect(row.completedAt!.getTime()).toBeGreaterThanOrEqual(row.startedAt.getTime());
     }
     expect(rows[1]!.outputs).toEqual({
       video: {
@@ -835,9 +797,7 @@ describe('真实 PostgreSQL NodeRun', () => {
     });
     expect(state.outputs).toEqual({ video_1: rows[1]!.outputs });
     expect(JSON.stringify(rows)).not.toContain('decoded-business');
-    expect(JSON.stringify(rows)).not.toContain(
-      'provider-credential-test-marker',
-    );
+    expect(JSON.stringify(rows)).not.toContain('provider-credential-test-marker');
   });
 
   it('Binding 失败也有 failed 记录，inputs 保持未解析，业务未执行', async () => {
@@ -885,10 +845,7 @@ describe('真实 PostgreSQL NodeRun', () => {
       Array.from({ length: 12 }, (_, index) => index + 1),
     );
     expect(new Set(runs.map((run) => run.id)).size).toBe(12);
-    expect(
-      (await createRootAttempt(first, { ...input, nodeId: 'different' }))
-        .attempt,
-    ).toBe(1);
+    expect((await createRootAttempt(first, { ...input, nodeId: 'different' })).attempt).toBe(1);
     await expect(
       db.nodeRun.create({
         data: {
@@ -923,9 +880,7 @@ describe('真实 PostgreSQL NodeRun', () => {
       }),
     ).rejects.toThrow();
     await expect(repo.markCompleted(run.id, {})).rejects.toThrow();
-    expect(
-      await db.nodeRun.findUniqueOrThrow({ where: { id: run.id } }),
-    ).toEqual(before);
+    expect(await db.nodeRun.findUniqueOrThrow({ where: { id: run.id } })).toEqual(before);
     const failed = await createRootAttempt(repo, {
       workflowRunId,
       nodeId: 'terminal',
@@ -943,27 +898,23 @@ describe('真实 PostgreSQL NodeRun', () => {
     });
     await expect(repo.markCompleted(failed.id, {})).rejects.toThrow();
     await expect(repo.updateInputs(failed.id, {})).rejects.toThrow();
-    expect(
-      await db.nodeRun.findUniqueOrThrow({ where: { id: failed.id } }),
-    ).toEqual(failedSnapshot);
+    expect(await db.nodeRun.findUniqueOrThrow({ where: { id: failed.id } })).toEqual(
+      failedSnapshot,
+    );
   });
 
   it('限定所有者、项目与运行，不能凭 NodeRun ID 写其他范围的历史', async () => {
     const workflowRunId = await createParentRun();
-    await expect(
-      repositories.forRun(otherId, projectId, workflowRunId),
-    ).rejects.toThrow('无权访问');
+    await expect(repositories.forRun(otherId, projectId, workflowRunId)).rejects.toThrow(
+      '无权访问',
+    );
     const first = await repositories.forRun(ownerId, projectId, workflowRunId);
     const otherProject = await repositories.forRun(
       otherId,
       otherProjectId,
       await createParentRun(otherId, otherProjectId),
     );
-    const otherRun = await repositories.forRun(
-      ownerId,
-      projectId,
-      await createParentRun(),
-    );
+    const otherRun = await repositories.forRun(ownerId, projectId, await createParentRun());
     const run = await createRootAttempt(first, {
       workflowRunId,
       nodeId: 'scoped',
@@ -985,8 +936,9 @@ describe('真实 PostgreSQL NodeRun', () => {
         nodeId: 'invalid',
       }),
     ).rejects.toThrow('不匹配');
-    expect(
-      await db.nodeRun.findUniqueOrThrow({ where: { id: run.id } }),
-    ).toMatchObject({ status: 'running', inputs: null });
+    expect(await db.nodeRun.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({
+      status: 'running',
+      inputs: null,
+    });
   });
 });

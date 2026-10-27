@@ -10,10 +10,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { AuthService, type AuthActor } from './auth.service.js';
-import {
-  invalidOriginMessage,
-  isUntrustedWriteOrigin,
-} from './trusted-origin.js';
+import { invalidOriginMessage, isUntrustedWriteOrigin } from './trusted-origin.js';
 
 export const Public = () => SetMetadata('auth:public', true);
 export const PlatformAdmin = () => SetMetadata('auth:role', 'admin');

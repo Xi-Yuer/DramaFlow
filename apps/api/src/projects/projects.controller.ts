@@ -32,11 +32,7 @@ export class ProjectsController {
   ) {
     return this.projects.get(actor.user.id, id);
   }
-  @Put(':id') save(
-    @Actor() actor: AuthActor,
-    @Param('id') id: string,
-    @Body() body: unknown,
-  ) {
+  @Put(':id') save(@Actor() actor: AuthActor, @Param('id') id: string, @Body() body: unknown) {
     return this.projects.save(actor.user.id, id, body);
   }
 

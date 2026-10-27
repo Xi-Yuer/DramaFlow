@@ -21,18 +21,12 @@ describe('Runtime HTTP 错误边界', () => {
     ['WORKFLOW_INVOCATION_CONTRACT_INVALID', 500],
   ] as const)('调用契约错误 %s 安全映射为 %s', (code, status) => {
     const mapped = workflowRuntimeHttpError(
-      new WorkflowInvocationValidationError(
-        code,
-        'private-input-name',
-        'private-type-name',
-      ),
+      new WorkflowInvocationValidationError(code, 'private-input-name', 'private-type-name'),
       'WORKFLOW_VERSION_NOT_FOUND',
     );
     expect(mapped.getStatus()).toBe(status);
     expect(mapped.getResponse()).toMatchObject({ code });
-    expect(JSON.stringify(mapped.getResponse())).not.toMatch(
-      /private|cause|stack/,
-    );
+    expect(JSON.stringify(mapped.getResponse())).not.toMatch(/private|cause|stack/);
   });
 
   it('invocation 冲突为 409；入队确认错误只保留已受理身份和安全摘要', () => {
@@ -86,9 +80,9 @@ describe('Runtime HTTP 错误边界', () => {
     expect(checkpoint.getResponse()).toMatchObject({
       code: 'WORKFLOW_CHECKPOINT_UNAVAILABLE',
     });
-    expect(
-      JSON.stringify([revision.getResponse(), checkpoint.getResponse()]),
-    ).not.toContain('private');
+    expect(JSON.stringify([revision.getResponse(), checkpoint.getResponse()])).not.toContain(
+      'private',
+    );
   });
   it('waiting claim 冲突映射为 409，保留稳定码且不返回原异常', () => {
     const mapped = workflowRuntimeHttpError(
@@ -125,10 +119,7 @@ describe('Runtime HTTP 错误边界', () => {
     expect(execution.getResponse()).toMatchObject({
       code: 'NODE_EXECUTION_FAILED',
     });
-    for (const code of [
-      'REFERENCE_RUNTIME_NOT_CONFIGURED',
-      'ARTIFACT_WRITER_NOT_CONFIGURED',
-    ]) {
+    for (const code of ['REFERENCE_RUNTIME_NOT_CONFIGURED', 'ARTIFACT_WRITER_NOT_CONFIGURED']) {
       const cause = Object.assign(new Error('private configuration detail'), {
         code,
       });
@@ -136,20 +127,12 @@ describe('Runtime HTTP 错误边界', () => {
         'node',
         'type',
         'decode_input',
-        new ReferenceResolutionError(
-          { kind: 'artifact', id: 'private-artifact' },
-          { cause },
-        ),
+        new ReferenceResolutionError({ kind: 'artifact', id: 'private-artifact' }, { cause }),
       );
-      const mapped = workflowRuntimeHttpError(
-        wrapped,
-        'WORKFLOW_RUN_NOT_FOUND',
-      );
+      const mapped = workflowRuntimeHttpError(wrapped, 'WORKFLOW_RUN_NOT_FOUND');
       expect(mapped.getStatus()).toBe(503);
       expect(mapped.getResponse()).toMatchObject({ code });
-      expect(JSON.stringify(mapped.getResponse())).not.toMatch(
-        /private|stack|cause|signed-url/,
-      );
+      expect(JSON.stringify(mapped.getResponse())).not.toMatch(/private|stack|cause|signed-url/);
     }
   });
 
@@ -169,8 +152,6 @@ describe('Runtime HTTP 错误边界', () => {
     expect(recording.getResponse()).toMatchObject({
       code: 'WORKFLOW_RUN_RECORDING_FAILED',
     });
-    expect(JSON.stringify(recording.getResponse())).not.toMatch(
-      /private|cause|stack/,
-    );
+    expect(JSON.stringify(recording.getResponse())).not.toMatch(/private|cause|stack/);
   });
 });

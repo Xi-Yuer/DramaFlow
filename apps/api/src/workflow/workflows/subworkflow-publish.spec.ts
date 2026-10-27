@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  StringType,
-  type GraphDefinition,
-  type NodeDefinition,
-} from '@dramaflow/contracts';
+import { StringType, type GraphDefinition, type NodeDefinition } from '@dramaflow/contracts';
 import type { Prisma } from '@dramaflow/database';
 import type { DatabaseService, ModelProviderService } from '@dramaflow/server';
 import {
@@ -89,23 +85,19 @@ function fixture(nested = false) {
     createIterationNodeType(),
     createTextGenerationNodeType(),
   ]);
-  const createVersion = vi.fn(
-    async ({ data }: { data: Record<string, unknown> }) => ({
-      id: 'version',
-      workflowId: data.workflowId,
-      version: data.version,
-      sourceRevision: data.sourceRevision,
-      createdAt: new Date('2026-10-26T00:00:00.000Z'),
-      definition: data.definition,
-    }),
-  );
+  const createVersion = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+    id: 'version',
+    workflowId: data.workflowId,
+    version: data.version,
+    sourceRevision: data.sourceRevision,
+    createdAt: new Date('2026-10-26T00:00:00.000Z'),
+    definition: data.definition,
+  }));
   const updateDraft = vi.fn().mockResolvedValue({ count: 1 });
   const tx = {
     $queryRaw: vi
       .fn()
-      .mockResolvedValue([
-        { id: 'workflow', projectId: 'project', revision: 1, draft },
-      ]),
+      .mockResolvedValue([{ id: 'workflow', projectId: 'project', revision: 1, draft }]),
     workflow: { updateMany: updateDraft },
     workflowVersion: {
       findUnique: vi.fn().mockResolvedValue(null),
@@ -115,9 +107,8 @@ function fixture(nested = false) {
   };
   const db = {
     client: {
-      $transaction: async (
-        work: (transaction: Prisma.TransactionClient) => Promise<unknown>,
-      ) => work(tx as unknown as Prisma.TransactionClient),
+      $transaction: async (work: (transaction: Prisma.TransactionClient) => Promise<unknown>) =>
+        work(tx as unknown as Prisma.TransactionClient),
     },
   } as unknown as DatabaseService;
   const assertModel = vi.fn().mockResolvedValue(undefined);
@@ -243,33 +234,28 @@ describe('SubWorkflow Draft / 正式 Publish 静态边界', () => {
     expect(f.assertModel).not.toHaveBeenCalled();
     expect(f.createVersion).not.toHaveBeenCalled();
   });
-  it.each([false, true])(
-    '子图模型权限拒绝不能绕过（嵌套=%s）',
-    async (nested) => {
-      const f = fixture(nested);
-      const denied = new Error('模型权限拒绝');
-      f.assertModel.mockRejectedValue(denied);
-      await expect(
-        f.service.publish('owner', {
-          workflowId: 'workflow',
-          expectedRevision: 1,
-        }),
-      ).rejects.toBe(denied);
-      expect(f.assertModel).toHaveBeenCalledExactlyOnceWith(
-        f.tx,
-        'owner',
-        f.modelConfigurationId,
-        'text.generate',
-      );
-      expect(f.createVersion).not.toHaveBeenCalled();
-    },
-  );
+  it.each([false, true])('子图模型权限拒绝不能绕过（嵌套=%s）', async (nested) => {
+    const f = fixture(nested);
+    const denied = new Error('模型权限拒绝');
+    f.assertModel.mockRejectedValue(denied);
+    await expect(
+      f.service.publish('owner', {
+        workflowId: 'workflow',
+        expectedRevision: 1,
+      }),
+    ).rejects.toBe(denied);
+    expect(f.assertModel).toHaveBeenCalledExactlyOnceWith(
+      f.tx,
+      'owner',
+      f.modelConfigurationId,
+      'text.generate',
+    );
+    expect(f.createVersion).not.toHaveBeenCalled();
+  });
   it('child config 在 Publish 按完整 Schema 检查，Draft 仍允许未完成配置', async () => {
     const f = fixture();
     f.action.config = {};
-    expect(() =>
-      validateWorkflowNodeConfigurations(f.draft, f.registry),
-    ).not.toThrow();
+    expect(() => validateWorkflowNodeConfigurations(f.draft, f.registry)).not.toThrow();
     await expect(
       f.service.publish('owner', {
         workflowId: 'workflow',
@@ -323,9 +309,7 @@ describe('SubWorkflow Draft / 正式 Publish 静态边界', () => {
       const f = fixture();
       if (kind === 'type') f.action.type = 'test.missing';
       else f.action.typeVersion = 2;
-      expect(() =>
-        validateWorkflowNodeConfigurations(f.draft, f.registry),
-      ).not.toThrow();
+      expect(() => validateWorkflowNodeConfigurations(f.draft, f.registry)).not.toThrow();
       await expect(
         f.service.publish('owner', {
           workflowId: 'workflow',

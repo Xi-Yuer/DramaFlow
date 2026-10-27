@@ -9,15 +9,8 @@ import {
   NumberType,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
-import {
-  DatabaseService,
-  ModelProviderService,
-  SecretsService,
-} from '@dramaflow/server';
-import {
-  createTextGenerationNodeType,
-  NodeRegistry,
-} from '@dramaflow/workflow';
+import { DatabaseService, ModelProviderService, SecretsService } from '@dramaflow/server';
+import { createTextGenerationNodeType, NodeRegistry } from '@dramaflow/workflow';
 import type { Type } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -31,8 +24,7 @@ import { createWorkflowService } from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test' ||
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test' ||
   !process.env.WORKFLOW_QUEUE_PREFIX?.startsWith('dramaflow-test-')
 )
   throw new Error('Workflow 编辑 HTTP 测试仅允许隔离测试库与队列');
@@ -46,19 +38,13 @@ const origin = new URL(authBaseUrl()).origin;
 const emptyDraft = { inputs: [], nodes: [], edges: [], outputs: [] };
 
 async function application() {
-  const constructor = z.custom<Type<unknown>>(
-    (value) => typeof value === 'function',
-  );
-  const module: unknown = await import(
-    new URL('../dist/app.module.js', import.meta.url).href
-  );
+  const constructor = z.custom<Type<unknown>>((value) => typeof value === 'function');
+  const module: unknown = await import(new URL('../dist/app.module.js', import.meta.url).href);
   const authModule: unknown = await import(
     new URL('../dist/auth/auth.service.js', import.meta.url).href
   );
   const { AppModule } = z.object({ AppModule: constructor }).parse(module);
-  const { AuthService: AuthToken } = z
-    .object({ AuthService: constructor })
-    .parse(authModule);
+  const { AuthService: AuthToken } = z.object({ AuthService: constructor }).parse(authModule);
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
     logger: false,
@@ -133,16 +119,12 @@ describe('正式 Publish 边界与版本 HTTP', () => {
           })
         ).status,
       ).toBe(200);
-      const response = await api(
-        `/workflows/${f.workflow.id}/publish`,
-        'POST',
-        { expectedRevision: 2 },
-      );
+      const response = await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+        expectedRevision: 2,
+      });
       expect(response.status).toBe(201);
       expect(response.headers.get('Cache-Control')).toBe('no-store');
-      const version = workflowVersionResponseSchema.parse(
-        await response.json(),
-      );
+      const version = workflowVersionResponseSchema.parse(await response.json());
       expect(version).toMatchObject({
         workflowId: f.workflow.id,
         projectId: f.project.id,
@@ -154,13 +136,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
         revision: 2,
         draft: f.draft,
       });
-      const read = await api(
-        `/workflow-versions/${version.id}`,
-        'GET',
-        undefined,
-        0,
-        1,
-      );
+      const read = await api(`/workflow-versions/${version.id}`, 'GET', undefined, 0, 1);
       expect(read.status).toBe(200);
       expect(await read.json()).toEqual(version);
       const listed = await api(`/workflows/${f.workflow.id}/versions`);
@@ -178,9 +154,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
         'explicit-test-model',
       ])
         expect(text).not.toContain(privateValue);
-      expect(
-        await db.workflowRun.count({ where: { projectId: f.project.id } }),
-      ).toBe(0);
+      expect(await db.workflowRun.count({ where: { projectId: f.project.id } })).toBe(0);
     } finally {
       decrypt.mockRestore();
     }
@@ -266,17 +240,14 @@ describe('正式 Publish 边界与版本 HTTP', () => {
       expect(saved.status).toBe(200);
       revision++;
       const before = await readWorkflow(f.project.id);
-      const response = await api(
-        `/workflows/${f.workflow.id}/publish`,
-        'POST',
-        { expectedRevision: revision },
-      );
+      const response = await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+        expectedRevision: revision,
+      });
       expect(response.status).toBe(400);
       const error = await response.json();
       if (code === 'NODE_CONFIG_INVALID')
         expect(error.code).toBe('WORKFLOW_NODE_CONFIGURATION_INVALID');
-      else
-        expect(error.details).toContainEqual(expect.objectContaining({ code }));
+      else expect(error.details).toContainEqual(expect.objectContaining({ code }));
       expect(
         await db.workflowVersion.count({
           where: { workflowId: f.workflow.id },
@@ -309,9 +280,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
     });
     expect(rejected.status).toBe(400);
     expect(await rejected.text()).not.toContain('secret-in-untrusted-draft');
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
     await api(`/workflows/${f.workflow.id}/draft`, 'PUT', {
       expectedRevision: revision,
       definition: f.draft,
@@ -394,11 +363,9 @@ describe('正式 Publish 边界与版本 HTTP', () => {
         where: { id: f.workflow.id },
         data: { draft: z.record(z.string(), z.json()).parse(draft) },
       });
-      const response = await api(
-        `/workflows/${f.workflow.id}/publish`,
-        'POST',
-        { expectedRevision: 1 },
-      );
+      const response = await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+        expectedRevision: 1,
+      });
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({
         code: 'MODEL_CONFIGURATION_UNAVAILABLE',
@@ -447,9 +414,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
         })
       ).status,
     ).toBe(400);
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
   });
 
   it('未注册插件、插件不提供该能力、无效 endpoint 或参数不能发布', async () => {
@@ -464,12 +429,10 @@ describe('正式 Publish 边界与版本 HTTP', () => {
         data: {
           ownerId: userIds[0]!,
           name: '不可信导入配置',
-          pluginId:
-            mode === 'missing_plugin' ? 'missing_plugin' : 'openai_compatible',
+          pluginId: mode === 'missing_plugin' ? 'missing_plugin' : 'openai_compatible',
           pluginVersion: mode === 'missing_plugin_version' ? 99 : 1,
           configuration: {
-            baseURL:
-              mode === 'invalid_endpoint' ? 'invalid' : 'http://127.0.0.1:1/v1',
+            baseURL: mode === 'invalid_endpoint' ? 'invalid' : 'http://127.0.0.1:1/v1',
           },
           encryptedCredentials: 'not-read-during-publish',
         },
@@ -489,11 +452,9 @@ describe('正式 Publish 边界与版本 HTTP', () => {
         where: { id: f.workflow.id },
         data: { draft: z.record(z.string(), z.json()).parse(draft) },
       });
-      const response = await api(
-        `/workflows/${f.workflow.id}/publish`,
-        'POST',
-        { expectedRevision: 1 },
-      );
+      const response = await api(`/workflows/${f.workflow.id}/publish`, 'POST', {
+        expectedRevision: 1,
+      });
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({
         code: 'MODEL_CONFIGURATION_INVALID',
@@ -519,18 +480,10 @@ describe('正式 Publish 边界与版本 HTTP', () => {
         })
       ).status,
     ).toBe(409);
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
     const responses = await Promise.all(
       Array.from({ length: 12 }, (_, i) =>
-        api(
-          `/workflows/${f.workflow.id}/publish`,
-          'POST',
-          { expectedRevision: 2 },
-          0,
-          i % 2,
-        ),
+        api(`/workflows/${f.workflow.id}/publish`, 'POST', { expectedRevision: 2 }, 0, i % 2),
       ),
     );
     expect(responses.filter(({ status }) => status === 201)).toHaveLength(1);
@@ -562,9 +515,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
     ).toBe(400);
     const old = await api(`/workflow-versions/${version.id}`);
     expect(await old.json()).toEqual(version);
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(1);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(1);
     expect(await readWorkflow(f.project.id)).toMatchObject({ revision: 3 });
   });
 
@@ -584,9 +535,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
     });
     const disabling = db.$transaction(
       async (tx) => {
-        const [connection] = await tx.$queryRaw<
-          { pid: number }[]
-        >`SELECT pg_backend_pid() AS pid`;
+        const [connection] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
         await tx.modelConfiguration.update({
           where: { id: f.model.id },
           data: { enabled: false },
@@ -612,9 +561,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
       await disabling;
     }
     expect((await publishing).status).toBe(400);
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
   });
 
   it('发布与版本查询默认认证、隔离所有者并检查写 Origin；严格拒绝客户端定义覆盖', async () => {
@@ -650,9 +597,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
       { expectedRevision: 1, definition: emptyDraft },
       { expectedRevision: 1, ownerId: userIds[1] },
     ])
-      expect(
-        (await api(`/workflows/${workflow.id}/publish`, 'POST', body)).status,
-      ).toBe(400);
+      expect((await api(`/workflows/${workflow.id}/publish`, 'POST', body)).status).toBe(400);
     expect(
       (
         await api(`/workflows/${randomUUID()}/publish`, 'POST', {
@@ -662,10 +607,9 @@ describe('正式 Publish 边界与版本 HTTP', () => {
     ).toBe(404);
     expect((await api(`/workflow-versions/${randomUUID()}`)).status).toBe(404);
     expect((await api(`/workflows/${randomUUID()}/versions`)).status).toBe(404);
-    expect(
-      (await api(`/workflows/${workflow.id}/versions?beforeVersion=invalid`))
-        .status,
-    ).toBe(400);
+    expect((await api(`/workflows/${workflow.id}/versions?beforeVersion=invalid`)).status).toBe(
+      400,
+    );
     await db.project.update({
       where: { id: project.id },
       data: { ownerId: userIds[1] },
@@ -705,9 +649,7 @@ describe('正式 Publish 边界与版本 HTTP', () => {
     );
     expect(first.nextBeforeVersion).toBe(3);
     const second = workflowVersionListResponseSchema.parse(
-      await (
-        await api(`/workflows/${workflow.id}/versions?beforeVersion=3`)
-      ).json(),
+      await (await api(`/workflows/${workflow.id}/versions?beforeVersion=3`)).json(),
     );
     expect(second.items.map(({ version }) => version)).toEqual([2, 1]);
     expect(second.nextBeforeVersion).toBeNull();
@@ -749,13 +691,7 @@ async function createProject(name = '工作流编辑测试', actor = 0) {
 }
 
 async function readWorkflow(projectId: string, instance = 0, actor = 0) {
-  const response = await api(
-    `/projects/${projectId}/workflow`,
-    'GET',
-    undefined,
-    actor,
-    instance,
-  );
+  const response = await api(`/projects/${projectId}/workflow`, 'GET', undefined, actor, instance);
   expect(response.status).toBe(200);
   expect(response.headers.get('Cache-Control')).toBe('no-store');
   return workflowResponseSchema.parse(await response.json());
@@ -797,18 +733,12 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
       draft: emptyDraft,
     });
     expect(workflow.id).not.toBe(project.id);
-    expect(await db.workflow.count({ where: { projectId: project.id } })).toBe(
-      1,
-    );
+    expect(await db.workflow.count({ where: { projectId: project.id } })).toBe(1);
     const initialized = await api(`/projects/${project.id}/workflow`, 'POST');
     expect(initialized.status).toBe(200);
     expect(await initialized.json()).toEqual(workflow);
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: workflow.id } }),
-    ).toBe(0);
-    expect(
-      await db.workflowRun.count({ where: { projectId: project.id } }),
-    ).toBe(0);
+    expect(await db.workflowVersion.count({ where: { workflowId: workflow.id } })).toBe(0);
+    expect(await db.workflowRun.count({ where: { projectId: project.id } })).toBe(0);
     expect(
       await db.workflowExecutionOutbox.count({
         where: { workflowRun: { projectId: project.id } },
@@ -834,13 +764,9 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
       );
       const response = await api('/projects', 'POST', { name });
       expect(response.status).toBe(500);
-      expect(
-        await db.project.count({ where: { ownerId: userIds[0], name } }),
-      ).toBe(0);
+      expect(await db.project.count({ where: { ownerId: userIds[0], name } })).toBe(0);
     } finally {
-      await db.$executeRawUnsafe(
-        `DROP TRIGGER IF EXISTS "${guard}" ON "workflow"`,
-      );
+      await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${guard}" ON "workflow"`);
       await db.$executeRawUnsafe(`DROP FUNCTION "${guard}"()`);
     }
   });
@@ -855,13 +781,9 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
     });
     const path = `/projects/${project.id}/workflow`;
     expect((await api(path)).status).toBe(404);
-    expect(await db.workflow.count({ where: { projectId: project.id } })).toBe(
-      0,
-    );
+    expect(await db.workflow.count({ where: { projectId: project.id } })).toBe(0);
     const responses = await Promise.all(
-      Array.from({ length: 12 }, (_, index) =>
-        api(path, 'POST', {}, 0, index % 2),
-      ),
+      Array.from({ length: 12 }, (_, index) => api(path, 'POST', {}, 0, index % 2)),
     );
     const workflows = [];
     for (const response of responses) {
@@ -870,12 +792,8 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
     }
     expect(new Set(workflows.map(({ id }) => id)).size).toBe(1);
     expect(workflows.every((workflow) => workflow.revision === 1)).toBe(true);
-    expect(await db.workflow.count({ where: { projectId: project.id } })).toBe(
-      1,
-    );
-    expect(
-      await db.project.findUniqueOrThrow({ where: { id: project.id } }),
-    ).toEqual(project);
+    expect(await db.workflow.count({ where: { projectId: project.id } })).toBe(1);
+    expect(await db.project.findUniqueOrThrow({ where: { id: project.id } })).toEqual(project);
     expect(await readWorkflow(project.id)).toEqual(workflows[0]);
   });
 
@@ -902,30 +820,20 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
     expect(await response.json()).toEqual({ revision: 2 });
     const saved = await readWorkflow(project.id, 1);
     expect(saved).toMatchObject({ id: workflow.id, revision: 2, draft });
-    const initialized = await api(
-      `/projects/${project.id}/workflow`,
-      'POST',
-      {},
-    );
+    const initialized = await api(`/projects/${project.id}/workflow`, 'POST', {});
     expect(initialized.status).toBe(200);
     expect(await initialized.json()).toEqual(saved);
-    expect(
-      await db.project.findUniqueOrThrow({ where: { id: project.id } }),
-    ).toEqual(projectBefore);
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: workflow.id } }),
-    ).toBe(0);
-    expect(
-      await db.workflowRun.count({ where: { projectId: project.id } }),
-    ).toBe(0);
+    expect(await db.project.findUniqueOrThrow({ where: { id: project.id } })).toEqual(
+      projectBefore,
+    );
+    expect(await db.workflowVersion.count({ where: { workflowId: workflow.id } })).toBe(0);
+    expect(await db.workflowRun.count({ where: { projectId: project.id } })).toBe(0);
   });
 
   it('跨 API 实例同 revision 的并发保存只有一个成功，stale revision 不覆盖新内容', async () => {
     const project = await createProject();
     const workflow = await readWorkflow(project.id);
-    const requests = Array.from({ length: 12 }, (_, index) =>
-      definition(`草稿 ${index}`),
-    );
+    const requests = Array.from({ length: 12 }, (_, index) => definition(`草稿 ${index}`));
     const responses = await Promise.all(
       requests.map((draft, index) =>
         api(
@@ -947,9 +855,7 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
       else expect(await response.json()).toEqual({ revision: 2 });
     }
     const saved = await readWorkflow(project.id);
-    expect(saved.draft).toEqual(
-      requests[responses.findIndex(({ status }) => status === 200)],
-    );
+    expect(saved.draft).toEqual(requests[responses.findIndex(({ status }) => status === 200)]);
     const stale = await api(`/workflows/${workflow.id}/draft`, 'PUT', {
       expectedRevision: 1,
       definition: emptyDraft,
@@ -974,10 +880,7 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
       expect((await api(path, method, body, null)).status).toBe(401);
       expect((await api(path, method, body, 1)).status).toBe(404);
       if (method !== 'GET')
-        expect(
-          (await api(path, method, body, 0, 0, 'https://untrusted.invalid'))
-            .status,
-        ).toBe(403);
+        expect((await api(path, method, body, 0, 0, 'https://untrusted.invalid')).status).toBe(403);
     }
     for (const [path, method, body] of [
       [`/projects/${randomUUID()}/workflow`, 'GET', undefined],
@@ -985,9 +888,7 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
       [`/workflows/${randomUUID()}/draft`, 'PUT', save],
     ] as const)
       expect((await api(path, method, body)).status).toBe(404);
-    expect(await db.workflow.count({ where: { projectId: legacy.id } })).toBe(
-      0,
-    );
+    expect(await db.workflow.count({ where: { projectId: legacy.id } })).toBe(0);
     expect(await readWorkflow(project.id)).toEqual(workflow);
   });
 
@@ -999,9 +900,7 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
       data: { ownerId: userIds[1] },
     });
     expect((await api(`/projects/${project.id}/workflow`)).status).toBe(404);
-    expect(
-      (await api(`/projects/${project.id}/workflow`, 'POST', {})).status,
-    ).toBe(404);
+    expect((await api(`/projects/${project.id}/workflow`, 'POST', {})).status).toBe(404);
     expect(
       (
         await api(`/workflows/${workflow.id}/draft`, 'PUT', {
@@ -1010,12 +909,7 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
         })
       ).status,
     ).toBe(404);
-    const response = await api(
-      `/projects/${project.id}/workflow`,
-      'POST',
-      {},
-      1,
-    );
+    const response = await api(`/projects/${project.id}/workflow`, 'POST', {}, 1);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(workflow);
   });
@@ -1032,13 +926,9 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
       { ...request, expectedRevision: 0 },
       { ...request, definition: { nodes: [] } },
     ])
-      expect(
-        (await api(`/workflows/${workflow.id}/draft`, 'PUT', body)).status,
-      ).toBe(400);
+      expect((await api(`/workflows/${workflow.id}/draft`, 'PUT', body)).status).toBe(400);
     for (const body of [null, { workflowId: 'other' }, { draft: emptyDraft }])
-      expect(
-        (await api(`/projects/${project.id}/workflow`, 'POST', body)).status,
-      ).toBe(400);
+      expect((await api(`/projects/${project.id}/workflow`, 'POST', body)).status).toBe(400);
     expect((await api('/projects/invalid/workflow')).status).toBe(400);
     const unsafe = definition('秘密不能写入节点配置');
     unsafe.nodes[0]!.config = { apiKey: 'test-secret-marker' };
@@ -1070,12 +960,10 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
       definition: definition('修改已发布流程的草稿'),
     });
     expect(response.status).toBe(200);
-    expect(
-      await db.workflowVersion.findUniqueOrThrow({ where: { id: version.id } }),
-    ).toEqual(persisted);
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: workflow.id } }),
-    ).toBe(1);
+    expect(await db.workflowVersion.findUniqueOrThrow({ where: { id: version.id } })).toEqual(
+      persisted,
+    );
+    expect(await db.workflowVersion.count({ where: { workflowId: workflow.id } })).toBe(1);
     expect(
       (
         await api(`/workflows/${workflow.id}/publish`, 'POST', {
@@ -1083,9 +971,7 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
         })
       ).status,
     ).toBe(400);
-    expect(
-      await db.workflowRun.count({ where: { projectId: project.id } }),
-    ).toBe(0);
+    expect(await db.workflowRun.count({ where: { projectId: project.id } })).toBe(0);
     expect(
       await db.workflowExecutionOutbox.count({
         where: { workflowRun: { projectId: project.id } },

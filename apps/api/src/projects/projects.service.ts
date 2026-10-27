@@ -152,8 +152,7 @@ export class ProjectsService {
       jobs.set(workflowExecutionJobId(start), start);
       for (const execution of run.executions) {
         const parsed = workflowExecutionJobSchema.safeParse(execution.payload);
-        if (parsed.success)
-          jobs.set(workflowExecutionJobId(parsed.data), parsed.data);
+        if (parsed.success) jobs.set(workflowExecutionJobId(parsed.data), parsed.data);
       }
     }
     let cleanupFailed = false;

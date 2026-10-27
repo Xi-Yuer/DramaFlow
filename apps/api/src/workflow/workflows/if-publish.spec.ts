@@ -2,26 +2,14 @@ import { expect, it, vi } from 'vitest';
 import { type WorkflowDefinition } from '@dramaflow/contracts';
 import type { Prisma } from '@dramaflow/database';
 import type { DatabaseService, ModelProviderService } from '@dramaflow/server';
-import {
-  createIfNodeType,
-  createTextGenerationNodeType,
-  NodeRegistry,
-} from '@dramaflow/workflow';
+import { createIfNodeType, createTextGenerationNodeType, NodeRegistry } from '@dramaflow/workflow';
 import { WorkflowService } from './workflow.service.js';
 
-it.each([
-  false,
-  true,
-  'candidates',
-  'successors',
-  'convergence',
-  'partial-convergence',
-] as const)(
+it.each([false, true, 'candidates', 'successors', 'convergence', 'partial-convergence'] as const)(
   '生产 Publish 仅放行安全 If：条件分支最终输出=%s',
   async (conditionalOutput) => {
     const isConvergence =
-      conditionalOutput === 'convergence' ||
-      conditionalOutput === 'partial-convergence';
+      conditionalOutput === 'convergence' || conditionalOutput === 'partial-convergence';
     const draft: WorkflowDefinition = {
       inputs: [],
       nodes: [
@@ -139,15 +127,11 @@ it.each([
         createdAt: new Date('2026-10-23T00:00:00.000Z'),
       }),
     );
-    const aggregateVersion = vi
-      .fn()
-      .mockResolvedValue({ _max: { version: null } });
+    const aggregateVersion = vi.fn().mockResolvedValue({ _max: { version: null } });
     const transaction = {
       $queryRaw: vi
         .fn()
-        .mockResolvedValue([
-          { id: 'workflow', projectId: 'project', revision: 1, draft },
-        ]),
+        .mockResolvedValue([{ id: 'workflow', projectId: 'project', revision: 1, draft }]),
       workflowVersion: {
         findUnique: vi.fn().mockResolvedValue(null),
         aggregate: aggregateVersion,
@@ -157,9 +141,8 @@ it.each([
     // 只替换数据库与模型服务，实际执行生产 WorkflowService.publish 和领域校验。
     const db = {
       client: {
-        $transaction: async (
-          work: (tx: Prisma.TransactionClient) => Promise<unknown>,
-        ) => work(transaction as unknown as Prisma.TransactionClient),
+        $transaction: async (work: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+          work(transaction as unknown as Prisma.TransactionClient),
       },
     } as unknown as DatabaseService;
     const assertModel = vi.fn();
@@ -171,10 +154,7 @@ it.each([
       new NodeRegistry([createTextGenerationNodeType(), createIfNodeType()]),
       models,
     );
-    if (
-      conditionalOutput === true ||
-      conditionalOutput === 'partial-convergence'
-    ) {
+    if (conditionalOutput === true || conditionalOutput === 'partial-convergence') {
       await expect(
         service.publish('owner', {
           workflowId: 'workflow',
@@ -183,9 +163,7 @@ it.each([
       ).rejects.toMatchObject({
         response: {
           code: 'WORKFLOW_PUBLISH_VALIDATION_FAILED',
-          message: expect.stringContaining(
-            isConvergence ? '完整覆盖' : 'Compiler',
-          ),
+          message: expect.stringContaining(isConvergence ? '完整覆盖' : 'Compiler'),
           issues: [
             {
               code: isConvergence

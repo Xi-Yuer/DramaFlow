@@ -4,7 +4,7 @@ import type { NodeTypeManifest } from '@dramaflow/contracts';
 import { WorkflowNodeSettingsActions } from '../../node-catalog/human-review-settings';
 import { WorkflowModelActionsContext } from '../../model-selection/selection/model-selection-context';
 import { WorkflowInputContext } from '../../inputs/workflow-input-context';
-import { replaceNodeInput } from '../../inputs/template-input';
+import { replaceNodeInput } from '../../inputs/template/binding';
 import { WorkflowOutputActions } from '../../outputs/workflow-end';
 import { WorkflowConditionActions } from '../../conditions/if-condition-editor';
 import { setIfCondition } from '../../conditions/if-condition';

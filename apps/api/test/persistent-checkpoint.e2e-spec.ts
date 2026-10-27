@@ -2,31 +2,19 @@ import { fork, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import {
-  runtimeValueMapSchema,
-  workflowRunStatusSchema,
-} from '@dramaflow/contracts';
-import {
-  DatabaseService,
-  WorkflowCheckpointerService,
-} from '@dramaflow/server';
+import { runtimeValueMapSchema, workflowRunStatusSchema } from '@dramaflow/contracts';
+import { DatabaseService, WorkflowCheckpointerService } from '@dramaflow/server';
 import { NodeRegistry, workflowStateSchema } from '@dramaflow/workflow';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import {
-  createWorkflowService,
-  storeRuntimeTestVersion,
-} from './fixtures/workflow-service.js';
+import { createWorkflowService, storeRuntimeTestVersion } from './fixtures/workflow-service.js';
 import { persistentTestDefinition } from './fixtures/persistent-workflow-compiler.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test'
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test'
 )
-  throw new Error(
-    'Persistent Checkpoint 集成测试仅允许在 DramaFlow 的隔离测试数据库运行',
-  );
+  throw new Error('Persistent Checkpoint 集成测试仅允许在 DramaFlow 的隔离测试数据库运行');
 
 const eventSchema = z
   .object({
@@ -69,29 +57,22 @@ beforeAll(async () => {
   });
 });
 afterAll(async () => {
-  for (const child of children)
-    if (child.exitCode === null) child.kill('SIGKILL');
+  for (const child of children) if (child.exitCode === null) child.kill('SIGKILL');
   try {
     const runs = await db.workflowRun.findMany({
       where: { project: { ownerId } },
       select: { threadId: true },
     });
-    for (const run of runs)
-      await cleanupCheckpointer.saver.deleteThread(run.threadId);
+    for (const run of runs) await cleanupCheckpointer.saver.deleteThread(run.threadId);
     await db.user.deleteMany({ where: { id: ownerId } });
   } finally {
-    await Promise.all([
-      cleanupCheckpointer.onModuleDestroy(),
-      database.onModuleDestroy(),
-    ]);
+    await Promise.all([cleanupCheckpointer.onModuleDestroy(), database.onModuleDestroy()]);
   }
 });
 
 function launch(command: object, env: NodeJS.ProcessEnv = process.env) {
   const child = fork(
-    fileURLToPath(
-      new URL('./fixtures/persistent-checkpoint-process.ts', import.meta.url),
-    ),
+    fileURLToPath(new URL('./fixtures/persistent-checkpoint-process.ts', import.meta.url)),
     [],
     {
       execArgv: ['--import', import.meta.resolve('tsx')],
@@ -162,11 +143,7 @@ async function fixture() {
     },
   });
   const service = createWorkflowService(database, new NodeRegistry());
-  const version = await storeRuntimeTestVersion(
-    database,
-    workflow,
-    persistentTestDefinition(),
-  );
+  const version = await storeRuntimeTestVersion(database, workflow, persistentTestDefinition());
   const identity = {
     ownerId,
     projectId: project.id,
@@ -206,11 +183,7 @@ describe('PostgreSQL Checkpoint 跨进程恢复', () => {
       expectedRevision: 1,
       definition: future,
     });
-    await storeRuntimeTestVersion(
-      database,
-      { ...f.workflow, revision: 2 },
-      future,
-    );
+    await storeRuntimeTestVersion(database, { ...f.workflow, revision: 2 }, future);
     const b = launch({
       action: 'resume',
       ownerId,
@@ -247,12 +220,8 @@ describe('PostgreSQL Checkpoint 跨进程恢复', () => {
       threadId: f.run.threadId,
       outputs: { answer: { value: 31 } },
     });
-    expect(
-      await db.workflowRun.count({ where: { projectId: f.project.id } }),
-    ).toBe(1);
-    expect(
-      await db.nodeRun.count({ where: { workflowRunId: f.run.workflowRunId } }),
-    ).toBe(0);
+    expect(await db.workflowRun.count({ where: { projectId: f.project.id } })).toBe(1);
+    expect(await db.nodeRun.count({ where: { workflowRunId: f.run.workflowRunId } })).toBe(0);
   });
 
   it('两个全新进程各自创建 Saver 并读取 waiting，只有一个 claim 成功且进入 graph.invoke', async () => {
@@ -273,9 +242,9 @@ describe('PostgreSQL Checkpoint 跨进程恢复', () => {
         () => {
           for (const instance of [a, b]) {
             expect(instance.child.exitCode).toBeNull();
-            expect(
-              instance.events.filter((event) => event.event === 'read'),
-            ).toEqual([expect.objectContaining({ status: 'waiting' })]);
+            expect(instance.events.filter((event) => event.event === 'read')).toEqual([
+              expect.objectContaining({ status: 'waiting' }),
+            ]);
           }
         },
         { timeout: 10000 },
@@ -295,9 +264,7 @@ describe('PostgreSQL Checkpoint 跨进程恢复', () => {
       expect(results.filter((event) => event.event === 'error')).toEqual([
         expect.objectContaining({ code: 'WORKFLOW_RUN_NOT_WAITING' }),
       ]);
-      expect(
-        [...a.events, ...b.events].filter((event) => event.event === 'invoke'),
-      ).toEqual([
+      expect([...a.events, ...b.events].filter((event) => event.event === 'invoke')).toEqual([
         expect.objectContaining({ threadId: f.run.threadId, resume: true }),
       ]);
       expect(a.child.pid).not.toBe(b.child.pid);
@@ -315,12 +282,9 @@ describe('PostgreSQL Checkpoint 跨进程恢复', () => {
 
   it('Checkpoint 数据库不可用时应用初始化明确失败，不进入 ready 或 Graph', async () => {
     const listener = createServer();
-    await new Promise<void>((resolve) =>
-      listener.listen(0, '127.0.0.1', resolve),
-    );
+    await new Promise<void>((resolve) => listener.listen(0, '127.0.0.1', resolve));
     const address = listener.address();
-    if (!address || typeof address === 'string')
-      throw new Error('未取得测试端口');
+    if (!address || typeof address === 'string') throw new Error('未取得测试端口');
     await new Promise<void>((resolve, reject) =>
       listener.close((error) => (error ? reject(error) : resolve())),
     );
@@ -336,9 +300,7 @@ describe('PostgreSQL Checkpoint 跨进程恢复', () => {
       code: 'WORKFLOW_CHECKPOINT_UNAVAILABLE',
     });
     expect(
-      instance.events.some(
-        (event) => event.event === 'invoke' || event.event === 'result',
-      ),
+      instance.events.some((event) => event.event === 'invoke' || event.event === 'result'),
     ).toBe(false);
   });
 });

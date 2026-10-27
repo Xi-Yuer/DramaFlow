@@ -8,7 +8,7 @@ import type {
   HumanReviewActions,
   WorkflowRunStatusState,
 } from '../../run/status/workflow-run-status';
-import type { GraphViewportController } from '../../editor/graph-navigation';
+import type { GraphViewportController } from '../../editor/navigation/graph-navigation';
 import type { WorkflowBodyInputNode } from '../../iteration/body-input-boundary';
 import type { WorkflowEndNode, WorkflowOutputEdge } from '../../outputs/workflow-outputs';
 import type { WorkflowNode, WorkflowEdge } from '../adapter/types';

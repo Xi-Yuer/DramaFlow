@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { Request } from 'express';
 import { DatabaseService } from '@dramaflow/server';
@@ -26,10 +22,7 @@ export class AuthService {
       where: { id: session.user.id },
     });
     if (!user) throw new UnauthorizedException('会话已失效，请重新登录');
-    if (
-      user.banned &&
-      (!user.banExpires || user.banExpires.getTime() > Date.now())
-    )
+    if (user.banned && (!user.banExpires || user.banExpires.getTime() > Date.now()))
       throw new ForbiddenException('账号已停用，请联系管理员');
     return { user, session: session.session };
   }

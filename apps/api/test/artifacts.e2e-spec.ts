@@ -2,12 +2,7 @@ import 'reflect-metadata';
 import { fork, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import {
-  ImageType,
-  JsonType,
-  StringType,
-  type RuntimeValue,
-} from '@dramaflow/contracts';
+import { ImageType, JsonType, StringType, type RuntimeValue } from '@dramaflow/contracts';
 import {
   ArtifactModule,
   ArtifactRepository,
@@ -35,8 +30,7 @@ import {
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test'
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test'
 )
   throw new Error('Artifact 集成测试仅允许独立测试数据库');
 @Module({ imports: [WorkflowRuntimeInfrastructureModule, ArtifactModule] })
@@ -63,8 +57,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   vi.restoreAllMocks();
-  for (const child of children)
-    if (child.exitCode === null) child.kill('SIGKILL');
+  for (const child of children) if (child.exitCode === null) child.kill('SIGKILL');
   try {
     const db = database.client;
     const artifacts = await db.artifact.findMany({
@@ -75,9 +68,7 @@ afterAll(async () => {
       where: { project: { ownerId: { in: [ownerId, outsiderId] } } },
     });
     for (const run of runs)
-      await app
-        .get(WorkflowCheckpointerService)
-        .saver.deleteThread(run.threadId);
+      await app.get(WorkflowCheckpointerService).saver.deleteThread(run.threadId);
     await db.user.deleteMany({ where: { id: { in: [ownerId, outsiderId] } } });
   } finally {
     await app?.close();
@@ -96,10 +87,7 @@ async function fixture(owner = ownerId) {
       draft: z.record(z.string(), z.json()).parse(artifactDefinition()),
     },
   });
-  const version = await createWorkflowService(
-    database,
-    app.get(NodeRegistry),
-  ).publish(owner, {
+  const version = await createWorkflowService(database, app.get(NodeRegistry)).publish(owner, {
     workflowId: workflow.id,
     expectedRevision: 1,
   });
@@ -120,9 +108,7 @@ async function writingFixture() {
   await (
     await app.get(WorkflowRunRepositories).forProject(ownerId, f.projectId)
   ).markRunning(f.run.id);
-  const nodeRepository = await app
-    .get(NodeRunRepositories)
-    .forRun(ownerId, f.projectId, f.run.id);
+  const nodeRepository = await app.get(NodeRunRepositories).forRun(ownerId, f.projectId, f.run.id);
   const occurrence = await nodeRepository.getOrCreateOccurrence({
     workflowRunId: f.run.id,
     nodeId: 'A',
@@ -133,9 +119,7 @@ async function writingFixture() {
     nodeId: 'A',
     occurrenceId: occurrence.id,
   });
-  const codec = await app
-    .get(ArtifactRuntimeFactory)
-    .forRun(ownerId, f.projectId, f.run.id);
+  const codec = await app.get(ArtifactRuntimeFactory).forRun(ownerId, f.projectId, f.run.id);
   const context = {
     projectId: f.projectId,
     workflowRunId: f.run.id,
@@ -177,9 +161,7 @@ async function launch(command: {
   runId: string;
 }) {
   const child = fork(
-    fileURLToPath(
-      new URL('./fixtures/artifact-worker-process.ts', import.meta.url),
-    ),
+    fileURLToPath(new URL('./fixtures/artifact-worker-process.ts', import.meta.url)),
     [],
     {
       execArgv: ['--import', import.meta.resolve('tsx')],
@@ -264,10 +246,7 @@ describe('生产 Artifact：PostgreSQL + RustFS + Runtime + persistent checkpoin
       where: { workflowRunId: f.run.id },
       orderBy: { nodeId: 'asc' },
     });
-    expect(nodes.map((node) => node.status)).toEqual([
-      'completed',
-      'completed',
-    ]);
+    expect(nodes.map((node) => node.status)).toEqual(['completed', 'completed']);
     for (const artifact of artifacts) {
       expect(artifact).toMatchObject({
         status: 'ready',
@@ -310,16 +289,13 @@ describe('生产 Artifact：PostgreSQL + RustFS + Runtime + persistent checkpoin
     await assertCheckpointsAreReferences(f.run.threadId);
     const second = await launch({ action: 'resume', ...command });
     expect(second).toMatchObject({ result: { status: 'completed' } });
-    if (first?.event !== 'result' || second?.event !== 'result')
-      throw new Error('缺少测试结果');
+    if (first?.event !== 'result' || second?.event !== 'result') throw new Error('缺少测试结果');
     expect(first.pid).not.toBe(second.pid);
     const nodes = await database.client.nodeRun.findMany({
       where: { workflowRunId: f.run.id },
       orderBy: { nodeId: 'asc' },
     });
-    expect(
-      nodes.map((node) => [node.nodeId, node.attempt, node.status]),
-    ).toEqual([
+    expect(nodes.map((node) => [node.nodeId, node.attempt, node.status])).toEqual([
       ['A', 1, 'completed'],
       ['B', 1, 'completed'],
     ]);
@@ -360,11 +336,7 @@ describe('生产 Artifact：PostgreSQL + RustFS + Runtime + persistent checkpoin
     const sameOwnerOtherProject = await fixture();
     const sameOwnerCodec = await app
       .get(ArtifactRuntimeFactory)
-      .forRun(
-        ownerId,
-        sameOwnerOtherProject.projectId,
-        sameOwnerOtherProject.run.id,
-      );
+      .forRun(ownerId, sameOwnerOtherProject.projectId, sameOwnerOtherProject.run.id);
     const get = vi.spyOn(storage, 'get');
     const head = vi.spyOn(storage, 'head');
     try {
@@ -382,9 +354,7 @@ describe('生产 Artifact：PostgreSQL + RustFS + Runtime + persistent checkpoin
         }),
       ).rejects.toMatchObject({ code: 'REFERENCE_RESOLUTION_FAILED' });
       await expect(
-        app
-          .get(ArtifactRuntimeFactory)
-          .forRun(outsiderId, f.projectId, f.run.id),
+        app.get(ArtifactRuntimeFactory).forRun(outsiderId, f.projectId, f.run.id),
       ).rejects.toThrow();
       expect(get).not.toHaveBeenCalled();
       expect(head).not.toHaveBeenCalled();
@@ -404,9 +374,7 @@ describe('生产 Artifact：PostgreSQL + RustFS + Runtime + persistent checkpoin
         { ...f.context, nodeRunId: other.context.nodeRunId },
         { ...f.context, nodeId: 'wrong-node' },
       ])
-        await expect(
-          f.codec.encode({}, { ...f.options, context }),
-        ).rejects.toMatchObject({
+        await expect(f.codec.encode({}, { ...f.options, context })).rejects.toMatchObject({
           code: 'ARTIFACT_WRITE_FAILED',
           stage: 'register',
         });
@@ -469,11 +437,7 @@ describe('生产 Artifact：PostgreSQL + RustFS + Runtime + persistent checkpoin
       where: { id: artifactId(value) },
     });
     expect(await f.codec.decode(value, f.context)).toBe('original');
-    await storage.put(
-      row.storageKey,
-      new TextEncoder().encode('"tampered"'),
-      'application/json',
-    );
+    await storage.put(row.storageKey, new TextEncoder().encode('"tampered"'), 'application/json');
     await expect(f.codec.decode(value, f.context)).rejects.toMatchObject({
       code: 'REFERENCE_RESOLUTION_FAILED',
     });
@@ -502,12 +466,10 @@ describe('生产 Artifact：PostgreSQL + RustFS + Runtime + persistent checkpoin
       put.mockRestore();
     }
     const upload = storage.put.bind(storage);
-    const failAfterUpload = vi
-      .spyOn(storage, 'put')
-      .mockImplementationOnce(async (...args) => {
-        await upload(...args);
-        throw new Error('PUT acknowledgement lost');
-      });
+    const failAfterUpload = vi.spyOn(storage, 'put').mockImplementationOnce(async (...args) => {
+      await upload(...args);
+      throw new Error('PUT acknowledgement lost');
+    });
     try {
       await expect(f.codec.encode({}, f.options)).rejects.toMatchObject({
         code: 'ARTIFACT_WRITE_FAILED',
@@ -541,12 +503,10 @@ describe('生产 Artifact：PostgreSQL + RustFS + Runtime + persistent checkpoin
     const f = await writingFixture();
     const uploadError = new Error('upload failure');
     const upload = storage.put.bind(storage);
-    const put = vi
-      .spyOn(storage, 'put')
-      .mockImplementationOnce(async (...args) => {
-        await upload(...args);
-        throw uploadError;
-      });
+    const put = vi.spyOn(storage, 'put').mockImplementationOnce(async (...args) => {
+      await upload(...args);
+      throw uploadError;
+    });
     const cleanup = vi
       .spyOn(storage, 'delete')
       .mockRejectedValueOnce(new Error('cleanup unavailable'));
@@ -590,9 +550,7 @@ describe('生产 Artifact：PostgreSQL + RustFS + Runtime + persistent checkpoin
       .spyOn(repository, 'markReady')
       .mockRejectedValueOnce(new Error('DB unavailable'));
     try {
-      await expect(
-        f.codec.encode({ text: 'stored' }, f.options),
-      ).rejects.toMatchObject({
+      await expect(f.codec.encode({ text: 'stored' }, f.options)).rejects.toMatchObject({
         code: 'ARTIFACT_WRITE_FAILED',
         stage: 'finalize',
       });
@@ -614,16 +572,14 @@ describe('生产 Artifact：PostgreSQL + RustFS + Runtime + persistent checkpoin
         f.context,
       ),
     ).rejects.toMatchObject({ code: 'REFERENCE_RESOLUTION_FAILED' });
-    const ambiguous = vi
-      .spyOn(repository, 'markReady')
-      .mockImplementationOnce(async (...args) => {
-        await ready(...args);
-        throw new Error('commit acknowledgement lost');
-      });
+    const ambiguous = vi.spyOn(repository, 'markReady').mockImplementationOnce(async (...args) => {
+      await ready(...args);
+      throw new Error('commit acknowledgement lost');
+    });
     try {
-      await expect(
-        f.codec.encode({ text: 'committed' }, f.options),
-      ).rejects.toMatchObject({ stage: 'finalize' });
+      await expect(f.codec.encode({ text: 'committed' }, f.options)).rejects.toMatchObject({
+        stage: 'finalize',
+      });
     } finally {
       ambiguous.mockRestore();
     }

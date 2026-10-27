@@ -1,9 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import {
-  AnyType,
-  NumberType,
-  type WorkflowDefinition,
-} from '@dramaflow/contracts';
+import { AnyType, NumberType, type WorkflowDefinition } from '@dramaflow/contracts';
 import {
   DatabaseService,
   WorkflowRunRepositories,
@@ -14,8 +10,7 @@ import { storeRuntimeTestVersion } from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test'
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test'
 )
   throw new Error('Invocation 集成测试仅允许隔离测试库');
 const database = new DatabaseService();
@@ -29,10 +24,7 @@ beforeAll(async () => {
     data: { id: ownerId, name: 'Invocation', email: `${ownerId}@example.test` },
   });
   const { WorkflowVersionRepositories } = await import('@dramaflow/server');
-  factory = new WorkflowRunSubmissionFactory(
-    new WorkflowVersionRepositories(database),
-    runs,
-  );
+  factory = new WorkflowRunSubmissionFactory(new WorkflowVersionRepositories(database), runs);
 });
 afterAll(async () => {
   await db.user.deleteMany({ where: { id: ownerId } });
@@ -76,9 +68,7 @@ describe('PostgreSQL invocation 受理', () => {
     );
     expect(new Set(results.map((run) => run.id)).size).toBe(1);
     expect(new Set(results.map((run) => run.threadId)).size).toBe(1);
-    expect(
-      await db.workflowRun.count({ where: { workflowId: f.input.workflowId } }),
-    ).toBe(1);
+    expect(await db.workflowRun.count({ where: { workflowId: f.input.workflowId } })).toBe(1);
     expect(
       await db.workflowExecutionOutbox.count({
         where: { workflowRunId: results[0]!.id, kind: 'start' },
@@ -96,12 +86,10 @@ describe('PostgreSQL invocation 受理', () => {
         }),
       ),
     );
-    expect(
-      results.filter((result) => result.status === 'fulfilled'),
-    ).toHaveLength(1);
-    expect(
-      results.find((result) => result.status === 'rejected'),
-    ).toMatchObject({ reason: { code: 'WORKFLOW_INVOCATION_CONFLICT' } });
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find((result) => result.status === 'rejected')).toMatchObject({
+      reason: { code: 'WORKFLOW_INVOCATION_CONFLICT' },
+    });
     const records = await db.workflowRun.findMany({
       where: { workflowId: f.input.workflowId },
     });
@@ -113,37 +101,32 @@ describe('PostgreSQL invocation 受理', () => {
     ).toBe(1);
   });
 
-  it.each([
-    'pending',
-    'running',
-    'waiting',
-    'completed',
-    'failed',
-    'cancelled',
-  ] as const)('复用 %s，保留 key 和 start Outbox', async (status) => {
-    const f = await fixture();
-    const original = await f.submission.start(f.input);
-    if (status !== 'pending') await f.repository.markRunning(original.id);
-    if (status === 'waiting') await f.repository.markWaiting(original.id);
-    if (status === 'completed')
-      await f.repository.markCompleted(original.id, {});
-    if (status === 'failed')
-      await f.repository.markFailed(original.id, {
-        stage: 'invoke',
-        message: '失败',
+  it.each(['pending', 'running', 'waiting', 'completed', 'failed', 'cancelled'] as const)(
+    '复用 %s，保留 key 和 start Outbox',
+    async (status) => {
+      const f = await fixture();
+      const original = await f.submission.start(f.input);
+      if (status !== 'pending') await f.repository.markRunning(original.id);
+      if (status === 'waiting') await f.repository.markWaiting(original.id);
+      if (status === 'completed') await f.repository.markCompleted(original.id, {});
+      if (status === 'failed')
+        await f.repository.markFailed(original.id, {
+          stage: 'invoke',
+          message: '失败',
+        });
+      if (status === 'cancelled') await f.repository.markCancelled(original.id);
+      expect(await f.submission.start(f.input)).toMatchObject({
+        id: original.id,
+        invocationKey: f.input.invocationKey,
+        status,
       });
-    if (status === 'cancelled') await f.repository.markCancelled(original.id);
-    expect(await f.submission.start(f.input)).toMatchObject({
-      id: original.id,
-      invocationKey: f.input.invocationKey,
-      status,
-    });
-    expect(
-      await db.workflowExecutionOutbox.count({
-        where: { workflowRunId: original.id },
-      }),
-    ).toBe(1);
-  });
+      expect(
+        await db.workflowExecutionOutbox.count({
+          where: { workflowRunId: original.id },
+        }),
+      ).toBe(1);
+    },
+  );
 
   it('不同合法版本冲突，不覆盖已有版本', async () => {
     const f = await fixture();
@@ -189,8 +172,6 @@ describe('PostgreSQL invocation 受理', () => {
         },
       }),
     ).rejects.toThrow();
-    expect((await f.repository.getById(run.id))?.invocationKey).toBe(
-      f.input.invocationKey,
-    );
+    expect((await f.repository.getById(run.id))?.invocationKey).toBe(f.input.invocationKey);
   });
 });

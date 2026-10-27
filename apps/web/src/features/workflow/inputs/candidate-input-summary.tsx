@@ -1,6 +1,6 @@
 import type { CandidateBinding, NodeTypeManifest, WorkflowDefinition } from '@dramaflow/contracts';
-import { describeNodeOutput, sourceLabel } from './template-input';
-import styles from './template-input-editor.module.css';
+import { describeNodeOutput, sourceLabel } from './template/sources';
+import styles from './template/editor/template-input-editor.module.css';
 
 export function CandidateInputSummary({
   portName,

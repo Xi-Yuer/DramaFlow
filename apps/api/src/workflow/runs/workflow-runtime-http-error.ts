@@ -18,8 +18,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 
-export type WorkflowResourceNotFoundCode =
-  'WORKFLOW_VERSION_NOT_FOUND' | 'WORKFLOW_RUN_NOT_FOUND';
+export type WorkflowResourceNotFoundCode = 'WORKFLOW_VERSION_NOT_FOUND' | 'WORKFLOW_RUN_NOT_FOUND';
 
 export function workflowResourceNotFound(code: WorkflowResourceNotFoundCode) {
   return new NotFoundException({
@@ -41,8 +40,7 @@ function errorCode(error: Error): unknown {
   if ('code' in error) return error.code;
   if (error instanceof HttpException) {
     const body = error.getResponse();
-    if (typeof body === 'object' && body !== null && 'code' in body)
-      return body.code;
+    if (typeof body === 'object' && body !== null && 'code' in body) return body.code;
   }
   return undefined;
 }
@@ -66,10 +64,7 @@ export function workflowRuntimeHttpError(
       return new InternalServerErrorException(response);
     return new BadRequestException(response);
   }
-  if (
-    error instanceof WorkflowRunNotWaitingError ||
-    error instanceof WorkflowRunNotPendingError
-  )
+  if (error instanceof WorkflowRunNotWaitingError || error instanceof WorkflowRunNotPendingError)
     return new ConflictException(
       {
         code: error.code,
@@ -95,12 +90,10 @@ export function workflowRuntimeHttpError(
     return new ServiceUnavailableException({
       code: 'WORKFLOW_QUEUE_UNAVAILABLE',
       message: '执行命令已持久保存，入队结果尚未确认',
-      ...('workflowRunId' in accepted &&
-      typeof accepted.workflowRunId === 'string'
+      ...('workflowRunId' in accepted && typeof accepted.workflowRunId === 'string'
         ? { workflowRunId: accepted.workflowRunId }
         : {}),
-      ...('invocationKey' in accepted &&
-      typeof accepted.invocationKey === 'string'
+      ...('invocationKey' in accepted && typeof accepted.invocationKey === 'string'
         ? { invocationKey: accepted.invocationKey }
         : {}),
     });
@@ -120,11 +113,7 @@ export function workflowRuntimeHttpError(
   // 只从有界 cause 链提取白名单配置码，不序列化 cause / stack / 驱动或供应商消息。
   const seen = new Set<Error>();
   let cause = error;
-  for (
-    let depth = 0;
-    depth < 8 && cause instanceof Error && !seen.has(cause);
-    depth++
-  ) {
+  for (let depth = 0; depth < 8 && cause instanceof Error && !seen.has(cause); depth++) {
     seen.add(cause);
     const code = errorCode(cause);
     if (typeof code === 'string' && configurationMessages.has(code))

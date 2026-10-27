@@ -9,11 +9,7 @@ export class WorkflowExecutionTreeController {
 
   @Get(':runId/execution-tree')
   @Header('Cache-Control', 'no-store')
-  query(
-    @Actor() actor: AuthActor,
-    @Param('runId') runId: string,
-    @Query() query: unknown,
-  ) {
+  query(@Actor() actor: AuthActor, @Param('runId') runId: string, @Query() query: unknown) {
     return this.trees.query(actor.user.id, runId, query);
   }
 }

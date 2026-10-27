@@ -9,11 +9,7 @@ import { WorkflowRuntimeService } from './workflow-runtime.service.js';
 
 @Module({
   imports: [WorkflowRuntimeInfrastructureModule, WorkflowQueueModule],
-  providers: [
-    WorkflowRuntimeService,
-    WorkflowExecutionConsumer,
-    WorkflowOutboxPump,
-  ],
+  providers: [WorkflowRuntimeService, WorkflowExecutionConsumer, WorkflowOutboxPump],
   exports: [WorkflowRuntimeService],
 })
 export class WorkflowRuntimeModule {}

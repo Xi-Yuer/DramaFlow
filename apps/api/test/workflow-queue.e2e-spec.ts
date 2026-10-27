@@ -20,8 +20,7 @@ import { storeRuntimeTestVersion } from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test' ||
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test' ||
   !process.env.WORKFLOW_QUEUE_PREFIX?.startsWith('dramaflow-test-')
 )
   throw new Error('Queue 集成测试仅允许独立测试数据库与队列');
@@ -41,9 +40,7 @@ const eventSchema = z.object({
 });
 function launch(command: object) {
   const child = fork(
-    fileURLToPath(
-      new URL('./fixtures/queue-worker-process.ts', import.meta.url),
-    ),
+    fileURLToPath(new URL('./fixtures/queue-worker-process.ts', import.meta.url)),
     [],
     {
       execArgv: ['--import', import.meta.resolve('tsx')],
@@ -71,8 +68,7 @@ function launch(command: object) {
     async wait(event: string) {
       await vi.waitFor(
         () => {
-          if (child.exitCode !== null)
-            throw new Error(`队列子进程已退出：${stderr}`);
+          if (child.exitCode !== null) throw new Error(`队列子进程已退出：${stderr}`);
           expect(events.some((value) => value.event === event)).toBe(true);
         },
         { timeout: 15000 },
@@ -81,9 +77,7 @@ function launch(command: object) {
     },
     async stop(kill = false) {
       if (child.exitCode !== null || child.signalCode !== null) return;
-      const exited = new Promise<void>((resolve) =>
-        child.once('exit', () => resolve()),
-      );
+      const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
       if (kill) child.kill('SIGKILL');
       else child.send({ event: 'close' });
       await exited;
@@ -156,9 +150,7 @@ async function fixture(native = false, businessFailure = false) {
 async function waitRun(id: string, status: string) {
   await vi.waitFor(
     async () =>
-      expect(
-        (await db.workflowRun.findUniqueOrThrow({ where: { id } })).status,
-      ).toBe(status),
+      expect((await db.workflowRun.findUniqueOrThrow({ where: { id } })).status).toBe(status),
     { timeout: 15000 },
   );
 }
@@ -173,14 +165,12 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   for (const child of children)
-    if (child.exitCode === null && child.signalCode === null)
-      child.kill('SIGKILL');
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
   const records = await db.workflowRun.findMany({
     where: { project: { ownerId } },
     select: { threadId: true },
   });
-  for (const run of records)
-    await checkpointer.saver.deleteThread(run.threadId);
+  for (const run of records) await checkpointer.saver.deleteThread(run.threadId);
   await db.user.deleteMany({ where: { id: ownerId } });
   await queue.queue.obliterate({ force: true });
   await queue.onModuleDestroy();
@@ -202,18 +192,16 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
     const event = await submitter.wait('submitted');
     const id = event.runId!;
     await submitter.stop(true);
-    expect(
-      await db.workflowRun.findUniqueOrThrow({ where: { id } }),
-    ).toMatchObject({ status: 'pending' });
+    expect(await db.workflowRun.findUniqueOrThrow({ where: { id } })).toMatchObject({
+      status: 'pending',
+    });
     expect(
       await db.workflowExecutionOutbox.findFirstOrThrow({
         where: { workflowRunId: id },
       }),
     ).toMatchObject({ status: 'pending' });
     expect(
-      await queue.queue.getJob(
-        workflowExecutionJobId({ kind: 'start', workflowRunId: id }),
-      ),
+      await queue.queue.getJob(workflowExecutionJobId({ kind: 'start', workflowRunId: id })),
     ).toBeUndefined();
     const worker = launch({ mode: 'worker' });
     await worker.wait('ready');
@@ -289,28 +277,24 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
               ).toMatchObject({ status: 'recovery_required' }),
             { timeout: 15000 },
           );
-          expect(
-            await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } }),
-          ).toMatchObject({ status: 'running' });
+          expect(await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({
+            status: 'running',
+          });
           const checkpoint = await checkpointer.saver.getTuple({
             configurable: { thread_id: run.threadId },
           });
           if (crash === 'claimed') expect(checkpoint).toBeUndefined();
           else expect(checkpoint).toBeDefined();
         }
-        expect(
-          await db.nodeRun.count({ where: { workflowRunId: run.id } }),
-        ).toBe(crash === 'executed' ? 1 : 0);
+        expect(await db.nodeRun.count({ where: { workflowRunId: run.id } })).toBe(
+          crash === 'executed' ? 1 : 0,
+        );
         if (crash === 'executed') {
-          expect(
-            await db.nodeRun.findMany({ where: { workflowRunId: run.id } }),
-          ).toMatchObject([{ status: 'running', attempt: 1 }]);
-          expect(
-            dying.events.filter((event) => event.event === 'node_execute'),
-          ).toHaveLength(1);
-          expect(
-            worker.events.filter((event) => event.event === 'node_execute'),
-          ).toHaveLength(0);
+          expect(await db.nodeRun.findMany({ where: { workflowRunId: run.id } })).toMatchObject([
+            { status: 'running', attempt: 1 },
+          ]);
+          expect(dying.events.filter((event) => event.event === 'node_execute')).toHaveLength(1);
+          expect(worker.events.filter((event) => event.event === 'node_execute')).toHaveLength(0);
         }
         expect(await db.workflowRun.count({ where: { id: run.id } })).toBe(1);
       } finally {
@@ -333,38 +317,32 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
         workflowRunId: run.id,
         value: 10,
       });
-      await expect(
-        f.submission.resume({ workflowRunId: run.id, value: 99 }),
-      ).rejects.toMatchObject({ code: 'WORKFLOW_RESUME_ALREADY_SUBMITTED' });
+      await expect(f.submission.resume({ workflowRunId: run.id, value: 99 })).rejects.toMatchObject(
+        { code: 'WORKFLOW_RESUME_ALREADY_SUBMITTED' },
+      );
       await dispatcher.publishExecution(first.executionId);
       await vi.waitFor(
         async () =>
           expect(
-            (await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } }))
-              .waitingRevision,
+            (await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } })).waitingRevision,
           ).toBe(2),
         { timeout: 15000 },
       );
       await vi.waitFor(async () =>
-        expect(
-          await (
-            await queue.queue.getJob(workflowExecutionJobId(first))
-          )?.getState(),
-        ).toBe('completed'),
+        expect(await (await queue.queue.getJob(workflowExecutionJobId(first)))?.getState()).toBe(
+          'completed',
+        ),
       );
       await (await queue.queue.getJob(workflowExecutionJobId(first)))?.remove();
       await queue.publish(first);
       await vi.waitFor(async () =>
-        expect(
-          await (
-            await queue.queue.getJob(workflowExecutionJobId(first))
-          )?.getState(),
-        ).toBe('completed'),
+        expect(await (await queue.queue.getJob(workflowExecutionJobId(first)))?.getState()).toBe(
+          'completed',
+        ),
       );
-      expect(
-        (await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } }))
-          .status,
-      ).toBe('waiting');
+      expect((await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } })).status).toBe(
+        'waiting',
+      );
       const second = await f.submission.resume({
         workflowRunId: run.id,
         value: 20,
@@ -372,16 +350,12 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
       expect(second.executionId).not.toBe(first.executionId);
       await dispatcher.publishExecution(second.executionId);
       await waitRun(run.id, 'completed');
-      expect(
-        await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } }),
-      ).toMatchObject({
+      expect(await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({
         outputs: { first: { value: 10 }, second: { value: 20 } },
         threadId: run.threadId,
         workflowVersionId: run.workflowVersionId,
       });
-      expect(
-        worker.events.filter((event) => event.event === 'invoke'),
-      ).toHaveLength(3);
+      expect(worker.events.filter((event) => event.event === 'invoke')).toHaveLength(3);
     } finally {
       await worker.stop();
       await queue.queue.pause();
@@ -408,11 +382,8 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
         ).toBe('completed'),
       );
       expect(
-        (
-          await queue.queue.getJob(
-            workflowExecutionJobId({ kind: 'start', workflowRunId: run.id }),
-          )
-        )?.attemptsMade,
+        (await queue.queue.getJob(workflowExecutionJobId({ kind: 'start', workflowRunId: run.id })))
+          ?.attemptsMade,
       ).toBe(2);
       expect(await db.workflowRun.count({ where: { id: run.id } })).toBe(1);
     } finally {
@@ -435,28 +406,18 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
         workflowRunId: run.id,
       });
       await vi.waitFor(async () =>
-        expect(await (await queue.queue.getJob(jobId))?.getState()).toBe(
-          'failed',
-        ),
+        expect(await (await queue.queue.getJob(jobId))?.getState()).toBe('failed'),
       );
       const queued = await queue.queue.getJob(jobId);
       expect(queued?.opts.attempts).toBe(5);
       expect(queued?.attemptsMade).toBe(1);
       expect(queued?.failedReason).toBe('WORKFLOW_EXECUTION_FAILED');
-      expect(JSON.stringify(queued?.stacktrace)).not.toContain(
-        'provider-secret-marker',
-      );
-      expect(
-        await db.nodeRun.findMany({ where: { workflowRunId: run.id } }),
-      ).toMatchObject([
+      expect(JSON.stringify(queued?.stacktrace)).not.toContain('provider-secret-marker');
+      expect(await db.nodeRun.findMany({ where: { workflowRunId: run.id } })).toMatchObject([
         { attempt: 1, status: 'failed', error: { stage: 'execute' } },
       ]);
-      expect(await db.nodeRun.count({ where: { workflowRunId: run.id } })).toBe(
-        1,
-      );
-      expect(
-        worker.events.filter((event) => event.event === 'node_execute'),
-      ).toHaveLength(1);
+      expect(await db.nodeRun.count({ where: { workflowRunId: run.id } })).toBe(1);
+      expect(worker.events.filter((event) => event.event === 'node_execute')).toHaveLength(1);
       expect(
         await db.workflowExecutionOutbox.findFirstOrThrow({
           where: { workflowRunId: run.id },
@@ -469,19 +430,14 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
   });
 
   it('显式发布缺失的意图不能伪装成已经入队', async () => {
-    await expect(
-      dispatcher.publishExecution(randomUUID()),
-    ).rejects.toMatchObject({ status: 404 });
+    await expect(dispatcher.publishExecution(randomUUID())).rejects.toMatchObject({ status: 404 });
   });
 
   it('Redis 无法建立连接时入队有界失败，Outbox 保留且不 claim Run', async () => {
     const server = createServer();
-    await new Promise<void>((resolve) =>
-      server.listen(0, '127.0.0.1', resolve),
-    );
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
-    if (!address || typeof address === 'string')
-      throw new Error('测试端口未就绪');
+    if (!address || typeof address === 'string') throw new Error('测试端口未就绪');
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     );
@@ -498,9 +454,7 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
     const run = await f.submission.start(f.input);
     try {
       await expect(
-        new WorkflowOutboxDispatcher(database, unavailable).publishStart(
-          run.id,
-        ),
+        new WorkflowOutboxDispatcher(database, unavailable).publishStart(run.id),
       ).rejects.toMatchObject({ status: 503 });
     } finally {
       await unavailable.onModuleDestroy();
@@ -510,9 +464,10 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
         where: { workflowRunId: run.id },
       }),
     ).toMatchObject({ status: 'pending', attempts: 1 });
-    expect(
-      await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } }),
-    ).toMatchObject({ status: 'pending', startedAt: null });
+    expect(await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({
+      status: 'pending',
+      startedAt: null,
+    });
   });
 
   it('Outbox 写入失败回滚 Run 且不占用 key；投递故障保留 pending 意图', async () => {
@@ -530,22 +485,14 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
     try {
       await expect(submit.createWithExecution(f.input)).rejects.toThrow();
     } finally {
-      await db.$executeRawUnsafe(
-        `DROP TRIGGER "${triggerName}" ON workflow_execution_outbox`,
-      );
+      await db.$executeRawUnsafe(`DROP TRIGGER "${triggerName}" ON workflow_execution_outbox`);
       await db.$executeRawUnsafe(`DROP FUNCTION "${triggerName}"()`);
     }
-    expect(
-      await db.workflowRun.count({ where: { projectId: f.input.projectId } }),
-    ).toBe(0);
+    expect(await db.workflowRun.count({ where: { projectId: f.input.projectId } })).toBe(0);
     const run = await f.submission.start(f.input);
     expect(run.invocationKey).toBe(f.input.invocationKey);
-    expect(
-      await db.workflowRun.count({ where: { workflowId: f.input.workflowId } }),
-    ).toBe(1);
-    const failing = vi
-      .spyOn(queue, 'publish')
-      .mockRejectedValue(new Error('redis-secret-marker'));
+    expect(await db.workflowRun.count({ where: { workflowId: f.input.workflowId } })).toBe(1);
+    const failing = vi.spyOn(queue, 'publish').mockRejectedValue(new Error('redis-secret-marker'));
     try {
       await expect(dispatcher.publishStart(run.id)).rejects.toMatchObject({
         status: 503,
@@ -558,8 +505,9 @@ describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
         where: { workflowRunId: run.id },
       }),
     ).toMatchObject({ status: 'pending', attempts: 1 });
-    expect(
-      await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } }),
-    ).toMatchObject({ status: 'pending', startedAt: null });
+    expect(await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({
+      status: 'pending',
+      startedAt: null,
+    });
   });
 });

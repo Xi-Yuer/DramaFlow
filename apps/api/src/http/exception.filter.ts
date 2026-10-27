@@ -1,10 +1,4 @@
-import {
-  ArgumentsHost,
-  Catch,
-  ExceptionFilter,
-  HttpException,
-  Logger,
-} from '@nestjs/common';
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
@@ -14,8 +8,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
     const requestId = randomUUID();
-    const path =
-      host.switchToHttp().getRequest<Request>().originalUrl.split('?')[0] ?? '';
+    const path = host.switchToHttp().getRequest<Request>().originalUrl.split('?')[0] ?? '';
     const sensitive =
       /^\/api\/v1\/(?:provider-plugins\/?$|projects\/[^/]+\/(?:providers|model-configurations)(?:\/|$))/.test(
         path,
@@ -28,9 +21,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
       'type' in error &&
       error.type === 'entity.too.large'
     ) {
-      response
-        .status(413)
-        .json({ code: 'HTTP_413', message: '请求内容过大', requestId });
+      response.status(413).json({ code: 'HTTP_413', message: '请求内容过大', requestId });
       return;
     }
     if (error instanceof HttpException) {
@@ -75,10 +66,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
         return;
       }
       response.status(error.getStatus()).json({
-        code:
-          typeof value.code === 'string'
-            ? value.code
-            : `HTTP_${error.getStatus()}`,
+        code: typeof value.code === 'string' ? value.code : `HTTP_${error.getStatus()}`,
         message: typeof value.message === 'string' ? value.message : '请求失败',
         ...(value.issues ? { details: value.issues } : {}),
         ...((value.code === 'WORKFLOW_QUEUE_UNAVAILABLE' ||
@@ -86,8 +74,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
         typeof value.workflowRunId === 'string'
           ? { workflowRunId: value.workflowRunId }
           : {}),
-        ...(value.code === 'WORKFLOW_QUEUE_UNAVAILABLE' &&
-        typeof value.invocationKey === 'string'
+        ...(value.code === 'WORKFLOW_QUEUE_UNAVAILABLE' && typeof value.invocationKey === 'string'
           ? { invocationKey: value.invocationKey }
           : {}),
         requestId,

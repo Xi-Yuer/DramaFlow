@@ -1,16 +1,9 @@
-import {
-  ImageType,
-  JsonType,
-  NumberType,
-  type WorkflowDefinition,
-} from '@dramaflow/contracts';
+import { ImageType, JsonType, NumberType, type WorkflowDefinition } from '@dramaflow/contracts';
 import { NodeRegistry } from '@dramaflow/workflow';
 import { z } from 'zod';
 
 export const largeText = 'artifact-content-only-in-rustfs:'.repeat(12000);
-export const imageBytes = Uint8Array.from([
-  137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3,
-]);
+export const imageBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
 
 // 只在测试 Registry 注册，不加入生产目录；下游输入是业务对象与可访问媒体资源。
 export function registerArtifactNodes(registry: NodeRegistry) {
@@ -79,14 +72,11 @@ export function registerArtifactNodes(registry: NodeRegistry) {
           image: z.object({ access: z.object({ url: z.url() }) }),
         })
         .parse(input);
-      if (data.payload.text !== largeText)
-        throw new Error('大 JSON 内容不一致');
+      if (data.payload.text !== largeText) throw new Error('大 JSON 内容不一致');
       const response = await fetch(data.image.access.url);
       if (
         !response.ok ||
-        !Buffer.from(await response.arrayBuffer()).equals(
-          Buffer.from(imageBytes),
-        )
+        !Buffer.from(await response.arrayBuffer()).equals(Buffer.from(imageBytes))
       )
         throw new Error('临时访问 URL 无法读取实际二进制');
       return { length: data.payload.text.length };

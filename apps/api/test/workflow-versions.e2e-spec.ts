@@ -1,39 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import { StringType, type WorkflowDefinition } from '@dramaflow/contracts';
-import {
-  DatabaseService,
-  WorkflowVersionRepositories,
-} from '@dramaflow/server';
-import {
-  createWorkflowDefinitionSnapshot,
-  NodeRegistry,
-} from '@dramaflow/workflow';
+import { DatabaseService, WorkflowVersionRepositories } from '@dramaflow/server';
+import { createWorkflowDefinitionSnapshot, NodeRegistry } from '@dramaflow/workflow';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import {
-  registerTextTestNodes,
-  createWorkflowService,
-} from './fixtures/workflow-service.js';
+import { registerTextTestNodes, createWorkflowService } from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test'
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test'
 )
-  throw new Error(
-    'WorkflowVersion 集成测试仅允许在 DramaFlow 的隔离测试数据库运行',
-  );
+  throw new Error('WorkflowVersion 集成测试仅允许在 DramaFlow 的隔离测试数据库运行');
 
 const database = new DatabaseService();
 const db = database.client;
 const ownerId = randomUUID();
 const otherId = randomUUID();
 const repositories = new WorkflowVersionRepositories(database);
-const workflows = createWorkflowService(
-  database,
-  registerTextTestNodes(new NodeRegistry()),
-);
+const workflows = createWorkflowService(database, registerTextTestNodes(new NodeRegistry()));
 
 beforeAll(async () => {
   for (const id of [ownerId, otherId])
@@ -88,9 +73,7 @@ function definition(text: string): WorkflowDefinition {
 }
 
 function snapshot(input: unknown) {
-  return z
-    .record(z.string(), z.json())
-    .parse(createWorkflowDefinitionSnapshot(input));
+  return z.record(z.string(), z.json()).parse(createWorkflowDefinitionSnapshot(input));
 }
 
 async function fixture(draft: WorkflowDefinition = definition('A')) {
@@ -151,29 +134,27 @@ describe('真实 PostgreSQL Workflow / WorkflowVersion', () => {
       version: 2,
       definition: b,
     });
-    expect(
-      await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } }),
-    ).toMatchObject({
+    expect(await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } })).toMatchObject({
       draft: b,
       revision: 2,
     });
-    const freshRepository = await new WorkflowVersionRepositories(
-      database,
-    ).forProject(ownerId, f.project.id);
+    const freshRepository = await new WorkflowVersionRepositories(database).forProject(
+      ownerId,
+      f.project.id,
+    );
     expect(await freshRepository.getVersion(v1.id)).toEqual(first);
 
     const connection = new DatabaseService();
     try {
-      const [original] = await db.$queryRaw<
-        { pid: number }[]
-      >`SELECT pg_backend_pid() AS pid`;
+      const [original] = await db.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
       const [fresh] = await connection.client.$queryRaw<
         { pid: number }[]
       >`SELECT pg_backend_pid() AS pid`;
       expect(fresh?.pid).not.toBe(original?.pid);
-      const reconnected = await new WorkflowVersionRepositories(
-        connection,
-      ).forProject(ownerId, f.project.id);
+      const reconnected = await new WorkflowVersionRepositories(connection).forProject(
+        ownerId,
+        f.project.id,
+      );
       expect(await reconnected.getVersion(v1.id)).toEqual(first);
       expect(await reconnected.getVersion(v2.id)).toMatchObject({
         definition: b,
@@ -197,9 +178,9 @@ describe('真实 PostgreSQL Workflow / WorkflowVersion', () => {
       await expect(
         db.workflowVersion.update({ where: { id: version.id }, data }),
       ).rejects.toThrow();
-    expect(
-      await db.workflowVersion.findUniqueOrThrow({ where: { id: version.id } }),
-    ).toEqual(version);
+    expect(await db.workflowVersion.findUniqueOrThrow({ where: { id: version.id } })).toEqual(
+      version,
+    );
   });
 
   it('每项目一个 Workflow、同工作流版本号唯一，版本和 revision 为正数', async () => {
@@ -244,9 +225,9 @@ describe('真实 PostgreSQL Workflow / WorkflowVersion', () => {
     expect(await a.repository.getVersion(a.workflow.id)).toBeNull();
     expect(await a.repository.getVersion('latest')).toBeNull();
     expect(await a.repository.getVersion(randomUUID())).toBeNull();
-    await expect(
-      repositories.forProject(otherId, a.project.id),
-    ).rejects.toThrow('项目不存在或无权访问');
+    await expect(repositories.forProject(otherId, a.project.id)).rejects.toThrow(
+      '项目不存在或无权访问',
+    );
   });
 
   it('每次读取重新验证所有者，已有 Repository 不能沿用过期权限', async () => {
@@ -273,9 +254,7 @@ describe('真实 PostgreSQL Workflow / WorkflowVersion', () => {
         definition: { patch: [] },
       },
     });
-    await expect(f.repository.getVersion(version.id)).rejects.toBeInstanceOf(
-      z.ZodError,
-    );
+    await expect(f.repository.getVersion(version.id)).rejects.toBeInstanceOf(z.ZodError);
   });
 
   it('删除 Workflow 级联删除版本，读取不返回已删除快照', async () => {
@@ -283,8 +262,6 @@ describe('真实 PostgreSQL Workflow / WorkflowVersion', () => {
     const version = await storeVersion(f.workflow.id, 1);
     await db.workflow.delete({ where: { id: f.workflow.id } });
     expect(await f.repository.getVersion(version.id)).toBeNull();
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
   });
 });

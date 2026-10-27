@@ -7,10 +7,7 @@ import {
   modelManagementListQuerySchema,
   modelCatalogQuerySchema,
 } from '@dramaflow/contracts';
-import {
-  ModelProviderService,
-  ModelConfigurationError,
-} from '@dramaflow/server';
+import { ModelProviderService, ModelConfigurationError } from '@dramaflow/server';
 import {
   BadRequestException,
   Body,
@@ -50,8 +47,7 @@ async function safe<T>(action: () => Promise<T> | T): Promise<T> {
         code: error.code,
         message: '模型能力配置无效或不可用，请检查所选插件、能力及配置',
       };
-      if (error.code === 'MODEL_PROVIDER_UNAVAILABLE')
-        throw new ConflictException(body);
+      if (error.code === 'MODEL_PROVIDER_UNAVAILABLE') throw new ConflictException(body);
       throw new BadRequestException(body);
     }
     if (error instanceof NotFoundException)
@@ -92,9 +88,7 @@ export class ModelManagementController {
   @Header('Cache-Control', 'no-store')
   modelCatalog(@Query() query: unknown) {
     return safe(() =>
-      this.models.listModelCatalog(
-        parse(modelCatalogQuerySchema, query).capability,
-      ),
+      this.models.listModelCatalog(parse(modelCatalogQuerySchema, query).capability),
     );
   }
 
@@ -102,22 +96,14 @@ export class ModelManagementController {
   @Header('Cache-Control', 'no-store')
   listProviders(@Actor() actor: AuthActor, @Query() query: unknown) {
     return safe(() =>
-      this.models.listProviders(
-        actor.user.id,
-        parse(modelManagementListQuerySchema, query),
-      ),
+      this.models.listProviders(actor.user.id, parse(modelManagementListQuerySchema, query)),
     );
   }
 
   @Get('providers/:providerId')
   @Header('Cache-Control', 'no-store')
-  getProvider(
-    @Actor() actor: AuthActor,
-    @Param('providerId') providerId: string,
-  ) {
-    return safe(() =>
-      this.models.getProvider(actor.user.id, parse(z.uuid(), providerId)),
-    );
+  getProvider(@Actor() actor: AuthActor, @Param('providerId') providerId: string) {
+    return safe(() => this.models.getProvider(actor.user.id, parse(z.uuid(), providerId)));
   }
 
   @Post('providers/catalog')
@@ -188,10 +174,7 @@ export class ModelManagementController {
   @Header('Cache-Control', 'no-store')
   getModel(@Actor() actor: AuthActor, @Param('modelId') modelId: string) {
     return safe(() =>
-      this.models.getManagedModelConfiguration(
-        actor.user.id,
-        parse(z.uuid(), modelId),
-      ),
+      this.models.getManagedModelConfiguration(actor.user.id, parse(z.uuid(), modelId)),
     );
   }
 

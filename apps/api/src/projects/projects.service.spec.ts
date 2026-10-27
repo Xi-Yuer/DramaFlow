@@ -1,8 +1,4 @@
-import {
-  ConflictException,
-  NotFoundException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -46,9 +42,7 @@ async function setup() {
   };
   const client = {
     project,
-    $transaction: vi.fn((callback: (current: typeof tx) => Promise<unknown>) =>
-      callback(tx),
-    ),
+    $transaction: vi.fn((callback: (current: typeof tx) => Promise<unknown>) => callback(tx)),
   };
   const storage = { delete: vi.fn().mockResolvedValue(undefined) };
   const checkpoints = { deleteThread: vi.fn().mockResolvedValue(undefined) };
@@ -125,9 +119,7 @@ describe('基础项目与所有者隔离', () => {
   it('不存在或属于其他所有者的项目统一返回 404', async () => {
     const { service, project } = await setup();
     project.findFirst.mockResolvedValue(null);
-    await expect(service.get('owner-b', projectId)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(service.get('owner-b', projectId)).rejects.toBeInstanceOf(NotFoundException);
     expect(project.findFirst).toHaveBeenCalledWith({
       where: { id: projectId, ownerId: 'owner-b' },
     });
@@ -198,9 +190,7 @@ describe('基础项目与所有者隔离', () => {
       { cursor: ['a', 'b'] },
       { ownerId: 'other-owner' },
     ]) {
-      await expect(service.list(ownerId, query)).rejects.toBeInstanceOf(
-        z.ZodError,
-      );
+      await expect(service.list(ownerId, query)).rejects.toBeInstanceOf(z.ZodError);
     }
     expect(project.findMany).not.toHaveBeenCalled();
   });
@@ -219,9 +209,7 @@ describe('基础项目与所有者隔离', () => {
 
   it('相同修订号并发保存时，仅成功写入者返回新修订号，另一方收到 409', async () => {
     const { service, project } = await setup();
-    project.updateMany
-      .mockResolvedValueOnce({ count: 1 })
-      .mockResolvedValueOnce({ count: 0 });
+    project.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
     const results = await Promise.allSettled([
       service.save(ownerId, projectId, saveInput),
       service.save(ownerId, projectId, saveInput),
@@ -241,9 +229,9 @@ describe('基础项目与所有者隔离', () => {
     const { service, project } = await setup();
     project.updateMany.mockResolvedValue({ count: 0 });
     project.findFirst.mockResolvedValue(null);
-    await expect(
-      service.save('owner-b', projectId, saveInput),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.save('owner-b', projectId, saveInput)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
     expect(project.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: projectId, ownerId: 'owner-b', revision: 3 },
@@ -257,9 +245,9 @@ describe('基础项目与所有者隔离', () => {
     { ownerId: 'owner-b' },
   ])('拒绝创建或保存请求中的旧业务字段和所有者注入：%o', async (extra) => {
     const { service, project } = await setup();
-    await expect(
-      service.create(ownerId, { name: '第一集', ...extra }),
-    ).rejects.toBeInstanceOf(z.ZodError);
+    await expect(service.create(ownerId, { name: '第一集', ...extra })).rejects.toBeInstanceOf(
+      z.ZodError,
+    );
     await expect(
       service.save(ownerId, projectId, { ...saveInput, ...extra }),
     ).rejects.toBeInstanceOf(z.ZodError);
@@ -313,9 +301,7 @@ describe('基础项目与所有者隔离', () => {
   it('其他所有者或未知项目删除时返回 404，不清理外部对象', async () => {
     const { service, project, tx, storage, checkpoints, queue } = await setup();
     tx.$queryRaw.mockResolvedValue([]);
-    await expect(service.remove('owner-b', projectId)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(service.remove('owner-b', projectId)).rejects.toBeInstanceOf(NotFoundException);
     expect(project.delete).not.toHaveBeenCalled();
     expect(storage.delete).not.toHaveBeenCalled();
     expect(checkpoints.deleteThread).not.toHaveBeenCalled();
@@ -334,9 +320,7 @@ describe('基础项目与所有者隔离', () => {
 
   it('无效项目标识不开启删除事务', async () => {
     const { service, tx } = await setup();
-    await expect(service.remove(ownerId, 'not-a-uuid')).rejects.toBeInstanceOf(
-      z.ZodError,
-    );
+    await expect(service.remove(ownerId, 'not-a-uuid')).rejects.toBeInstanceOf(z.ZodError);
     expect(tx.$queryRaw).not.toHaveBeenCalled();
   });
 });

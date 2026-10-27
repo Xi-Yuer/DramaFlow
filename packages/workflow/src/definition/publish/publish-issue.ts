@@ -86,3 +86,7 @@ export class WorkflowPublishValidationError extends Error {
     this.name = 'WorkflowPublishValidationError';
   }
 }
+
+export function invalid(code: WorkflowPublishIssueCode, nodeId: string, portKey?: string): never {
+  throw new WorkflowPublishValidationError(code, nodeId, portKey);
+}

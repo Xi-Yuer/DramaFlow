@@ -1,7 +1,4 @@
-import {
-  walkGraphDefinitions,
-  type WorkflowDefinition,
-} from '@dramaflow/contracts';
+import { walkGraphDefinitions, type WorkflowDefinition } from '@dramaflow/contracts';
 import {
   NodeRegistrationError,
   NodeRegistry,
@@ -29,11 +26,7 @@ export function validateWorkflowNodeConfigurations(
         nodeType = registry.get(node.type, node.typeVersion);
       } catch (error) {
         // 编辑中的草稿可引用尚不可用的类型；正式发布另走完整语义校验。
-        if (
-          error instanceof NodeRegistrationError &&
-          error.code === 'unavailable_type'
-        )
-          continue;
+        if (error instanceof NodeRegistrationError && error.code === 'unavailable_type') continue;
         throw error;
       }
       if (
@@ -42,11 +35,8 @@ export function validateWorkflowNodeConfigurations(
         !isSubworkflowNodeManifest(nodeType.manifest)
       )
         continue;
-      const allowed = new Set(
-        nodeType.manifest.config.map((field) => field.key),
-      );
-      if (Object.keys(node.config).some((key) => !allowed.has(key)))
-        throw invalidConfiguration();
+      const allowed = new Set(nodeType.manifest.config.map((field) => field.key));
+      if (Object.keys(node.config).some((key) => !allowed.has(key))) throw invalidConfiguration();
     }
   }
 }

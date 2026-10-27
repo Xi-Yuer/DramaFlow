@@ -4,23 +4,15 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { createDatabase } from '@dramaflow/database';
-import {
-  decodeProjectPageCursor,
-  projectListSchema,
-  projectSchema,
-} from '@dramaflow/contracts';
+import { decodeProjectPageCursor, projectListSchema, projectSchema } from '@dramaflow/contracts';
 import { createAuth } from '../src/auth/auth.factory.js';
 import { authBaseUrl } from '../src/auth/trusted-origin.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  !new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname.endsWith(
-    '_test',
-  )
+  !new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname.endsWith('_test')
 )
-  throw new Error(
-    '认证集成测试只能通过 pnpm test:integration 在隔离数据库运行',
-  );
+  throw new Error('认证集成测试只能通过 pnpm test:integration 在隔离数据库运行');
 const db = createDatabase();
 const auth = createAuth(db);
 const base = 'http://127.0.0.1:3101';
@@ -50,9 +42,7 @@ const call = (
     method,
     headers: {
       ...(session ? { cookie: session } : {}),
-      ...(body
-        ? { 'Content-Type': 'application/json', Origin: requestOrigin }
-        : {}),
+      ...(body ? { 'Content-Type': 'application/json', Origin: requestOrigin } : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
@@ -149,12 +139,7 @@ it('真实密码登录、Cookie 会话和安全 DTO，不暴露凭证', async ()
   expect(body.role).toBe('user');
   expect(JSON.stringify(body)).not.toContain('token');
   expect(JSON.stringify(body)).not.toContain('password');
-  const nodeTypes = await call(
-    '/api/v1/workflow/node-types',
-    'GET',
-    undefined,
-    cookie,
-  );
+  const nodeTypes = await call('/api/v1/workflow/node-types', 'GET', undefined, cookie);
   expect(nodeTypes.status).toBe(200);
   expect(nodeTypes.headers.get('Cache-Control')).toBe('no-store');
   expect(await nodeTypes.json()).toEqual(
@@ -180,12 +165,7 @@ it('真实密码登录、Cookie 会话和安全 DTO，不暴露凭证', async ()
 
 it('真实项目 API 保留基础字段、所有者隔离和修订号并发校验，拒绝旧业务协议', async () => {
   expect((await call('/api/v1/projects')).status).toBe(401);
-  const createdResponse = await call(
-    '/api/v1/projects',
-    'POST',
-    { name: ' 第一集 ' },
-    cookie,
-  );
+  const createdResponse = await call('/api/v1/projects', 'POST', { name: ' 第一集 ' }, cookie);
   expect(createdResponse.status).toBe(201);
   const created = projectSchema.parse(await createdResponse.json());
   expect(created.name).toBe('第一集');
@@ -211,16 +191,9 @@ it('真实项目 API 保留基础字段、所有者隔离和修订号并发校�
   expect(adminProjectResponse.status).toBe(201);
   const adminProject = projectSchema.parse(await adminProjectResponse.json());
   expect((await call(path, 'GET', undefined, adminCookie)).status).toBe(404);
-  expect(
-    (
-      await call(
-        `/api/v1/projects/${adminProject.id}`,
-        'GET',
-        undefined,
-        cookie,
-      )
-    ).status,
-  ).toBe(404);
+  expect((await call(`/api/v1/projects/${adminProject.id}`, 'GET', undefined, cookie)).status).toBe(
+    404,
+  );
   for (const [session, ownId, otherId] of [
     [cookie, created.id, adminProject.id],
     [adminCookie, adminProject.id, created.id],
@@ -250,59 +223,33 @@ it('真实项目 API 保留基础字段、所有者隔离和修订号并发校�
   const stale = await call(path, 'PUT', update, secondCookie);
   expect(stale.status).toBe(409);
   expect(await stale.json()).toMatchObject({ code: 'REVISION_CONFLICT' });
-  expect(
-    (await call(path, 'PUT', { ...update, revision: 2 }, adminCookie)).status,
-  ).toBe(404);
+  expect((await call(path, 'PUT', { ...update, revision: 2 }, adminCookie)).status).toBe(404);
 
   for (const extra of [
     { definition: { schemaVersion: 1, nodes: [], edges: [], bindings: [] } },
     { nodeCount: 0 },
   ]) {
     expect(
-      (
-        await call(
-          '/api/v1/projects',
-          'POST',
-          { name: '旧协议', ...extra },
-          cookie,
-        )
-      ).status,
+      (await call('/api/v1/projects', 'POST', { name: '旧协议', ...extra }, cookie)).status,
     ).toBe(400);
-    expect(
-      (await call(path, 'PUT', { ...update, revision: 2, ...extra }, cookie))
-        .status,
-    ).toBe(400);
+    expect((await call(path, 'PUT', { ...update, revision: 2, ...extra }, cookie)).status).toBe(
+      400,
+    );
   }
-  expect((await call('/api/v1/plugins', 'GET', undefined, cookie)).status).toBe(
-    404,
-  );
+  expect((await call('/api/v1/plugins', 'GET', undefined, cookie)).status).toBe(404);
 
   const removed = await call(path, 'DELETE', undefined, cookie);
   expect(removed.status).toBe(204);
   expect(await removed.text()).toBe('');
   expect((await call(path, 'GET', undefined, cookie)).status).toBe(404);
   expect(await db.workflow.count({ where: { projectId: created.id } })).toBe(0);
-  expect(await db.workflowRun.count({ where: { projectId: created.id } })).toBe(
-    0,
-  );
+  expect(await db.workflowRun.count({ where: { projectId: created.id } })).toBe(0);
   expect(await db.artifact.count({ where: { projectId: created.id } })).toBe(0);
   expect(
-    (
-      await call(
-        `/api/v1/projects/${adminProject.id}`,
-        'DELETE',
-        undefined,
-        cookie,
-      )
-    ).status,
+    (await call(`/api/v1/projects/${adminProject.id}`, 'DELETE', undefined, cookie)).status,
   ).toBe(404);
-  expect(
-    await db.project.findUnique({ where: { id: adminProject.id } }),
-  ).not.toBeNull();
-  expect(
-    (await call('/api/v1/projects/not-a-uuid', 'DELETE', undefined, cookie))
-      .status,
-  ).toBe(400);
+  expect(await db.project.findUnique({ where: { id: adminProject.id } })).not.toBeNull();
+  expect((await call('/api/v1/projects/not-a-uuid', 'DELETE', undefined, cookie)).status).toBe(400);
 });
 
 it('真实项目列表跨页保留相同毫秒记录的顺序，始终隔离所有者', async () => {
@@ -325,12 +272,7 @@ it('真实项目列表跨页保留相同毫秒记录的顺序，始终隔离所�
     })),
   });
   try {
-    const firstResponse = await call(
-      '/api/v1/projects',
-      'GET',
-      undefined,
-      cookie,
-    );
+    const firstResponse = await call('/api/v1/projects', 'GET', undefined, cookie);
     expect(firstResponse.status).toBe(200);
     const first = projectListSchema.parse(await firstResponse.json());
     expect(first.items.map((item) => item.id)).toEqual(ownIds.slice(0, 30));
@@ -357,14 +299,7 @@ it('真实项目列表跨页保留相同毫秒记录的顺序，始终隔离所�
     expect(new Set(combined).size).toBe(combined.length);
     expect(combined.some((id) => otherIds.includes(id))).toBe(false);
     expect(
-      (
-        await call(
-          '/api/v1/projects?cursor=not-base64',
-          'GET',
-          undefined,
-          cookie,
-        )
-      ).status,
+      (await call('/api/v1/projects?cursor=not-base64', 'GET', undefined, cookie)).status,
     ).toBe(400);
   } finally {
     await db.project.deleteMany({
@@ -382,46 +317,20 @@ it('资料可编辑，角色不能自助提升，跨来源写入被拒绝', asyn
   const response = await call('/api/v1/users/me', 'PATCH', data, cookie);
   expect(response.status).toBe(200);
   expect((await response.json()).name).toBe('阿月');
+  expect((await call('/api/v1/users/me', 'PATCH', { ...data, role: 'admin' }, cookie)).status).toBe(
+    400,
+  );
   expect(
-    (
-      await call(
-        '/api/v1/users/me',
-        'PATCH',
-        { ...data, role: 'admin' },
-        cookie,
-      )
-    ).status,
-  ).toBe(400);
-  expect(
-    (
-      await call(
-        '/api/v1/users/me',
-        'PATCH',
-        data,
-        cookie,
-        'https://untrusted.invalid',
-      )
-    ).status,
+    (await call('/api/v1/users/me', 'PATCH', data, cookie, 'https://untrusted.invalid')).status,
   ).toBe(403);
   expect(
-    (
-      await call(
-        '/api/v1/users/me',
-        'PATCH',
-        { ...data, timeZone: 'invalid-zone' },
-        cookie,
-      )
-    ).status,
+    (await call('/api/v1/users/me', 'PATCH', { ...data, timeZone: 'invalid-zone' }, cookie)).status,
   ).toBe(400);
-  expect(
-    (await db.user.findUniqueOrThrow({ where: { id: userId } })).role,
-  ).toBe('user');
+  expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).role).toBe('user');
 });
 
 it('普通用户不能访问平台账号目录，管理员可以', async () => {
-  expect((await call('/api/v1/users', 'GET', undefined, cookie)).status).toBe(
-    403,
-  );
+  expect((await call('/api/v1/users', 'GET', undefined, cookie)).status).toBe(403);
   const adminCookie = cookies(await signIn(adminEmail));
   const directory = await call('/api/v1/users', 'GET', undefined, adminCookie);
   expect(directory.status).toBe(200);
@@ -429,37 +338,23 @@ it('普通用户不能访问平台账号目录，管理员可以', async () => {
 });
 
 it('设备列表不返回 token，撤销其他设备立即生效', async () => {
-  const response = await call(
-    '/api/v1/users/me/sessions',
-    'GET',
-    undefined,
-    cookie,
-  );
+  const response = await call('/api/v1/users/me/sessions', 'GET', undefined, cookie);
   expect(response.status).toBe(200);
   const body = await response.json();
   expect(body.items).toHaveLength(2);
   expect(JSON.stringify(body)).not.toContain('token');
-  expect(
-    body.items.filter((item: { current: boolean }) => item.current),
-  ).toHaveLength(1);
-  expect(
-    (await call('/api/v1/users/me/revoke-other-sessions', 'POST', {}, cookie))
-      .status,
-  ).toBe(201);
-  expect(
-    (await call('/api/v1/users/me', 'GET', undefined, secondCookie)).status,
-  ).toBe(401);
-  expect(
-    (await call('/api/v1/users/me', 'GET', undefined, cookie)).status,
-  ).toBe(200);
+  expect(body.items.filter((item: { current: boolean }) => item.current)).toHaveLength(1);
+  expect((await call('/api/v1/users/me/revoke-other-sessions', 'POST', {}, cookie)).status).toBe(
+    201,
+  );
+  expect((await call('/api/v1/users/me', 'GET', undefined, secondCookie)).status).toBe(401);
+  expect((await call('/api/v1/users/me', 'GET', undefined, cookie)).status).toBe(200);
 });
 
 it('账号停用阻止旧会话与新登录，停用用户不能修改密码', async () => {
   await db.user.update({ where: { id: userId }, data: { banned: true } });
   try {
-    expect(
-      (await call('/api/v1/users/me', 'GET', undefined, cookie)).status,
-    ).toBe(403);
+    expect((await call('/api/v1/users/me', 'GET', undefined, cookie)).status).toBe(403);
     expect((await signIn()).status).toBe(403);
     expect(
       (
@@ -497,19 +392,13 @@ it('修改密码校验旧密码并撤销其他会话，退出后访问立即失�
   );
   expect(change.status).toBe(200);
   cookie = cookies(change) || cookie;
-  expect(
-    (await call('/api/v1/users/me', 'GET', undefined, secondCookie)).status,
-  ).toBe(401);
+  expect((await call('/api/v1/users/me', 'GET', undefined, secondCookie)).status).toBe(401);
   expect((await signIn(email, password)).status).toBe(401);
   const fresh = await signIn(email, newPassword);
   expect(fresh.status).toBe(200);
   cookie = cookies(fresh);
-  expect((await call('/api/auth/sign-out', 'POST', {}, cookie)).status).toBe(
-    200,
-  );
-  expect(
-    (await call('/api/v1/users/me', 'GET', undefined, cookie)).status,
-  ).toBe(401);
+  expect((await call('/api/auth/sign-out', 'POST', {}, cookie)).status).toBe(200);
+  expect((await call('/api/v1/users/me', 'GET', undefined, cookie)).status).toBe(401);
 });
 
 it('服务端拒绝过期会话，并对连续登录尝试限流', async () => {
@@ -521,9 +410,7 @@ it('服务端拒绝过期会话，并对连续登录尝试限流', async () => {
     where: { userId },
     data: { expiresAt: new Date(0) },
   });
-  expect(
-    (await call('/api/v1/users/me', 'GET', undefined, expiredCookie)).status,
-  ).toBe(401);
+  expect((await call('/api/v1/users/me', 'GET', undefined, expiredCookie)).status).toBe(401);
   await db.rateLimit.deleteMany();
   let limited = false;
   for (let i = 0; i < 12; i++) {

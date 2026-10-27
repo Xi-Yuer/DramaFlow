@@ -4,7 +4,7 @@ import type { CapabilityInvoker } from '@dramaflow/workflow';
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
 import { SecretsService } from '../secrets/secrets.service.js';
-import { ModelConfigurationError } from './model-provider.service.js';
+import { ModelConfigurationError } from './shared/model-configuration-error.js';
 
 @Injectable()
 export class WorkflowCapabilitiesFactory {

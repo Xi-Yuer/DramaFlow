@@ -1,9 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import {
-  NumberType,
-  type WorkflowDefinition,
-  type WorkflowRun,
-} from '@dramaflow/contracts';
+import { NumberType, type WorkflowDefinition, type WorkflowRun } from '@dramaflow/contracts';
 import {
   DatabaseService,
   NodeRunRepositories,
@@ -31,12 +27,9 @@ import { z } from 'zod';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test'
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test'
 )
-  throw new Error(
-    'WorkflowRunner 集成测试仅允许在 DramaFlow 的隔离测试数据库运行',
-  );
+  throw new Error('WorkflowRunner 集成测试仅允许在 DramaFlow 的隔离测试数据库运行');
 
 const database = new DatabaseService();
 const db = database.client;
@@ -62,16 +55,11 @@ afterAll(async () => {
     for (const run of runs) await checkpointer.saver.deleteThread(run.threadId);
     await db.user.deleteMany({ where: { id: ownerId } });
   } finally {
-    await Promise.all([
-      checkpointer.onModuleDestroy(),
-      database.onModuleDestroy(),
-    ]);
+    await Promise.all([checkpointer.onModuleDestroy(), database.onModuleDestroy()]);
   }
 });
 
-async function fixture(
-  editDefinition?: (definition: WorkflowDefinition) => void,
-) {
+async function fixture(editDefinition?: (definition: WorkflowDefinition) => void) {
   const projectId = (
     await db.project.create({
       data: { ownerId, name: '运行版本测试', viewport: {} },
@@ -157,15 +145,9 @@ async function fixture(
       createdAt: new Date(version.publishedAt),
     },
   });
-  const versions = await new WorkflowVersionRepositories(database).forProject(
-    ownerId,
-    projectId,
-  );
+  const versions = await new WorkflowVersionRepositories(database).forProject(ownerId, projectId);
   const getVersion = vi.spyOn(versions, 'getVersion');
-  const runs = await new WorkflowRunRepositories(database).forProject(
-    ownerId,
-    projectId,
-  );
+  const runs = await new WorkflowRunRepositories(database).forProject(ownerId, projectId);
   const nodeRuns = new NodeRunRepositories(database);
   const codec = new DefaultRuntimeValueCodec(
     { resolve: vi.fn() },
@@ -185,13 +167,11 @@ async function fixture(
   );
   const compileNative = compiler.compile.bind(compiler);
   const graphs: CompiledWorkflow[] = [];
-  const compile = vi
-    .spyOn(compiler, 'compile')
-    .mockImplementation(async (definition, run) => {
-      const graph = await compileNative(definition, run);
-      graphs.push(graph);
-      return graph;
-    });
+  const compile = vi.spyOn(compiler, 'compile').mockImplementation(async (definition, run) => {
+    const graph = await compileNative(definition, run);
+    graphs.push(graph);
+    return graph;
+  });
   const runner = new DefaultWorkflowRunner(
     versions,
     runs,
@@ -469,9 +449,7 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 恢复', () => {
     });
     expect(snapshot.values.outputs.prepared.value.value).toBe(7);
     expect(snapshot.next).toEqual([]);
-    expect(
-      await db.nodeRun.count({ where: { workflowRunId: first.workflowRunId } }),
-    ).toBe(0);
+    expect(await db.nodeRun.count({ where: { workflowRunId: first.workflowRunId } })).toBe(0);
     expect(
       await db.workflowRun.count({
         where: { workflowVersionId: f.version.id },
@@ -491,10 +469,7 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 恢复', () => {
       f.input.projectId,
     );
     const secondRunner = new DefaultWorkflowRunner(
-      await new WorkflowVersionRepositories(database).forProject(
-        ownerId,
-        f.input.projectId,
-      ),
+      await new WorkflowVersionRepositories(database).forProject(ownerId, f.input.projectId),
       other,
       { compile: f.compile },
       new DefaultWorkflowOutputResolver(),
@@ -537,9 +512,7 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 恢复', () => {
       await vi.waitFor(() => expect(errors).toHaveLength(1));
       expect(errors[0]).toMatchObject({ code: 'WORKFLOW_RUN_NOT_WAITING' });
       expect(
-        f.graphs
-          .slice(1)
-          .filter((graph) => vi.mocked(graph.invoke).mock.calls.length > 0),
+        f.graphs.slice(1).filter((graph) => vi.mocked(graph.invoke).mock.calls.length > 0),
       ).toHaveLength(1);
       expect(
         (
@@ -554,12 +527,8 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 恢复', () => {
       await outcomes;
     }
     const results = await outcomes;
-    expect(
-      results.filter((result) => result.status === 'fulfilled'),
-    ).toHaveLength(1);
-    expect(
-      results.filter((result) => result.status === 'rejected'),
-    ).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
     expect(f.values).toHaveLength(1);
     expect(f.prepared).toHaveBeenCalledTimes(1);
     expect(
@@ -601,8 +570,6 @@ describe('真实 PostgreSQL + LangGraph WorkflowRunner 恢复', () => {
         where: { workflowVersionId: f.version.id },
       }),
     ).toBe(1);
-    expect(
-      await db.nodeRun.count({ where: { workflowRunId: first.workflowRunId } }),
-    ).toBe(0);
+    expect(await db.nodeRun.count({ where: { workflowRunId: first.workflowRunId } })).toBe(0);
   });
 });

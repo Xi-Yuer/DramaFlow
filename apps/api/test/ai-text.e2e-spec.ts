@@ -34,8 +34,7 @@ import { storeRuntimeTestVersion } from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test' ||
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test' ||
   !process.env.WORKFLOW_QUEUE_PREFIX?.startsWith('dramaflow-test-')
 )
   throw new Error('文本 AI 集成测试仅允许独立测试库与队列');
@@ -63,9 +62,7 @@ const protocolServer = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request)
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
-    const body = requestSchema.parse(
-      JSON.parse(Buffer.concat(chunks).toString('utf8')),
-    );
+    const body = requestSchema.parse(JSON.parse(Buffer.concat(chunks).toString('utf8')));
     calls.push({
       path: request.url ?? '',
       authorization: request.headers.authorization,
@@ -74,9 +71,7 @@ const protocolServer = createServer(async (request, response) => {
       body,
     });
     response.setHeader('Content-Type', 'application/json');
-    const failureStatus = /^sdk-failure-(307|308|401|429|503)-/.exec(
-      body.model,
-    )?.[1];
+    const failureStatus = /^sdk-failure-(307|308|401|429|503)-/.exec(body.model)?.[1];
     if (body.model.startsWith('failure-') || failureStatus) {
       response.writeHead(failureStatus ? Number(failureStatus) : 503, {
         Location: `${providerBase}/redirect-target`,
@@ -146,9 +141,7 @@ const origin = new URL(authBaseUrl()).origin;
 
 async function startWorker() {
   const child = fork(
-    fileURLToPath(
-      new URL('./fixtures/ai-text-worker-process.ts', import.meta.url),
-    ),
+    fileURLToPath(new URL('./fixtures/ai-text-worker-process.ts', import.meta.url)),
     [],
     {
       execArgv: ['--import', import.meta.resolve('tsx')],
@@ -160,9 +153,7 @@ async function startWorker() {
   let ready = false;
   let stderr = '';
   child.on('message', (value) => {
-    ready =
-      z.object({ event: z.literal('ready'), pid: z.number() }).parse(value)
-        .event === 'ready';
+    ready = z.object({ event: z.literal('ready'), pid: z.number() }).parse(value).event === 'ready';
   });
   child.stderr?.on('data', (chunk: Buffer) => {
     stderr = (stderr + chunk.toString()).slice(-3000);
@@ -173,8 +164,7 @@ async function startWorker() {
   });
   await vi.waitFor(
     () => {
-      if (child.exitCode !== null)
-        throw new Error(`正式文本 AI Worker 启动失败：${stderr}`);
+      if (child.exitCode !== null) throw new Error(`正式文本 AI Worker 启动失败：${stderr}`);
       expect(ready).toBe(true);
     },
     { timeout: 15000 },
@@ -182,26 +172,17 @@ async function startWorker() {
 }
 
 beforeAll(async () => {
-  await new Promise<void>((resolve) =>
-    protocolServer.listen(0, '127.0.0.1', resolve),
-  );
+  await new Promise<void>((resolve) => protocolServer.listen(0, '127.0.0.1', resolve));
   const address = protocolServer.address();
-  if (!address || typeof address === 'string')
-    throw new Error('本机协议服务未就绪');
+  if (!address || typeof address === 'string') throw new Error('本机协议服务未就绪');
   providerBase = `http://127.0.0.1:${address.port}/v1`;
-  const constructor = z.custom<Type<unknown>>(
-    (value) => typeof value === 'function',
-  );
-  const source: unknown = await import(
-    new URL('../dist/app.module.js', import.meta.url).href
-  );
+  const constructor = z.custom<Type<unknown>>((value) => typeof value === 'function');
+  const source: unknown = await import(new URL('../dist/app.module.js', import.meta.url).href);
   const authSource: unknown = await import(
     new URL('../dist/auth/auth.service.js', import.meta.url).href
   );
   const { AppModule } = z.object({ AppModule: constructor }).parse(source);
-  const { AuthService: AuthToken } = z
-    .object({ AuthService: constructor })
-    .parse(authSource);
+  const { AuthService: AuthToken } = z.object({ AuthService: constructor }).parse(authSource);
   app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
     logger: false,
@@ -255,14 +236,11 @@ afterAll(async () => {
       select: { threadId: true },
     });
     for (const run of runs)
-      await app
-        ?.get(WorkflowCheckpointerService)
-        .saver.deleteThread(run.threadId);
+      await app?.get(WorkflowCheckpointerService).saver.deleteThread(run.threadId);
     await db.user.deleteMany({ where: { id: { in: userIds } } });
     await app?.get(WorkflowExecutionQueue).queue.obliterate({ force: true });
   } finally {
-    if (worker && worker.exitCode === null && worker.signalCode === null)
-      worker.kill('SIGKILL');
+    if (worker && worker.exitCode === null && worker.signalCode === null) worker.kill('SIGKILL');
     await app?.close();
     await database.onModuleDestroy();
     await new Promise<void>((resolve, reject) =>
@@ -276,10 +254,7 @@ async function project(owner = ownerId) {
     data: { ownerId: owner, name: '文本 AI', viewport: {} },
   });
 }
-async function configured(
-  model = `model-${randomUUID()}`,
-  providerType?: 'openai' | 'anthropic',
-) {
+async function configured(model = `model-${randomUUID()}`, providerType?: 'openai' | 'anthropic') {
   const headers = {
     Cookie: cookies.get(ownerId) ?? '',
     Origin: origin,
@@ -312,9 +287,7 @@ async function configured(
     }),
   });
   expect(modelResponse.status).toBe(201);
-  const configuration = managedModelConfigurationSchema.parse(
-    await modelResponse.json(),
-  );
+  const configuration = managedModelConfigurationSchema.parse(await modelResponse.json());
   expect(JSON.stringify({ provider, configuration })).not.toContain(credential);
   expect(provider).not.toHaveProperty('encryptedCredentials');
   return { provider, configuration, model };
@@ -358,18 +331,15 @@ async function published(
     },
   });
   if (legacy) return storeRuntimeTestVersion(database, workflow, definition);
-  const response = await fetch(
-    `${apiBase}/api/v1/workflows/${workflow.id}/publish`,
-    {
-      method: 'POST',
-      headers: {
-        Cookie: cookies.get(owner) ?? '',
-        Origin: new URL(authBaseUrl()).origin,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ expectedRevision: 1 }),
+  const response = await fetch(`${apiBase}/api/v1/workflows/${workflow.id}/publish`, {
+    method: 'POST',
+    headers: {
+      Cookie: cookies.get(owner) ?? '',
+      Origin: new URL(authBaseUrl()).origin,
+      'Content-Type': 'application/json',
     },
-  );
+    body: JSON.stringify({ expectedRevision: 1 }),
+  });
   expect(response.status).toBe(201);
   return z.object({ id: z.string() }).parse(await response.json());
 }
@@ -411,10 +381,7 @@ async function terminal(workflowRunId: string, status: 'completed' | 'failed') {
   );
   return db.workflowRun.findUniqueOrThrow({ where: { id: workflowRunId } });
 }
-async function assertSafePersistence(
-  runId: string,
-  extraSecrets: string[] = [],
-) {
+async function assertSafePersistence(runId: string, extraSecrets: string[] = []) {
   const run = await db.workflowRun.findUniqueOrThrow({ where: { id: runId } });
   const version = await db.workflowVersion.findUniqueOrThrow({
     where: { id: run.workflowVersionId },
@@ -430,8 +397,7 @@ async function assertSafePersistence(
   });
   for (const value of [run, version, workflow, nodeRuns, intents]) {
     const serialized = JSON.stringify(value);
-    for (const secret of [credential, ...extraSecrets])
-      expect(serialized).not.toContain(secret);
+    for (const secret of [credential, ...extraSecrets]) expect(serialized).not.toContain(secret);
     expect(serialized).not.toContain(providerBase);
     expect(serialized).not.toContain('upstream-error-must-not-leak');
     expect(serialized).not.toContain('encryptedCredentials');
@@ -441,16 +407,14 @@ async function assertSafePersistence(
     .get(WorkflowCheckpointerService)
     .saver.list({ configurable: { thread_id: run.threadId } })) {
     const serialized = JSON.stringify(tuple);
-    for (const secret of [credential, ...extraSecrets])
-      expect(serialized).not.toContain(secret);
+    for (const secret of [credential, ...extraSecrets]) expect(serialized).not.toContain(secret);
     expect(serialized).not.toContain(providerBase);
     expect(serialized).not.toContain('upstream-error-must-not-leak');
     expect(serialized).not.toContain('encryptedCredentials');
     checkpointCount++;
   }
   expect(checkpointCount).toBeGreaterThan(0);
-  for (const secret of [credential, ...extraSecrets])
-    expect(workerLog).not.toContain(secret);
+  for (const secret of [credential, ...extraSecrets]) expect(workerLog).not.toContain(secret);
   expect(workerLog).not.toContain('upstream-error-must-not-leak');
   return nodeRuns;
 }
@@ -481,12 +445,7 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
       const result = await promisify(execFile)(
         process.execPath,
         [
-          fileURLToPath(
-            new URL(
-              '../../../scripts/configure-model-provider.mjs',
-              import.meta.url,
-            ),
-          ),
+          fileURLToPath(new URL('../../../scripts/configure-model-provider.mjs', import.meta.url)),
           file,
         ],
         {
@@ -506,20 +465,14 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
       expect(provider.encryptedCredentials).not.toContain(credential);
       expect(provider.ownerId).toBe(ownerId);
       expect(
-        await providers.getModelConfiguration(
-          ownerId,
-          ids.modelConfigurationId,
-        ),
+        await providers.getModelConfiguration(ownerId, ids.modelConfigurationId),
       ).toMatchObject({
         providerId: ids.providerId,
         model: 'cli-explicit-model',
         capability: 'text.generate',
       });
       expect(
-        await providers.getModelConfiguration(
-          outsiderId,
-          ids.modelConfigurationId,
-        ),
+        await providers.getModelConfiguration(outsiderId, ids.modelConfigurationId),
       ).toBeNull();
       expect(calls).toHaveLength(before);
     } finally {
@@ -582,13 +535,13 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
     ]);
     const nodes = await assertSafePersistence(run.id);
     expect(JSON.stringify({ run, nodes, workerLog })).not.toContain(rotated);
-    expect(
-      await db.workflowVersion.findUniqueOrThrow({ where: { id: version.id } }),
-    ).toMatchObject({
-      definition: {
-        nodes: [{ config: { modelConfigurationId: f.configuration.id } }],
+    expect(await db.workflowVersion.findUniqueOrThrow({ where: { id: version.id } })).toMatchObject(
+      {
+        definition: {
+          nodes: [{ config: { modelConfigurationId: f.configuration.id } }],
+        },
       },
-    });
+    );
   });
 
   it('已发布版本引用正式模型配置；真实 Worker 完成输出，凭证仅在调用边界解密', async () => {
@@ -638,21 +591,14 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
       headers: { Cookie: cookies.get(ownerId) ?? '' },
     });
     expect(response.status).toBe(200);
-    expect(
-      workflowRunResponseSchema.parse(await response.json()),
-    ).toMatchObject({
+    expect(workflowRunResponseSchema.parse(await response.json())).toMatchObject({
       status: 'completed',
       outputs: run.outputs,
     });
   });
 
   it('历史快照中的缺失 / 禁用配置、禁用 Provider 或坏密文仍由 Runtime 拒绝，不请求模型', async () => {
-    for (const mode of [
-      'missing',
-      'model_disabled',
-      'provider_disabled',
-      'bad_secret',
-    ]) {
+    for (const mode of ['missing', 'model_disabled', 'provider_disabled', 'bad_secret']) {
       const p = await project();
       const f = await configured();
       if (mode === 'model_disabled')
@@ -684,9 +630,7 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
         attempt: 1,
         error: { stage: 'execute', code: 'NODE_EXECUTION_FAILED' },
       });
-      expect(calls.filter((call) => call.body.model === f.model)).toHaveLength(
-        0,
-      );
+      expect(calls.filter((call) => call.body.model === f.model)).toHaveLength(0);
     }
   });
 
@@ -700,9 +644,7 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
     ]);
     const job = await app
       .get(WorkflowExecutionQueue)
-      .queue.getJob(
-        workflowExecutionJobId({ kind: 'start', workflowRunId: run.id }),
-      );
+      .queue.getJob(workflowExecutionJobId({ kind: 'start', workflowRunId: run.id }));
     await vi.waitFor(async () => expect(await job?.getState()).toBe('failed'));
     expect(job?.attemptsMade).toBe(1);
     expect(calls.filter((call) => call.body.model === f.model)).toHaveLength(1);
@@ -721,22 +663,10 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
         settings: {},
       }),
     ).rejects.toThrow();
-    const ownVersion = await published(
-      otherProject.id,
-      f.configuration.id,
-      ownerId,
-    );
+    const ownVersion = await published(otherProject.id, f.configuration.id, ownerId);
     await terminal((await submit(ownVersion.id, ownerId)).id, 'completed');
-    const foreignVersion = await published(
-      foreign.id,
-      f.configuration.id,
-      outsiderId,
-      true,
-    );
-    const foreignRun = await terminal(
-      (await submit(foreignVersion.id, outsiderId)).id,
-      'failed',
-    );
+    const foreignVersion = await published(foreign.id, f.configuration.id, outsiderId, true);
+    const foreignRun = await terminal((await submit(foreignVersion.id, outsiderId)).id, 'failed');
     expect(await assertSafePersistence(foreignRun.id)).toMatchObject([
       { status: 'failed', error: { stage: 'execute' } },
     ]);
@@ -745,176 +675,152 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
     const protectedRun = await submit(protectedVersion.id);
     await terminal(protectedRun.id, 'completed');
     for (const suffix of ['', '/resume']) {
-      const response = await fetch(
-        `${apiBase}/api/v1/workflow-runs/${protectedRun.id}${suffix}`,
-        {
-          method: suffix ? 'POST' : 'GET',
-          headers: {
-            Cookie: cookies.get(outsiderId) ?? '',
-            ...(suffix
-              ? { Origin: origin, 'Content-Type': 'application/json' }
-              : {}),
-          },
-          ...(suffix ? { body: JSON.stringify({ value: true }) } : {}),
+      const response = await fetch(`${apiBase}/api/v1/workflow-runs/${protectedRun.id}${suffix}`, {
+        method: suffix ? 'POST' : 'GET',
+        headers: {
+          Cookie: cookies.get(outsiderId) ?? '',
+          ...(suffix ? { Origin: origin, 'Content-Type': 'application/json' } : {}),
         },
-      );
+        ...(suffix ? { body: JSON.stringify({ value: true }) } : {}),
+      });
       expect(response.status).toBe(404);
     }
   });
-  describe.each(['openai', 'anthropic'] as const)(
-    'AI SDK 正式链 / %s',
-    (providerType) => {
-      it('正式管理 HTTP 配置、发布与 Worker 请求实际厂商协议；同版本下次运行使用轮换凭证', async () => {
+  describe.each(['openai', 'anthropic'] as const)('AI SDK 正式链 / %s', (providerType) => {
+    it('正式管理 HTTP 配置、发布与 Worker 请求实际厂商协议；同版本下次运行使用轮换凭证', async () => {
+      const p = await project();
+      const f = await configured(`sdk-${providerType}-${randomUUID()}`, providerType);
+      const version = await published(p.id, f.configuration.id);
+      const rotated = `sdk-rotated-${providerType}-${randomUUID()}`;
+      for (const key of [credential, rotated]) {
+        if (key === rotated)
+          await providers.replaceCredentials(ownerId, f.provider.id, {
+            apiKey: key,
+          });
+        const before = calls.length;
+        const run = await terminal((await submit(version.id)).id, 'completed');
+        const requests = calls.slice(before);
+        expect(requests).toHaveLength(1);
+        expect(requests[0]).toMatchObject({
+          path: providerType === 'openai' ? '/v1/chat/completions' : '/v1/messages',
+          body: { model: f.model, max_tokens: 64, temperature: 0 },
+          ...(providerType === 'openai'
+            ? { authorization: `Bearer ${key}`, apiKey: undefined }
+            : {
+                apiKey: key,
+                authorization: undefined,
+                anthropicVersion: '2023-06-01',
+              }),
+        });
+        expect(requests[0]?.body.stream).not.toBe(true);
+        expect(requests[0]?.body.messages).toEqual(
+          providerType === 'openai'
+            ? [
+                { role: 'system', content: '用一句话描写场景。' },
+                { role: 'user', content: '雨夜中的人物' },
+              ]
+            : [
+                {
+                  role: 'user',
+                  content: [{ type: 'text', text: '雨夜中的人物' }],
+                },
+              ],
+        );
+        if (providerType === 'anthropic')
+          expect(requests[0]?.body.system).toEqual([{ type: 'text', text: '用一句话描写场景。' }]);
+        expect(run.outputs).toEqual({
+          text: {
+            storage: 'inline',
+            type: StringType,
+            value: '人物走入雨中的场景。',
+          },
+        });
+        expect(await assertSafePersistence(run.id, [rotated])).toMatchObject([
+          {
+            nodeId: 'text',
+            attempt: 1,
+            status: 'completed',
+            outputs: run.outputs,
+          },
+        ]);
+        const response = await fetch(`${apiBase}/api/v1/workflow-runs/${run.id}`, {
+          headers: { Cookie: cookies.get(ownerId) ?? '' },
+        });
+        expect(response.status).toBe(200);
+        expect(workflowRunResponseSchema.parse(await response.json())).toMatchObject({
+          status: 'completed',
+          outputs: run.outputs,
+        });
+      }
+      const stored = await db.modelProvider.findUniqueOrThrow({
+        where: { id: f.provider.id },
+      });
+      expect(stored.encryptedCredentials).not.toContain(rotated);
+      expect(stored).toMatchObject({
+        pluginId: 'text_generation',
+        pluginVersion: 1,
+        configuration: { provider: providerType },
+      });
+      const snapshot = await db.workflowVersion.findUniqueOrThrow({
+        where: { id: version.id },
+      });
+      expect(snapshot.definition).toMatchObject({
+        nodes: [{ config: { modelConfigurationId: f.configuration.id } }],
+      });
+    });
+
+    it.each([307, 308, 401, 429, 503])(
+      'HTTP %i 失败仅一次实际请求，NodeRun/API/日志无原始 SDK 错误',
+      async (status) => {
         const p = await project();
         const f = await configured(
-          `sdk-${providerType}-${randomUUID()}`,
+          `sdk-failure-${status}-${providerType}-${randomUUID()}`,
           providerType,
         );
         const version = await published(p.id, f.configuration.id);
-        const rotated = `sdk-rotated-${providerType}-${randomUUID()}`;
-        for (const key of [credential, rotated]) {
-          if (key === rotated)
-            await providers.replaceCredentials(ownerId, f.provider.id, {
-              apiKey: key,
-            });
-          const before = calls.length;
-          const run = await terminal(
-            (await submit(version.id)).id,
-            'completed',
-          );
-          const requests = calls.slice(before);
-          expect(requests).toHaveLength(1);
-          expect(requests[0]).toMatchObject({
-            path:
-              providerType === 'openai'
-                ? '/v1/chat/completions'
-                : '/v1/messages',
-            body: { model: f.model, max_tokens: 64, temperature: 0 },
-            ...(providerType === 'openai'
-              ? { authorization: `Bearer ${key}`, apiKey: undefined }
-              : {
-                  apiKey: key,
-                  authorization: undefined,
-                  anthropicVersion: '2023-06-01',
-                }),
-          });
-          expect(requests[0]?.body.stream).not.toBe(true);
-          expect(requests[0]?.body.messages).toEqual(
-            providerType === 'openai'
-              ? [
-                  { role: 'system', content: '用一句话描写场景。' },
-                  { role: 'user', content: '雨夜中的人物' },
-                ]
-              : [
-                  {
-                    role: 'user',
-                    content: [{ type: 'text', text: '雨夜中的人物' }],
-                  },
-                ],
-          );
-          if (providerType === 'anthropic')
-            expect(requests[0]?.body.system).toEqual([
-              { type: 'text', text: '用一句话描写场景。' },
-            ]);
-          expect(run.outputs).toEqual({
-            text: {
-              storage: 'inline',
-              type: StringType,
-              value: '人物走入雨中的场景。',
-            },
-          });
-          expect(await assertSafePersistence(run.id, [rotated])).toMatchObject([
-            {
-              nodeId: 'text',
-              attempt: 1,
-              status: 'completed',
-              outputs: run.outputs,
-            },
-          ]);
-          const response = await fetch(
-            `${apiBase}/api/v1/workflow-runs/${run.id}`,
-            { headers: { Cookie: cookies.get(ownerId) ?? '' } },
-          );
-          expect(response.status).toBe(200);
-          expect(
-            workflowRunResponseSchema.parse(await response.json()),
-          ).toMatchObject({ status: 'completed', outputs: run.outputs });
-        }
-        const stored = await db.modelProvider.findUniqueOrThrow({
-          where: { id: f.provider.id },
+        const run = await terminal((await submit(version.id)).id, 'failed');
+        const nodes = await assertSafePersistence(run.id);
+        expect(nodes).toMatchObject([
+          {
+            attempt: 1,
+            status: 'failed',
+            error: { code: 'NODE_EXECUTION_FAILED', stage: 'execute' },
+          },
+        ]);
+        const requests = calls.filter((call) => call.body.model === f.model);
+        expect(requests).toHaveLength(1);
+        expect(requests[0]?.path).toBe(
+          providerType === 'openai' ? '/v1/chat/completions' : '/v1/messages',
+        );
+        const job = await app
+          .get(WorkflowExecutionQueue)
+          .queue.getJob(workflowExecutionJobId({ kind: 'start', workflowRunId: run.id }));
+        await vi.waitFor(async () => expect(await job?.getState()).toBe('failed'));
+        expect(job?.attemptsMade).toBe(1);
+        const response = await fetch(`${apiBase}/api/v1/workflow-runs/${run.id}`, {
+          headers: { Cookie: cookies.get(ownerId) ?? '' },
         });
-        expect(stored.encryptedCredentials).not.toContain(rotated);
-        expect(stored).toMatchObject({
-          pluginId: 'text_generation',
-          pluginVersion: 1,
-          configuration: { provider: providerType },
+        expect(response.status).toBe(200);
+        const dto = workflowRunResponseSchema.parse(await response.json());
+        expect(dto.status).toBe('failed');
+        // 正常 NodeRun.inputs 本来就记录用户输入；这里验证错误投影绝不携带 prompt 或协议内容。
+        const errors = JSON.stringify({
+          error: run.error,
+          nodeErrors: nodes.map((node) => node.error),
+          apiError: dto.error,
+          workerLog,
         });
-        const snapshot = await db.workflowVersion.findUniqueOrThrow({
-          where: { id: version.id },
-        });
-        expect(snapshot.definition).toMatchObject({
-          nodes: [{ config: { modelConfigurationId: f.configuration.id } }],
-        });
-      });
-
-      it.each([307, 308, 401, 429, 503])(
-        'HTTP %i 失败仅一次实际请求，NodeRun/API/日志无原始 SDK 错误',
-        async (status) => {
-          const p = await project();
-          const f = await configured(
-            `sdk-failure-${status}-${providerType}-${randomUUID()}`,
-            providerType,
-          );
-          const version = await published(p.id, f.configuration.id);
-          const run = await terminal((await submit(version.id)).id, 'failed');
-          const nodes = await assertSafePersistence(run.id);
-          expect(nodes).toMatchObject([
-            {
-              attempt: 1,
-              status: 'failed',
-              error: { code: 'NODE_EXECUTION_FAILED', stage: 'execute' },
-            },
-          ]);
-          const requests = calls.filter((call) => call.body.model === f.model);
-          expect(requests).toHaveLength(1);
-          expect(requests[0]?.path).toBe(
-            providerType === 'openai' ? '/v1/chat/completions' : '/v1/messages',
-          );
-          const job = await app
-            .get(WorkflowExecutionQueue)
-            .queue.getJob(
-              workflowExecutionJobId({ kind: 'start', workflowRunId: run.id }),
-            );
-          await vi.waitFor(async () =>
-            expect(await job?.getState()).toBe('failed'),
-          );
-          expect(job?.attemptsMade).toBe(1);
-          const response = await fetch(
-            `${apiBase}/api/v1/workflow-runs/${run.id}`,
-            { headers: { Cookie: cookies.get(ownerId) ?? '' } },
-          );
-          expect(response.status).toBe(200);
-          const dto = workflowRunResponseSchema.parse(await response.json());
-          expect(dto.status).toBe('failed');
-          // 正常 NodeRun.inputs 本来就记录用户输入；这里验证错误投影绝不携带 prompt 或协议内容。
-          const errors = JSON.stringify({
-            error: run.error,
-            nodeErrors: nodes.map((node) => node.error),
-            apiError: dto.error,
-            workerLog,
-          });
-          for (const forbidden of [
-            credential,
-            '雨夜中的人物',
-            '用一句话描写场景。',
-            'upstream-error-must-not-leak',
-            'sdk-response-header-marker',
-            'APICallError',
-            'requestBodyValues',
-          ])
-            expect(errors).not.toContain(forbidden);
-        },
-      );
-    },
-  );
+        for (const forbidden of [
+          credential,
+          '雨夜中的人物',
+          '用一句话描写场景。',
+          'upstream-error-must-not-leak',
+          'sdk-response-header-marker',
+          'APICallError',
+          'requestBodyValues',
+        ])
+          expect(errors).not.toContain(forbidden);
+      },
+    );
+  });
 });

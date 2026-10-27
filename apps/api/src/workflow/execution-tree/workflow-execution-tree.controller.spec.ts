@@ -11,13 +11,9 @@ describe('Execution Tree 只读 HTTP 入口', () => {
       query,
     } as unknown as WorkflowExecutionTreeService);
     const params = { parentType: 'child_execution', parentId: 'stable-id' };
-    expect(
-      await controller.query(
-        { user: { id: 'owner' } } as AuthActor,
-        'run',
-        params,
-      ),
-    ).toEqual({ items: [] });
+    expect(await controller.query({ user: { id: 'owner' } } as AuthActor, 'run', params)).toEqual({
+      items: [],
+    });
     expect(query).toHaveBeenCalledWith('owner', 'run', params);
   });
   it('默认认证、GET、no-store；入口命名不绑定 Composite 类型', () => {
@@ -29,8 +25,6 @@ describe('Execution Tree 只读 HTTP 入口', () => {
       value: 'no-store',
     });
     expect(Reflect.getMetadata('auth:public', method)).not.toBe(true);
-    expect(
-      Reflect.getMetadata('auth:public', WorkflowExecutionTreeController),
-    ).not.toBe(true);
+    expect(Reflect.getMetadata('auth:public', WorkflowExecutionTreeController)).not.toBe(true);
   });
 });

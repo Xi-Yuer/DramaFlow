@@ -6,7 +6,7 @@ import {
   type StaticInputBinding,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
-import { removeVariable, replaceNodeInput } from '../template-input';
+import { removeVariable, replaceNodeInput } from '../template/binding';
 import { resolveWorkflowNodePorts } from '../../ports/resolve-workflow-node-ports';
 
 function rewriteBinding(

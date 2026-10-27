@@ -5,17 +5,7 @@ import {
   publishWorkflowRequestSchema,
   workflowVersionResponseSchema,
 } from '@dramaflow/contracts';
-import {
-  Body,
-  Controller,
-  Get,
-  Header,
-  HttpCode,
-  Param,
-  Post,
-  Put,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, Header, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import { Actor } from '../../auth/auth.guard.js';
 import type { AuthActor } from '../../auth/auth.service.js';
 import { WorkflowService } from './workflow.service.js';

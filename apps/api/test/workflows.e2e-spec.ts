@@ -1,36 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import { StringType, type WorkflowDefinition } from '@dramaflow/contracts';
-import {
-  createTextGenerationNodeType,
-  NodeRegistry,
-} from '@dramaflow/workflow';
-import {
-  DatabaseService,
-  WorkflowVersionRepositories,
-} from '@dramaflow/server';
+import { createTextGenerationNodeType, NodeRegistry } from '@dramaflow/workflow';
+import { DatabaseService, WorkflowVersionRepositories } from '@dramaflow/server';
 import { NotFoundException } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import {
-  registerTextTestNodes,
-  createWorkflowService,
-} from './fixtures/workflow-service.js';
+import { registerTextTestNodes, createWorkflowService } from './fixtures/workflow-service.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test'
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test'
 )
-  throw new Error(
-    'Workflow 发布集成测试仅允许在 DramaFlow 的隔离测试数据库运行',
-  );
+  throw new Error('Workflow 发布集成测试仅允许在 DramaFlow 的隔离测试数据库运行');
 
 const database = new DatabaseService();
 const secondConnection = new DatabaseService();
 const db = database.client;
-const registry = registerTextTestNodes(
-  new NodeRegistry([createTextGenerationNodeType()]),
-);
+const registry = registerTextTestNodes(new NodeRegistry([createTextGenerationNodeType()]));
 const service = createWorkflowService(database, registry);
 const otherService = createWorkflowService(secondConnection, registry);
 const ownerId = randomUUID();
@@ -44,10 +30,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await db.user.deleteMany({ where: { id: { in: [ownerId, otherId] } } });
-  await Promise.all([
-    database.onModuleDestroy(),
-    secondConnection.onModuleDestroy(),
-  ]);
+  await Promise.all([database.onModuleDestroy(), secondConnection.onModuleDestroy()]);
 });
 
 function definition(text: string): WorkflowDefinition {
@@ -91,9 +74,7 @@ async function fixture(revision = 10) {
   return { workflow, project, draft };
 }
 
-function conflict(
-  code: 'WORKFLOW_REVISION_CONFLICT' | 'WORKFLOW_REVISION_ALREADY_PUBLISHED',
-) {
+function conflict(code: 'WORKFLOW_REVISION_CONFLICT' | 'WORKFLOW_REVISION_ALREADY_PUBLISHED') {
   return expect.objectContaining({
     response: expect.objectContaining({ code }),
     status: 409,
@@ -123,9 +104,9 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
         definition: unsafe,
       }),
     ).rejects.toEqual(failure);
-    expect(
-      await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } }),
-    ).toEqual(f.workflow);
+    expect(await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } })).toEqual(
+      f.workflow,
+    );
 
     // 模拟直接导入或历史数据库中的不可信草稿；发布必须重新守住正式 Node Schema 边界。
     await db.workflow.update({
@@ -138,9 +119,7 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
         expectedRevision: 10,
       }),
     ).rejects.toEqual(failure);
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
   });
 
   it('正式 AI Node 可保存未选模型的 Draft，发布前必须补齐可用模型配置', async () => {
@@ -164,9 +143,7 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
       status: 400,
       response: { code: 'WORKFLOW_NODE_CONFIGURATION_INVALID' },
     });
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
     const selected = randomUUID();
     draft.nodes[0]!.config = { modelConfigurationId: selected };
     await service.updateDraft(ownerId, {
@@ -183,39 +160,28 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
       status: 400,
       response: { code: 'MODEL_CONFIGURATION_UNAVAILABLE' },
     });
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
   });
 
   it('两个独立连接并发以 revision 8 编辑，只有一个成功写入 revision 9', async () => {
     const f = await fixture(8);
-    const requests = Array.from({ length: 12 }, (_, index) =>
-      definition(`编辑 ${index}`),
-    );
+    const requests = Array.from({ length: 12 }, (_, index) => definition(`编辑 ${index}`));
     const outcomes = await Promise.allSettled(
       requests.map(async (draft, index) => ({
         draft,
-        result: await (index % 2 ? service : otherService).updateDraft(
-          ownerId,
-          {
-            workflowId: f.workflow.id,
-            expectedRevision: 8,
-            definition: draft,
-          },
-        ),
+        result: await (index % 2 ? service : otherService).updateDraft(ownerId, {
+          workflowId: f.workflow.id,
+          expectedRevision: 8,
+          definition: draft,
+        }),
       })),
     );
-    const successful = outcomes.filter(
-      (outcome) => outcome.status === 'fulfilled',
-    );
+    const successful = outcomes.filter((outcome) => outcome.status === 'fulfilled');
     expect(successful).toHaveLength(1);
     const winner = successful[0];
     if (!winner) throw new Error('没有成功编辑');
     expect(winner.value.result).toEqual({ revision: 9 });
-    expect(
-      await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } }),
-    ).toMatchObject({
+    expect(await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } })).toMatchObject({
       revision: 9,
       draft: winner.value.draft,
     });
@@ -233,12 +199,10 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
         expectedRevision: 9,
       }),
     ).rejects.toEqual(conflict('WORKFLOW_REVISION_CONFLICT'));
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
-    expect(
-      await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } }),
-    ).toEqual(f.workflow);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
+    expect(await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } })).toEqual(
+      f.workflow,
+    );
   });
 
   it('12 次同 revision 并发发布只有一个版本，重复发布明确冲突，新修订获得下一版本号', async () => {
@@ -249,9 +213,7 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
         (index % 2 ? service : otherService).publish(ownerId, input),
       ),
     );
-    const successful = outcomes.filter(
-      (outcome) => outcome.status === 'fulfilled',
-    );
+    const successful = outcomes.filter((outcome) => outcome.status === 'fulfilled');
     expect(successful).toHaveLength(1);
     const first = successful[0]?.value;
     if (!first) throw new Error('没有成功发布');
@@ -263,20 +225,16 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
     const failed = outcomes.filter((outcome) => outcome.status === 'rejected');
     expect(failed).toHaveLength(11);
     for (const outcome of failed)
-      expect(outcome.reason).toEqual(
-        conflict('WORKFLOW_REVISION_ALREADY_PUBLISHED'),
-      );
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(1);
+      expect(outcome.reason).toEqual(conflict('WORKFLOW_REVISION_ALREADY_PUBLISHED'));
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(1);
     await expect(otherService.publish(ownerId, input)).rejects.toEqual(
       conflict('WORKFLOW_REVISION_ALREADY_PUBLISHED'),
     );
 
     const b = definition('B');
-    expect(
-      await otherService.updateDraft(ownerId, { ...input, definition: b }),
-    ).toEqual({ revision: 11 });
+    expect(await otherService.updateDraft(ownerId, { ...input, definition: b })).toEqual({
+      revision: 11,
+    });
     const second = await service.publish(ownerId, {
       ...input,
       expectedRevision: 11,
@@ -290,21 +248,21 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
       where: { workflowId: f.workflow.id },
       orderBy: { version: 'asc' },
     });
-    expect(
-      versions.map(({ version, sourceRevision }) => [version, sourceRevision]),
-    ).toEqual([
+    expect(versions.map(({ version, sourceRevision }) => [version, sourceRevision])).toEqual([
       [1, 10],
       [2, 11],
     ]);
-    const reader = await new WorkflowVersionRepositories(
-      secondConnection,
-    ).forProject(ownerId, f.project.id);
+    const reader = await new WorkflowVersionRepositories(secondConnection).forProject(
+      ownerId,
+      f.project.id,
+    );
     expect(await reader.getVersion(first.id)).toMatchObject({
       definition: f.draft,
     });
-    expect(
-      await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } }),
-    ).toMatchObject({ draft: b, revision: 11 });
+    expect(await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } })).toMatchObject({
+      draft: b,
+      revision: 11,
+    });
   });
 
   it('版本号沿用已存在的最大版本，不把 draft revision 当成版本号', async () => {
@@ -337,9 +295,7 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
     });
     const editing = db.$transaction(
       async (tx) => {
-        const [connection] = await tx.$queryRaw<
-          { pid: number }[]
-        >`SELECT pg_backend_pid() AS pid`;
+        const [connection] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
         if (!connection) throw new Error('未取得编辑连接');
         await tx.workflow.update({
           where: { id: f.workflow.id },
@@ -384,9 +340,7 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
     expect(outcome?.status).toBe('rejected');
     if (outcome?.status !== 'rejected') throw new Error('过期发布未被拒绝');
     expect(outcome.reason).toEqual(conflict('WORKFLOW_REVISION_CONFLICT'));
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
   });
 
   it('publish 重新校验数据库 Draft，无效定义不创建版本，修复后仍从版本 1 开始', async () => {
@@ -401,9 +355,7 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
         expectedRevision: 10,
       }),
     ).rejects.toBeInstanceOf(z.ZodError);
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
     await service.updateDraft(ownerId, {
       workflowId: f.workflow.id,
       expectedRevision: 10,
@@ -448,12 +400,10 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
         definition: definition('B'),
       }),
     ).rejects.toBeInstanceOf(z.ZodError);
-    expect(
-      await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } }),
-    ).toEqual(f.workflow);
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
+    expect(await db.workflow.findUniqueOrThrow({ where: { id: f.workflow.id } })).toEqual(
+      f.workflow,
+    );
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
   });
 
   it('编辑与发布都检查所有者，不泄漏其他所有者的修订冲突，转移后旧权限失效', async () => {
@@ -465,9 +415,7 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
         definition: definition('越权'),
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.publish(otherId, input)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(service.publish(otherId, input)).rejects.toBeInstanceOf(NotFoundException);
     await db.project.update({
       where: { id: f.project.id },
       data: { ownerId: otherId },
@@ -478,15 +426,12 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
         definition: definition('过期权限'),
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.publish(ownerId, input)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(0);
-    expect(
-      await otherService.publish(otherId, { ...input, expectedRevision: 10 }),
-    ).toMatchObject({ version: 1, sourceRevision: 10 });
+    await expect(service.publish(ownerId, input)).rejects.toBeInstanceOf(NotFoundException);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
+    expect(await otherService.publish(otherId, { ...input, expectedRevision: 10 })).toMatchObject({
+      version: 1,
+      sourceRevision: 10,
+    });
   });
 
   it('数据库唯一约束兜底禁止同修订生成第二版本，sourceRevision 必须为正数', async () => {
@@ -506,8 +451,6 @@ describe('真实 PostgreSQL Draft 乐观锁与发布序列', () => {
     await expect(
       db.workflowVersion.create({ data: { ...data, sourceRevision: 0 } }),
     ).rejects.toThrow();
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: f.workflow.id } }),
-    ).toBe(1);
+    expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(1);
   });
 });

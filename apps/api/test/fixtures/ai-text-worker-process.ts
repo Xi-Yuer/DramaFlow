@@ -7,8 +7,7 @@ import { z } from 'zod';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test' ||
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test' ||
   !process.env.WORKFLOW_QUEUE_PREFIX?.startsWith('dramaflow-test-')
 )
   throw new Error('文本 AI Worker 测试仅允许隔离数据库 / 队列');
@@ -60,8 +59,7 @@ try {
             return await invoker.invoke(...args);
           } catch (error) {
             const summary = diagnostic.safeParse(error);
-            if (summary.success)
-              process.send?.({ event: 'capability_failed', ...summary.data });
+            if (summary.success) process.send?.({ event: 'capability_failed', ...summary.data });
             throw error;
           }
         },

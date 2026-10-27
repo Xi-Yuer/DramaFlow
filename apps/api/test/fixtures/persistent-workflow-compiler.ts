@@ -1,20 +1,7 @@
-import {
-  NumberType,
-  type RuntimeValue,
-  type WorkflowDefinition,
-} from '@dramaflow/contracts';
+import { NumberType, type RuntimeValue, type WorkflowDefinition } from '@dramaflow/contracts';
 import type { WorkflowCheckpointerService } from '@dramaflow/server';
-import {
-  WorkflowStateAnnotation,
-  type WorkflowCompiler,
-} from '@dramaflow/workflow';
-import {
-  Command,
-  END,
-  interrupt,
-  START,
-  StateGraph,
-} from '@langchain/langgraph';
+import { WorkflowStateAnnotation, type WorkflowCompiler } from '@dramaflow/workflow';
+import { Command, END, interrupt, START, StateGraph } from '@langchain/langgraph';
 
 export function persistentTestDefinition(): WorkflowDefinition {
   return {
@@ -68,8 +55,7 @@ export function persistentTestCompiler(
     async compile() {
       const graph = new StateGraph(WorkflowStateAnnotation)
         .addNode('prepare', (state) => {
-          if (state.outputs.prepare)
-            throw new Error('恢复时重复执行了已完成节点');
+          if (state.outputs.prepare) throw new Error('恢复时重复执行了已完成节点');
           return {
             outputs: {
               prepare: {
@@ -84,8 +70,7 @@ export function persistentTestCompiler(
         })
         .addNode('native_wait', () => {
           const value = interrupt<unknown, unknown>({ prompt: '提供测试增量' });
-          if (typeof value !== 'number')
-            throw new Error('测试 resume 必须是数字');
+          if (typeof value !== 'number') throw new Error('测试 resume 必须是数字');
           return {
             outputs: {
               native_wait: {
@@ -115,8 +100,7 @@ export function persistentTestCompiler(
       return {
         async invoke(input, config) {
           const threadId: unknown = config.configurable?.thread_id;
-          if (typeof threadId !== 'string')
-            throw new Error('测试缺少原 thread');
+          if (typeof threadId !== 'string') throw new Error('测试缺少原 thread');
           await onInvoke({ threadId, resume: input instanceof Command });
           return graph.invoke(input, config);
         },

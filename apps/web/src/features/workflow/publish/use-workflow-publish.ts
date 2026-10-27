@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { useWorkflowDraft } from '../editor/use-workflow-draft';
+import type { useWorkflowDraft } from '../editor/draft/use-workflow-draft';
 import { workflowApi, workflowKeys } from '../workflow-api';
 import { WorkflowPublisher, workflowPublicationForRevision } from './workflow-publish';
 

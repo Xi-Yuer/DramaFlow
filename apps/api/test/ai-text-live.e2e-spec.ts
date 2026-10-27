@@ -35,8 +35,7 @@ let worker: ChildProcess | undefined;
 let ownerId: string | undefined;
 let workerLog = '';
 let credential: string | undefined;
-let capabilityFailure:
-  { code: string; status?: number; outcome?: string } | undefined;
+let capabilityFailure: { code: string; status?: number; outcome?: string } | undefined;
 
 function assertNoCredential(value: unknown): void {
   if (credential && JSON.stringify(value).includes(credential))
@@ -45,9 +44,7 @@ function assertNoCredential(value: unknown): void {
 
 async function startWorker(): Promise<void> {
   const child = fork(
-    fileURLToPath(
-      new URL('./fixtures/ai-text-worker-process.ts', import.meta.url),
-    ),
+    fileURLToPath(new URL('./fixtures/ai-text-worker-process.ts', import.meta.url)),
     [],
     {
       execArgv: ['--import', import.meta.resolve('tsx')],
@@ -58,10 +55,7 @@ async function startWorker(): Promise<void> {
   worker = child;
   let ready = false;
   child.on('message', (value: unknown) => {
-    if (
-      z.object({ event: z.literal('ready'), pid: z.number() }).safeParse(value)
-        .success
-    )
+    if (z.object({ event: z.literal('ready'), pid: z.number() }).safeParse(value).success)
       ready = true;
     const summary = z
       .object({
@@ -109,14 +103,10 @@ afterAll(async () => {
       });
       for (const run of runs) {
         if (app) {
-          await app
-            .get(WorkflowCheckpointerService)
-            .saver.deleteThread(run.threadId);
+          await app.get(WorkflowCheckpointerService).saver.deleteThread(run.threadId);
           const job = await app
             .get(WorkflowExecutionQueue)
-            .queue.getJob(
-              workflowExecutionJobId({ kind: 'start', workflowRunId: run.id }),
-            );
+            .queue.getJob(workflowExecutionJobId({ kind: 'start', workflowRunId: run.id }));
           await job?.remove();
         }
       }
@@ -125,8 +115,7 @@ afterAll(async () => {
   } catch {
     cleanupFailed = true;
   } finally {
-    if (worker && worker.exitCode === null && worker.signalCode === null)
-      worker.kill('SIGKILL');
+    if (worker && worker.exitCode === null && worker.signalCode === null) worker.kill('SIGKILL');
     try {
       await app?.close();
     } catch {
@@ -139,8 +128,7 @@ afterAll(async () => {
     }
     credential = undefined;
   }
-  if (cleanupFailed)
-    throw new Error('真实模型测试清理失败，请检查隔离测试资源');
+  if (cleanupFailed) throw new Error('真实模型测试清理失败，请检查隔离测试资源');
 }, 45000);
 
 describe('显式启用：真实外部文本模型端到端验收', () => {
@@ -150,8 +138,7 @@ describe('显式启用：真实外部文本模型端到端验收', () => {
       try {
         if (
           process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-          new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-            '/dramaflow_test' ||
+          new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test' ||
           !process.env.WORKFLOW_QUEUE_PREFIX?.startsWith('dramaflow-test-')
         )
           throw new Error('真实模型测试必须使用隔离数据库与测试队列');
@@ -180,21 +167,15 @@ describe('显式启用：真实外部文本模型端到端验收', () => {
         credential = process.env[configuration.credentialEnv];
         if (!credential) throw new Error('未配置明确选择的模型凭证');
 
-        const constructor = z.custom<Type<unknown>>(
-          (value) => typeof value === 'function',
-        );
+        const constructor = z.custom<Type<unknown>>((value) => typeof value === 'function');
         const source: unknown = await import(
           new URL('../dist/app.module.js', import.meta.url).href
         );
         const authSource: unknown = await import(
           new URL('../dist/auth/auth.service.js', import.meta.url).href
         );
-        const { AppModule } = z
-          .object({ AppModule: constructor })
-          .parse(source);
-        const { AuthService: AuthToken } = z
-          .object({ AuthService: constructor })
-          .parse(authSource);
+        const { AppModule } = z.object({ AppModule: constructor }).parse(source);
+        const { AuthService: AuthToken } = z.object({ AuthService: constructor }).parse(authSource);
         app = await NestFactory.create<NestExpressApplication>(AppModule, {
           bodyParser: false,
           logger: false,
@@ -271,13 +252,13 @@ describe('显式启用：真实外部文本模型端到端验收', () => {
             draft: z.record(z.string(), z.json()).parse(definition),
           },
         });
-        const version = await createWorkflowService(
-          database,
-          app.get(NodeRegistry),
-        ).publish(ownerId, {
-          workflowId: workflow.id,
-          expectedRevision: 1,
-        });
+        const version = await createWorkflowService(database, app.get(NodeRegistry)).publish(
+          ownerId,
+          {
+            workflowId: workflow.id,
+            expectedRevision: 1,
+          },
+        );
         await startWorker();
         const submission = await fetch(`${base}/api/v1/workflow-runs`, {
           method: 'POST',
@@ -334,13 +315,7 @@ describe('显式启用：真实外部文本模型端到端验收', () => {
         const persistedDraft = await db.workflow.findUniqueOrThrow({
           where: { id: workflow.id },
         });
-        for (const value of [
-          run,
-          nodes,
-          intents,
-          persistedVersion,
-          persistedDraft,
-        ])
+        for (const value of [run, nodes, intents, persistedVersion, persistedDraft])
           assertNoCredential(value);
         let checkpointCount = 0;
         for await (const tuple of app
@@ -384,9 +359,7 @@ describe('显式启用：真实外部文本模型端到端验收', () => {
         const summary = capabilityFailure
           ? ` ${capabilityFailure.code}${capabilityFailure.status ? ` HTTP ${capabilityFailure.status}` : ''}${capabilityFailure.outcome ? ` ${capabilityFailure.outcome}` : ''}`
           : '';
-        throw new Error(
-          `真实文本 AI 端到端验收失败${summary}；本测试不自动重试。`,
-        );
+        throw new Error(`真实文本 AI 端到端验收失败${summary}；本测试不自动重试。`);
       }
     },
     180000,

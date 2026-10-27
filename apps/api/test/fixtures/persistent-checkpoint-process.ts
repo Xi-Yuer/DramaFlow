@@ -14,11 +14,7 @@ import {
   DefaultWorkflowRunSubmissionService,
   workflowStateSchema,
 } from '@dramaflow/workflow';
-import {
-  Module,
-  HttpException,
-  type INestApplicationContext,
-} from '@nestjs/common';
+import { Module, HttpException, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { z } from 'zod';
 
@@ -66,10 +62,10 @@ try {
   const request = receive();
   await send({ event: 'ipc_ready', pid: process.pid });
   const command = commandSchema.parse(await request);
-  app = await NestFactory.createApplicationContext(
-    PersistentCheckpointTestModule,
-    { logger: false, abortOnError: false },
-  );
+  app = await NestFactory.createApplicationContext(PersistentCheckpointTestModule, {
+    logger: false,
+    abortOnError: false,
+  });
   const checkpointer = app.get(WorkflowCheckpointerService);
   await checkpointer.ping();
   if (command.action === 'probe') {
@@ -148,8 +144,7 @@ try {
     };
   }
 } catch (error) {
-  const response =
-    error instanceof HttpException ? error.getResponse() : undefined;
+  const response = error instanceof HttpException ? error.getResponse() : undefined;
   const code =
     typeof error === 'object' && error !== null && 'code' in error
       ? error.code

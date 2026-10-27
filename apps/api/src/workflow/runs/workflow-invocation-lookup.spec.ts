@@ -14,8 +14,7 @@ import { WorkflowRunsController } from './workflow-runs.controller.js';
 function fixture() {
   const workflow = {
     findFirst: vi.fn(async (query) =>
-      query.where.id === 'workflow-a' &&
-      query.where.project.ownerId === 'owner-a'
+      query.where.id === 'workflow-a' && query.where.project.ownerId === 'owner-a'
         ? { projectId: 'project-a' }
         : null,
     ),
@@ -37,11 +36,7 @@ function fixture() {
   };
   const workflowRun = {
     findFirst: vi.fn(async (query) => {
-      if (
-        query.where.id === 'run-a' &&
-        query.where.project.ownerId === 'owner-a'
-      )
-        return row;
+      if (query.where.id === 'run-a' && query.where.project.ownerId === 'owner-a') return row;
       if (
         query.where.workflowId === 'workflow-a' &&
         query.where.projectId === 'project-a' &&
@@ -67,11 +62,7 @@ function fixture() {
 describe('只读 invocation lookup', () => {
   it('授权 lookup 返回现有安全 Run projection，没有执行副作用或 threadId', async () => {
     const f = fixture();
-    const result = await f.service.lookupInvocation(
-      'owner-a',
-      'workflow-a',
-      'key-a',
-    );
+    const result = await f.service.lookupInvocation('owner-a', 'workflow-a', 'key-a');
     expect(result.run).toMatchObject({ id: 'run-a', invocationKey: 'key-a' });
     expect(result.run).not.toHaveProperty('threadId');
     expect(result.run).not.toHaveProperty('projectId');
@@ -86,20 +77,16 @@ describe('只读 invocation lookup', () => {
     expect(f.dispatcher.publishExecution).not.toHaveBeenCalled();
   });
   it('已授权 Workflow 没有 invocation 返回明确 null', async () => {
-    expect(
-      await fixture().service.lookupInvocation(
-        'owner-a',
-        'workflow-a',
-        'missing',
-      ),
-    ).toEqual({ run: null });
+    expect(await fixture().service.lookupInvocation('owner-a', 'workflow-a', 'missing')).toEqual({
+      run: null,
+    });
   });
   it('同一用户另一个项目的 Workflow 不能用相同 key 找出原 Run', async () => {
     const f = fixture();
     f.workflow.findFirst.mockResolvedValueOnce({ projectId: 'project-b' });
-    expect(
-      await f.service.lookupInvocation('owner-a', 'workflow-b', 'key-a'),
-    ).toEqual({ run: null });
+    expect(await f.service.lookupInvocation('owner-a', 'workflow-b', 'key-a')).toEqual({
+      run: null,
+    });
     expect(f.workflowRun.findFirst.mock.calls[0]?.[0].where).toEqual({
       workflowId: 'workflow-b',
       invocationKey: 'key-a',
@@ -113,23 +100,17 @@ describe('只读 invocation lookup', () => {
     ['owner-a', 'workflow-other-project'],
   ])('不存在 / 跨用户 / 跨项目均隐藏资源 %s %s', async (owner, workflowId) => {
     const f = fixture();
-    await expect(
-      f.service.lookupInvocation(owner, workflowId, 'key-a'),
-    ).rejects.toMatchObject({ status: 404 });
+    await expect(f.service.lookupInvocation(owner, workflowId, 'key-a')).rejects.toMatchObject({
+      status: 404,
+    });
     expect(f.workflowRun.findFirst).not.toHaveBeenCalled();
   });
   it('入口沿用认证 actor，显式 no-store', () => {
     expect(
-      Reflect.getMetadata(
-        '__headers__',
-        WorkflowRunsController.prototype.lookup,
-      ),
+      Reflect.getMetadata('__headers__', WorkflowRunsController.prototype.lookup),
     ).toContainEqual({ name: 'Cache-Control', value: 'no-store' });
-    expect(
-      Reflect.getMetadata(
-        'auth:public',
-        WorkflowRunsController.prototype.lookup,
-      ),
-    ).not.toBe(true);
+    expect(Reflect.getMetadata('auth:public', WorkflowRunsController.prototype.lookup)).not.toBe(
+      true,
+    );
   });
 });

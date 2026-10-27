@@ -1,9 +1,6 @@
 import { Module } from '@nestjs/common';
 import { WorkflowService } from './workflow.service.js';
-import {
-  WorkflowNodeRegistryModule,
-  ModelProviderModule,
-} from '@dramaflow/server';
+import { WorkflowNodeRegistryModule, ModelProviderModule } from '@dramaflow/server';
 import {
   ProjectWorkflowsController,
   WorkflowsController,
@@ -13,11 +10,7 @@ import {
 @Module({
   imports: [WorkflowNodeRegistryModule, ModelProviderModule],
   providers: [WorkflowService],
-  controllers: [
-    ProjectWorkflowsController,
-    WorkflowsController,
-    WorkflowVersionsController,
-  ],
+  controllers: [ProjectWorkflowsController, WorkflowsController, WorkflowVersionsController],
   exports: [WorkflowService],
 })
 export class WorkflowsModule {}

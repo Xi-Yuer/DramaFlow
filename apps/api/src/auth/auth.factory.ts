@@ -9,8 +9,7 @@ import { authBaseUrl } from './trusted-origin.js';
 export function createAuth(db: PrismaClient) {
   const secret = process.env.BETTER_AUTH_SECRET;
   const baseURL = authBaseUrl();
-  if (!secret || secret.length < 32)
-    throw new Error('BETTER_AUTH_SECRET 至少需要 32 个字符');
+  if (!secret || secret.length < 32) throw new Error('BETTER_AUTH_SECRET 至少需要 32 个字符');
   return betterAuth({
     appName: 'DramaFlow',
     secret,

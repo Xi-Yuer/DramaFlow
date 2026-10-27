@@ -2,18 +2,10 @@ import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { toNodeHandler } from 'better-auth/node';
 import type { Express } from 'express';
 import type { AuthService } from './auth.service.js';
-import {
-  invalidOriginMessage,
-  isUntrustedWriteOrigin,
-} from './trusted-origin.js';
+import { invalidOriginMessage, isUntrustedWriteOrigin } from './trusted-origin.js';
 
 // 不公开管理员插件、注册、账号删除、模拟登录等尚未授权的 HTTP 能力。
-const exposed = new Set([
-  'sign-in/email',
-  'sign-out',
-  'get-session',
-  'change-password',
-]);
+const exposed = new Set(['sign-in/email', 'sign-out', 'get-session', 'change-password']);
 export function mountAuth(server: Express, service: AuthService) {
   const trustedProxies =
     process.env.TRUSTED_PROXY_CIDRS?.split(',')
@@ -38,8 +30,7 @@ export function mountAuth(server: Express, service: AuthService) {
         });
         return;
       }
-      request.headers['x-real-ip'] =
-        request.ip ?? request.socket.remoteAddress ?? 'unknown';
+      request.headers['x-real-ip'] = request.ip ?? request.socket.remoteAddress ?? 'unknown';
       response.setHeader('Cache-Control', 'no-store');
       // 不让已停用账号利用认证组件的内建接口绕过平台 Guard。
       if (path !== 'sign-in/email' && path !== 'sign-out') {

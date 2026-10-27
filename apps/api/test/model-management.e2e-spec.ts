@@ -18,15 +18,7 @@ import type { Type } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import {
-  beforeAll,
-  beforeEach,
-  afterAll,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
+import { beforeAll, beforeEach, afterAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { AuthService } from '../src/auth/auth.service.js';
 import { authBaseUrl } from '../src/auth/trusted-origin.js';
@@ -35,8 +27,7 @@ import { ApiExceptionFilter } from '../src/http/exception.filter.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test' ||
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test' ||
   !process.env.WORKFLOW_QUEUE_PREFIX?.startsWith('dramaflow-test-')
 )
   throw new Error('模型管理测试仅允许隔离库和队列');
@@ -51,19 +42,13 @@ let app: NestExpressApplication, base: string;
 let log: ReturnType<typeof vi.spyOn>;
 
 beforeAll(async () => {
-  const constructor = z.custom<Type<unknown>>(
-    (value) => typeof value === 'function',
-  );
-  const module: unknown = await import(
-    new URL('../dist/app.module.js', import.meta.url).href
-  );
+  const constructor = z.custom<Type<unknown>>((value) => typeof value === 'function');
+  const module: unknown = await import(new URL('../dist/app.module.js', import.meta.url).href);
   const authModule: unknown = await import(
     new URL('../dist/auth/auth.service.js', import.meta.url).href
   );
   const { AppModule } = z.object({ AppModule: constructor }).parse(module);
-  const { AuthService: AuthToken } = z
-    .object({ AuthService: constructor })
-    .parse(authModule);
+  const { AuthService: AuthToken } = z.object({ AuthService: constructor }).parse(authModule);
   app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
     logger: false,
@@ -174,12 +159,8 @@ describe('用户模型管理 HTTP', () => {
     await db.modelProvider.deleteMany({ where: { ownerId: { in: users } } });
   });
   it('受鉴权的安全目录来自正式插件，包含配置 Schema 和能力参数，不返回执行实现', async () => {
-    expect((await http('/provider-plugins', 'GET', undefined, -1)).status).toBe(
-      401,
-    );
-    const result = providerPluginCatalogSchema.parse(
-      await json(await http('/provider-plugins')),
-    );
+    expect((await http('/provider-plugins', 'GET', undefined, -1)).status).toBe(401);
+    const result = providerPluginCatalogSchema.parse(await json(await http('/provider-plugins')));
     expect(result.items.map(({ id, version }) => ({ id, version }))).toEqual([
       { id: 'openai_compatible', version: 1 },
       { id: 'text_generation', version: 1 },
@@ -187,9 +168,7 @@ describe('用户模型管理 HTTP', () => {
     expect(result.items[0]).toMatchObject({
       id: 'openai_compatible',
       version: 1,
-      credentialFields: [
-        { key: 'apiKey', required: true, minLength: 1, maxLength: 4096 },
-      ],
+      credentialFields: [{ key: 'apiKey', required: true, minLength: 1, maxLength: 4096 }],
       capabilities: [{ type: 'text.generate' }],
     });
     expect(result.items[0]!.configurationSchema).toMatchObject({
@@ -198,15 +177,11 @@ describe('用户模型管理 HTTP', () => {
         timeoutMs: { default: 60000 },
       },
     });
-    expect(JSON.stringify(result)).not.toMatch(
-      /invoke|credentialsSchema|encryptedCredentials/,
-    );
+    expect(JSON.stringify(result)).not.toMatch(/invoke|credentialsSchema|encryptedCredentials/);
   });
 
   it('Model Catalog 按能力返回所属 Provider 的模型，不含凭证', async () => {
-    expect((await http('/model-catalog', 'GET', undefined, -1)).status).toBe(
-      401,
-    );
+    expect((await http('/model-catalog', 'GET', undefined, -1)).status).toBe(401);
     expect((await http('/model-catalog?capability=')).status).toBe(400);
     const catalog = modelCatalogSchema.parse(
       await json(await http('/model-catalog?capability=text.generate')),
@@ -225,29 +200,18 @@ describe('用户模型管理 HTTP', () => {
         capabilities: [{ type: 'text.generate', name: '文本生成' }],
       },
     ]);
-    expect(JSON.stringify(catalog)).not.toMatch(
-      /apiKey|credential|baseURL|pluginId|secret/i,
-    );
+    expect(JSON.stringify(catalog)).not.toMatch(/apiKey|credential|baseURL|pluginId|secret/i);
     expect(
-      modelCatalogSchema.parse(
-        await json(await http('/model-catalog?capability=image.generate')),
-      ),
+      modelCatalogSchema.parse(await json(await http('/model-catalog?capability=image.generate'))),
     ).toEqual({
       items: [],
     });
   });
 
   it('Provider Catalog 发布 OpenAI / Anthropic，实例绑定定义并物化官方调用配置', async () => {
-    expect((await http('/provider-catalog', 'GET', undefined, -1)).status).toBe(
-      401,
-    );
-    const catalog = providerCatalogSchema.parse(
-      await json(await http('/provider-catalog')),
-    );
-    expect(catalog.items.map((item) => item.id)).toEqual([
-      'anthropic',
-      'openai',
-    ]);
+    expect((await http('/provider-catalog', 'GET', undefined, -1)).status).toBe(401);
+    const catalog = providerCatalogSchema.parse(await json(await http('/provider-catalog')));
+    expect(catalog.items.map((item) => item.id)).toEqual(['anthropic', 'openai']);
     expect(new Set(catalog.items.map((item) => item.id)).size).toBe(2);
     expect(JSON.stringify(catalog)).not.toMatch(
       /text_generation|pluginId|pluginVersion|baseURL|api\.openai\.com|api\.anthropic\.com|vercel|encryptedCredentials/,
@@ -270,9 +234,7 @@ describe('用户模型管理 HTTP', () => {
       },
     });
     expect(JSON.stringify(openai)).not.toContain(marker);
-    expect(
-      (await http(`/providers/${openai.id}`, 'GET', undefined, 1)).status,
-    ).toBe(404);
+    expect((await http(`/providers/${openai.id}`, 'GET', undefined, 1)).status).toBe(404);
     const anthropicResponse = await http(`/providers/catalog`, 'POST', {
       name: '官方 Anthropic',
       providerDefinitionId: 'anthropic',
@@ -280,9 +242,7 @@ describe('用户模型管理 HTTP', () => {
       configuration: {},
     });
     expect(anthropicResponse.status).toBe(201);
-    expect(
-      modelProviderSchema.parse(await json(anthropicResponse)),
-    ).toMatchObject({
+    expect(modelProviderSchema.parse(await json(anthropicResponse))).toMatchObject({
       providerDefinitionId: 'anthropic',
       pluginId: 'text_generation',
       pluginVersion: 1,
@@ -298,10 +258,7 @@ describe('用户模型管理 HTTP', () => {
       settings: { temperature: 0.2, maxOutputTokens: 32 },
     });
     expect(configured.status).toBe(201);
-    expect(
-      managedModelConfigurationSchema.parse(await json(configured))
-        .availability,
-    ).toEqual({
+    expect(managedModelConfigurationSchema.parse(await json(configured)).availability).toEqual({
       selectable: true,
       unavailableReason: null,
     });
@@ -344,23 +301,17 @@ describe('用户模型管理 HTTP', () => {
         selectable: true,
         unavailableReason: null,
       });
+      expect(modelProviderListSchema.parse(await json(await http(f.providers))).items).toEqual([
+        f.v,
+      ]);
+      expect(modelConfigurationListSchema.parse(await json(await http(f.models))).items).toEqual([
+        f.m,
+      ]);
+      expect(modelProviderSchema.parse(await json(await http(`${f.providers}/${f.v.id}`)))).toEqual(
+        f.v,
+      );
       expect(
-        modelProviderListSchema.parse(await json(await http(f.providers)))
-          .items,
-      ).toEqual([f.v]);
-      expect(
-        modelConfigurationListSchema.parse(await json(await http(f.models)))
-          .items,
-      ).toEqual([f.m]);
-      expect(
-        modelProviderSchema.parse(
-          await json(await http(`${f.providers}/${f.v.id}`)),
-        ),
-      ).toEqual(f.v);
-      expect(
-        managedModelConfigurationSchema.parse(
-          await json(await http(`${f.models}/${f.m.id}`)),
-        ),
+        managedModelConfigurationSchema.parse(await json(await http(`${f.models}/${f.m.id}`))),
       ).toEqual(f.m);
       expect(decrypt).not.toHaveBeenCalled();
     } finally {
@@ -370,14 +321,10 @@ describe('用户模型管理 HTTP', () => {
       where: { id: f.v.id },
     });
     expect(row.encryptedCredentials).not.toContain(marker);
-    expect(
-      JSON.parse(
-        new SecretsService().decrypt(row.encryptedCredentials, users[0]!),
-      ),
-    ).toEqual({ apiKey: marker });
-    expect(await db.workflowRun.count({ where: { projectId: f.p.id } })).toBe(
-      0,
-    );
+    expect(JSON.parse(new SecretsService().decrypt(row.encryptedCredentials, users[0]!))).toEqual({
+      apiKey: marker,
+    });
+    expect(await db.workflowRun.count({ where: { projectId: f.p.id } })).toBe(0);
   });
 
   it('所有目录 / 详情读取也必须登录', async () => {
@@ -405,10 +352,7 @@ describe('用户模型管理 HTTP', () => {
         data: {
           ownerId: users[0]!,
           name: '历史配置',
-          pluginId:
-            reason === 'PLUGIN_UNAVAILABLE'
-              ? 'missing_plugin'
-              : 'openai_compatible',
+          pluginId: reason === 'PLUGIN_UNAVAILABLE' ? 'missing_plugin' : 'openai_compatible',
           pluginVersion: 1,
           configuration:
             reason === 'CONFIGURATION_INVALID'
@@ -421,10 +365,7 @@ describe('用户模型管理 HTTP', () => {
         data: {
           ownerId: users[0]!,
           providerId: v.id,
-          capability:
-            reason === 'CAPABILITY_UNAVAILABLE'
-              ? 'video.generate'
-              : 'text.generate',
+          capability: reason === 'CAPABILITY_UNAVAILABLE' ? 'video.generate' : 'text.generate',
           model: 'historical-model',
           settings: {},
         },
@@ -448,22 +389,15 @@ describe('用户模型管理 HTTP', () => {
         });
         expect(create.status).toBe(400);
         await json(create);
-        expect(
-          await db.modelConfiguration.count({ where: { ownerId: users[0]! } }),
-        ).toBe(before);
+        expect(await db.modelConfiguration.count({ where: { ownerId: users[0]! } })).toBe(before);
       }
     }
   });
 
   it('启停独立管理：停用 Provider 不改模型绑定，模型重新启用不隐式启用 Provider', async () => {
     const f = await fixture();
-    expect(
-      (await http(`${f.providers}/${f.v.id}`, 'PATCH', { enabled: false }))
-        .status,
-    ).toBe(200);
-    let m = managedModelConfigurationSchema.parse(
-      await json(await http(`${f.models}/${f.m.id}`)),
-    );
+    expect((await http(`${f.providers}/${f.v.id}`, 'PATCH', { enabled: false })).status).toBe(200);
+    let m = managedModelConfigurationSchema.parse(await json(await http(`${f.models}/${f.m.id}`)));
     expect(m.enabled).toBe(true);
     expect(m.availability.unavailableReason).toBe('PROVIDER_DISABLED');
     const blocked = await http(f.models, 'POST', {
@@ -475,21 +409,16 @@ describe('用户模型管理 HTTP', () => {
     expect(blocked.status).toBe(409);
     await json(blocked);
     await http(`${f.models}/${f.m.id}`, 'PATCH', { enabled: false });
-    m = managedModelConfigurationSchema.parse(
-      await json(await http(`${f.models}/${f.m.id}`)),
-    );
+    m = managedModelConfigurationSchema.parse(await json(await http(`${f.models}/${f.m.id}`)));
     expect(m.availability.unavailableReason).toBe('MODEL_DISABLED');
     await http(`${f.models}/${f.m.id}`, 'PATCH', { enabled: true });
     expect(
-      managedModelConfigurationSchema.parse(
-        await json(await http(`${f.models}/${f.m.id}`)),
-      ).availability.unavailableReason,
+      managedModelConfigurationSchema.parse(await json(await http(`${f.models}/${f.m.id}`)))
+        .availability.unavailableReason,
     ).toBe('PROVIDER_DISABLED');
     await http(`${f.providers}/${f.v.id}`, 'PATCH', { enabled: true });
     expect(
-      managedModelConfigurationSchema.parse(
-        await json(await http(`${f.models}/${f.m.id}`)),
-      ),
+      managedModelConfigurationSchema.parse(await json(await http(`${f.models}/${f.m.id}`))),
     ).toEqual(f.m);
   });
 
@@ -508,11 +437,9 @@ describe('用户模型管理 HTTP', () => {
       where: { id: f.v.id },
     });
     expect(after.encryptedCredentials).not.toBe(before.encryptedCredentials);
-    expect(
-      JSON.parse(
-        new SecretsService().decrypt(after.encryptedCredentials, users[0]!),
-      ),
-    ).toEqual({ apiKey: `${marker}-rotated` });
+    expect(JSON.parse(new SecretsService().decrypt(after.encryptedCredentials, users[0]!))).toEqual(
+      { apiKey: `${marker}-rotated` },
+    );
     expect(after.configuration).toEqual(before.configuration);
     expect(after.enabled).toBe(false);
     const failed = await http(`${f.providers}/${f.v.id}/credentials`, 'PUT', {
@@ -521,31 +448,23 @@ describe('用户模型管理 HTTP', () => {
     expect(failed.status).toBe(400);
     await json(failed);
     expect(
-      (await db.modelProvider.findUniqueOrThrow({ where: { id: f.v.id } }))
-        .encryptedCredentials,
+      (await db.modelProvider.findUniqueOrThrow({ where: { id: f.v.id } })).encryptedCredentials,
     ).toBe(after.encryptedCredentials);
   });
 
   it('列表按用户隔离，猜中 ID 也不能读取、修改或使用其他用户的资源', async () => {
     const f = await fixture();
     expect(
-      modelProviderListSchema.parse(
-        await json(await http(f.providers, 'GET', undefined, 1)),
-      ).items,
+      modelProviderListSchema.parse(await json(await http(f.providers, 'GET', undefined, 1))).items,
     ).toEqual([]);
     expect(
-      modelConfigurationListSchema.parse(
-        await json(await http(f.models, 'GET', undefined, 1)),
-      ).items,
+      modelConfigurationListSchema.parse(await json(await http(f.models, 'GET', undefined, 1)))
+        .items,
     ).toEqual([]);
     for (const [path, method, body] of [
       [`${f.providers}/${f.v.id}`, 'GET', undefined],
       [`${f.providers}/${f.v.id}`, 'PATCH', { enabled: false }],
-      [
-        `${f.providers}/${f.v.id}/credentials`,
-        'PUT',
-        { credentials: { apiKey: marker } },
-      ],
+      [`${f.providers}/${f.v.id}/credentials`, 'PUT', { credentials: { apiKey: marker } }],
       [`${f.models}/${f.m.id}`, 'GET', undefined],
       [
         f.models,
@@ -565,15 +484,11 @@ describe('用户模型管理 HTTP', () => {
     }
     const otherProject = await project();
     expect(otherProject.id).not.toBe(f.p.id);
+    expect(modelProviderSchema.parse(await json(await http(`${f.providers}/${f.v.id}`))).id).toBe(
+      f.v.id,
+    );
     expect(
-      modelProviderSchema.parse(
-        await json(await http(`${f.providers}/${f.v.id}`)),
-      ).id,
-    ).toBe(f.v.id);
-    expect(
-      managedModelConfigurationSchema.parse(
-        await json(await http(`${f.models}/${f.m.id}`)),
-      ).id,
+      managedModelConfigurationSchema.parse(await json(await http(`${f.models}/${f.m.id}`))).id,
     ).toBe(f.m.id);
   });
 
@@ -602,9 +517,7 @@ describe('用户模型管理 HTTP', () => {
       expect(response.status).toBe(400);
       await json(response);
     }
-    expect(
-      await db.modelProvider.count({ where: { ownerId: users[0]! } }),
-    ).toBe(0);
+    expect(await db.modelProvider.count({ where: { ownerId: users[0]! } })).toBe(0);
     const v = await provider();
     for (const body of [
       {
@@ -636,9 +549,7 @@ describe('用户模型管理 HTTP', () => {
       expect(response.status).toBe(400);
       await json(response);
     }
-    expect(
-      await db.modelConfiguration.count({ where: { ownerId: users[0]! } }),
-    ).toBe(0);
+    expect(await db.modelConfiguration.count({ where: { ownerId: users[0]! } })).toBe(0);
   });
 
   it('PATCH 拒绝修改不可变语义；认证和 Origin 保护所有管理写入', async () => {
@@ -677,11 +588,7 @@ describe('用户模型管理 HTTP', () => {
     for (const [path, method, body] of [
       [f.providers, 'POST', providerBody()],
       [`${f.providers}/${f.v.id}`, 'PATCH', { enabled: false }],
-      [
-        `${f.providers}/${f.v.id}/credentials`,
-        'PUT',
-        { credentials: { apiKey: marker } },
-      ],
+      [`${f.providers}/${f.v.id}/credentials`, 'PUT', { credentials: { apiKey: marker } }],
       [
         f.models,
         'POST',
@@ -695,13 +602,7 @@ describe('用户模型管理 HTTP', () => {
       [`${f.models}/${f.m.id}`, 'PATCH', { enabled: false }],
     ] as const) {
       expect((await http(path, method, body, -1)).status).toBe(401);
-      const response = await http(
-        path,
-        method,
-        body,
-        0,
-        'https://untrusted.example',
-      );
+      const response = await http(path, method, body, 0, 'https://untrusted.example');
       expect(response.status).toBe(403);
       await json(response);
     }
@@ -730,11 +631,9 @@ describe('用户模型管理 HTTP', () => {
     const before = await db.modelProvider.findUniqueOrThrow({
       where: { id: v.id },
     });
-    const encrypt = vi
-      .spyOn(SecretsService.prototype, 'encrypt')
-      .mockImplementation(() => {
-        throw new Error(marker);
-      });
+    const encrypt = vi.spyOn(SecretsService.prototype, 'encrypt').mockImplementation(() => {
+      throw new Error(marker);
+    });
     try {
       const created = await http(path, 'POST', providerBody());
       expect(created.status).toBe(503);
@@ -748,12 +647,9 @@ describe('用户模型管理 HTTP', () => {
       encrypt.mockRestore();
     }
     expect(
-      (await db.modelProvider.findUniqueOrThrow({ where: { id: v.id } }))
-        .encryptedCredentials,
+      (await db.modelProvider.findUniqueOrThrow({ where: { id: v.id } })).encryptedCredentials,
     ).toBe(before.encryptedCredentials);
-    expect(
-      await db.modelProvider.count({ where: { ownerId: users[0]! } }),
-    ).toBe(1);
+    expect(await db.modelProvider.count({ where: { ownerId: users[0]! } })).toBe(1);
   });
 
   it('启停与轮换并发只修改各自字段，恢复后模型身份保持不变', async () => {
@@ -770,19 +666,16 @@ describe('用户模型管理 HTTP', () => {
       where: { id: f.v.id },
     });
     expect(row.enabled).toBe(false);
-    expect(
-      new SecretsService().decrypt(row.encryptedCredentials, users[0]!),
-    ).toContain(`${marker}-parallel`);
-    expect(
-      (await db.modelConfiguration.findUniqueOrThrow({ where: { id: f.m.id } }))
-        .enabled,
-    ).toBe(false);
+    expect(new SecretsService().decrypt(row.encryptedCredentials, users[0]!)).toContain(
+      `${marker}-parallel`,
+    );
+    expect((await db.modelConfiguration.findUniqueOrThrow({ where: { id: f.m.id } })).enabled).toBe(
+      false,
+    );
     await http(`${f.providers}/${f.v.id}`, 'PATCH', { enabled: true });
     await http(`${f.models}/${f.m.id}`, 'PATCH', { enabled: true });
     expect(
-      managedModelConfigurationSchema.parse(
-        await json(await http(`${f.models}/${f.m.id}`)),
-      ),
+      managedModelConfigurationSchema.parse(await json(await http(`${f.models}/${f.m.id}`))),
     ).toEqual(f.m);
   });
 
@@ -818,9 +711,7 @@ describe('用户模型管理 HTTP', () => {
       definition: draft,
     });
     expect(saved.status).toBe(200);
-    const revision = z
-      .object({ revision: z.number() })
-      .parse(await saved.json()).revision;
+    const revision = z.object({ revision: z.number() }).parse(await saved.json()).revision;
     const published = await http(`/workflows/${workflow.id}/publish`, 'POST', {
       expectedRevision: revision,
     });
@@ -839,9 +730,7 @@ describe('用户模型管理 HTTP', () => {
       expectedRevision: revision,
       definition: draft,
     });
-    const nextRevision = z
-      .object({ revision: z.number() })
-      .parse(await nextSaved.json()).revision;
+    const nextRevision = z.object({ revision: z.number() }).parse(await nextSaved.json()).revision;
     expect(
       (
         await http(`/workflows/${workflow.id}/publish`, 'POST', {
@@ -849,13 +738,10 @@ describe('用户模型管理 HTTP', () => {
         })
       ).status,
     ).toBe(400);
-    expect(
-      await db.workflowVersion.count({ where: { workflowId: workflow.id } }),
-    ).toBe(1);
-    expect(
-      projectSchema.parse(await (await http(`/projects/${f.p.id}`)).json())
-        .revision,
-    ).toBe(f.p.revision);
+    expect(await db.workflowVersion.count({ where: { workflowId: workflow.id } })).toBe(1);
+    expect(projectSchema.parse(await (await http(`/projects/${f.p.id}`)).json()).revision).toBe(
+      f.p.revision,
+    );
     await http(`${f.providers}/${f.v.id}`, 'PATCH', { enabled: true });
     expect(
       (
@@ -865,9 +751,8 @@ describe('用户模型管理 HTTP', () => {
       ).status,
     ).toBe(201);
     expect(
-      workflowResponseSchema.parse(
-        await (await http(`/projects/${f.p.id}/workflow`)).json(),
-      ).revision,
+      workflowResponseSchema.parse(await (await http(`/projects/${f.p.id}/workflow`)).json())
+        .revision,
     ).toBe(nextRevision);
   });
 
@@ -910,12 +795,8 @@ describe('用户模型管理 HTTP', () => {
         await json(await http(`/${resource}?cursor=${first.nextCursor}`)),
       );
       expect(second.nextCursor).toBeNull();
-      expect(
-        new Set([...first.items, ...second.items].map((item) => item.id)).size,
-      ).toBe(total);
-      expect((await http(`/${resource}?cursor=${foreign.id}`)).status).toBe(
-        400,
-      );
+      expect(new Set([...first.items, ...second.items].map((item) => item.id)).size).toBe(total);
+      expect((await http(`/${resource}?cursor=${foreign.id}`)).status).toBe(400);
       expect((await http(`/${resource}?limit=10000`)).status).toBe(400);
     }
   });

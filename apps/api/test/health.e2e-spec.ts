@@ -12,8 +12,7 @@ beforeAll(async () => {
     stdio: 'ignore',
   });
   for (let attempt = 0; attempt < 80; attempt++) {
-    if (server.exitCode !== null)
-      throw new Error('API 启动失败，请检查基础设施配置');
+    if (server.exitCode !== null) throw new Error('API 启动失败，请检查基础设施配置');
     try {
       const response = await fetch(`${origin}/api/v1/health`);
       if (response.ok) return;

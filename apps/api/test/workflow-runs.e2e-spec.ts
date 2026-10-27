@@ -5,22 +5,15 @@ import {
   type RuntimeValue,
   type WorkflowRunStatus,
 } from '@dramaflow/contracts';
-import {
-  DatabaseService,
-  NodeRunRepositories,
-  WorkflowRunRepositories,
-} from '@dramaflow/server';
+import { DatabaseService, NodeRunRepositories, WorkflowRunRepositories } from '@dramaflow/server';
 import type { WorkflowRunRepository } from '@dramaflow/workflow';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test'
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test'
 )
-  throw new Error(
-    'WorkflowRun 集成测试仅允许在 DramaFlow 的隔离测试数据库运行',
-  );
+  throw new Error('WorkflowRun 集成测试仅允许在 DramaFlow 的隔离测试数据库运行');
 
 const database = new DatabaseService();
 const db = database.client;
@@ -145,9 +138,10 @@ describe('真实 PostgreSQL WorkflowRun', () => {
       where: { id: run.id },
     });
     await repository.markWaiting(run.id);
-    expect(
-      await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } }),
-    ).toMatchObject({ status: 'waiting', completedAt: null });
+    expect(await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({
+      status: 'waiting',
+      completedAt: null,
+    });
     await repository.markRunning(run.id);
     await repository.markCompleted(run.id, outputs);
     const completed = await db.workflowRun.findUniqueOrThrow({
@@ -165,21 +159,8 @@ describe('真实 PostgreSQL WorkflowRun', () => {
     expect(completed.outputs).not.toHaveProperty('nodeId');
   });
 
-  const statuses = [
-    'pending',
-    'running',
-    'waiting',
-    'completed',
-    'failed',
-    'cancelled',
-  ] as const;
-  const targets = [
-    'running',
-    'waiting',
-    'completed',
-    'failed',
-    'cancelled',
-  ] as const;
+  const statuses = ['pending', 'running', 'waiting', 'completed', 'failed', 'cancelled'] as const;
+  const targets = ['running', 'waiting', 'completed', 'failed', 'cancelled'] as const;
   const allowed = new Set([
     'pending:running',
     'running:waiting',
@@ -216,9 +197,7 @@ describe('真实 PostgreSQL WorkflowRun', () => {
         if (to === 'cancelled') expect(row.completedAt).toBeInstanceOf(Date);
       } else {
         await expect(actions[to]()).rejects.toThrow('状态不允许');
-        expect(
-          await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } }),
-        ).toEqual(before);
+        expect(await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } })).toEqual(before);
       }
     },
   );
@@ -236,12 +215,8 @@ describe('真实 PostgreSQL WorkflowRun', () => {
       { startedAt: new Date(0) },
       { status: 'failed', error: failure, completedAt: new Date() },
     ])
-      await expect(
-        db.workflowRun.update({ where: { id: run.id }, data }),
-      ).rejects.toThrow();
-    expect(
-      await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } }),
-    ).toEqual(before);
+      await expect(db.workflowRun.update({ where: { id: run.id }, data })).rejects.toThrow();
+    expect(await db.workflowRun.findUniqueOrThrow({ where: { id: run.id } })).toEqual(before);
   });
 
   it('并发终态操作只能成功一次，不覆盖已经提交的结果', async () => {
@@ -251,9 +226,7 @@ describe('真实 PostgreSQL WorkflowRun', () => {
       repository.markFailed(run.id, failure),
       repository.markCancelled(run.id),
     ]);
-    expect(
-      results.filter((result) => result.status === 'fulfilled'),
-    ).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     const row = await db.workflowRun.findUniqueOrThrow({
       where: { id: run.id },
     });
@@ -263,9 +236,7 @@ describe('真实 PostgreSQL WorkflowRun', () => {
   });
 
   it('每次写入检查项目 / 所有者，不能使用已有 Repository 越权操作', async () => {
-    await expect(repositories.forProject(otherId, projectId)).rejects.toThrow(
-      '无权访问',
-    );
+    await expect(repositories.forProject(otherId, projectId)).rejects.toThrow('无权访问');
     await expect(
       repository.create({
         projectId: otherProjectId,
@@ -293,9 +264,7 @@ describe('真实 PostgreSQL WorkflowRun', () => {
   it('NodeRun 必须引用同项目真实 WorkflowRun，删除父运行级联删除节点历史', async () => {
     const run = await prepare('running');
     const nodes = new NodeRunRepositories(database);
-    await expect(
-      nodes.forRun(ownerId, projectId, 'missing-run'),
-    ).rejects.toThrow('运行不存在');
+    await expect(nodes.forRun(ownerId, projectId, 'missing-run')).rejects.toThrow('运行不存在');
     const nodeRepository = await nodes.forRun(ownerId, projectId, run.id);
     const occurrence = await nodeRepository.getOrCreateOccurrence({
       workflowRunId: run.id,
@@ -324,41 +293,34 @@ describe('真实 PostgreSQL WorkflowRun', () => {
       ).rejects.toMatchObject({ code: 'P2003' });
     await db.workflowRun.delete({ where: { id: run.id } });
     expect(await db.nodeRun.findUnique({ where: { id: node.id } })).toBeNull();
-    expect(
-      await db.project.findUnique({ where: { id: projectId } }),
-    ).not.toBeNull();
+    expect(await db.project.findUnique({ where: { id: projectId } })).not.toBeNull();
   });
 });
 
 describe('WorkflowRun 读取与原子恢复 claim', () => {
-  it.each([
-    'pending',
-    'running',
-    'waiting',
-    'completed',
-    'failed',
-    'cancelled',
-  ] as const)('读取完整 %s 记录，JSON / ISO 字段转换正确', async (status) => {
-    const run = await prepare(status);
-    const read = await repository.getById(run.id);
-    expect(read).toMatchObject({
-      id: run.id,
-      projectId,
-      workflowId: run.workflowId,
-      workflowVersionId: run.workflowVersionId,
-      threadId: run.threadId,
-      status,
-      inputs: {},
-      createdAt: run.createdAt,
-    });
-    if (status !== 'pending')
-      expect(read?.startedAt).toEqual(expect.any(String));
-    if (status === 'completed') expect(read?.outputs).toEqual(outputs);
-    if (status === 'failed') expect(read?.error).toEqual(failure);
-    if (['completed', 'failed', 'cancelled'].includes(status))
-      expect(read?.completedAt).toEqual(expect.any(String));
-    expect(await repository.getById('missing-run')).toBeNull();
-  });
+  it.each(['pending', 'running', 'waiting', 'completed', 'failed', 'cancelled'] as const)(
+    '读取完整 %s 记录，JSON / ISO 字段转换正确',
+    async (status) => {
+      const run = await prepare(status);
+      const read = await repository.getById(run.id);
+      expect(read).toMatchObject({
+        id: run.id,
+        projectId,
+        workflowId: run.workflowId,
+        workflowVersionId: run.workflowVersionId,
+        threadId: run.threadId,
+        status,
+        inputs: {},
+        createdAt: run.createdAt,
+      });
+      if (status !== 'pending') expect(read?.startedAt).toEqual(expect.any(String));
+      if (status === 'completed') expect(read?.outputs).toEqual(outputs);
+      if (status === 'failed') expect(read?.error).toEqual(failure);
+      if (['completed', 'failed', 'cancelled'].includes(status))
+        expect(read?.completedAt).toEqual(expect.any(String));
+      expect(await repository.getById('missing-run')).toBeNull();
+    },
+  );
 
   it('两个生产 Repository 的 12 个首次执行 claim 只有一个成功，startedAt 在抢占时写入', async () => {
     const run = await create();
@@ -422,8 +384,7 @@ describe('WorkflowRun 读取与原子恢复 claim', () => {
     '%s 的读取和 claim 继续检查所有者 / 项目，不使用过期权限',
     async (status) => {
       const run = await prepare(status);
-      const claim =
-        status === 'pending' ? 'claimPendingForStart' : 'claimWaitingForResume';
+      const claim = status === 'pending' ? 'claimPendingForStart' : 'claimWaitingForResume';
       const before = await repository.getById(run.id);
       const other = await repositories.forProject(otherId, otherProjectId);
       expect(await other.getById(run.id)).toBeNull();

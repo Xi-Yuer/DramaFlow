@@ -105,10 +105,7 @@ function fixture() {
   ];
   const workflowRun = {
     findFirst: vi.fn(async (query) => {
-      if (
-        query.where.id === 'run-a' &&
-        query.where.project?.ownerId === 'owner-a'
-      ) {
+      if (query.where.id === 'run-a' && query.where.project?.ownerId === 'owner-a') {
         return runRow;
       }
       return null;
@@ -255,16 +252,10 @@ describe('WorkflowRun NodeRun 查询 API', () => {
 
   it('Controller 入口需要认证且返回 Cache-Control: no-store', () => {
     expect(
-      Reflect.getMetadata(
-        '__headers__',
-        WorkflowRunsController.prototype.nodeRuns,
-      ),
+      Reflect.getMetadata('__headers__', WorkflowRunsController.prototype.nodeRuns),
     ).toContainEqual({ name: 'Cache-Control', value: 'no-store' });
-    expect(
-      Reflect.getMetadata(
-        'auth:public',
-        WorkflowRunsController.prototype.nodeRuns,
-      ),
-    ).not.toBe(true);
+    expect(Reflect.getMetadata('auth:public', WorkflowRunsController.prototype.nodeRuns)).not.toBe(
+      true,
+    );
   });
 });

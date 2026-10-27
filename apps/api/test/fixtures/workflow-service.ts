@@ -16,10 +16,7 @@ import { z } from 'zod';
 import { WorkflowService } from '../../src/workflow/workflows/workflow.service.js';
 
 // 手动构造的集成服务仍使用真实插件、模型配置校验和数据库，不绕过 Publish。
-export function createWorkflowService(
-  database: DatabaseService,
-  registry: NodeRegistry,
-) {
+export function createWorkflowService(database: DatabaseService, registry: NodeRegistry) {
   const plugins = createProviderPluginRegistry();
   const providers = createProviderCatalog(plugins);
   return new WorkflowService(
@@ -50,9 +47,7 @@ export function registerTextTestNodes(registry: NodeRegistry): NodeRegistry {
     },
     inputSchema: prompt,
     outputSchema: output,
-    configSchema: z
-      .object({ style: z.object({ tags: z.array(z.string()) }) })
-      .strict(),
+    configSchema: z.object({ style: z.object({ tags: z.array(z.string()) }) }).strict(),
     async execute(input) {
       return { text: prompt.parse(input).prompt };
     },
@@ -97,9 +92,7 @@ export async function storeRuntimeTestVersion(
       workflowId: workflow.id,
       version: (previous._max.version ?? 0) + 1,
       sourceRevision: workflow.revision,
-      definition: z
-        .record(z.string(), z.json())
-        .parse(workflowDefinitionSchema.parse(definition)),
+      definition: z.record(z.string(), z.json()).parse(workflowDefinitionSchema.parse(definition)),
     },
   });
 }

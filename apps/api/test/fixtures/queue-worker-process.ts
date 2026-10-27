@@ -30,9 +30,7 @@ const send = (message: object) =>
     process.send?.(message, (error) => (error ? reject(error) : resolve())),
   );
 const forever = () => new Promise<never>(() => {});
-const input: unknown = await new Promise((resolve) =>
-  process.once('message', resolve),
-);
+const input: unknown = await new Promise((resolve) => process.once('message', resolve));
 const request = z
   .object({
     mode: z.enum(['worker', 'dispatcher', 'submitter']),
@@ -47,8 +45,7 @@ const request = z
   .parse(input);
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test' ||
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test' ||
   !process.env.WORKFLOW_QUEUE_PREFIX?.startsWith('dramaflow-test-')
 )
   throw new Error('仅允许隔离测试库 / 队列');
@@ -56,9 +53,7 @@ if (
 class SubmissionProcessModule {}
 const source: unknown =
   request.mode === 'worker'
-    ? await import(
-        new URL('../../../worker/dist/app.module.js', import.meta.url).href
-      )
+    ? await import(new URL('../../../worker/dist/app.module.js', import.meta.url).href)
     : { AppModule: SubmissionProcessModule };
 // fixture 位于 api/test/fixtures；Worker dist 相对 api 根的同级 worker。
 const token = z
@@ -166,15 +161,12 @@ try {
           .object({ nodes: z.array(z.object({ type: z.string() })) })
           .parse(version.definition)
           .nodes.some((node) => node.type === 'test.queue_wait');
-      if (!native && request.crash !== 'claimed')
-        return assemble(owner, project, executionId);
+      if (!native && request.crash !== 'claimed') return assemble(owner, project, executionId);
       const compiler = {
         async compile() {
           const graph = new StateGraph(WorkflowStateAnnotation)
             .addNode('first', () => {
-              const value = z
-                .number()
-                .parse(interrupt<unknown, unknown>('第一次等待'));
+              const value = z.number().parse(interrupt<unknown, unknown>('第一次等待'));
               return {
                 outputs: {
                   first: {
@@ -188,9 +180,7 @@ try {
               };
             })
             .addNode('second', () => {
-              const value = z
-                .number()
-                .parse(interrupt<unknown, unknown>('第二次等待'));
+              const value = z.number().parse(interrupt<unknown, unknown>('第二次等待'));
               return {
                 outputs: {
                   second: {

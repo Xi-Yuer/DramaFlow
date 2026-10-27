@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Header,
-  HttpCode,
-  Param,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, Get, Header, HttpCode, Param, Post } from '@nestjs/common';
 import { Actor } from '../../auth/auth.guard.js';
 import type { AuthActor } from '../../auth/auth.service.js';
 import { WorkflowRuntimeService } from './workflow-runtime.service.js';
@@ -35,11 +27,7 @@ export class WorkflowRunsController {
     @Param('workflowId') workflowId: string,
     @Param('invocationKey') invocationKey: string,
   ) {
-    return this.runtime.lookupInvocation(
-      actor.user.id,
-      workflowId,
-      invocationKey,
-    );
+    return this.runtime.lookupInvocation(actor.user.id, workflowId, invocationKey);
   }
 
   @Get(':runId/pending-human-reviews')
@@ -57,11 +45,7 @@ export class WorkflowRunsController {
   @Post(':runId/resume')
   @HttpCode(202)
   @Header('Cache-Control', 'no-store')
-  resume(
-    @Actor() actor: AuthActor,
-    @Param('runId') runId: string,
-    @Body() body: unknown,
-  ) {
+  resume(@Actor() actor: AuthActor, @Param('runId') runId: string, @Body() body: unknown) {
     return this.runtime.resumeRun(actor.user.id, runId, body);
   }
 }

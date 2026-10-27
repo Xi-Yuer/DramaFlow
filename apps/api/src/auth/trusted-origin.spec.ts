@@ -16,9 +16,7 @@ describe('trusted origin', () => {
 
   it('写入必须来自配置站点的来源', () => {
     process.env.BETTER_AUTH_URL = 'https://studio.example/app';
-    expect(isUntrustedWriteOrigin('POST', 'https://studio.example')).toBe(
-      false,
-    );
+    expect(isUntrustedWriteOrigin('POST', 'https://studio.example')).toBe(false);
     expect(isUntrustedWriteOrigin('PUT', 'https://evil.example')).toBe(true);
     expect(isUntrustedWriteOrigin('PATCH', undefined)).toBe(true);
   });

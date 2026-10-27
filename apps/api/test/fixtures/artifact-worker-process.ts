@@ -26,13 +26,10 @@ import { registerArtifactNodes } from './artifact-workflow.js';
 
 if (
   process.env.DRAMAFLOW_INTEGRATION !== '1' ||
-  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !==
-    '/dramaflow_test'
+  new URL(process.env.DATABASE_URL ?? 'http://invalid').pathname !== '/dramaflow_test'
 )
   throw new Error('Artifact 子进程仅允许隔离测试库');
-const request = new Promise<unknown>((resolve) =>
-  process.once('message', resolve),
-);
+const request = new Promise<unknown>((resolve) => process.once('message', resolve));
 const send = (value: object) =>
   new Promise<void>((resolve, reject) => {
     if (!process.send) return reject(new Error('缺少测试 IPC'));
@@ -71,12 +68,8 @@ try {
       const executor = new DefaultNodeExecutor(
         registry,
         createBindingResolver(),
-        await app
-          .get(ArtifactRuntimeFactory)
-          .forRun(command.ownerId, command.projectId, run.id),
-        await app
-          .get(NodeRunRepositories)
-          .forRun(command.ownerId, command.projectId, run.id),
+        await app.get(ArtifactRuntimeFactory).forRun(command.ownerId, command.projectId, run.id),
+        await app.get(NodeRunRepositories).forRun(command.ownerId, command.projectId, run.id),
       );
       const graph = new StateGraph<
         typeof WorkflowStateAnnotation.spec,
@@ -113,12 +106,8 @@ try {
     },
   };
   const runner = new DefaultWorkflowRunner(
-    await app
-      .get(WorkflowVersionRepositories)
-      .forProject(command.ownerId, command.projectId),
-    await app
-      .get(WorkflowRunRepositories)
-      .forProject(command.ownerId, command.projectId),
+    await app.get(WorkflowVersionRepositories).forProject(command.ownerId, command.projectId),
+    await app.get(WorkflowRunRepositories).forProject(command.ownerId, command.projectId),
     compiler,
     new DefaultWorkflowOutputResolver(),
   );
