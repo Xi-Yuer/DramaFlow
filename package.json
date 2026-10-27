@@ -25,6 +25,7 @@
     "test:integration": "node scripts/integration.mjs",
     "storage:init": "node scripts/storage-init.mjs",
     "model:configure": "node scripts/configure-model-provider.mjs",
+    "fixture:ai-text": "pnpm exec turbo run build --filter=@dramaflow/api && node scripts/create-ai-text-acceptance.mjs",
     "test:ai:live": "node scripts/test-ai-live.mjs",
     "test:storage": "node scripts/test-storage.mjs",
     "auth:bootstrap": "pnpm exec turbo run build --filter=@dramaflow/api && node scripts/provision-user.mjs --admin",

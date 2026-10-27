@@ -1,0 +1,70 @@
+{
+  "id": "test-ai-text-processing",
+  "metadata": {
+    "name": "AI 文本处理",
+    "description": "开发验收：将输入文本概括为简短摘要，实例化后选择模型",
+    "icon": "brain"
+  },
+  "category": "ai",
+  "exposure": "internal",
+  "target": {
+    "type": "flow.subworkflow",
+    "version": 1
+  },
+  "creation": {
+    "composite": {
+      "kind": "subworkflow",
+      "graph": {
+        "inputs": [
+          {
+            "name": "text",
+            "type": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "required": true
+          }
+        ],
+        "nodes": [
+          {
+            "id": "generate",
+            "type": "ai.text_generate",
+            "typeVersion": 1,
+            "name": "AI 文本生成",
+            "inputs": {
+              "prompt": {
+                "type": "workflow_input",
+                "key": "text"
+              },
+              "system": {
+                "type": "constant",
+                "value": "请将输入文本概括为不超过两句话的简短摘要，只输出摘要。忠实保留主要信息，不添加原文没有的事实。"
+              }
+            },
+            "config": {},
+            "ui": {
+              "position": {
+                "x": 320,
+                "y": 160
+              }
+            }
+          }
+        ],
+        "edges": [],
+        "outputs": [
+          {
+            "name": "result",
+            "type": {
+              "kind": "primitive",
+              "name": "string"
+            },
+            "source": {
+              "nodeId": "generate",
+              "outputKey": "text"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -7,7 +7,11 @@ import type {
   WorkflowDefinition,
   WorkflowRunResponse,
 } from '@dramaflow/contracts';
-import { ROOT_EXECUTION_SCOPE_KEY } from '@dramaflow/contracts';
+import {
+  directGraphNodeRuns,
+  groupGraphNodeAttempts,
+  type GraphExecutionProjection,
+} from './graph-execution-projection';
 import type {
   HumanReviewActions,
   HumanReviewState,
@@ -34,6 +38,7 @@ export interface WorkflowRuntimeInput {
   workflow: Pick<WorkflowDefinition, 'nodes' | 'edges'>;
   runStatus?: WorkflowRunStatusState | null;
   nodeRuns?: readonly NodeRun[];
+  projection?: GraphExecutionProjection;
 }
 
 export function defaultWorkflowNodeRuntimeState(nodeId: string): WorkflowNodeRuntimeState {
@@ -59,39 +64,29 @@ export function formatNodeRunDuration(startedAt: string, completedAt?: string): 
   return `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)} s`;
 }
 
-function groupNodeRunsByNodeId(
-  nodeRuns: readonly NodeRun[] | undefined,
-): Map<string, readonly NodeRun[]> {
-  const grouped = new Map<string, NodeRun[]>();
-  if (!nodeRuns) return grouped;
-  for (const record of nodeRuns) {
-    // 当前 Inspector 只展示 root scope，不能让子 scope 的高 attempt 覆盖 root。
-    if (record.scopeKey !== ROOT_EXECUTION_SCOPE_KEY) continue;
-    const list = grouped.get(record.nodeId) ?? [];
-    if (list[0] && list[0].occurrenceId !== record.occurrenceId)
-      throw new Error('同一 root 节点存在不一致的 occurrence 身份');
-    list.push(record);
-    grouped.set(record.nodeId, list);
-  }
-  for (const [nodeId, list] of grouped.entries()) {
-    list.sort((a, b) => a.attempt - b.attempt);
-    grouped.set(nodeId, list);
-  }
-  return grouped;
-}
-
 // 真实 NodeRun execution facts + PendingHumanReview 优先；不依赖 Workflow topology 猜测节点执行结果。
 export function resolveWorkflowRuntimeNodes({
   workflow,
   runStatus,
   nodeRuns,
+  projection,
 }: WorkflowRuntimeInput): ReadonlyMap<string, WorkflowNodeRuntimeState> {
-  const run = runStatus?.run ?? null;
-  const review = runStatus?.review ?? null;
+  const resolved = !projection || projection.phase === 'resolved';
+  const run = resolved ? (runStatus?.run ?? null) : null;
+  const atRoot =
+    !projection || (projection.phase === 'resolved' && projection.instance.type === 'workflow_run');
+  const review = resolved && atRoot ? (runStatus?.review ?? null) : null;
   const runRefreshing = runStatus?.refreshing ?? false;
   const runError = runStatus?.error ?? null;
-  const effectiveNodeRuns = nodeRuns ?? runStatus?.nodeRuns;
-  const groupedNodeRuns = groupNodeRunsByNodeId(effectiveNodeRuns);
+  const effectiveNodeRuns = projection
+    ? projection.phase === 'resolved'
+      ? projection.nodeRuns
+      : []
+    : directGraphNodeRuns(nodeRuns ?? runStatus?.nodeRuns ?? [], {
+        type: 'workflow_run',
+        id: run?.id ?? '',
+      });
+  const groupedNodeRuns = groupGraphNodeAttempts(effectiveNodeRuns);
   const activeRunInProgress =
     run !== null &&
     (run.status === 'pending' || run.status === 'running' || run.status === 'waiting');
@@ -160,6 +155,7 @@ export function resolveWorkflowRuntimeNodes({
 export interface WorkflowRuntimeContextValue {
   nodes: ReadonlyMap<string, WorkflowNodeRuntimeState>;
   runStatus: WorkflowRunStatusState | null;
+  projection?: GraphExecutionProjection;
   reviewActions?: HumanReviewActions;
   onRefreshRunStatus?: () => void;
 }
@@ -173,6 +169,8 @@ export function WorkflowRuntimeProvider({
   workflow,
   runStatus = null,
   nodeRuns,
+  projection,
+  runtimeNodes,
   reviewActions,
   onRefreshRunStatus,
   children,
@@ -180,22 +178,26 @@ export function WorkflowRuntimeProvider({
   workflow: Pick<WorkflowDefinition, 'nodes' | 'edges'>;
   runStatus?: WorkflowRunStatusState | null;
   nodeRuns?: readonly NodeRun[];
+  projection?: GraphExecutionProjection;
+  runtimeNodes?: ReadonlyMap<string, WorkflowNodeRuntimeState>;
   reviewActions?: HumanReviewActions;
   onRefreshRunStatus?: () => void;
   children: ReactNode;
 }) {
   const nodes = useMemo(
-    () => resolveWorkflowRuntimeNodes({ workflow, runStatus, nodeRuns }),
-    [workflow, runStatus, nodeRuns],
+    () =>
+      runtimeNodes ?? resolveWorkflowRuntimeNodes({ workflow, runStatus, nodeRuns, projection }),
+    [workflow, runStatus, nodeRuns, projection, runtimeNodes],
   );
   const value = useMemo<WorkflowRuntimeContextValue>(
     () => ({
       nodes,
       runStatus,
+      projection,
       reviewActions,
       onRefreshRunStatus,
     }),
-    [nodes, runStatus, reviewActions, onRefreshRunStatus],
+    [nodes, runStatus, projection, reviewActions, onRefreshRunStatus],
   );
   return createElement(WorkflowRuntimeContext.Provider, { value }, children);
 }

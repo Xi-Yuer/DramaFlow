@@ -40,7 +40,7 @@ Definition Location 沿既有 nestedGraphSlots 与 GraphDefinitionPath 追加 no
 
 [NodeRun Repository](../packages/server/src/workflow/runtime/execution/node-run-repository.ts)按授权 Run 获取 / 创建 occurrence；唯一键竞争在事务 advisory lock 内串行化。创建 attempt 时锁定对应 occurrence 行，只在该 occurrence 内分配序号；NodeRun 的唯一键为 occurrenceId / attempt，复合外键保证 occurrence、NodeRun 的项目 / Run / nodeId 一致。数据库禁止修改 occurrence 身份及既有 attempt 的归属、序号和开始时间。Action Executor 通过显式 scopeKey 取得 occurrence，分配 attempt 的操作不新增 retry 策略或重放兜底。
 
-NodeRun 查询新增安全的 occurrenceId / scopeKey，不返回 thread、checkpoint 或原生 task metadata。当前 Runtime Inspector 仅展示 root scope 的唯一 occurrence，再按其 attempt 排序；不以跨 occurrence 的最大 attempt 猜最新执行，不增加 Iteration UI。Artifact 继续只关联 nodeRunId，经 NodeRun 反查 occurrence，不复制 scope / occurrence 字段。
+NodeRun 查询新增安全的 occurrenceId / scopeKey，不返回 thread、checkpoint 或原生 task metadata。Canvas 与 Runtime Inspector 在明确的 graph execution boundary 内选择唯一 occurrence，再按其 attempt 排序；Root 与 Nested 共用投影，见 [Graph Execution Projection](#graph-execution-projection)。不以跨 occurrence 的最大 attempt 猜最新执行，不增加 Iteration item selector。Artifact 继续只关联 nodeRunId，经 NodeRun 反查 occurrence，不复制 scope / occurrence 字段。
 
 [增量迁移](../packages/database/prisma/migrations/20261024000000_node_occurrences/migration.sql)将旧数据的每组 Run / node 全部 attempt 回填到同一个 root occurrence，保留 NodeRun ID、序号、状态、输入输出、时间和 Artifact 关联，不清空审计记录。旧 checkpoint 的 State 不增加必填字段，现有 root 审核恢复重新查得同一 occurrence。
 
@@ -228,6 +228,16 @@ Template 的 `node_output` 变量也由同一适配层投影为数据线，以 `
 
 删除来源节点时统一清理相关 Template alias 及其正文 token，保留其他节点和 workflow_input 变量；无变量时保留剩余文字为 constant，文字也为空则移除绑定。此清理与 Candidate / 真实边及 Workflow 输出共用节点删除入口，不维护独立投影状态。当前 inputs 中只有 Template 与 Candidate 绑定可引用节点输出；constant、workflow_input 和 asset 不产生跨节点引用。依赖合法性继续由 Contract / Publish / Compiler 校验。
 
+### Graph Execution Projection
+
+[投影模型](../apps/web/src/features/workflow/runtime/graph-execution-projection.ts)区分发布版本中的 Definition Location、Graph Execution Instance 与 NodeRun occurrence / attempt。Root instance 是 WorkflowRun，直属记录要求没有 ChildExecution 归属且属于 root scope；Nested instance 是 ChildExecution，只接收 `childExecutionId` 精确匹配的直属 NodeRuns。先限定实例，再对本图局部 nodeId 分组；同名节点不能跨 graph / ChildExecution 覆盖。状态计算与 PendingHumanReview 沿用同一 `resolveWorkflowRuntimeNodes`；Canvas 选择逻辑、节点卡片和 Inspector 共享计算出的 map。审核等待只在 Root 合成，不将父图 PendingHumanReview 套到内部同名节点；Inspector 的历史 attempt 选择同时核对 occurrence 身份。
+
+[查询上下文](../apps/web/src/features/workflow/runtime/use-graph-execution-projection.ts)按当前 Run 的 `workflowVersionId` 复用版本查询，核对 Workflow / Project 身份并保守比较完整执行定义，忽略节点 ui 位置和 JSON 对象键顺序；其他字段及数组顺序均须一致。Draft 修改输入、prompt、config 或图结构后撤下旧执行状态，返回 version_mismatch；位置移动不影响匹配。版本加载失败或缺失返回 unavailable，不借用运行表单中选择的其他版本。
+
+Definition Canvas 下钻时，从已确定的父 graph instance 中找 owner 的唯一 occurrence，选其当前 attempt，再沿 Tree 的显式 parent 查询该 NodeRun 的 ChildExecutions。当前 `nestedGraphSlots` 只有唯一槽位，故可确定子图定义地址；不解析 scopeKey，不猜 invocationKey，也不全局搜索 nodeId。只有唯一 ChildExecution 才继续投影；没有执行返回 no_execution，多个实例或 occurrence 返回 ambiguous，查询中返回 loading，无法确定版本或槽位返回 version_mismatch / unavailable。未能解析的原因在 Canvas / Inspector 明确展示，不冒充某个节点运行结果；no_execution 可按既有 idle 呈现。
+
+ChildExecution 查询遍历全部 nextCursor 后判断数量，并检查分页 Run / Version / parent 归属、重复记录及游标循环。直属 NodeRun 复用已有完整、非分页的 `/node-runs` 查询结果，按显式执行边界过滤，保留 inputs / outputs / attempts；不从 Tree 摘要伪造完整 NodeRun。活动 Run 定时重新查询子执行，显式刷新同时更新 Run、版本与关联查询，切换 Run / Location 后旧响应不能覆盖新上下文。没有数据库迁移或新增 definitionRef，不改 Compiler / Runtime 身份。多实例仍需后续显式选择，当前没有 Iteration item selector；未来多 graph slot 不能用唯一槽位规则猜测关联。
+
 ### Canvas 运行态与连线表现
 
 节点状态仍由真实 NodeRun / PendingHumanReview 合成，经集中式 [runtime-presentation](../apps/web/src/features/workflow/runtime/runtime-presentation.ts)映射到 Canvas；不修改 Runtime Status 数据模型。画布不再显示状态胶囊或独立状态行，改为整节点边框、轻底色和标题区图标。running 使用青色边框、细 ring 与缓慢旋转图标及「正在执行」；waiting 使用琥珀色边框与手形图标、人工操作文字，待审内容摘要及现有 CTA 保留；failed 使用红色边框、轻底色和错误图标 / 文字；completed 仅保留低对比边框与小勾；idle 无可见状态标记，pending 仅有低权重时钟。选中轮廓与运行态边框独立，选中不覆盖等待 / 失败等语义色；Inspector 保留原有状态展示。
@@ -273,6 +283,8 @@ Web 普通 Picker 使用 `isNodeCatalogEntryVisible` 只显示 public，并按 E
 
 已有 Iteration / SubWorkflow 可继续加载、选择、Inspector 编辑、进入嵌套图、保存与发布。没有数据库 Template / TemplateVersion、共享子图引用或真实业务 Composite Entry；也未开放 Iteration → SubWorkflow 等嵌套执行能力。
 
+领域无关的 AI 文本 Composite 实例化样例仅保存在 [test fixture](../packages/server/test/fixtures/ai-text-composite-entry.json)，不注册到生产 NodeCatalog，不进入 Catalog API 或普通 Picker。`internal` 是产品暴露策略，不是测试样例存储。测试条目以 `flow.subworkflow@1` 为 target，copy-on-create 的 graph 声明 `text:string` 输入、一个 `ai.text_generate@1` 和 `result:string` 输出；prompt 绑定局部 `workflow_input.text`，system 是摘要指令，模型配置为空，由用户在实例的正式模型选择器中补齐 `modelConfigurationId`。实例继续使用普通 Draft / Publish / Compiler / Capability / Plugin 协议。
+
 ### Web Human Review
 
 正式目录中的 `flow.human_review@1` 沿用通用节点选择器与 Manifest Handle，不过滤 interaction。节点内设置支持名称（失焦或回车提交）、静态 instruction；content 复用现有文本 / Template / Candidate / DataEdge 输入机制，三个业务输出可连接下游，没有审批专属控制出口。设计配置只写 Draft，执行审批只在 Run 面板进行。
@@ -301,7 +313,7 @@ reference 只展示类型、kind 与 ID（Asset 包含版本），提示暂不�
 
 `metadata.index` 为非负整数时显示 `#n`，不读取其他 metadata，也不展示 child execution、occurrence 或 Run 的持久化 id。状态复用 [runtime-presentation](../apps/web/src/features/workflow/runtime/runtime-presentation.ts) 的 running / completed / failed 文案。failed 且 DTO 带 error 时只读展示 message、stage 与 code。同一层不按 nodeId 合并 attempt。`nextCursor` 非空时追加下一页。列表直接使用 DTO 状态，不把 Human Review 的 waiting 合成进这一层；根画布仍按原规则合成。
 
-节点名称来自与本次 Run `workflowVersionId` 一致的已加载版本定义：沿 composite body 按 nodeId 收集名称，仅在名称唯一时使用，否则显示「节点」。这不建立执行归属。[投影](../apps/web/src/features/workflow/run/execution/execution-browse.ts)保留 NodeRun 的 id、nodeId、occurrenceId、attempt、status、parent 与 error，供以后把当前层 NodeRun 覆盖到对应图。Child Execution 没有 definitionRef 或图路径，因此当前不能可靠打开对应子图画布；根画布仍只覆盖 root NodeRun。不提供 Retry、Resume、Cancel 或结果修改。
+节点名称来自与本次 Run `workflowVersionId` 一致的已加载版本定义：沿 composite body 按 nodeId 收集名称，仅在名称唯一时使用，否则显示「节点」。这不建立执行归属。[Tree 摘要投影](../apps/web/src/features/workflow/run/execution/execution-browse.ts)保留 NodeRun 的 id、nodeId、occurrenceId、attempt、status、parent 与 error。Tree 浏览仍为独立只读视图，不提供点击条目直接打开 Definition Canvas；Canvas 下钻中的唯一实例关联由 [Graph Execution Projection](#graph-execution-projection)负责。ChildExecution 没有持久化 definitionRef 或图路径，不提供 Retry、Resume、Cancel 或结果修改。
 
 ## 目录与依赖
 

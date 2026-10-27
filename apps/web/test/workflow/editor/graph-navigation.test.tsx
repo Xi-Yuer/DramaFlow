@@ -19,6 +19,7 @@ import {
   type WorkflowResponse,
 } from '@dramaflow/contracts';
 import { GraphCanvasSession } from '../../../src/features/workflow/editor/navigation/graph-canvas-session';
+import { workflowKeys } from '../../../src/features/workflow/workflow-api';
 import { DRILL_MOTION_MS } from '../../../src/features/workflow/editor/navigation/graph-drill-transition';
 import {
   createGraphNavigation,
@@ -266,7 +267,9 @@ function bodyOf(definition: WorkflowDefinition) {
 }
 
 function setup(initial = workflow(), catalogEntries?: readonly NodeCatalogEntry[]) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
   client.setQueryData(
     nodeCatalogKeys.list,
     catalogEntries ?? [
@@ -281,6 +284,12 @@ function setup(initial = workflow(), catalogEntries?: readonly NodeCatalogEntry[
     ],
   );
   client.setQueryData(nodeTypeKeys.list, manifests);
+  client.setQueryData(workflowKeys.version('navigation-version'), {
+    id: 'navigation-version',
+    workflowId: 'workflow',
+    projectId: 'project',
+    definition: structuredClone(initial),
+  });
   const rootMoves: Viewport[] = [];
   let current = initial;
   function Editor() {
@@ -289,6 +298,7 @@ function setup(initial = workflow(), catalogEntries?: readonly NodeCatalogEntry[
     return (
       <GraphCanvasSession
         projectId="project"
+        workflowId="workflow"
         workflow={definition}
         onEdit={(apply) => setDefinition((item) => apply(item))}
         onOpenProvider={() => undefined}
@@ -298,6 +308,23 @@ function setup(initial = workflow(), catalogEntries?: readonly NodeCatalogEntry[
           rootMoves.push(next);
         }}
         nodeRuns={[rootRun]}
+        runStatus={{
+          phase: 'ready',
+          runId: rootRun.workflowRunId,
+          run: {
+            id: rootRun.workflowRunId,
+            workflowId: 'workflow',
+            workflowVersionId: 'navigation-version',
+            invocationKey: 'navigation',
+            status: 'failed',
+            inputs: {},
+            createdAt: rootRun.startedAt,
+          },
+          nodeRuns: [rootRun],
+          error: null,
+          refreshing: false,
+          review: null,
+        }}
       />
     );
   }
@@ -551,7 +578,9 @@ describe('Iteration Body 画布', () => {
     expect(flowNode('format')?.measured).toBeUndefined();
     clickNode('format');
     fireEvent.click(screen.getByRole('tab', { name: '运行状态' }));
-    expect(screen.getByText('根图失败标记')).toBeTruthy();
+    // Body 已被编辑，旧版本的运行事实不能继续覆盖当前 Draft。
+    expect(screen.queryByText('根图失败标记')).toBeNull();
+    expect(document.querySelector('[data-execution-projection="version_mismatch"]')).toBeTruthy();
     expect(
       resolveWorkflowNodePorts(
         view.definition().nodes.find((item) => item.id === 'iterate')!,

@@ -2,7 +2,8 @@
 import { App, ConfigProvider } from 'antd';
 import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Project, WorkflowResponse } from '@dramaflow/contracts';
 import type { WorkflowRunState } from '../../../src/features/workflow/run/workflow-run';
 import { CanvasEditor } from '../../../src/features/workflow/editor/canvas-editor';
@@ -82,9 +83,14 @@ const workflow: WorkflowResponse = {
   draft: { nodes: [], edges: [], inputs: [], outputs: [] },
 };
 function Wrapper({ children }: { children: ReactNode }) {
+  const [client] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  );
   return (
     <ConfigProvider theme={{ token: { motion: false } }}>
-      <App>{children}</App>
+      <App>
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      </App>
     </ConfigProvider>
   );
 }

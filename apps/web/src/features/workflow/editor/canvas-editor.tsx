@@ -145,6 +145,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
           ref={graphSession}
           key={draft.workflowId}
           projectId={project.id}
+          workflowId={draft.workflowId}
           workflow={draft.definition}
           onEdit={draft.edit}
           onOpenProvider={modelSettings.openProvider}

@@ -11,6 +11,9 @@ import {
 } from 'react';
 import { motion } from 'motion/react';
 import { ReactFlowProvider, type OnMove } from '@xyflow/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useGraphExecutionProjection } from '../../runtime/use-graph-execution-projection';
+import { workflowKeys } from '../../workflow-api';
 import type { NodeRun, Project, WorkflowDefinition } from '@dramaflow/contracts';
 import { WorkflowCanvas } from '@/features/workflow/canvas/workflow-canvas';
 import type {
@@ -66,6 +69,7 @@ export const GraphCanvasSession = forwardRef<
   GraphCanvasSessionHandle,
   {
     projectId: string;
+    workflowId: string;
     workflow: WorkflowDefinition;
     onEdit: (apply: (current: WorkflowDefinition) => WorkflowDefinition) => void;
     onOpenProvider: (
@@ -87,6 +91,7 @@ export const GraphCanvasSession = forwardRef<
 >(function GraphCanvasSession(
   {
     projectId,
+    workflowId,
     workflow,
     onEdit,
     onOpenProvider,
@@ -112,6 +117,22 @@ export const GraphCanvasSession = forwardRef<
   const drillTokenRef = useRef(0);
   const viewportControllerRef = useRef<GraphViewportController | null>(null);
   const location = currentGraphLocation(navigation);
+  const queryClient = useQueryClient();
+  const projection = useGraphExecutionProjection({
+    workflow,
+    workflowId,
+    projectId,
+    location,
+    runStatus,
+  });
+  function refreshExecution() {
+    onRefreshRunStatus?.();
+    const run = runStatus?.run;
+    if (run) {
+      void queryClient.invalidateQueries({ queryKey: ['graph-execution-projection', run.id] });
+      void queryClient.invalidateQueries({ queryKey: workflowKeys.version(run.workflowVersionId) });
+    }
+  }
   const locationRef = useRef(location);
   const commit = useCallback((recipe: (state: GraphNavigationState) => GraphNavigationState) => {
     setNavigation((state) => {
@@ -328,10 +349,11 @@ export const GraphCanvasSession = forwardRef<
                 }
           }
           viewportControllerRef={viewportControllerRef}
-          runStatus={atRoot ? runStatus : null}
+          runStatus={runStatus}
+          projection={projection}
           reviewActions={atRoot ? reviewActions : undefined}
           nodeRuns={atRoot ? nodeRuns : undefined}
-          onRefreshRunStatus={atRoot ? onRefreshRunStatus : undefined}
+          onRefreshRunStatus={runStatus?.run ? refreshExecution : undefined}
         />
       </ReactFlowProvider>
     </motion.div>

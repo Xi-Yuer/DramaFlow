@@ -17,6 +17,7 @@ import { WorkflowEnd } from '../outputs/workflow-end';
 import { WorkflowBodyInputs } from '../iteration/body-input-boundary-node';
 import { WorkflowNodeInspector } from '../inspector/workflow-node-inspector';
 import { resolveWorkflowRuntimeNodes, WorkflowRuntimeProvider } from '../runtime/runtime-status';
+import { GraphExecutionNotice } from '../runtime/graph-execution-notice';
 import { workflowNodeTypes } from './rendering/workflow-node';
 import { workflowEdgeTypes } from './rendering/workflow-edge';
 import { CanvasEditingProviders } from './editing/canvas-editing-providers';
@@ -74,6 +75,7 @@ export function WorkflowCanvas({
   runStatus = null,
   reviewActions,
   nodeRuns,
+  projection,
   onRefreshRunStatus,
 }: WorkflowCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -115,8 +117,8 @@ export function WorkflowCanvas({
   );
 
   const runtimeNodes = useMemo(
-    () => resolveWorkflowRuntimeNodes({ workflow, runStatus, nodeRuns }),
-    [workflow, runStatus, nodeRuns],
+    () => resolveWorkflowRuntimeNodes({ workflow, runStatus, nodeRuns, projection }),
+    [workflow, runStatus, nodeRuns, projection],
   );
 
   const view = useCanvasView({
@@ -177,7 +179,12 @@ export function WorkflowCanvas({
   }
 
   return (
-    <div className="canvas-stage" data-graph-location={locationName}>
+    <div
+      className="canvas-stage"
+      data-graph-location={locationName}
+      data-execution-projection={projection?.phase}
+    >
+      <GraphExecutionNotice projection={projection} onRefresh={onRefreshRunStatus} />
       {navigation ? (
         <nav className="canvas-breadcrumb" aria-label="图位置">
           <button type="button" onClick={navigation.onBack}>
@@ -201,6 +208,8 @@ export function WorkflowCanvas({
         workflow={workflow}
         runStatus={runStatus}
         nodeRuns={nodeRuns}
+        projection={projection}
+        runtimeNodes={runtimeNodes}
         reviewActions={reviewActions}
         onRefreshRunStatus={onRefreshRunStatus}
       >

@@ -502,6 +502,7 @@ describe('Iteration Inspector 与 Body 画布', () => {
       return (
         <GraphCanvasSession
           projectId="project"
+          workflowId="workflow"
           workflow={definition}
           onEdit={(apply) => setDefinition((item) => apply(item))}
           onOpenProvider={() => undefined}

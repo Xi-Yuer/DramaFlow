@@ -4,6 +4,10 @@
 
 ## 当前阶段
 
+唯一 Graph Execution Instance 的 Canvas / Inspector 投影进入人工验收：检查 SubWorkflow 下钻后的内部 running / completed / failed、历史 attempt、刷新与切换 Run，以及编辑 Draft 后的版本不匹配提示。已实现边界见 [Graph Execution Projection](architecture.md#graph-execution-projection)。Iteration 多 item 只报告 ambiguous，item selector、Tree 条目跳转画布和多槽位执行定义关联继续留待独立授权；本轮不运行 Browser E2E 或真实 Provider。
+
+Catalog Entry → Composite 的 AI 文本纵向验收等待用户在 Web 完成。测试样例只保留为 test fixture；本机专用项目只创建普通 Draft，人工步骤见[开发指南](development.md#ai-文本-composite-人工验收)。用户检查下钻 Zoom / Grow、选择已有模型、修改内部 prompt / config、返回保存并刷新，再显式 Publish / Run，核对真实输出和 Execution Tree。自动测试使用 fake Provider，不替代真实模型与视觉验收。
+
 Canvas / Adapter / Node Inspector、通用 Input / Iteration 输入、模型设置与模型选择的职责拆分进入结构与交互验收；目录边界见[开发指南](development.md#前端职责目录)，实现入口见[当前架构](architecture.md#web-graph-input-编辑职责)。保持现有协议、提交与显式选择规则，只调整 Web 模块组织。Template 编辑器、Editor 项目元数据会话、后端模型服务与发布校验的集中职责留待后续分别处理，不与本轮通用输入和模型管理迁移混改。
 
 Root Workflow Input → Boundary → Iteration.items 与 Run Form 数组提交等待人工验收；范围见[当前架构](architecture.md#web-workflow-run-inputs)。待人工检查文本 / 数字列表增删、实际提交、Body 映射与数组输出，以及草稿保存重开。Web 人工验收不创建验收 Workflow，不运行浏览器 E2E 或真实 Provider。
@@ -19,7 +23,8 @@ Canvas 小范围视觉优化待人工验收：运行焦点、人工等待、失�
 - Workflow Web 数据依赖可视化仍待人工 Canvas 验收；Template variable candidate、Switch / N-way 和 Nested If 不在当前授权范围。
 
 - Runtime 运维：recovery_required 人工处理、业务记录 / checkpoint 对账、运行删除与保留策略；[独立实验](../experiments/langgraph-iteration-runtime/README.md)已复现 LangGraph 1.5.0 maxConcurrency=1 异常，依赖处理方案待独立评审，本轮不升级或绕过。
-- Human Review 分支区域内审核、并行 pending、子 scope 的定义 / 版本 / 权限绑定待独立设计；嵌套 Iteration、Batch 及简单 If 之外的条件拓扑不能直接沿用当前技术预算公式。SubWorkflow v1 已固定调用一次，子图仍不允许 If、Candidate、Human Review、Iteration 与嵌套 SubWorkflow；Web 编辑和跨版本调用未授权。
+- Human Review 分支区域内审核、并行 pending、子 scope 的定义 / 版本 / 权限绑定待独立设计；嵌套 Iteration、Batch 及简单 If 之外的条件拓扑不能直接沿用当前技术预算公式。SubWorkflow v1 已固定调用一次，子图仍不允许 If、Candidate、Human Review、Iteration 与嵌套 SubWorkflow；跨版本调用未授权。
+- `data.format_text@1` 先保留，待本次真实 AI 人工验收后评估迁移为 test fixture。当前源码依赖是生产 Registry / internal Catalog 装配、contracts 与节点导出，以及确定性 Runtime、API 鉴权 / 装配、Catalog 和 Web 测试；没有发现其他生产业务调用方。本机开发库另有含该节点的草稿与不可变版本，不能直接移除 Registry 后宣称旧运行仍可执行。后续方案为抽取 `test.format_text` 与值契约到测试 helper，迁移测试及验收草稿，审查现存版本 / Run 的保留或开发数据清理范围，再单独删除生产注册、Catalog 条目及不再使用的生产实现 / 导出。本任务不删除该节点。
 - Artifact 内容 HTTP、Asset / Promote、媒体能力、Tool / Agent 和上下文构建均待独立任务；声明或测试夹具不代表产品已交付。
 
 ## Execution Tree 演进设计
@@ -35,4 +40,4 @@ Canvas 小范围视觉优化待人工验收：运行焦点、人工等待、失�
 
 ### 下一步最小独立实施任务
 
-SubWorkflow v1 的固定单次调用、持久化与 checkpoint 已接入，允许的子图集合见[当前架构](architecture.md#scoped-graph-compilation)。Web 子图编辑、跨版本或跨项目调用、Batch、单 item Retry / Resume 继续另行授权。
+SubWorkflow v1 的固定单次调用、持久化与 checkpoint 已接入，允许的子图集合见[当前架构](architecture.md#scoped-graph-compilation)。现有 Web 子图编辑继续进行人工验收；跨版本或跨项目调用、Batch、单 item Retry / Resume 继续另行授权。AI 文本样例验收后保留为 test fixture，不恢复 production development Entry；如需正式通用产品 Entry，另行确认产品需求。

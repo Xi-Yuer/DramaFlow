@@ -15,6 +15,7 @@ import { RuntimeStatusBadge } from '../../runtime/runtime-status-badge';
 import { resolveWorkflowNodePorts } from '../../ports/resolve-workflow-node-ports';
 import styles from '../workflow-node-inspector.module.css';
 import { NodeRuntimeValueView } from './node-runtime-value-view';
+import { GraphExecutionNotice } from '../../runtime/graph-execution-notice';
 
 function formatTime(value: string) {
   return new Date(value).toLocaleString('zh-CN', {
@@ -33,15 +34,17 @@ export function NodeRuntimeInspectorBody({
   isHumanReview: boolean;
 }) {
   const runtime = useWorkflowNodeRuntime(node.id);
-  const { reviewActions, onRefreshRunStatus } = useWorkflowRuntime();
+  const { reviewActions, onRefreshRunStatus, projection } = useWorkflowRuntime();
   const [selectedAttempt, setSelectedAttempt] = useState<{
     nodeId: string;
+    occurrenceId: string;
     attempt: number;
   } | null>(null);
 
   const ports = manifest ? resolveWorkflowNodePorts(node, manifest) : undefined;
   const displayedNodeRun =
-    (selectedAttempt?.nodeId === node.id
+    (selectedAttempt?.nodeId === node.id &&
+    selectedAttempt.occurrenceId === runtime.nodeRun?.occurrenceId
       ? runtime.attempts.find((item) => item.attempt === selectedAttempt.attempt)
       : undefined) ?? runtime.nodeRun;
 
@@ -62,6 +65,7 @@ export function NodeRuntimeInspectorBody({
 
   return (
     <div className={styles.sections} aria-label="节点运行详情">
+      <GraphExecutionNotice projection={projection} onRefresh={onRefreshRunStatus} />
       <div className={styles.contextHint}>
         <Badge variant="secondary">运行上下文 · 只读</Badge>
         <span>展示当前节点的真实执行记录，不会修改工作流草稿</span>
@@ -127,7 +131,11 @@ export function NodeRuntimeInspectorBody({
                         aria-label={`Attempt ${item.attempt}`}
                         aria-pressed={isCurrentAttempt}
                         onClick={() =>
-                          setSelectedAttempt({ nodeId: node.id, attempt: item.attempt })
+                          setSelectedAttempt({
+                            nodeId: node.id,
+                            occurrenceId: item.occurrenceId,
+                            attempt: item.attempt,
+                          })
                         }
                       >
                         第 {item.attempt} 次

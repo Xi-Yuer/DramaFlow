@@ -25,6 +25,12 @@
 
 离开保护、刷新 / 重启后的 invocation recovery、多 Tab storage event、Logout 后重新登录仍需真实浏览器人工验收；使用受控本地能力，避免重复收费。不把本机临时 Workflow、模型配置 ID 或运行内容写成仓库现状。
 
+## AI 文本 Composite 人工验收
+
+本机开发建数入口为 `pnpm fixture:ai-text <ownerId>`，需要现有账号与本项目本机 `dramaflow` 数据库。命令先构建，再通过正式 `ProjectsService.create` / `WorkflowService.updateDraft` / `getForProject` 创建并重载普通草稿，名称为「AI 文本处理 · Composite 验收」。它仅从测试 helper 实例化，不把 Entry 注册到生产 Catalog；模型留空，不创建 WorkflowVersion / WorkflowRun，不启动 Runtime / Worker / Outbox Pump。重复执行只读取并报告现有同名项目，不覆盖人工编辑。创建请求结果不明时先核对项目列表，勿盲目重放。
+
+在 Web 项目列表打开该项目，检查外部 `text:string → result:string`，进入 SubWorkflow 检查 Zoom / Grow 下钻与 AI 文本生成节点。prompt 初始绑定局部 `workflow_input.text`，system 为摘要指令；通过现有正式模型选择器选择本地已有的 DeepSeek 配置。修改 prompt / config，返回父图保存并刷新，再次进入确认保留；然后由用户显式 Publish、选择该版本 Run 并输入一段普通文本。检查真实摘要、Workflow Result 与 Execution Tree 中父 NodeRun → SubWorkflow ChildExecution → AI NodeRun 的归属、状态和输出。真实输出与动效需人工确认，fake Provider 自动测试不代表此项通过；不运行 Browser E2E。
+
 ## 前端职责目录
 
 按业务入口组织 feature，再按实际职责划分内部目录，不把大文件机械切成同层碎片，也不按行数统一拆分。当前画布与检查器的目录边界如下。

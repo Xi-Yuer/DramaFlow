@@ -12,6 +12,7 @@ import type { GraphViewportController } from '../../editor/navigation/graph-navi
 import type { WorkflowBodyInputNode } from '../../iteration/body-input-boundary';
 import type { WorkflowEndNode, WorkflowOutputEdge } from '../../outputs/workflow-outputs';
 import type { WorkflowNode, WorkflowEdge } from '../adapter/types';
+import type { GraphExecutionProjection } from '../../runtime/graph-execution-projection';
 
 export type CanvasNode = WorkflowNode | WorkflowEndNode | WorkflowBodyInputNode;
 export type CanvasEdge = WorkflowEdge | WorkflowOutputEdge;
@@ -48,5 +49,6 @@ export type WorkflowCanvasProps = {
   runStatus?: WorkflowRunStatusState | null;
   reviewActions?: HumanReviewActions;
   nodeRuns?: readonly NodeRun[];
+  projection?: GraphExecutionProjection;
   onRefreshRunStatus?: () => void;
 };
