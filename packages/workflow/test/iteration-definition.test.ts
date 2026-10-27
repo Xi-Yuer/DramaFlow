@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { MemorySaver } from '@langchain/langgraph';
 import {
   StringType,
+  isNodeVisibleInCatalog,
   NumberType,
   AnyType,
   workflowDefinitionSchema,
@@ -125,6 +126,9 @@ const errorCode = (code: string) => expect.objectContaining({ code });
 describe('Iteration Composite Contract / Draft', () => {
   it('正式定义、三种 mapping 和动态端口可发布；校验不执行 Action', () => {
     const f = fixture();
+    const hidden = f.registry.get('flow.iteration', 1).manifest;
+    expect(hidden.metadata.catalog?.exposure).toBe('internal');
+    expect(isNodeVisibleInCatalog(hidden, 'advanced')).toBe(false);
     expect(workflowDefinitionSchema.parse(f.graph)).toEqual(f.graph);
     const validated = check(f);
     expect(validated.map((entry) => entry.node.id)).toEqual(['iteration', 'process']);

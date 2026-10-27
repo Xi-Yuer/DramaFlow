@@ -6,7 +6,11 @@ export const ifManifest: NodeTypeManifest = {
   type: 'flow.if',
   version: 1,
   executionKind: 'control',
-  metadata: { name: '条件分支', category: 'flow' },
+  metadata: {
+    name: '条件分支',
+    category: 'flow',
+    catalog: { exposure: 'advanced', category: 'workflow' },
+  },
   inputs: [
     {
       key: 'value',

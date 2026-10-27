@@ -1,19 +1,19 @@
 import { useState } from 'react';
 import { Button, Popover } from 'antd';
 import { Plus } from 'lucide-react';
-import type { NodeCategory, NodeTypeManifest } from '@dramaflow/contracts';
+import {
+  isNodeVisibleInCatalog,
+  type NodeCatalogCategory,
+  type NodeTypeManifest,
+} from '@dramaflow/contracts';
 import { NodeTypeIcon } from './node-type-icon';
 import styles from './node-picker.module.css';
 
-const categoryNames: Record<NodeCategory, string> = {
-  input: '输入',
-  ai: 'AI',
-  image: '图片',
-  video: '视频',
-  audio: '音频',
-  flow: '流程',
-  data: '数据',
-  output: '输出',
+const categoryNames: Record<NodeCatalogCategory, string> = {
+  ai: 'AI 能力',
+  data: '数据处理',
+  workflow: '工作流控制',
+  advanced: '高级能力',
 };
 
 export function NodePicker({
@@ -25,18 +25,19 @@ export function NodePicker({
   disabled: boolean;
   onSelect: (manifest: NodeTypeManifest) => void;
 }) {
+  const catalog = manifests.filter((manifest) => isNodeVisibleInCatalog(manifest));
   const [open, setOpen] = useState(false);
   return (
     <div className={styles.toolbar}>
       <Popover
         trigger="click"
         placement="bottomLeft"
-        open={open && !disabled}
+        open={open && !disabled && catalog.length > 0}
         onOpenChange={setOpen}
         title="选择节点"
         content={
           <div className={styles.list} aria-label="节点目录">
-            {manifests.map((manifest) => (
+            {catalog.map((manifest) => (
               <Button
                 key={`${manifest.type}@${manifest.version}`}
                 className={styles.option}
@@ -58,7 +59,7 @@ export function NodePicker({
                     <span>{manifest.metadata.description}</span>
                   ) : null}
                   <small>
-                    {categoryNames[manifest.metadata.category]} · v{manifest.version}
+                    {categoryNames[manifest.metadata.catalog.category]} · v{manifest.version}
                   </small>
                 </span>
               </Button>
@@ -66,7 +67,11 @@ export function NodePicker({
           </div>
         }
       >
-        <Button icon={<Plus size={16} />} disabled={disabled} aria-expanded={open && !disabled}>
+        <Button
+          icon={<Plus size={16} />}
+          disabled={disabled || catalog.length === 0}
+          aria-expanded={open && !disabled && catalog.length > 0}
+        >
           添加节点
         </Button>
       </Popover>

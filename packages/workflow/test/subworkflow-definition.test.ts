@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   NumberType,
   StringType,
+  isNodeVisibleInCatalog,
   type GraphDefinition,
   type NodeDefinition,
   type StaticInputBinding,
@@ -99,6 +100,9 @@ const code = (value: string) => expect.objectContaining({ code: value });
 describe('SubWorkflow 静态语义 / 执行门禁', () => {
   it('静态返回完整后代、路径和 capability，不执行节点，也不能作为 Action 获取', () => {
     const f = fixture();
+    const hidden = f.registry.get('flow.subworkflow', 1).manifest;
+    expect(hidden.metadata.catalog?.exposure).toBe('internal');
+    expect(isNodeVisibleInCatalog(hidden, 'advanced')).toBe(false);
     const entries = check(f);
     expect(entries.map((entry) => [entry.node.id, entry.definitionPath])).toEqual([
       ['call', undefined],
@@ -235,6 +239,7 @@ describe('SubWorkflow 静态语义 / 执行门禁', () => {
   });
   it('v1 子图的普通 Action 可以 Publish，节点本身仍没有 execute', () => {
     const f = fixture();
+    expect(isNodeVisibleInCatalog(f.registry.get('flow.subworkflow', 1).manifest)).toBe(false);
     expect(check(f)).toHaveLength(2);
     expect(validateWorkflowForPublish(f.root, f.registry)).toHaveLength(2);
     expect(f.execute).not.toHaveBeenCalled();

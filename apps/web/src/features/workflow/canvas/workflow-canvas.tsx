@@ -3,7 +3,12 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Background, BackgroundVariant, Controls, ReactFlow, useReactFlow } from '@xyflow/react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from 'antd';
-import { nestedGraphSlots, type NodeDefinition, type NodeTypeManifest } from '@dramaflow/contracts';
+import {
+  isNodeVisibleInCatalog,
+  nestedGraphSlots,
+  type NodeDefinition,
+  type NodeTypeManifest,
+} from '@dramaflow/contracts';
 import { NodePicker } from '../node-catalog/node-picker';
 import { createWorkflowNode } from '../node-catalog/create-workflow-node';
 import { nodeTypeApi, nodeTypeKeys } from '../node-catalog/node-type-api';
@@ -91,7 +96,11 @@ export function WorkflowCanvas({
     };
   }, [getViewport, setViewport, viewportControllerRef]);
   const catalog = useMemo(
-    () => (manifestFilter ? (nodeTypes.data ?? []).filter(manifestFilter) : (nodeTypes.data ?? [])),
+    () =>
+      (nodeTypes.data ?? []).filter(
+        (manifest) =>
+          isNodeVisibleInCatalog(manifest) && (!manifestFilter || manifestFilter(manifest)),
+      ),
     [manifestFilter, nodeTypes.data],
   );
 
@@ -136,10 +145,10 @@ export function WorkflowCanvas({
   function addNode(selection: NodeTypeManifest) {
     if (locked || nodeTypes.isPending || nodeTypes.isError || !stageRef.current) return;
     // 只接受当前目录中精确匹配的版本，目录失败时不使用兜底节点。
-    const manifest = nodeTypes.data.find(
+    const manifest = catalog.find(
       (item) => item.type === selection.type && item.version === selection.version,
     );
-    if (!manifest || (manifestFilter && !manifestFilter(manifest))) return;
+    if (!manifest) return;
     const bounds = stageRef.current.getBoundingClientRect();
     // 连续新增稍微错开，避免多个新节点初始完全重叠。
     const offset = (workflow.nodes.length % 5) * 24;
@@ -252,7 +261,7 @@ export function WorkflowCanvas({
                     ? '正在加载节点目录…'
                     : nodeTypes.isError
                       ? '节点目录加载失败，请重试加载目录。'
-                      : nodeTypes.data.length === 0
+                      : catalog.length === 0
                         ? '当前暂无可用节点。'
                         : navigation
                           ? '点击左上角“添加节点”，开始编排 Body。'

@@ -88,7 +88,11 @@ const formatManifest = manifest({
   type: 'data.format_text',
   version: 1,
   executionKind: 'action',
-  metadata: { name: '文本格式化', category: 'data' },
+  metadata: {
+    name: '文本格式化',
+    category: 'data',
+    catalog: { exposure: 'public', category: 'data' },
+  },
   inputs: [
     { key: 'text', name: '文本', dataType: StringType, required: true },
     { key: 'index', name: '序号', dataType: NumberType, required: true },
@@ -109,7 +113,11 @@ const iterationManifest = manifest({
   version: 1,
   executionKind: 'composite',
   portDerivation: 'iteration',
-  metadata: { name: '逐项处理', category: 'flow' },
+  metadata: {
+    name: '逐项处理',
+    category: 'flow',
+    catalog: { exposure: 'internal', category: 'advanced' },
+  },
   inputs: [
     { key: 'items', name: '集合', dataType: { kind: 'array', itemType: AnyType }, required: true },
   ],

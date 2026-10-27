@@ -28,7 +28,12 @@ export function createTextGenerationNodeType(): NodeType<
       type: 'ai.text_generate',
       version: 1,
       executionKind: 'action',
-      metadata: { name: '文本生成', category: 'ai', description: '使用明确选择的模型配置生成文本' },
+      metadata: {
+        catalog: { exposure: 'public', category: 'ai' },
+        name: '文本生成',
+        category: 'ai',
+        description: '使用明确选择的模型配置生成文本',
+      },
       inputs: [
         { key: 'prompt', name: '提示词', dataType: StringType, required: true },
         { key: 'system', name: '系统提示词', dataType: StringType },

@@ -102,10 +102,11 @@ async function choose(label: string) {
 }
 
 describe('If Generic Node 编辑', () => {
-  it('目录创建精确 If；不默认填条件/输入，Handle 由 Manifest 生成', async () => {
-    const view = setup({ ...ifWorkflow(), nodes: [] });
+  it('普通目录隐藏 Advanced If，已有 If 的 Inspector 与 Handle 继续工作', () => {
+    const view = setup({ ...ifWorkflow(), nodes: [ifWorkflow().nodes[0]!] });
     fireEvent.click(screen.getByRole('button', { name: '添加节点' }));
-    fireEvent.click(await screen.findByRole('button', { name: '添加 条件分支 · v1' }));
+    expect(screen.queryByRole('button', { name: '添加 条件分支 · v1' })).toBeNull();
+    fireEvent.click(screen.getByRole('article', { name: '条件分支' }));
     expect(draft.definition.nodes).toHaveLength(1);
     expect(draft.definition.nodes[0]).toMatchObject({
       type: 'flow.if',
@@ -178,10 +179,17 @@ describe('If Generic Node 编辑', () => {
     });
   });
   it('不完整 If 可 Save；DataEdge / 命名控制边走现有 Canvas 持久化与删除回调', async () => {
-    setup({ ...ifWorkflow(), nodes: ifWorkflow().nodes.filter((node) => node.id !== 'if') });
-    fireEvent.click(screen.getByRole('button', { name: '添加节点' }));
-    fireEvent.click(await screen.findByRole('button', { name: '添加 条件分支 · v1' }));
+    setup();
+    fireEvent.click(screen.getByRole('article', { name: '条件分支' }));
     const id = draft.definition.nodes.find((node) => node.type === 'flow.if')!.id;
+    act(() =>
+      draft.edit((current) => ({
+        ...current,
+        nodes: current.nodes.map((node) =>
+          node.id === id ? { ...node, name: '待配置分支' } : node,
+        ),
+      })),
+    );
     const save = vi.spyOn(workflowApi, 'saveDraft').mockResolvedValue({ revision: 2 });
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     await waitFor(() => expect(draft.dirty).toBe(false));

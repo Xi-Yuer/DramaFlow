@@ -5,7 +5,11 @@ const manifest = {
   type: 'test.text',
   version: 1,
   executionKind: 'action',
-  metadata: { name: '文本样例', category: 'ai' },
+  metadata: {
+    name: '文本样例',
+    category: 'ai',
+    catalog: { exposure: 'internal', category: 'advanced' },
+  },
   inputs: [],
   outputs: [],
   config: [],
@@ -40,6 +44,13 @@ describe('节点类型目录客户端', () => {
     respond([manifest]);
     await expect(nodeTypeApi.list()).resolves.toEqual([manifest]);
     respond([{ ...manifest, compile: 'server-code' }]);
+    await expect(nodeTypeApi.list()).rejects.toThrow('服务器响应格式');
+    respond([
+      {
+        ...manifest,
+        metadata: { ...manifest.metadata, catalog: { exposure: 'invalid', category: 'advanced' } },
+      },
+    ]);
     await expect(nodeTypeApi.list()).rejects.toThrow('服务器响应格式');
     respond([manifest, manifest]);
     await expect(nodeTypeApi.list()).rejects.toThrow('服务器响应格式');

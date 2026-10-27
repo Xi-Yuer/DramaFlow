@@ -30,7 +30,7 @@ DefaultWorkflowCompiler 只负责不可变快照、生产预检、限定 Run 的
 
 Definition Location 沿既有 nestedGraphSlots 与 GraphDefinitionPath 追加 nodeId / graphKey，不使用 scopeKey 或全局唯一 nodeId。局部 Action 使用显式动态 execution provider，同一静态图位置可对应不同 scope；当前 Human Review / Iteration 策略仍要求固定父 scope，生产门禁也继续禁止在 Iteration 中嵌套这些节点。
 
-[SubWorkflow Strategy](../packages/workflow/src/compiler/subworkflow/strategy.ts)在当前版本内固定调用一次内嵌图，不新增 Run / Job，也不做跨版本或跨项目授权。prepare 创建父 NodeRun 并按同名输入建立局部边界；子图入口创建或复用 kind=`subworkflow`、invocationKey=`subworkflow:graph` 的 ChildExecution；声明输出成功后结束 child，再完成父 NodeRun。子图允许普通 Action、Action 链、parallel + ALL join、DataEdge、workflow_input、constant、Template（包括依赖多个上游 Action 输出）和普通 Graph 输出。Publish 拒绝 Candidate、If、Human Review、Iteration、嵌套 SubWorkflow，以及其他 control / composite / interaction。Candidate 返回 `SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED`，不留到运行期再报歧义；其余不允许的节点返回 `SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED`。父图输入仍使用既有绑定，包括父图自己的 Candidate。没有 Web 子图编辑。业务失败同事务结束 child 与父 NodeRun；原生中断保持 running，仓储故障不伪装成业务失败。
+[SubWorkflow Strategy](../packages/workflow/src/compiler/subworkflow/strategy.ts)在当前版本内固定调用一次内嵌图，不新增 Run / Job，也不做跨版本或跨项目授权。prepare 创建父 NodeRun 并按同名输入建立局部边界；子图入口创建或复用 kind=`subworkflow`、invocationKey=`subworkflow:graph` 的 ChildExecution；声明输出成功后结束 child，再完成父 NodeRun。子图允许普通 Action、Action 链、parallel + ALL join、DataEdge、workflow_input、constant、Template（包括依赖多个上游 Action 输出）和普通 Graph 输出。Publish 拒绝 Candidate、If、Human Review、Iteration、嵌套 SubWorkflow，以及其他 control / composite / interaction。Candidate 返回 `SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED`，不留到运行期再报歧义；其余不允许的节点返回 `SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED`。父图输入仍使用既有绑定，包括父图自己的 Candidate。Web 已有 Definition nested graph 编辑入口，Catalog 隐藏不移除已有节点的入口。业务失败同事务结束 child 与父 NodeRun；原生中断保持 running，仓储故障不伪装成业务失败。
 
 计划递归分析已注册策略的图结构。普通局部预算为既有 DAG / If 路径上限加实际入口 / 声明输出节点；策略只声明 wrapper 节点数和 child boundary，公共预算合并各原生图的最大值。Iteration 与 SubWorkflow 的 wrapper 都是 prepare / 子图 / collect 三节点。Body 与 SubWorkflow 子图都有审计入口和声明输出收口，因此深度 D 对应 D+3；wrapper 上限为 4，总上限取较大值，不按调用次数相加。技术结构分析与生产 prepare 分离：可分析嵌套 Iteration 的预算不表示准入；prepare 在任何执行服务创建前保留现有 capability / topology gate。条件局部图若需声明输出收口，目前要求已证明的唯一终点，不能对互斥出口误用 ALL barrier；这不限制 root 既有条件出口。SubWorkflow v1 子图不编译 If。
 
@@ -94,7 +94,7 @@ body 的嵌套 composite、If / control、Human Review / interaction 均拒绝�
 
 当前链为 WorkflowRun → Parent NodeOccurrence → Parent NodeRun attempt → ChildExecution → child NodeOccurrences / NodeRuns。NodeOccurrence 继续以 Run / scopeKey / nodeId 标识逻辑节点，attempt 只在 occurrence 内编号；ChildExecution 的具体父 NodeRun 隔离不同父 attempt。scope 是稳定 opaque 身份材料，不能还原静态定义路径；root 仍为约定字符串，没有独立 ExecutionScope 表。Outbox 的 executionId 是 start / resume 投递身份，与 child 调用不同。
 
-通用 Contract、Executor context、NodeRun ownership、Repository 与 Tree Adapter 已使用 ChildExecution；Iteration 保留集合快照、current_item / current_index 映射、Send、有序聚合及 index extension。SubWorkflow v1 复用同一 ChildExecution，kind 为 `subworkflow`，invocationKey 固定为 `subworkflow:graph`，不使用 index。Compiler 的独立控制策略与 capability gate 继续保留。Definition Location 仍与 scope 分离，目前不提供通用关系型 definitionRef 或 Execution → Canvas projection。进一步的 occurrence / scope 归属统一、跨版本子图授权与 scoped resume 必须独立设计，不能因为持久化已通用就宣称这些能力已完成。没有 Web 子图编辑或单次 Retry / Resume。
+通用 Contract、Executor context、NodeRun ownership、Repository 与 Tree Adapter 已使用 ChildExecution；Iteration 保留集合快照、current_item / current_index 映射、Send、有序聚合及 index extension。SubWorkflow v1 复用同一 ChildExecution，kind 为 `subworkflow`，invocationKey 固定为 `subworkflow:graph`，不使用 index。Compiler 的独立控制策略与 capability gate 继续保留。Definition Location 仍与 scope 分离，目前不提供通用关系型 definitionRef 或 Execution → Canvas projection。进一步的 occurrence / scope 归属统一、跨版本子图授权与 scoped resume 必须独立设计，不能因为持久化已通用就宣称这些能力已完成。Web 支持 Definition nested graph 编辑，但尚无单次调用 Retry / Resume。
 
 ## Execution Tree 只读查询
 
@@ -138,7 +138,7 @@ Project 使用 `GET / POST /projects`、`GET / PUT /projects/:id`；Workflow 使
 
 ## 生产 Runtime 装配
 
-API 装配 Submission / Queue；Worker 装配 Consumer、Outbox Pump 和执行服务。执行服务核验持久意图，从 Run 派生项目 / 所有者，再创建有权限作用域的 Runner、Executor、能力和 Artifact 服务，不跨用户缓存。Node 目录与执行共用 Registry，服务对象不进入 State / checkpoint。
+API 装配 Submission / Queue；Worker 装配 Consumer、Outbox Pump 和执行服务。执行服务核验持久意图，从 Run 派生项目 / 所有者，再创建有权限作用域的 Runner、Executor、能力和 Artifact 服务，不跨用户缓存。Node 类型说明由 Registry 提供，Catalog metadata 单独决定产品创建入口的暴露；服务对象不进入 State / checkpoint。
 
 ### Web 基础发布
 
@@ -251,6 +251,23 @@ unsafe 注册标准 beforeunload，safe / 卸载时解除。不改写 Router / h
 页面重进只读 lookup，核对 workflow / version / key / 已知 Run ID 后复用 Status tracking。未找到、冲突或查询失败时保留身份，可重新查询，不自动 POST / 换 key；存在未确认身份时，用户确认新旧请求可能同时执行后才发起独立 Run。accepted / queue uncertainty 补写失败不重发，旧 uncertainty 不被后续一次 4xx 消除。
 
 确认 completed / failed / cancelled 后先由页面持有 Run，再自动清理 receipt；waiting 保留。清理不清空当前页面，但下次重进不依赖已删除的终态 receipt 自动发现历史。多 Run 不覆盖，storage event 只同步集合，不当锁或跨 Tab 自动提交。Logout 成功清本用户并失效晚到写回，失败保留；存储清理失败明确提示。离开保护仍保留，找到当前错误请求的 Run 后解除旧 uncertainty。
+
+### Node Catalog 产品暴露
+
+NodeRegistry 负责注册可供系统解析与执行的类型；Node Catalog 负责产品创建入口；WorkflowDefinition 只持久化实例。Manifest 的 `metadata.catalog` 包含 `exposure: public | advanced | internal` 与产品 `category: ai | data | workflow | advanced`（AI 能力、数据处理、工作流控制、高级能力）。原 `metadata.category` 继续用于节点视觉分类，两者均不决定 Compiler / Runtime 准入。未声明 Catalog metadata 的类型不自动进入任何 Picker surface。
+
+| 当前生产 NodeType     | 暴露     | 产品分类   |
+| --------------------- | -------- | ---------- |
+| `ai.text_generate@1`  | public   | AI 能力    |
+| `data.format_text@1`  | public   | 数据处理   |
+| `flow.human_review@1` | public   | 工作流控制 |
+| `flow.if@1`           | advanced | 工作流控制 |
+| `flow.iteration@1`    | internal | 高级能力   |
+| `flow.subworkflow@1`  | internal | 高级能力   |
+
+`GET /api/v1/workflow/node-types` 保持认证、no-store 与完整 JSON Manifest 响应，包含所有暴露级别，供已有节点渲染、Inspector、端口及 nested graph 编辑使用。Web 普通 Picker 通过共享 `isNodeVisibleInCatalog` 策略只显示 public；添加回调也只接受当前过滤目录中的精确类型版本，并继续叠加 Body 等局部图能力约束。策略支持 advanced surface（public + advanced），当前没有 Advanced Mode UI；internal 始终不供 Picker 创建。该可见性不是权限或 Definition 校验 gate。
+
+已有 Iteration / SubWorkflow 可继续加载、选择、Inspector 编辑、进入嵌套图、保存与发布；发布及运行仍遵循各 Strategy 的既有能力限制。没有删除类型、扩展嵌套能力或引入业务 Composite Template。
 
 ### Web Human Review
 

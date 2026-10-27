@@ -12,7 +12,7 @@ Data Edge 提供输入值来源，Control Edge 提供先后关系，不自动相
 
 ## Manifest 与端口
 
-Manifest 固定 type / version 与 executionKind（action / control / composite / interaction）。category 是独立的 UI 分类，固定八类；图标和 component 使用受控映射。只公开 JSON，不携带 Zod、execute、编译器或服务实例。
+Manifest 固定 type / version 与 executionKind（action / control / composite / interaction）。metadata.category 保留八类节点视觉分类；metadata.catalog 独立表达产品暴露和产品分类；图标和 component 使用受控映射。只公开 JSON，不携带 Zod、execute、编译器或服务实例。
 
 数据端口使用正式 DataType，Handle.id 等于端口 key，同方向唯一。required 表示可省略，null 用 union 表达；集合用 array.itemType，没有 multiple。输出 storagePolicy 为 inline / reference / auto，缺省 auto，不改变端口类型。
 
@@ -28,7 +28,7 @@ config 用 string / number / boolean / select 字段数组；condition 字段只
 
 [nestedGraphSlots / walkGraphDefinitions](../packages/contracts/src/graph/traversal.ts)统一访问 root、Iteration.body 与 SubWorkflow.graph，返回 nodeId / graphKey 静态路径；不解析 scope、执行序号或 checkpoint namespace。Definition schema 与静态语义递归检查局部引用、DAG、输入输出类型、节点版本和配置；发布事务对返回的全部后代执行现有 capability / 模型权限检查。
 
-Draft 允许保存尚不可执行的 SubWorkflow，配置字段边界仍递归生效。完整 Definition 静态校验不代表执行准入。v1 Publish 允许子图内普通 Action、Action 链、parallel + ALL join、DataEdge、workflow_input、constant、Template（包括依赖多个上游 Action 输出）和普通 Graph 输出。拒绝 Candidate 绑定、If、Human Review、Iteration、嵌套 SubWorkflow，以及其他 control / composite / interaction。Candidate 返回 SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED；其余不允许的节点返回 SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED。Iteration body 内的 SubWorkflow 仍报 ITERATION_BODY_CAPABILITY_UNSUPPORTED。父节点输入继续使用既有绑定，不在子图内放宽 Candidate。运行时固定调用一次，checkpoint 复用同一父 attempt、child ID 与 scope。没有 Web 子图编辑。
+Draft 允许保存尚不可执行的 SubWorkflow，配置字段边界仍递归生效。完整 Definition 静态校验不代表执行准入。v1 Publish 允许子图内普通 Action、Action 链、parallel + ALL join、DataEdge、workflow_input、constant、Template（包括依赖多个上游 Action 输出）和普通 Graph 输出。拒绝 Candidate 绑定、If、Human Review、Iteration、嵌套 SubWorkflow，以及其他 control / composite / interaction。Candidate 返回 SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED；其余不允许的节点返回 SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED。Iteration body 内的 SubWorkflow 仍报 ITERATION_BODY_CAPABILITY_UNSUPPORTED。父节点输入继续使用既有绑定，不在子图内放宽 Candidate。运行时固定调用一次，checkpoint 复用同一父 attempt、child ID 与 scope。已有 SubWorkflow 可通过 Web nested graph 编辑入口进入；Catalog 可见性不改变该入口。
 
 ## Iteration Composite Contract
 
@@ -57,7 +57,7 @@ Action 编译策略只调用统一 Executor，返回当前 nodeId 的 outputs �
 ## 节点类型开发
 
 1. 声明纯 JSON Manifest、三组严格 Zod 和业务 execute；可使用 createOperationNodeType 组合。invokeNodeOperation 只是独立值校验工具，不是另一套 Runtime。
-2. 在受信任 Registry 注册精确版本；GET /api/v1/workflow/node-types 默认认证、no-store，只返回 Manifest。缺少版本时界面显示不可用，不按目录顺序猜测。
+2. 在受信任 Registry 注册精确版本，并显式声明 metadata.catalog。GET /api/v1/workflow/node-types 默认认证、no-store，返回完整 Manifest（包含 Catalog metadata），供已有 Definition 渲染与编辑；创建入口按产品 surface 过滤。缺少版本时界面显示不可用，不按目录顺序猜测。
 3. 通过静态发布校验和运行时三组 Schema 验证真实行为。能力 / 资源绑定须补齐相应发布授权检查，不能仅靠 UI 控件推断。
 
 ## Preset 与 NodeRun

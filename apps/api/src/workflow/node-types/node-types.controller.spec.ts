@@ -1,5 +1,9 @@
 import 'reflect-metadata';
-import type { NodeTypeManifest } from '@dramaflow/contracts';
+import {
+  isNodeVisibleInCatalog,
+  nodeTypeManifestListSchema,
+  type NodeTypeManifest,
+} from '@dramaflow/contracts';
 import { NodeRegistry } from '@dramaflow/workflow';
 import { UnauthorizedException, type INestApplication } from '@nestjs/common';
 import { APP_GUARD, Reflector } from '@nestjs/core';
@@ -66,6 +70,32 @@ describe('节点类型目录 API', () => {
       .get('/api/v1/workflow/node-types')
       .expect(200)
       .expect('Cache-Control', 'no-store');
+    const manifests = nodeTypeManifestListSchema.parse(response.body);
+    expect(
+      manifests.map(({ type, metadata }) => [type, metadata.catalog]),
+    ).toEqual([
+      ['ai.text_generate', { exposure: 'public', category: 'ai' }],
+      ['data.format_text', { exposure: 'public', category: 'data' }],
+      ['flow.if', { exposure: 'advanced', category: 'workflow' }],
+      ['flow.iteration', { exposure: 'internal', category: 'advanced' }],
+      ['flow.subworkflow', { exposure: 'internal', category: 'advanced' }],
+      ['flow.human_review', { exposure: 'public', category: 'workflow' }],
+    ]);
+    expect(
+      manifests
+        .filter((manifest) => isNodeVisibleInCatalog(manifest))
+        .map(({ type }) => type),
+    ).toEqual(['ai.text_generate', 'data.format_text', 'flow.human_review']);
+    expect(
+      manifests
+        .filter((manifest) => isNodeVisibleInCatalog(manifest, 'advanced'))
+        .map(({ type }) => type),
+    ).toEqual([
+      'ai.text_generate',
+      'data.format_text',
+      'flow.if',
+      'flow.human_review',
+    ]);
     expect(response.body).toMatchObject([
       { type: 'ai.text_generate', version: 1, executionKind: 'action' },
       {
@@ -143,7 +173,11 @@ describe('节点类型目录 API', () => {
       type: 'test.catalog',
       version: 1,
       executionKind: 'action',
-      metadata: { name: '测试节点', category: 'data' },
+      metadata: {
+        name: '测试节点',
+        category: 'data',
+        catalog: { exposure: 'internal', category: 'advanced' },
+      },
       inputs: [],
       outputs: [],
       config: [],

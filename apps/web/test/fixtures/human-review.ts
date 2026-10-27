@@ -9,7 +9,12 @@ export const humanReviewManifest: NodeTypeManifest = {
   type: 'flow.human_review',
   version: 1,
   executionKind: 'interaction',
-  metadata: { name: '人工审批', category: 'flow', description: '审核文本并返回通过或拒绝结果' },
+  metadata: {
+    name: '人工审批',
+    category: 'flow',
+    catalog: { exposure: 'public', category: 'workflow' },
+    description: '审核文本并返回通过或拒绝结果',
+  },
   inputs: [{ key: 'content', name: '待审核内容', dataType: StringType, required: true }],
   outputs: [
     { key: 'content', name: '审核内容', dataType: StringType },

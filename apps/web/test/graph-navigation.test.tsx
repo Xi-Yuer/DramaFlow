@@ -79,7 +79,7 @@ const textManifest = manifest({
   type: 'ai.text_generate',
   version: 1,
   executionKind: 'action',
-  metadata: { name: '文本生成', category: 'ai' },
+  metadata: { name: '文本生成', category: 'ai', catalog: { exposure: 'public', category: 'ai' } },
   inputs: [{ key: 'prompt', name: '提示词', dataType: StringType, required: true }],
   outputs: [{ key: 'text', name: '生成文本', dataType: StringType }],
   config: [],
@@ -88,7 +88,11 @@ const formatManifest = manifest({
   type: 'data.format_text',
   version: 1,
   executionKind: 'action',
-  metadata: { name: '文本格式化', category: 'data' },
+  metadata: {
+    name: '文本格式化',
+    category: 'data',
+    catalog: { exposure: 'public', category: 'data' },
+  },
   inputs: [
     { key: 'text', name: '文本', dataType: StringType, required: true },
     { key: 'index', name: '序号', dataType: { kind: 'primitive', name: 'number' }, required: true },
@@ -100,7 +104,11 @@ const ifManifest = manifest({
   type: 'flow.if',
   version: 1,
   executionKind: 'control',
-  metadata: { name: '条件分支', category: 'flow' },
+  metadata: {
+    name: '条件分支',
+    category: 'flow',
+    catalog: { exposure: 'advanced', category: 'workflow' },
+  },
   inputs: [{ key: 'value', name: '输入值', dataType: StringType, required: true }],
   outputs: [],
   controlOutputs: [
@@ -113,7 +121,11 @@ const reviewManifest = manifest({
   type: 'flow.human_review',
   version: 1,
   executionKind: 'interaction',
-  metadata: { name: '人工审批', category: 'flow' },
+  metadata: {
+    name: '人工审批',
+    category: 'flow',
+    catalog: { exposure: 'public', category: 'workflow' },
+  },
   inputs: [{ key: 'content', name: '待审核内容', dataType: StringType, required: true }],
   outputs: [{ key: 'content', name: '审核内容', dataType: StringType }],
   config: [],
@@ -123,7 +135,11 @@ const subworkflowManifest = manifest({
   version: 1,
   executionKind: 'composite',
   portDerivation: 'subworkflow',
-  metadata: { name: '子流程', category: 'flow' },
+  metadata: {
+    name: '子流程',
+    category: 'flow',
+    catalog: { exposure: 'internal', category: 'advanced' },
+  },
   inputs: [],
   outputs: [],
   config: [],
@@ -133,7 +149,11 @@ const iterationManifest = manifest({
   version: 1,
   executionKind: 'composite',
   portDerivation: 'iteration',
-  metadata: { name: '逐项处理', category: 'flow' },
+  metadata: {
+    name: '逐项处理',
+    category: 'flow',
+    catalog: { exposure: 'internal', category: 'advanced' },
+  },
   inputs: [{ key: 'items', name: '集合', dataType: array(AnyType), required: true }],
   outputs: [],
   config: [],
@@ -142,7 +162,11 @@ const controlActionManifest = manifest({
   type: 'test.gated',
   version: 1,
   executionKind: 'action',
-  metadata: { name: '带控制出口', category: 'data' },
+  metadata: {
+    name: '带控制出口',
+    category: 'data',
+    catalog: { exposure: 'public', category: 'data' },
+  },
   inputs: [],
   outputs: [],
   controlOutputs: [{ key: 'done', name: '完成' }],
@@ -672,6 +696,10 @@ describe('SubWorkflow 画布', () => {
       edges: [],
       outputs: [],
     });
+    fireEvent.click(screen.getByRole('button', { name: '添加节点' }));
+    expect(screen.queryByRole('button', { name: '添加 子流程 · v1' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '添加 逐项处理 · v1' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '添加节点' }));
     clickNode('call');
     fireEvent.click(screen.getByRole('button', { name: '进入' }));
     expect(document.querySelector('[data-graph-location="graph"]')).toBeTruthy();
@@ -707,6 +735,35 @@ describe('SubWorkflow 画布', () => {
     fireEvent.click(screen.getByRole('button', { name: '进入' }));
     expect(flow.defaultViewport).toEqual({ x: 6, y: 7, zoom: 1.4 });
     expect(flowNode('format')?.selected).toBe(true);
+    const snapshot = workflowDraftDefinitionSchema.parse(
+      JSON.parse(JSON.stringify(view.definition())),
+    );
+    const saved = workflowDraftReducer(
+      {
+        ...createWorkflowDraftState({
+          id: 'workflow-1',
+          projectId: 'project-1',
+          revision: 1,
+          draft: snapshot,
+        } as WorkflowResponse),
+        definition: snapshot,
+      },
+      { type: 'save-succeeded', revision: 2, snapshot },
+    );
+    const reloaded = workflowDraftReducer(saved, {
+      type: 'reload-succeeded',
+      workflow: {
+        id: 'workflow-1',
+        projectId: 'project-1',
+        revision: 2,
+        draft: snapshot,
+      } as WorkflowResponse,
+    });
+    expect(reloaded.definition).toEqual(view.definition());
+    expect(reloaded.definition.nodes.find((item) => item.id === 'call')?.composite).toEqual(
+      child.composite,
+    );
+    expect(reloaded.revision).toBe(2);
   });
 
   it('breadcrumb 可以回到任意中间层', () => {
