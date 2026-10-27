@@ -1,0 +1,13 @@
+.context {
+  position: absolute;
+  z-index: 6;
+  top: 54px;
+  left: 14px;
+  max-width: calc(100% - 28px);
+  padding: 6px 10px;
+  border: 1px solid;
+}
+
+.select {
+  min-width: 112px;
+}

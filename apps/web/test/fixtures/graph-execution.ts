@@ -133,3 +133,41 @@ export function graphExecutionFixture() {
     location,
   };
 }
+
+export function iterationExecutionFixture(indexes = [2, 0, 1]) {
+  const f = graphExecutionFixture();
+  f.owner.type = 'flow.iteration';
+  f.owner.name = '逐项处理';
+  f.owner.inputs = { items: { type: 'constant', value: ['A', 'B', 'C'] } };
+  f.owner.composite = {
+    kind: 'iteration',
+    itemType: StringType,
+    invariantInputs: [],
+    bodyInputMapping: [{ target: 'text', source: { type: 'current_item' } }],
+    body: f.child,
+  };
+  f.workflow.inputs = [];
+  f.workflow.outputs[0]!.type = { kind: 'array', itemType: StringType };
+  f.version.definition = structuredClone(f.workflow);
+  f.location[0]!.graphKey = 'body';
+  const executions: Extract<ExecutionTreeEntry, { type: 'child_execution' }>[] = indexes.map(
+    (index) => ({
+      ...f.execution,
+      type: 'child_execution',
+      kind: 'iteration_item',
+      id: `item-${index}`,
+      metadata: { index },
+    }),
+  );
+  const itemRuns: NodeRun[] = indexes.map((index) => ({
+    ...f.childRun,
+    id: `item-node-run-${index}`,
+    childExecutionId: `item-${index}`,
+    occurrenceId: `item-occurrence-${index}`,
+    scopeKey: `opaque-${index}`,
+    status: index === 0 ? 'completed' : index === 1 ? 'failed' : 'running',
+    outputs: { text: { storage: 'inline', type: StringType, value: `Item ${index + 1} output` } },
+  }));
+  f.nodeRuns.splice(0, f.nodeRuns.length, f.parentRun, ...itemRuns);
+  return { ...f, executions, itemRuns };
+}

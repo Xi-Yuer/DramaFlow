@@ -40,7 +40,7 @@ Definition Location 沿既有 nestedGraphSlots 与 GraphDefinitionPath 追加 no
 
 [NodeRun Repository](../packages/server/src/workflow/runtime/execution/node-run-repository.ts)按授权 Run 获取 / 创建 occurrence；唯一键竞争在事务 advisory lock 内串行化。创建 attempt 时锁定对应 occurrence 行，只在该 occurrence 内分配序号；NodeRun 的唯一键为 occurrenceId / attempt，复合外键保证 occurrence、NodeRun 的项目 / Run / nodeId 一致。数据库禁止修改 occurrence 身份及既有 attempt 的归属、序号和开始时间。Action Executor 通过显式 scopeKey 取得 occurrence，分配 attempt 的操作不新增 retry 策略或重放兜底。
 
-NodeRun 查询新增安全的 occurrenceId / scopeKey，不返回 thread、checkpoint 或原生 task metadata。Canvas 与 Runtime Inspector 在明确的 graph execution boundary 内选择唯一 occurrence，再按其 attempt 排序；Root 与 Nested 共用投影，见 [Graph Execution Projection](#graph-execution-projection)。不以跨 occurrence 的最大 attempt 猜最新执行，不增加 Iteration item selector。Artifact 继续只关联 nodeRunId，经 NodeRun 反查 occurrence，不复制 scope / occurrence 字段。
+NodeRun 查询新增安全的 occurrenceId / scopeKey，不返回 thread、checkpoint 或原生 task metadata。Canvas 与 Runtime Inspector 在明确的 graph execution boundary 内选择唯一 occurrence，再按其 attempt 排序；Root 与 Nested 共用投影，见 [Graph Execution Projection](#graph-execution-projection)。不以跨 occurrence 的最大 attempt 猜最新执行；Iteration Item Selector 只提供真实 ChildExecution 的显式选择。Artifact 继续只关联 nodeRunId，经 NodeRun 反查 occurrence，不复制 scope / occurrence 字段。
 
 [增量迁移](../packages/database/prisma/migrations/20261024000000_node_occurrences/migration.sql)将旧数据的每组 Run / node 全部 attempt 回填到同一个 root occurrence，保留 NodeRun ID、序号、状态、输入输出、时间和 Artifact 关联，不清空审计记录。旧 checkpoint 的 State 不增加必填字段，现有 root 审核恢复重新查得同一 occurrence。
 
@@ -234,9 +234,13 @@ Template 的 `node_output` 变量也由同一适配层投影为数据线，以 `
 
 [查询上下文](../apps/web/src/features/workflow/runtime/use-graph-execution-projection.ts)按当前 Run 的 `workflowVersionId` 复用版本查询，核对 Workflow / Project 身份并保守比较完整执行定义，忽略节点 ui 位置和 JSON 对象键顺序；其他字段及数组顺序均须一致。Draft 修改输入、prompt、config 或图结构后撤下旧执行状态，返回 version_mismatch；位置移动不影响匹配。版本加载失败或缺失返回 unavailable，不借用运行表单中选择的其他版本。
 
-Definition Canvas 下钻时，从已确定的父 graph instance 中找 owner 的唯一 occurrence，选其当前 attempt，再沿 Tree 的显式 parent 查询该 NodeRun 的 ChildExecutions。当前 `nestedGraphSlots` 只有唯一槽位，故可确定子图定义地址；不解析 scopeKey，不猜 invocationKey，也不全局搜索 nodeId。只有唯一 ChildExecution 才继续投影；没有执行返回 no_execution，多个实例或 occurrence 返回 ambiguous，查询中返回 loading，无法确定版本或槽位返回 version_mismatch / unavailable。未能解析的原因在 Canvas / Inspector 明确展示，不冒充某个节点运行结果；no_execution 可按既有 idle 呈现。
+Definition Canvas 下钻时，从已确定的父 graph instance 中找 owner 的唯一 occurrence，选其当前 attempt，再沿 Tree 的显式 parent 查询该 NodeRun 的 ChildExecutions。当前 `nestedGraphSlots` 只有唯一槽位，故可确定子图定义地址；不解析 scopeKey，不猜 invocationKey，也不全局搜索 nodeId。唯一 ChildExecution 自动解析；多个实例且调用方尚未提供选择时仍返回 ambiguous，并携带已完整读取的候选执行上下文。通用 `selectGraphExecutionInstance` 接收候选集合中的真实 executionId，继续沿相同边界投影 NodeRuns，不接受集合外 ID。没有执行返回 no_execution，多个 occurrence 返回 ambiguous，查询中返回 loading，无法确定版本或槽位返回 version_mismatch / unavailable。ambiguous 是待选择的上下文，不作为查询错误；未能解析的原因在 Canvas / Inspector 明确展示，no_execution 可按既有 idle 呈现。
 
-ChildExecution 查询遍历全部 nextCursor 后判断数量，并检查分页 Run / Version / parent 归属、重复记录及游标循环。直属 NodeRun 复用已有完整、非分页的 `/node-runs` 查询结果，按显式执行边界过滤，保留 inputs / outputs / attempts；不从 Tree 摘要伪造完整 NodeRun。活动 Run 定时重新查询子执行，显式刷新同时更新 Run、版本与关联查询，切换 Run / Location 后旧响应不能覆盖新上下文。没有数据库迁移或新增 definitionRef，不改 Compiler / Runtime 身份。多实例仍需后续显式选择，当前没有 Iteration item selector；未来多 graph slot 不能用唯一槽位规则猜测关联。
+ChildExecution 查询遍历全部 nextCursor 后判断数量，并检查分页 Run / Version / parent 归属、重复记录及游标循环。直属 NodeRun 复用已有完整、非分页的 `/node-runs` 查询结果，按显式执行边界过滤，保留 inputs / outputs / attempts；不从 Tree 摘要伪造完整 NodeRun。活动 Run 定时重新查询子执行，显式刷新同时更新 Run、版本与关联查询，切换 Run / Location 后旧响应不能覆盖新上下文。没有数据库迁移或新增 definitionRef，不改 Compiler / Runtime 身份；未来多 graph slot 不能用唯一槽位规则猜测关联。
+
+[Iteration Item Selector](../apps/web/src/features/workflow/iteration/execution/iteration-item-selector.tsx)只负责 Body 执行上下文的选择。选项为实际 ChildExecution ID 与经过验证的 `metadata.index`，按 index 排序并显示 Item `index + 1`；缺失或重复 index、错误 kind 返回 unavailable，不按返回顺序或 scope 字符串猜测。0 Item 保持 no_execution，1 Item 直接解析且隐藏 Selector，N Item 默认选择最小 index。用户选择按 Run、Version、Definition Location、父 NodeRun attempt 隔离，只保留在当前页面会话；刷新及返回父图后再下钻时保留仍有效的 ID，所选 ID 消失才回退最小 index，回退后不会因旧 ID 再次出现而跳回。分页尚未读完时不提供部分候选。
+
+Item 切换把 executionId 交给通用投影，使用已读取的完整候选和最新 NodeRuns 同步切换边界，不重新请求 Tree；Canvas 与 Inspector 一起切换 occurrence / attempts / 状态 / 输出。Inspector 历史 attempt 按 occurrence 隔离，不继承上个 Item 的选择。Selector 不创建虚拟 Item、独立运行状态或新的执行 API，不扩展 Item Retry / Resume、Body Runtime 或人工审核能力。
 
 ### Canvas 运行态与连线表现
 

@@ -9,6 +9,7 @@
 - 模型选择只写 modelConfigurationId，配置从 Schema / Catalog 得到；不静默替换失效配置。供应商配置意图只在当前界面保留，取消不继续。Secret 不回填、不进 Form / Query / 浏览器存储，请求发出及退出表单时清空。
 - prompt / system 独立保存 constant 或 template；变量展示当前节点 / 端口名称，保存 nodeId / portKey。引用节点输出即自动显示数据依赖投影，不额外创建 Data Edge；重复 alias 共用一条依赖线，变量通过输入编辑器删除。禁止自身和下游来源。
 - Save 与 Publish 分离，发布锁定 Draft，不隐式保存或运行；当前保存修订与最新版本分别展示。Run 始终明确选择已发布版本。
+- Iteration Body 的 Item Selector 只选择实际 ChildExecution，显示 Item `index + 1`，以真实 executionId 为值；按 metadata.index 排序，默认最小 index。有效选择在刷新后保留，失效才回退；单 Item 不强制操作，分页未完成不提前选择。Canvas / Inspector 共享当前执行实例，不把 Item 切换写入 Draft 或持久化为节点配置。
 - 主动离开统一使用 Editor guard；Logout 先确认再退出。invocation recovery 不自动重放请求，具体行为见[当前架构](architecture.md#web-invocation-identity-recovery)。
 
 ## 视觉与组件

@@ -76,6 +76,7 @@ export function WorkflowCanvas({
   reviewActions,
   nodeRuns,
   projection,
+  executionContext,
   onRefreshRunStatus,
 }: WorkflowCanvasProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -183,6 +184,9 @@ export function WorkflowCanvas({
       className="canvas-stage"
       data-graph-location={locationName}
       data-execution-projection={projection?.phase}
+      data-execution-instance={
+        projection?.phase === 'resolved' ? projection.instance.id : undefined
+      }
     >
       <GraphExecutionNotice projection={projection} onRefresh={onRefreshRunStatus} />
       {navigation ? (
@@ -204,6 +208,7 @@ export function WorkflowCanvas({
           ))}
         </nav>
       ) : null}
+      {executionContext}
       <WorkflowRuntimeProvider
         workflow={workflow}
         runStatus={runStatus}

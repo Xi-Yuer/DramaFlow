@@ -14,7 +14,7 @@ export function GraphExecutionNotice({
     <Alert
       role="status"
       showIcon
-      type={projection.phase === 'loading' ? 'info' : 'warning'}
+      type={projection.phase === 'loading' || projection.phase === 'ambiguous' ? 'info' : 'warning'}
       title={projection.reason}
       action={
         onRefresh && projection.phase !== 'loading' ? (

@@ -14,6 +14,9 @@ import { ReactFlowProvider, type OnMove } from '@xyflow/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGraphExecutionProjection } from '../../runtime/use-graph-execution-projection';
 import { workflowKeys } from '../../workflow-api';
+import { selectGraphExecutionInstance } from '../../runtime/graph-execution-projection';
+import { useIterationItemSelection } from '../../iteration/execution/use-iteration-item-selection';
+import { IterationItemSelector } from '../../iteration/execution/iteration-item-selector';
 import type { NodeRun, Project, WorkflowDefinition } from '@dramaflow/contracts';
 import { WorkflowCanvas } from '@/features/workflow/canvas/workflow-canvas';
 import type {
@@ -118,13 +121,34 @@ export const GraphCanvasSession = forwardRef<
   const viewportControllerRef = useRef<GraphViewportController | null>(null);
   const location = currentGraphLocation(navigation);
   const queryClient = useQueryClient();
-  const projection = useGraphExecutionProjection({
+  const discoveredProjection = useGraphExecutionProjection({
     workflow,
     workflowId,
     projectId,
     location,
     runStatus,
   });
+  const step = location.at(-1);
+  const owner = step
+    ? readLocatedGraph(workflow, location.slice(0, -1))?.nodes.find(
+        (node) => node.id === step.nodeId,
+      )
+    : undefined;
+  const itemSelection = useIterationItemSelection({
+    projection: discoveredProjection,
+    location,
+    enabled: step?.graphKey === 'body' && owner?.composite?.kind === 'iteration',
+  });
+  const projection =
+    itemSelection.phase === 'ready'
+      ? selectGraphExecutionInstance({
+          selection: itemSelection.selection,
+          executionId: itemSelection.selector.executionId,
+          nodeRuns: runStatus?.nodeRuns ?? [],
+        })
+      : itemSelection.phase === 'unavailable'
+        ? itemSelection
+        : discoveredProjection;
   function refreshExecution() {
     onRefreshRunStatus?.();
     const run = runStatus?.run;
@@ -351,6 +375,11 @@ export const GraphCanvasSession = forwardRef<
           viewportControllerRef={viewportControllerRef}
           runStatus={runStatus}
           projection={projection}
+          executionContext={
+            itemSelection.phase === 'ready' ? (
+              <IterationItemSelector {...itemSelection.selector} />
+            ) : undefined
+          }
           reviewActions={atRoot ? reviewActions : undefined}
           nodeRuns={atRoot ? nodeRuns : undefined}
           onRefreshRunStatus={runStatus?.run ? refreshExecution : undefined}

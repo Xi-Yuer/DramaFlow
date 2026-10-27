@@ -13,7 +13,17 @@ import type { ExecutionTreeLoad } from '../run/execution/use-execution-layer';
 import { acceptExecutionPage } from '../run/execution/execution-browse';
 
 export type GraphExecutionInstance = Exclude<ExecutionTreeParentRef, { type: 'node_run' }>;
-export type GraphExecutionProjection =
+export interface GraphExecutionSelection {
+  workflowRunId: string;
+  definition: { workflowVersionId: string; path: GraphDefinitionPath };
+  parentNodeRunId: string;
+  candidates: readonly {
+    executionId: string;
+    kind: string;
+    metadata: Extract<ExecutionTreeEntry, { type: 'child_execution' }>['metadata'];
+  }[];
+}
+export type GraphExecutionProjection = (
   | {
       phase: 'resolved';
       definition: { workflowVersionId: string; path: GraphDefinitionPath };
@@ -23,7 +33,8 @@ export type GraphExecutionProjection =
   | {
       phase: 'no_execution' | 'loading' | 'ambiguous' | 'version_mismatch' | 'unavailable';
       reason: string;
-    };
+    }
+) & { selection?: GraphExecutionSelection };
 
 // 对象键顺序不影响匹配；仅节点画布位置不属于执行定义。其他字段保守地逐项核对。
 export function executionDefinitionSignature(definition: WorkflowDefinition): string {
@@ -117,6 +128,31 @@ function projectInstance(
   return { phase: 'resolved', instance, definition: { workflowVersionId, path }, nodeRuns };
 }
 
+// UI 只提交真实 executionId；节点状态继续通过同一个 graph instance 投影计算。
+export function selectGraphExecutionInstance({
+  selection,
+  executionId,
+  nodeRuns,
+}: {
+  selection: GraphExecutionSelection;
+  executionId: string;
+  nodeRuns: readonly NodeRun[];
+}): GraphExecutionProjection {
+  if (nodeRuns.some((record) => record.workflowRunId !== selection.workflowRunId))
+    return { phase: 'unavailable', reason: '节点运行记录不属于当前工作流运行。' };
+  if (!selection.candidates.some((candidate) => candidate.executionId === executionId))
+    return { phase: 'ambiguous', reason: '所选子执行不在当前执行实例集合中。', selection };
+  return {
+    ...projectInstance(
+      { type: 'child_execution', id: executionId },
+      nodeRuns,
+      selection.definition.workflowVersionId,
+      selection.definition.path,
+    ),
+    selection,
+  };
+}
+
 // 只有遍历全部分页后才能认定唯一或不存在。cursor 循环、跨 Run / parent 响应均拒绝。
 export async function loadExecutionChildren(
   load: ExecutionTreeLoad,
@@ -187,15 +223,28 @@ export async function resolveNestedGraphExecution(input: {
       return { phase: 'unavailable', reason: '父节点下返回了不匹配的执行记录。' };
     if (children.length === 0)
       return { phase: 'no_execution', reason: '当前父节点 attempt 尚无子执行。' };
+    const selection: GraphExecutionSelection = {
+      workflowRunId: input.run.id,
+      definition: { workflowVersionId: input.version.id, path: [...current.definition.path, step] },
+      parentNodeRunId: attempt.id,
+      candidates: children.flatMap((child) =>
+        child.type === 'child_execution'
+          ? [{ executionId: child.id, kind: child.kind, metadata: child.metadata }]
+          : [],
+      ),
+    };
     if (children.length !== 1)
-      return { phase: 'ambiguous', reason: '该子图有多个执行实例，需要明确选择子执行。' };
+      return {
+        phase: 'ambiguous',
+        reason: '该子图有多个执行实例，需要明确选择子执行。',
+        selection,
+      };
     const child = children[0]!;
-    current = projectInstance(
-      { type: 'child_execution', id: child.id },
-      input.nodeRuns,
-      input.version.id,
-      [...current.definition.path, step],
-    );
+    current = selectGraphExecutionInstance({
+      selection,
+      executionId: child.id,
+      nodeRuns: input.nodeRuns,
+    });
     graph = slot.graph;
   }
   return current;

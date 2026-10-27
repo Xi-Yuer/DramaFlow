@@ -4,9 +4,10 @@ import {
   projectRootGraphExecution,
   resolveNestedGraphExecution,
   loadExecutionChildren,
+  selectGraphExecutionInstance,
 } from '../../../src/features/workflow/runtime/graph-execution-projection';
 import { resolveWorkflowRuntimeNodes } from '../../../src/features/workflow/runtime/runtime-status';
-import { graphExecutionFixture } from '../../fixtures/graph-execution';
+import { graphExecutionFixture, iterationExecutionFixture } from '../../fixtures/graph-execution';
 import { pendingReview } from '../../fixtures/human-review';
 
 function fixture() {
@@ -22,6 +23,48 @@ function fixture() {
 }
 
 describe('通用 Graph Execution Projection', () => {
+  it('通用 executionId 选择解决歧义，只接收当前父 attempt 已返回的真实 ChildExecution', async () => {
+    const f = iterationExecutionFixture();
+    const root = projectRootGraphExecution({ ...f, workflowId: f.run.workflowId });
+    if (root.phase !== 'resolved') throw new Error('测试 root 无效');
+    const discovered = await resolveNestedGraphExecution({
+      ...f,
+      root,
+      load: vi.fn().mockResolvedValue(f.page(f.executions)),
+    });
+    expect(discovered.phase).toBe('ambiguous');
+    if (!discovered.selection) throw new Error('缺少候选执行');
+    expect(discovered.selection.parentNodeRunId).toBe(f.parentRun.id);
+    expect(discovered.selection.candidates.map((candidate) => candidate.executionId)).toEqual([
+      'item-2',
+      'item-0',
+      'item-1',
+    ]);
+    const chosen = selectGraphExecutionInstance({
+      selection: discovered.selection,
+      executionId: 'item-1',
+      nodeRuns: f.nodeRuns,
+    });
+    expect(chosen).toMatchObject({
+      phase: 'resolved',
+      instance: { type: 'child_execution', id: 'item-1' },
+      nodeRuns: [f.itemRuns[2]!],
+    });
+    expect(
+      selectGraphExecutionInstance({
+        selection: discovered.selection,
+        executionId: 'unknown',
+        nodeRuns: f.nodeRuns,
+      }).phase,
+    ).toBe('ambiguous');
+    expect(
+      selectGraphExecutionInstance({
+        selection: discovered.selection,
+        executionId: 'item-1',
+        nodeRuns: [{ ...f.childRun, workflowRunId: 'other-run' }],
+      }).phase,
+    ).toBe('unavailable');
+  });
   it('Root 继续合成 PendingHumanReview，内部同名节点不会继承父图 waiting', async () => {
     const f = fixture();
     f.workflow.nodes.push({ ...f.action });

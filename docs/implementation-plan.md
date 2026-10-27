@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-唯一 Graph Execution Instance 的 Canvas / Inspector 投影进入人工验收：检查 SubWorkflow 下钻后的内部 running / completed / failed、历史 attempt、刷新与切换 Run，以及编辑 Draft 后的版本不匹配提示。已实现边界见 [Graph Execution Projection](architecture.md#graph-execution-projection)。Iteration 多 item 只报告 ambiguous，item selector、Tree 条目跳转画布和多槽位执行定义关联继续留待独立授权；本轮不运行 Browser E2E 或真实 Provider。
+Iteration Item Execution Selector 等待人工浏览器验收：检查乱序 Item 的默认选择、手动切换、Canvas / Inspector 一致性、刷新保留、所选实例消失后的回退，以及完整分页前的 loading。能力与边界见 [Graph Execution Projection](architecture.md#graph-execution-projection)。Root / SubWorkflow 的真实 Run 浏览器验收已确认；本轮不重跑 Browser E2E 或真实 Provider。Tree 条目跳转画布、多槽位关联、Item Retry / Resume 及更多 Iteration UI / Runtime 扩展继续留待独立授权。
 
 Catalog Entry → Composite 的 AI 文本纵向验收等待用户在 Web 完成。测试样例只保留为 test fixture；本机专用项目只创建普通 Draft，人工步骤见[开发指南](development.md#ai-文本-composite-人工验收)。用户检查下钻 Zoom / Grow、选择已有模型、修改内部 prompt / config、返回保存并刷新，再显式 Publish / Run，核对真实输出和 Execution Tree。自动测试使用 fake Provider，不替代真实模型与视觉验收。
 

@@ -1,5 +1,6 @@
 import type { NodeRun, NodeTypeManifest, Project, WorkflowDefinition } from '@dramaflow/contracts';
 import type { OnMove } from '@xyflow/react';
+import type { ReactNode } from 'react';
 import type {
   ModelSelectionIntent,
   ModelSelectionResume,
@@ -50,5 +51,6 @@ export type WorkflowCanvasProps = {
   reviewActions?: HumanReviewActions;
   nodeRuns?: readonly NodeRun[];
   projection?: GraphExecutionProjection;
+  executionContext?: ReactNode;
   onRefreshRunStatus?: () => void;
 };
