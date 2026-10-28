@@ -205,7 +205,7 @@ describe('SubWorkflow 静态语义 / 执行门禁', () => {
       );
     },
   );
-  it('静态可遍历 Iteration → SubWorkflow；Publish 仍拒绝 body composite', () => {
+  it('Iteration → SubWorkflow v1 使用正式 Publish 递归校验', () => {
     const f = fixture();
     const loop: NodeDefinition = {
       id: 'loop',
@@ -229,9 +229,7 @@ describe('SubWorkflow 静态语义 / 执行门禁', () => {
       { nodeId: 'loop', graphKey: 'body' },
       { nodeId: 'call', graphKey: 'graph' },
     ]);
-    expect(() => validateWorkflowForPublish(root, f.registry)).toThrow(
-      code('ITERATION_BODY_CAPABILITY_UNSUPPORTED'),
-    );
+    expect(validateWorkflowForPublish(root, f.registry)).toHaveLength(3);
   });
   it('v1 子图的普通 Action 可以 Publish，节点本身仍没有 execute', () => {
     const f = fixture();

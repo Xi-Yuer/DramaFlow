@@ -269,7 +269,7 @@ it('shared graph runtime 将同一个 childGraphRuns 传入 Iteration Body，不
   expect(f.nodeRuns.getItemRecords()).toEqual([]);
 });
 
-it('Publish / Compiler 仍拒绝 Iteration Body 内 SubWorkflow，不创建执行服务或审计', async () => {
+it('Publish / Compiler 正式接受 Iteration Body 内 SubWorkflow，compile 不创建审计', async () => {
   const f = iterationRuntimeFixture(1);
   f.registry.register(createSubworkflowNodeType());
   f.body.nodes = [
@@ -288,12 +288,8 @@ it('Publish / Compiler 仍拒绝 Iteration Body 内 SubWorkflow，不创建执�
   f.definition.nodes = [f.loop];
   f.definition.edges = [];
   f.definition.outputs = [];
-  const issue = { code: 'ITERATION_BODY_CAPABILITY_UNSUPPORTED', nodeId: 'sub' };
-  expect(() => validateWorkflowForPublish(f.definition, f.registry)).toThrow(
-    expect.objectContaining(issue),
-  );
-  await expect(f.createCompiler().compile(f.definition, f.run)).rejects.toMatchObject(issue);
-  expect(f.createExecutor).not.toHaveBeenCalled();
+  expect(() => validateWorkflowForPublish(f.definition, f.registry)).not.toThrow();
+  await expect(f.createCompiler().compile(f.definition, f.run)).resolves.toBeDefined();
   expect(f.nodeRuns.getRecords()).toEqual([]);
   expect(f.nodeRuns.getItemRecords()).toEqual([]);
 });

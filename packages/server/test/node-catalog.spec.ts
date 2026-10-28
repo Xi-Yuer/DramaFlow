@@ -21,13 +21,13 @@ function registry() {
   ]);
 }
 describe('独立产品 NodeCatalog', () => {
-  it('新增 Runtime 注册不自动暴露；正式 format / composite 条目为 internal', () => {
+  it('新增 Runtime 注册不自动暴露；正式子流程 Entry 可创建，format / iteration 保持 internal', () => {
     const runtime = registry();
     expect(new NodeCatalog([], runtime).list()).toEqual([]);
     const entries = new NodeCatalog(createBuiltinNodeCatalogEntries(), runtime).list();
     expect(
       entries.filter((entry) => isNodeCatalogEntryVisible(entry)).map(({ target }) => target.type),
-    ).toEqual(['ai.text_generate', 'flow.human_review']);
+    ).toEqual(['ai.text_generate', 'flow.subworkflow', 'flow.human_review']);
     expect(entries.find(({ target }) => target.type === 'data.format_text')?.exposure).toBe(
       'internal',
     );

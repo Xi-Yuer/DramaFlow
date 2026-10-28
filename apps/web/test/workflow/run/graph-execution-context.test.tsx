@@ -1,4 +1,8 @@
 // @vitest-environment happy-dom
+import {
+  NodeRegistry,
+  validateWorkflowForPublish,
+} from '../../../../../packages/workflow/src/index';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App, ConfigProvider } from 'antd';
 import {
@@ -461,6 +465,23 @@ describe('祖先 Item selection 的更深层 projection', () => {
 
   it('Item 2 → SubWorkflow 保持真实 ChildExecution，切换祖先后 Canvas / Inspector 不串同名 action', async () => {
     const f = mountIterationItems(undefined, true);
+    const inner = f.workflow.nodes[0]!.composite;
+    if (inner?.kind !== 'iteration' || inner.body.nodes[0]?.composite?.kind !== 'subworkflow')
+      throw new Error('缺少正式 graph');
+    inner.body.nodes[0].composite.graph.nodes[0]!.config.modelConfigurationId =
+      '00000000-0000-4000-8000-000000000001';
+    f.version.definition = structuredClone(f.workflow);
+    f.cache.setQueryData(workflowKeys.version(f.version.id), f.version);
+    expect(() =>
+      validateWorkflowForPublish(
+        f.workflow,
+        new NodeRegistry([
+          createIterationNodeType(),
+          createSubworkflowNodeType(),
+          createTextGenerationNodeType(),
+        ]),
+      ),
+    ).not.toThrow();
     const action = f.nodeRuns.find((record) => record.childExecutionId === 'sub-item-1')!;
     action.attempt = 3;
     f.nodeRuns.push({

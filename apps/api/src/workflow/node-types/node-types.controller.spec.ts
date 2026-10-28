@@ -182,15 +182,15 @@ describe('节点类型目录 API', () => {
       ['text-formatting', 'data.format_text', 'internal'],
       ['conditional-branch', 'flow.if', 'advanced'],
       ['iteration', 'flow.iteration', 'internal'],
-      ['subworkflow', 'flow.subworkflow', 'internal'],
+      ['subworkflow', 'flow.subworkflow', 'public'],
       ['human-review', 'flow.human_review', 'public'],
     ]);
     expect(entries.filter((entry) => isNodeCatalogEntryVisible(entry)).map(({ id }) => id)).toEqual(
-      ['text-generation', 'human-review'],
+      ['text-generation', 'subworkflow', 'human-review'],
     );
     expect(
       entries.filter((entry) => isNodeCatalogEntryVisible(entry, 'advanced')).map(({ id }) => id),
-    ).toEqual(['text-generation', 'conditional-branch', 'human-review']);
+    ).toEqual(['text-generation', 'conditional-branch', 'subworkflow', 'human-review']);
     expect(entries.every((entry) => entry.creation !== undefined)).toBe(true);
   });
 

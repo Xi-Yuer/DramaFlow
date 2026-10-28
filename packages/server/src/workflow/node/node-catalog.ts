@@ -72,13 +72,18 @@ export function createBuiltinNodeCatalogEntries(): NodeCatalogEntry[] {
       id: 'subworkflow',
       metadata: {
         name: '子流程',
-        description: '在当前版本内固定调用一次普通 Action 子图',
+        description: '封装可编辑的 Action DAG，声明输入输出后在当前版本内调用',
         icon: 'flow',
       },
       category: 'advanced',
-      exposure: 'internal',
+      exposure: 'public',
       target: { type: 'flow.subworkflow', version: 1 },
-      creation: {},
+      creation: {
+        composite: {
+          kind: 'subworkflow',
+          graph: { inputs: [], nodes: [], edges: [], outputs: [] },
+        },
+      },
     },
     {
       id: 'human-review',

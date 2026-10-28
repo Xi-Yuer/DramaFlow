@@ -46,7 +46,8 @@ import {
   enterNestedGraph,
   type GraphNavigationState,
   graphLocationKey,
-  isIterationBodyAction,
+  isIterationBodyNode,
+  isOrdinaryGraphAction,
   jumpToGraph,
   navigationCrumbs,
   patchGraphView,
@@ -362,7 +363,13 @@ export const GraphCanvasSession = forwardRef<
             if (atRoot) onRootViewportChange(event, viewport);
           }}
           locationName={atRoot ? 'root' : location.at(-1)!.graphKey}
-          manifestFilter={location.at(-1)?.graphKey === 'body' ? isIterationBodyAction : undefined}
+          manifestFilter={
+            location.at(-1)?.graphKey === 'body'
+              ? isIterationBodyNode
+              : location.at(-1)?.graphKey === 'graph'
+                ? isOrdinaryGraphAction
+                : undefined
+          }
           onEnterGraph={enter}
           navigation={
             atRoot

@@ -33,10 +33,10 @@ Canvas 小范围视觉优化待人工验收：运行焦点、人工等待、失�
 ### 后续边界
 
 - ChildExecution 是父 NodeRun attempt 的子图调用身份，不等于已建设覆盖 root / 所有 occurrence 的 ExecutionScope 表。是否需要独立 scope、关系型定义定位和 occurrence 直接归属，应在具体调用需求下决定，不叠加互斥归属字段。
-- SubWorkflow v1 复用当前版本内的内嵌 Graph Contract 与通用 ChildExecution，不创建新的 WorkflowRun / Job，也不解除 Iteration body capability gate。子图 Candidate 与 If 仍不开放。
+- SubWorkflow v1 复用当前版本内的内嵌 Graph Contract 与通用 ChildExecution，不创建新的 WorkflowRun / Job，Iteration Body 仅额外准入 flow.subworkflow@1。子图 Candidate 与 If 仍不开放。
 - Retry / Resume、子图 Human Review、跨版本或跨项目子图调用与权限解析均未开放；不能从 failed / running 记录自动重放执行。
 - 升级部署先停止旧写入器，迁移与 API / Worker 同步上线。checkpoint 中保留的父 attempt、child ID 与 scope 应继续复用；没有这些真实身份的旧快照不靠 index 猜测回填。
 
 ### 下一步最小独立实施任务
 
-Iteration → SubWorkflow 继续保持 Publish / Compiler 与 Picker 门禁；[组合执行验证边界](architecture.md#scoped-graph-compilation)不能替代正式准入与产品浏览器验收。Web 祖先 Item selection 传递进入交付验收；后续独立评审 SubWorkflow v1 白名单准入与真实产品浏览器验收；现有组合执行和持久化验证边界见当前架构，不据此自动开放 gate。跨版本或跨项目调用、Batch、单 item Retry / Resume 继续另行授权。AI 文本样例验收后保留为 test fixture，不恢复 production development Entry；如需正式通用产品 Entry，另行确认产品需求。
+Iteration → SubWorkflow v1 → Action DAG 正式准入与 Web 创建路径进入交付验收；[组合执行验证边界](architecture.md#scoped-graph-compilation)及自动测试不能替代真实产品浏览器验收。后续仅进行人工验收；现有组合执行和持久化验证边界见当前架构，其他 Composite 组合 gate 保持关闭。跨版本或跨项目调用、Batch、单 item Retry / Resume 继续另行授权。AI 文本样例验收后保留为 test fixture，不恢复 production development Entry；如需正式通用产品 Entry，另行确认产品需求。

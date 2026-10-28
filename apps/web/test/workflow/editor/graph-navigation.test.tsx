@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { createBuiltinNodeCatalogEntries } from '../../../../../packages/server/src/workflow/node/node-catalog';
 import type { NodeCatalogEntry } from '@dramaflow/contracts';
 import { createTestCatalogEntry } from '../../fixtures/node-catalog';
 import { nodeCatalogKeys } from '../../../src/features/workflow/node-catalog/node-catalog-api';
@@ -11,8 +12,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AnyType,
   StringType,
-  nodeTypeManifestSchema,
   workflowDraftDefinitionSchema,
+  workflowResponseSchema,
+  nodeTypeManifestSchema,
   type NodeRun,
   type NodeTypeManifest,
   type WorkflowDefinition,
@@ -27,7 +29,7 @@ import {
   editLocatedGraph,
   enterNestedGraph,
   graphLocationKey,
-  isIterationBodyAction,
+  isIterationBodyNode,
   jumpToGraph,
   patchGraphView,
   popGraph,
@@ -430,11 +432,12 @@ describe('图导航模型', () => {
     ]);
   });
 
-  it('Body Runtime 能力过滤只保留没有控制出口的 Action', () => {
-    expect(manifests.filter(isIterationBodyAction).map((item) => item.type)).toEqual([
+  it('Body 能力过滤精确加入 SubWorkflow v1', () => {
+    expect(manifests.filter(isIterationBodyNode).map((item) => item.type)).toEqual([
       'test.format',
       'ai.text_generate',
       'data.format_text',
+      'flow.subworkflow',
     ]);
   });
 });
@@ -937,4 +940,53 @@ describe('空间化进入与返回', () => {
     expect(document.querySelector('[data-graph-location="root"]')).toBeTruthy();
     window.matchMedia = original;
   });
+});
+
+it('正式 Body Picker → 子流程 Entry → graph 编辑 → Draft save/read', async () => {
+  const entries = createBuiltinNodeCatalogEntries();
+  const view = setup(workflow(), entries);
+  clickNode('iterate');
+  fireEvent.click(screen.getByRole('button', { name: '编辑 Body' }));
+  fireEvent.click(screen.getByRole('button', { name: '添加节点' }));
+  fireEvent.click(await screen.findByRole('button', { name: '添加 子流程 · v1' }));
+  const created = bodyOf(view.definition()).nodes.find((node) => node.type === 'flow.subworkflow')!;
+  expect(created.composite).toEqual({
+    kind: 'subworkflow',
+    graph: { inputs: [], nodes: [], edges: [], outputs: [] },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '进入' }));
+  expect(document.querySelector('[data-graph-location="graph"]')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '添加节点' }));
+  expect(screen.queryByRole('button', { name: '添加 子流程 · v1' })).toBeNull();
+  expect(screen.queryByRole('button', { name: '添加 人工审批 · v1' })).toBeNull();
+  fireEvent.click(await screen.findByRole('button', { name: '添加 文本生成 · v1' }));
+  const snapshot = workflowDraftDefinitionSchema.parse(
+    JSON.parse(JSON.stringify(view.definition())),
+  );
+  const response = workflowResponseSchema.parse({
+    id: 'workflow',
+    projectId: '00000000-0000-4000-8000-000000000001',
+    name: '默认工作流',
+    revision: 1,
+    draft: snapshot,
+    createdAt: '2026-10-28T00:00:00.000Z',
+    updatedAt: '2026-10-28T00:00:00.000Z',
+  });
+  let state = workflowDraftReducer(createWorkflowDraftState(response), {
+    type: 'save-succeeded',
+    revision: 2,
+    snapshot,
+  });
+  state = workflowDraftReducer(state, {
+    type: 'reload-succeeded',
+    workflow: { ...response, revision: 2, draft: snapshot },
+  });
+  const location = [
+    { nodeId: 'iterate', graphKey: 'body' as const },
+    { nodeId: created.id, graphKey: 'graph' as const },
+  ];
+  expect(readLocatedGraph(state.definition, location)?.nodes[0]?.type).toBe('ai.text_generate');
+  expect(entries.find((entry) => entry.id === 'subworkflow')?.creation.composite).toEqual(
+    created.composite,
+  );
 });

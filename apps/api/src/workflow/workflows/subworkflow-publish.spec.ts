@@ -170,31 +170,21 @@ describe('SubWorkflow Draft / 正式 Publish 静态边界', () => {
     );
     expect(f.createVersion).toHaveBeenCalledOnce();
   });
-  it('Iteration body 内的 SubWorkflow 在模型授权后仍拒绝发布', async () => {
+  it('Iteration body 内的 SubWorkflow 在模型授权后正式发布', async () => {
     const f = fixture(true);
     await expect(
       f.service.publish('owner', {
         workflowId: 'workflow',
         expectedRevision: 1,
       }),
-    ).rejects.toMatchObject({
-      response: {
-        code: 'WORKFLOW_PUBLISH_VALIDATION_FAILED',
-        issues: [
-          expect.objectContaining({
-            code: 'ITERATION_BODY_CAPABILITY_UNSUPPORTED',
-            nodeId: 'call',
-          }),
-        ],
-      },
-    });
+    ).resolves.toMatchObject({ id: 'version', definition: f.draft });
     expect(f.assertModel).toHaveBeenCalledExactlyOnceWith(
       f.tx,
       'owner',
       f.modelConfigurationId,
       'text.generate',
     );
-    expect(f.createVersion).not.toHaveBeenCalled();
+    expect(f.createVersion).toHaveBeenCalledOnce();
   });
   it('子图 Candidate 在发布时拒绝，不创建版本', async () => {
     const f = fixture();

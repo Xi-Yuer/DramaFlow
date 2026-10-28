@@ -404,7 +404,7 @@ describe('Iteration → SubWorkflow 原生组合 checkpoint 与身份', () => {
     expect(children).toHaveLength(6);
   });
 
-  it('maxConcurrency=1 在审计与 Action 前 fail-fast；正式 Publish / Compiler 仍拒绝该组合', async () => {
+  it('正式 Publish / Compiler 接受组合，maxConcurrency=1 仍在审计前 fail-fast', async () => {
     const f = fixture();
     await expect(
       f.compile().invoke(f.initial(), { ...f.config, maxConcurrency: 1 }),
@@ -412,10 +412,66 @@ describe('Iteration → SubWorkflow 原生组合 checkpoint 与身份', () => {
     expect(f.nodeRuns.getRecords()).toEqual([]);
     expect(f.nodeRuns.getItemRecords()).toEqual([]);
     expect(f.execute).not.toHaveBeenCalled();
-    const issue = { code: 'ITERATION_BODY_CAPABILITY_UNSUPPORTED', nodeId: 'sub' };
+    expect(() => validateWorkflowForPublish(f.definition, f.registry)).not.toThrow();
+    const compiled = await f.createCompiler().compile(f.definition, f.run);
+    const state = await compiled.invoke(f.initial(), f.config);
+    expect(
+      new DefaultWorkflowOutputResolver().resolve(f.definition, workflowStateSchema.parse(state)),
+    ).toMatchObject({ result: { value: expected } });
+    hierarchy(f);
+  });
+});
+
+it.each(['flow.iteration', 'flow.subworkflow', 'flow.human_review', 'flow.if'])(
+  '正式组合内部仍递归拒绝 %s',
+  async (type) => {
+    const f = fixture();
+    f.child.nodes[0]!.type = type;
+    const issue = {
+      code: 'SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED',
+      definitionPath: [
+        { nodeId: 'iterate', graphKey: 'body' },
+        { nodeId: 'sub', graphKey: 'graph' },
+      ],
+    };
     expect(() => validateWorkflowForPublish(f.definition, f.registry)).toThrow(
       expect.objectContaining(issue),
     );
     await expect(f.createCompiler().compile(f.definition, f.run)).rejects.toMatchObject(issue);
+    expect(f.nodeRuns.getRecords()).toEqual([]);
+  },
+);
+it('Body gate 不放行 SubWorkflow 的其他版本，子图 Candidate 仍被拒绝', async () => {
+  const f = fixture();
+  const sub = f.registry.get('flow.subworkflow', 1);
+  f.registry.register({
+    ...sub,
+    manifest: { ...sub.manifest, version: 2, portDerivation: undefined },
+  });
+  const composite = f.parent.composite;
+  delete f.parent.composite;
+  f.parent.typeVersion = 2;
+  expect(() => validateWorkflowForPublish(f.definition, f.registry)).toThrow(
+    expect.objectContaining({ code: 'ITERATION_BODY_CAPABILITY_UNSUPPORTED' }),
+  );
+  await expect(f.createCompiler().compile(f.definition, f.run)).rejects.toMatchObject({
+    code: 'ITERATION_BODY_CAPABILITY_UNSUPPORTED',
+  });
+  f.parent.typeVersion = 1;
+  f.parent.composite = composite;
+  f.child.nodes.push({ ...structuredClone(f.child.nodes[0]!), id: 'other' });
+  f.child.nodes.push({ ...structuredClone(f.child.nodes[0]!), id: 'another' });
+  f.child.nodes[0]!.inputs.text = {
+    type: 'candidate',
+    sources: [
+      { type: 'node_output', nodeId: 'other', portKey: 'text' },
+      { type: 'node_output', nodeId: 'another', portKey: 'text' },
+    ],
+  };
+  expect(() => validateWorkflowForPublish(f.definition, f.registry)).toThrow(
+    expect.objectContaining({ code: 'SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED' }),
+  );
+  await expect(f.createCompiler().compile(f.definition, f.run)).rejects.toMatchObject({
+    code: 'SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED',
   });
 });

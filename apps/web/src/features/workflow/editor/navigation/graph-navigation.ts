@@ -1,5 +1,6 @@
 import {
   nestedGraphSlots,
+  isSubworkflowNodeManifest,
   type GraphDefinition,
   type GraphDefinitionPath,
   type NodeDefinition,
@@ -211,7 +212,11 @@ export function navigationCrumbs(
   });
 }
 
-// 与 Publish 的 iteration body v1 可见条件一致：普通 Action，且没有控制出口。Web 看不到 execute。
-export function isIterationBodyAction(manifest: NodeTypeManifest): boolean {
+// 与 Publish 的 iteration body v1 可见条件一致：普通 Action（无控制出口）或精确 SubWorkflow v1。Web 看不到 execute。
+export function isIterationBodyNode(manifest: NodeTypeManifest): boolean {
+  return isSubworkflowNodeManifest(manifest) || isOrdinaryGraphAction(manifest);
+}
+
+export function isOrdinaryGraphAction(manifest: NodeTypeManifest): boolean {
   return manifest.executionKind === 'action' && (manifest.controlOutputs?.length ?? 0) === 0;
 }

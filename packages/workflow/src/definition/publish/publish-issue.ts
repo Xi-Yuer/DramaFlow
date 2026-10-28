@@ -58,6 +58,32 @@ export type WorkflowPublishIssueCode =
   | 'OUTPUT_STORAGE_UNSUPPORTED'
   | IfCapabilityIssueCode;
 
+const publishIssueMessages = new Map<WorkflowPublishIssueCode, string>([
+  ['SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED', 'SubWorkflow v1 子图仅允许普通 Action DAG'],
+  [
+    'SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED',
+    'SubWorkflow v1 子图不支持 Candidate；它需要已证明互斥的控制分支',
+  ],
+  [
+    'ITERATION_BODY_CAPABILITY_UNSUPPORTED',
+    'Iteration v1 body 仅允许普通 Action 或 flow.subworkflow@1',
+  ],
+  ['ITERATION_BODY_EMPTY', 'Iteration body 至少需要一个 Action 节点'],
+  [
+    'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED',
+    '当前 Human Review 仅支持分支区域外的串行审核，不支持并行待审批',
+  ],
+  ['NODE_EXECUTION_KIND_UNSUPPORTED', '当前 Compiler 尚不支持该节点执行种类'],
+]);
+
+const DEFAULT_PUBLISH_ISSUE_MESSAGE = '工作流不满足静态发布条件';
+
+function publishIssueMessage(code: WorkflowPublishIssueCode): string {
+  return (
+    publishIssueMessages.get(code) ?? ifCapabilityMessage(code) ?? DEFAULT_PUBLISH_ISSUE_MESSAGE
+  );
+}
+
 export class WorkflowPublishValidationError extends Error {
   constructor(
     readonly code: WorkflowPublishIssueCode,
@@ -65,24 +91,7 @@ export class WorkflowPublishValidationError extends Error {
     readonly portKey?: string,
     readonly definitionPath?: GraphDefinitionPath,
   ) {
-    super(
-      (code === 'SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED'
-        ? 'SubWorkflow v1 子图仅允许普通 Action DAG'
-        : code === 'SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED'
-          ? 'SubWorkflow v1 子图不支持 Candidate；它需要已证明互斥的控制分支'
-          : undefined) ??
-        ifCapabilityMessage(code) ??
-        (code === 'ITERATION_BODY_CAPABILITY_UNSUPPORTED'
-          ? 'Iteration v1 body 仅允许普通 Action，尚不支持 control / interaction / composite'
-          : code === 'ITERATION_BODY_EMPTY'
-            ? 'Iteration body 至少需要一个 Action 节点'
-            : undefined) ??
-        (code === 'HUMAN_REVIEW_TOPOLOGY_UNSUPPORTED'
-          ? '当前 Human Review 仅支持分支区域外的串行审核，不支持并行待审批'
-          : code === 'NODE_EXECUTION_KIND_UNSUPPORTED'
-            ? '当前 Compiler 尚不支持该节点执行种类'
-            : '工作流不满足静态发布条件'),
-    );
+    super(publishIssueMessage(code));
     this.name = 'WorkflowPublishValidationError';
   }
 }

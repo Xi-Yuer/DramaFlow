@@ -1,5 +1,6 @@
 import {
   graphDefinitionSchema,
+  isSubworkflowNodeManifest,
   nestedGraphSlots,
   type GraphDefinition,
 } from '@dramaflow/contracts';
@@ -94,6 +95,7 @@ function assertGraphExecutionKinds(
     }
     if (
       context.capability === 'iteration_body_v1' &&
+      !isSubworkflowNodeManifest(declaration.manifest) &&
       (declaration.manifest.executionKind !== 'action' ||
         !declaration.execute ||
         (declaration.manifest.controlOutputs?.length ?? 0) > 0)

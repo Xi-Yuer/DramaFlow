@@ -4,6 +4,7 @@
 
 ## 交互边界
 
+- Iteration Body Picker 允许普通 Action 与精确 flow.subworkflow@1 的可见 Catalog Entry；SubWorkflow graph Picker 仅允许普通 Action。正式“子流程”Entry 创建可编辑空 graph，仍走正常下钻、Draft 保存与刷新。
 - 节点创建读取独立 JSON Catalog Entry，端口和控件读取精确 target Manifest；config[].ui / ui.inputs 指定控件，不重复维护数值范围、默认值或厂商列表。Data Handle 使用端口 key，Control Handle 使用 control:source / control:target，命名出口追加 Manifest 的 key；连接语义见 [Node](node-model.md)。
 - 新 Data Edge 替换已有静态输入须确认，取消保持定义不变；已有节点输出来源时明确选择替换或添加候选。候选以绑定投影多条数据线，共用输入 Handle，不写入真实 edges；详细能力见[当前架构](architecture.md#react-flow-数据适配)。selected / dragging / measured 不持久化。保存失败不得显示已保存，短暂会话检查故障保留 Editor，明确拒绝访问则隐藏内容。
 - 模型选择只写 modelConfigurationId，配置从 Schema / Catalog 得到；不静默替换失效配置。供应商配置意图只在当前界面保留，取消不继续。Secret 不回填、不进 Form / Query / 浏览器存储，请求发出及退出表单时清空。

@@ -28,7 +28,7 @@ config 用 string / number / boolean / select 字段数组；condition 字段只
 
 [nestedGraphSlots / walkGraphDefinitions](../packages/contracts/src/graph/traversal.ts)统一访问 root、Iteration.body 与 SubWorkflow.graph，返回 nodeId / graphKey 静态路径；不解析 scope、执行序号或 checkpoint namespace。Definition schema 与静态语义递归检查局部引用、DAG、输入输出类型、节点版本和配置；发布事务对返回的全部后代执行现有 capability / 模型权限检查。
 
-Draft 允许保存尚不可执行的 SubWorkflow，配置字段边界仍递归生效。完整 Definition 静态校验不代表执行准入。v1 Publish 允许子图内普通 Action、Action 链、parallel + ALL join、DataEdge、workflow_input、constant、Template（包括依赖多个上游 Action 输出）和普通 Graph 输出。拒绝 Candidate 绑定、If、Human Review、Iteration、嵌套 SubWorkflow，以及其他 control / composite / interaction。Candidate 返回 SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED；其余不允许的节点返回 SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED。Iteration body 内的 SubWorkflow 仍报 ITERATION_BODY_CAPABILITY_UNSUPPORTED。父节点输入继续使用既有绑定，不在子图内放宽 Candidate。运行时固定调用一次，checkpoint 复用同一父 attempt、child ID 与 scope。已有 SubWorkflow 可通过 Web nested graph 编辑入口进入；Catalog 可见性不改变该入口。
+Draft 允许保存尚不可执行的 SubWorkflow，配置字段边界仍递归生效。完整 Definition 静态校验不代表执行准入。v1 Publish 允许子图内普通 Action、Action 链、parallel + ALL join、DataEdge、workflow_input、constant、Template（包括依赖多个上游 Action 输出）和普通 Graph 输出。拒绝 Candidate 绑定、If、Human Review、Iteration、嵌套 SubWorkflow，以及其他 control / composite / interaction。Candidate 返回 SUBWORKFLOW_GRAPH_CANDIDATE_UNSUPPORTED；其余不允许的节点返回 SUBWORKFLOW_GRAPH_CAPABILITY_UNSUPPORTED。Iteration body 允许精确的 flow.subworkflow@1，其 graph 继续递归执行同一 v1 门禁。父节点输入继续使用既有绑定，不在子图内放宽 Candidate。运行时固定调用一次，checkpoint 复用同一父 attempt、child ID 与 scope。已有 SubWorkflow 可通过 Web nested graph 编辑入口进入；Catalog 可见性不改变该入口。
 
 ## Iteration Composite Contract
 
@@ -40,7 +40,7 @@ body 使用同一 GraphDefinition / NodeDefinition / DataEdge / ControlEdge / �
 
 Draft 可保存缺少 composite、空 body、未完成映射及既有 sources=[] 输出编辑态；结构、局部引用与联合 DAG 仍遵循原 Graph Draft 校验。Publish 检查完整映射、已知元素类型（不接受顶层 any）、必填来源、有效非空 Action body、类型及输出。body 可不声明输出，遵循既有 Graph outputs=[] 语义。
 
-v1 Publish 仅允许 body 内普通 Action；拒绝 nested Iteration、其他 composite、If、Human Review、其他 control / interaction，以及带命名控制出口的特殊 Action。Contract 的递归表达能力不代表 Publish 或 Runtime 放行。Candidate 等表达继续受既有互斥来源证明约束，不因为进入 body 放松。
+v1 Publish 允许 body 内普通 Action 与精确 flow.subworkflow@1；后者的 graph 仅允许普通 Action DAG。拒绝 nested Iteration、其他版本或类型的 composite、If、Human Review、其他 control / interaction，以及带命名控制出口的特殊 Action。Contract 的递归表达能力不代表 Publish 或 Runtime 放行。Candidate 等表达继续受既有互斥来源证明约束，不因为进入 body 放松。
 
 空 items 合法，不调用 body，并为每个声明输出产生对应类型的空集合；当前由独立 Iteration Strategy 执行，空集合完成父 NodeRun，不创建 ChildExecution，详见[当前架构](architecture.md#child-execution-持久化)。current_index 是固定 snapshot 的从零位置，不是业务 itemKey；Definition 不含 occurrence、scope 或 LangGraph 身份。
 
@@ -97,3 +97,12 @@ If CompilationStrategy 不经 Action NodeExecutor，不提供 matched Data Outpu
 ## 视频领域能力与厂商边界
 
 领域类型可以专业化。用户选择 Provider，对应的受信任插件执行能力。图片、视频、语音可以使用各自插件，文本插件和 Vercel AI SDK 只负责当前的 `text.generate`。这些媒体能力、Asset、简单 If 之外的控制 / 交互执行与通用节点配置 UI 尚未交付，范围见[实施方案](implementation-plan.md)。
+
+## Composite capability matrix
+
+| 位置                                   | 正式允许                                                                                         | 继续拒绝                                                                                    |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| Iteration Body                         | 普通 Action、flow.subworkflow@1                                                                  | Iteration、If、Human Review、其他 Composite / control / interaction                         |
+| SubWorkflow v1 graph（含 Body 内调用） | 普通 Action DAG、链、parallel + ALL join、DataEdge、workflow_input、constant、Template、声明输出 | SubWorkflow、Iteration、Human Review、If、Candidate、其他 Composite / control / interaction |
+
+正式组合边界为 `Iteration → SubWorkflow v1 → Action DAG`，不是任意递归 Composite。Publish 与 Compiler 共用精确类型 / 版本门禁；普通 Picker 的“子流程”产品 Entry 显式初始化空 graph，用户再配置输入、Action 与输出。空 Draft 可以保存，不代表已满足 Publish 的输入与模型配置要求。没有 Shared SubWorkflow、Batch、Item Retry、partial success 或新的并发预算。
