@@ -7,7 +7,7 @@ import {
   type WorkflowRun,
   type WorkflowRunError,
 } from '@dramaflow/contracts';
-import { Command, isGraphBubbleUp, isInterrupted, type StateSnapshot } from '@langchain/langgraph';
+import { Command, isInterrupted, type StateSnapshot } from '@langchain/langgraph';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { z } from 'zod';
 import { IterationRuntimeCompatibilityError } from '../../compiler/iteration/compatibility.js';
@@ -21,6 +21,7 @@ import { createWorkflowRunConfig } from './config.js';
 import type { WorkflowOutputResolver } from '../../runtime/state/workflow-output-resolver.js';
 import type { WorkflowRunRepository } from '../repository/workflow-run-repository.js';
 import { WorkflowRunNotPendingError, WorkflowRunNotWaitingError } from './workflow-run-error.js';
+import { classifyGraphExecutionFailure } from '../../runtime/node/node-execution-error.js';
 import type { ResumeWorkflowRunInput } from '../submission/workflow-run-submission.js';
 import {
   loadWorkflowVersion,
@@ -249,7 +250,7 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
   }
 
   private async fail(run: WorkflowRun, stage: WorkflowRunStage, error: unknown): Promise<never> {
-    if (error !== null && isGraphBubbleUp(error)) throw error;
+    if (classifyGraphExecutionFailure(error).kind === 'control') throw error;
     try {
       await this.runs.markFailed(run.id, toWorkflowRunError(stage, error));
     } catch (recordingError) {

@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { ChildExecution, NodeOccurrence, NodeRun } from '@dramaflow/contracts';
+import type { ChildExecution, NodeOccurrence, NodeRun, NodeRunError } from '@dramaflow/contracts';
 import type {
   CreateNodeRunInput,
   ChildExecutionRepository,
@@ -152,31 +152,30 @@ export function auditedNodeRunRepositoryFixture() {
       row.status = 'completed';
       row.completedAt = '2026-10-26T00:00:02.000Z';
     });
+  async function failChild(id: string, error: NodeRunError, failParent: boolean) {
+    const row = items.get(id);
+    if (!row || row.status === 'completed') throw new Error('Child 不是 running / failed');
+    if (row.status === 'running') {
+      row.status = 'failed';
+      row.error = structuredClone(error);
+      row.completedAt = '2026-10-26T00:00:02.000Z';
+    }
+    if (failParent) {
+      const parent = records.get(row.parentNodeRunId)!;
+      if (parent.status === 'running') await repository.markFailed(parent.id, error);
+    }
+  }
   const markIterationItemFailed = vi
     .fn<IterationRunRepository['markIterationItemFailed']>()
     .mockImplementation(async (id, error) => {
-      const row = items.get(id);
-      if (!row || row.status === 'completed') throw new Error('Item 不是 running / failed');
-      if (row.status === 'running') {
-        row.status = 'failed';
-        row.error = structuredClone(error);
-        row.completedAt = '2026-10-26T00:00:02.000Z';
-      }
-      const parent = records.get(row.parentNodeRunId)!;
-      if (parent.status === 'running') await repository.markFailed(parent.id, error);
+      if (items.get(id)?.kind !== 'iteration_item') throw new Error('Iteration helper kind 无效');
+      await failChild(id, error, true);
     });
   return {
     ...repository,
     markChildExecutionAndParentFailed: vi
       .fn<ChildExecutionRepository['markChildExecutionAndParentFailed']>()
-      .mockImplementation(async (id, error) => {
-        const child = items.get(id)!;
-        child.status = 'failed';
-        child.error = structuredClone(error);
-        child.completedAt = '2026-10-26T00:00:02.000Z';
-        const parent = records.get(child.parentNodeRunId)!;
-        if (parent.status === 'running') await repository.markFailed(parent.id, error);
-      }),
+      .mockImplementation(async (id, error) => failChild(id, error, true)),
     getOrCreateChildExecutionRunning,
     getChildExecutionById: vi
       .fn<ChildExecutionRepository['getChildExecutionById']>()
@@ -184,11 +183,7 @@ export function auditedNodeRunRepositoryFixture() {
     markChildExecutionCompleted: markIterationItemCompleted,
     markChildExecutionFailed: vi
       .fn<ChildExecutionRepository['markChildExecutionFailed']>()
-      .mockImplementation(async (id, error) => {
-        const row = items.get(id)!;
-        row.status = 'failed';
-        row.error = error;
-      }),
+      .mockImplementation(async (id, error) => failChild(id, error, false)),
     getOrCreateIterationItemRunning,
     markIterationItemCompleted,
     markIterationItemFailed,

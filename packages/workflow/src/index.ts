@@ -27,6 +27,7 @@ export * from './runtime/node/node-executor.js';
 export * from './runtime/node/node-execution-error.js';
 export * from './runtime/execution/node-run-repository.js';
 export * from './runtime/execution/child-execution-repository.js';
+export * from './runtime/execution/composite-failure-boundary.js';
 export * from './runtime/state/workflow-output-resolver.js';
 export * from './run/repository/workflow-run-repository.js';
 export * from './run/repository/workflow-version-repository.js';

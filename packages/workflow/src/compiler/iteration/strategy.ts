@@ -22,13 +22,8 @@ import {
 import { NodeRegistry } from '../../node/registry/registry.js';
 import type { IterationRunRepository } from './execution-repository.js';
 import type { ChildGraphRunRepository } from '../../runtime/execution/child-execution-repository.js';
-import {
-  failNodeRun,
-  ChildExecutionRecordingError,
-  NodeExecutionError,
-  NodeRunRecordingError,
-  toNodeRunError,
-} from '../../runtime/node/node-execution-error.js';
+import { failNodeRun, NodeExecutionError } from '../../runtime/node/node-execution-error.js';
+import { failCompositeExecution } from '../../runtime/execution/composite-failure-boundary.js';
 import { deriveChildScope } from '../../runtime/execution/execution-scope.js';
 import {
   createLocalGraphInvocation,
@@ -42,6 +37,7 @@ import {
   RuntimeCollectionSnapshot,
 } from '../../runtime/values/runtime-collection.js';
 import { compileGraph } from '../graph/graph-compiler.js';
+import type { GraphNodeRegistrationOptions } from '../graph/graph-compiler.js';
 import {
   type GraphCompilationPlan,
   type GraphStrategyStructure,
@@ -78,6 +74,7 @@ export interface IterationCompilationContext {
   addNode(
     id: string,
     node: RunnableInterface<WorkflowState, WorkflowStateUpdate, LangGraphRunnableConfig>,
+    options?: GraphNodeRegistrationOptions,
   ): void;
 }
 export class IterationNodeCompilationStrategy implements NodeCompilationStrategy<IterationCompilationContext> {
@@ -115,16 +112,10 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
     const itemId = (state: typeof ItemState.State) =>
       workflowIdentifierSchema.parse(state[ITEM_RUN]);
     // 原生控制流与仓储故障交回 LangGraph；不把未完成 / 受理不明记成业务失败。
-    const failItem = async (state: typeof ItemState.State, cause: unknown): Promise<never> => {
-      if (cause instanceof NodeExecutionError && !(cause instanceof NodeRunRecordingError)) {
-        try {
-          await runs.markIterationItemFailed(itemId(state), toNodeRunError(cause));
-        } catch (recordingError) {
-          throw new ChildExecutionRecordingError(itemId(state), cause, recordingError);
-        }
-      }
-      throw cause;
-    };
+    const failItem = (state: typeof ItemState.State, cause: unknown): Promise<never> =>
+      failCompositeExecution(itemId(state), cause, (error) =>
+        runs.markIterationItemFailed(itemId(state), error),
+      );
     compileGraph<typeof ItemState.State>({
       plan: context.bodyCompilation,
       registry,
@@ -150,13 +141,7 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
           itemGraph.addConditionalEdges(id, route, paths);
         },
       },
-      wrapNode: (execute) => async (state, config) => {
-        try {
-          return await execute(state, config);
-        } catch (cause) {
-          return failItem(state, cause);
-        }
-      },
+      failureBoundary: failItem,
       entry: {
         name: '__dramaflow_item_start',
         execute: async (state) => {
@@ -350,6 +335,7 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
     iterationGraph.addEdge('body', 'collect');
     iterationGraph.addEdge('collect', END);
     // 直接嵌套 compiled graph，由 LangGraph 传播 checkpoint / pause / resume；无手写 invoke wrapper。
-    context.addNode(node.id, iterationGraph.compile());
+    const compiled = iterationGraph.compile();
+    context.addNode(node.id, compiled, { subgraphs: [compiled] });
   }
 }

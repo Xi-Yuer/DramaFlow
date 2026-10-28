@@ -39,4 +39,4 @@ Canvas 小范围视觉优化待人工验收：运行焦点、人工等待、失�
 
 ### 下一步最小独立实施任务
 
-Iteration → SubWorkflow 继续保持 Publish / Compiler 与 Picker 门禁；[动态执行身份基础](architecture.md#scoped-graph-compilation)不能替代组合执行验收。后续最小范围须先补跨 Composite 失败传播、组合 checkpoint / re-entry 测试及 Web 祖先 Item selection 传递，再独立决定是否开放该组合。跨版本或跨项目调用、Batch、单 item Retry / Resume 继续另行授权。AI 文本样例验收后保留为 test fixture，不恢复 production development Entry；如需正式通用产品 Entry，另行确认产品需求。
+Iteration → SubWorkflow 继续保持 Publish / Compiler 与 Picker 门禁；[动态执行身份基础](architecture.md#scoped-graph-compilation)不能替代组合执行验收。后续最小范围仍需补 Web 祖先 Item selection 传递，并对照已有 strategy 成功 / 失败 / checkpoint 测试评估更完整的组合执行与真实持久化验收，再独立决定是否开放该组合。跨版本或跨项目调用、Batch、单 item Retry / Resume 继续另行授权。AI 文本样例验收后保留为 test fixture，不恢复 production development Entry；如需正式通用产品 Entry，另行确认产品需求。

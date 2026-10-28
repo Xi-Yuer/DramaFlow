@@ -61,7 +61,7 @@ export interface GraphCompilationContext<State extends WorkflowState> {
     execute(state: State, outputs: Record<string, RuntimeValue>): Promise<Partial<State>>;
     onOutputError(state: State, error: unknown): Promise<never>;
   };
-  wrapNode?(node: LangGraphNode<State>): LangGraphNode<State>;
+  failureBoundary?(state: State, cause: unknown): Promise<never>;
 }
 export function readGraphExecutionIdentity<State extends WorkflowState>(
   execution: GraphExecutionContext<State>,
@@ -102,8 +102,31 @@ export function compileGraph<State extends WorkflowState>(
     !!context.completion !== !!plan.boundary.completion
   )
     throw new Error('Graph 编译边界与已证明预算不一致');
-  const addNode = (id: string, node: LangGraphNode<State>) =>
-    target.addNode(id, context.wrapNode ? context.wrapNode(node) : node);
+  const addNode = (
+    id: string,
+    node: CompiledGraphNode<State>,
+    options?: GraphNodeRegistrationOptions,
+  ) => {
+    const boundary = context.failureBoundary;
+    if (!boundary) {
+      target.addNode(id, node, options);
+      return;
+    }
+    // 包装只委托一次原生 Runnable，保留配置与显式 subgraphs 登记；不改变调度或 checkpoint。
+    target.addNode(
+      id,
+      async (state, config) => {
+        try {
+          return typeof node === 'function'
+            ? await node(state, config)
+            : await node.invoke(state, config);
+        } catch (cause) {
+          return boundary(state, cause);
+        }
+      },
+      options,
+    );
+  };
   for (const { node, declaration, strategy } of plan.entries) {
     switch (strategy) {
       case 'action':
@@ -161,7 +184,7 @@ export function compileGraph<State extends WorkflowState>(
           services: runtime.services,
           runs: runtime.childGraphRuns,
           childCompilation: child.plan,
-          addNode: (id, graph, options) => target.addNode(id, graph, options),
+          addNode,
         });
         break;
       }
@@ -184,7 +207,7 @@ export function compileGraph<State extends WorkflowState>(
           runs: runtime.iterationRuns,
           childGraphRuns: runtime.childGraphRuns,
           bodyCompilation: body.plan,
-          addNode: (id, child) => target.addNode(id, child),
+          addNode,
         });
         break;
       }

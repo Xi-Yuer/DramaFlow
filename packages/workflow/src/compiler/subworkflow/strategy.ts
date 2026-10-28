@@ -28,13 +28,8 @@ import {
   graphExecutionIdentitySchema,
 } from '../../runtime/execution/execution-scope.js';
 import { createLocalGraphInvocation } from '../../runtime/execution/graph-invocation.js';
-import {
-  failNodeRun,
-  NodeExecutionError,
-  NodeRunRecordingError,
-  ChildExecutionRecordingError,
-  toNodeRunError,
-} from '../../runtime/node/node-execution-error.js';
+import { failNodeRun, NodeExecutionError } from '../../runtime/node/node-execution-error.js';
+import { failCompositeExecution } from '../../runtime/execution/composite-failure-boundary.js';
 import type { WorkflowState, WorkflowStateUpdate } from '../../runtime/state/state.js';
 import type { NodeCompilationStrategy, WorkflowValueServices } from '../strategy.js';
 import {
@@ -101,23 +96,14 @@ export class SubWorkflowNodeCompilationStrategy implements NodeCompilationStrate
     if (!this.supports(declaration.manifest) || node.composite?.kind !== 'subworkflow')
       throw new Error('SubWorkflow strategy 仅支持 flow.subworkflow@1');
     const definition = node.composite.graph;
-    const failChild = async (
+    const failChild = (
       state: typeof SubworkflowChildState.State,
       cause: unknown,
     ): Promise<never> => {
-      // 原生控制异常、持久化/基础设施故障沿用原有边界，不伪造业务失败。
-      if (cause instanceof NodeExecutionError && !(cause instanceof NodeRunRecordingError)) {
-        const call = subworkflowCallSchema.parse(state[SUBWORKFLOW_CALL]);
-        try {
-          await runs.markChildExecutionAndParentFailed(
-            call.childExecutionId,
-            toNodeRunError(cause),
-          );
-        } catch (recordingError) {
-          throw new ChildExecutionRecordingError(call.childExecutionId, cause, recordingError);
-        }
-      }
-      throw cause;
+      const call = subworkflowCallSchema.parse(state[SUBWORKFLOW_CALL]);
+      return failCompositeExecution(call.childExecutionId, cause, (error) =>
+        runs.markChildExecutionAndParentFailed(call.childExecutionId, error),
+      );
     };
     const child = new StateGraph<
       typeof SubworkflowChildState.spec,
@@ -156,13 +142,7 @@ export class SubWorkflowNodeCompilationStrategy implements NodeCompilationStrate
           child.addConditionalEdges(id, route, paths);
         },
       },
-      wrapNode: (execute) => async (state, config) => {
-        try {
-          return await execute(state, config);
-        } catch (cause) {
-          return failChild(state, cause);
-        }
-      },
+      failureBoundary: failChild,
       entry: {
         name: '__dramaflow_subworkflow_inputs',
         execute: async (state) => {
@@ -299,7 +279,7 @@ export class SubWorkflowNodeCompilationStrategy implements NodeCompilationStrate
     invocation.addEdge('collect', END);
     const compiled = invocation.compile();
     if ('identity' in parentExecution) {
-      context.addNode(node.id, compiled);
+      context.addNode(node.id, compiled, { subgraphs: [compiled] });
       return;
     }
     // 先读取调用图的完整 State；原生子图输入过滤后只保留明确的执行身份。
