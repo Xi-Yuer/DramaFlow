@@ -12,10 +12,10 @@ import {
 import { motion } from 'motion/react';
 import { ReactFlowProvider, type OnMove } from '@xyflow/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useGraphExecutionProjection } from '../../runtime/use-graph-execution-projection';
-import { useGraphExecutionSelection } from '../../runtime/use-graph-execution-selection';
+import { useGraphExecutionProjection } from '../../runtime/projection/use-graph-execution-projection';
+import { useGraphExecutionSelection } from '../../runtime/projection/use-graph-execution-selection';
 import { workflowKeys } from '../../workflow-api';
-import { selectGraphExecutionInstance } from '../../runtime/graph-execution-projection';
+import { selectGraphExecutionInstance } from '../../runtime/projection/graph-execution-projection';
 import { useIterationItemSelection } from '../../iteration/execution/use-iteration-item-selection';
 import { IterationItemSelector } from '../../iteration/execution/iteration-item-selector';
 import type { NodeRun, Project, WorkflowDefinition } from '@dramaflow/contracts';

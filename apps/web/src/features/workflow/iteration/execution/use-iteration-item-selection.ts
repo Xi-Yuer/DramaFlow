@@ -7,13 +7,13 @@ import {
 import type {
   GraphExecutionProjection,
   GraphExecutionSelection,
-} from '../../runtime/graph-execution-projection';
+} from '../../runtime/projection/graph-execution-projection';
 import {
   graphExecutionChoiceKey,
   graphPathContains,
   validGraphExecutionChoice,
-} from '../../runtime/graph-execution-projection';
-import type { GraphExecutionSelectionState } from '../../runtime/use-graph-execution-selection';
+} from '../../runtime/projection/graph-execution-projection';
+import type { GraphExecutionSelectionState } from '../../runtime/projection/use-graph-execution-selection';
 
 export interface IterationItemOption {
   executionId: string;

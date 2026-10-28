@@ -1,1 +1,1 @@
-export { default } from '../../vitest.shared.mjs';
+export { default } from '../../config/testing/vitest.shared.mjs';

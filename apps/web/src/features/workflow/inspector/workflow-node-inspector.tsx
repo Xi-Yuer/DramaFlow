@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NodeTypeIcon } from '../node-catalog/node-type-icon';
 import { useWorkflowNodeRuntime } from '../runtime/runtime-status';
-import { RuntimeStatusBadge } from '../runtime/runtime-status-badge';
+import { RuntimeStatusBadge } from '../runtime/presentation/runtime-status-badge';
 import { NodeNameSection, NodeDesignInspectorBody } from './design/node-design-inspector';
 import { NodeRuntimeInspectorBody } from './runtime/node-runtime-inspector';
 import styles from './workflow-node-inspector.module.css';

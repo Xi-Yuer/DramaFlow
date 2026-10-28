@@ -10,8 +10,8 @@ import {
   toReactFlowNode,
   type WorkflowNode,
 } from '../../../src/features/workflow/canvas/react-flow-adapter';
-import { RuntimeCanvasStatus } from '../../../src/features/workflow/runtime/runtime-canvas-status';
-import { getRuntimeNodePresentation } from '../../../src/features/workflow/runtime/runtime-presentation';
+import { RuntimeCanvasStatus } from '../../../src/features/workflow/runtime/presentation/runtime-canvas-status';
+import { getRuntimeNodePresentation } from '../../../src/features/workflow/runtime/presentation/runtime-presentation';
 import {
   WorkflowRuntimeProvider,
   type RuntimeNodeStatus,

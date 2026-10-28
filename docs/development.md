@@ -32,13 +32,13 @@ pnpm --filter @dramaflow/workflow exec vitest test/run/workflow-resume.test.ts
 pnpm test --concurrency=2 -- --maxWorkers=2
 ```
 
-`vitest.shared.mjs` 是默认配置来源，Web alias、API globals 和专项串行 / timeout 配置保留在各包中。测试结果继续不使用 Turbo 缓存。
+`config/testing/vitest.shared.mjs` 是默认配置来源，Web alias、API globals 和专项串行 / timeout 配置保留在各包中。测试结果继续不使用 Turbo 缓存。
 
 ## 测试与环境边界
 
-集成测试使用独立 dramaflow_test、随机 dramaflow-test-* 队列前缀，应用现有迁移，只清理自建账号及其项目、模型、对象和 thread；禁止指向业务库或清空共享队列。MemorySaver 仅用于单元测试，Human Review 通过内存 Checkpointer 验证暂停、串行恢复、If 组合和审计生命周期，NodeRun 隔离 PostgreSQL 用例验证 occurrence 身份、各 occurrence 内并发 attempt 分配、审核复用和权限。独立[迁移用例](../packages/server/test/node-occurrence-migration.spec.ts)在 dramaflow_test 的随机 schema 重放旧 DDL 与新迁移，验证审计 / Artifact 保留及约束；该用例仅在显式 DRAMAFLOW_INTEGRATION=1 下运行。[ChildExecution 隔离 PostgreSQL 用例](../packages/server/test/iteration-item-runs.spec.ts)执行真实 Iteration 编译图，验证单 item 身份、并行失败、复用与 attempt 隔离、嵌套父链、权限及数据库不可变约束，同样要求 DRAMAFLOW_INTEGRATION=1 与本机 dramaflow_test。[运行树查询集成用例](../packages/server/test/execution-tree.integration.spec.ts)在同一隔离条件下验证真实外键、嵌套父链、独立状态、权限、分页和查询不改写审计；Contract / 通用查询单测另验证非 Iteration source、非法父链及边界投影。Web 单元 / 组件测试覆盖文本审批和恢复交互，真实浏览器仍需人工验收；本机协议替身不代表收费模型验收。
+集成测试使用独立 dramaflow_test、随机 dramaflow-test-* 队列前缀，应用现有迁移，只清理自建账号及其项目、模型、对象和 thread；禁止指向业务库或清空共享队列。MemorySaver 仅用于单元测试，Human Review 通过内存 Checkpointer 验证暂停、串行恢复、If 组合和审计生命周期，NodeRun 隔离 PostgreSQL 用例验证 occurrence 身份、各 occurrence 内并发 attempt 分配、审核复用和权限。独立[迁移用例](../packages/server/test/migrations/node-occurrence-migration.spec.ts)在 dramaflow_test 的随机 schema 重放旧 DDL 与新迁移，验证审计 / Artifact 保留及约束；该用例仅在显式 DRAMAFLOW_INTEGRATION=1 下运行。[ChildExecution 隔离 PostgreSQL 用例](../packages/server/test/workflow/runtime/execution/iteration-item-runs.spec.ts)执行真实 Iteration 编译图，验证单 item 身份、并行失败、复用与 attempt 隔离、嵌套父链、权限及数据库不可变约束，同样要求 DRAMAFLOW_INTEGRATION=1 与本机 dramaflow_test。[运行树查询集成用例](../packages/server/test/workflow/execution-tree/execution-tree.integration.spec.ts)在同一隔离条件下验证真实外键、嵌套父链、独立状态、权限、分页和查询不改写审计；Contract / 通用查询单测另验证非 Iteration source、非法父链及边界投影。Web 单元 / 组件测试覆盖文本审批和恢复交互，真实浏览器仍需人工验收；本机协议替身不代表收费模型验收。
 
-[Iteration → SubWorkflow checkpoint 集成用例](../packages/server/test/nested-composite-checkpoint.integration.spec.ts)同样只接受 DRAMAFLOW_INTEGRATION=1 与本机 dramaflow_test，额外要求既有 langgraph checkpoint 表。它不调用 PostgresSaver.setup、不执行迁移或启动基础设施；通过正式 repository 与 PostgresSaver 验证三 Item 的 checkpoint 重建、prepare 真正重入和失败层级，清理仅限自身账号、项目和 thread。版本 Definition 与 capability 绕过只存在于测试装配，不能替代正式 Publish 准入。
+[Iteration → SubWorkflow checkpoint 集成用例](../packages/server/test/workflow/runtime/execution/nested-composite-checkpoint.integration.spec.ts)同样只接受 DRAMAFLOW_INTEGRATION=1 与本机 dramaflow_test，额外要求既有 langgraph checkpoint 表。它不调用 PostgresSaver.setup、不执行迁移或启动基础设施；通过正式 repository 与 PostgresSaver 验证三 Item 的 checkpoint 重建、prepare 真正重入和失败层级，清理仅限自身账号、项目和 thread。版本 Definition 与 capability 绕过只存在于测试装配，不能替代正式 Publish 准入。
 
 真实 Provider 调用只在操作者明确授权后运行 `pnpm test:ai:live`。凭证通过受保护环境提供，不写命令行、日志或文档；不会因本机已有 key 自动启用，也不自动重试。变量为 DRAMAFLOW_LIVE_AI_BASE_URL、DRAMAFLOW_LIVE_AI_MODEL、DRAMAFLOW_LIVE_AI_CREDENTIAL_ENV 及后者指向的凭证变量。该入口使用高级兼容插件，不代替普通 Provider 路径。
 
@@ -56,23 +56,44 @@ pnpm test --concurrency=2 -- --maxWorkers=2
 
 按业务入口组织 feature，再按实际职责划分内部目录，不把大文件机械切成同层碎片，也不按行数统一拆分。当前画布与检查器的目录边界如下。
 
-| 目录                                                       | 职责                                                                                                       |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `workflow/canvas/adapter/`                                 | 纯转换与领域编辑：节点 / 边序列化、投影、Handle 校验、连接 / 删除 / 重连；不弹窗或持有 React 状态          |
-| `workflow/canvas/editing/`                                 | 用户编辑操作：确认来源替换 / 候选、输入输出边界弹窗、Context 操作装配；领域修改调用 adapter 或已有领域工具 |
-| `workflow/canvas/view/`                                    | 选择、测量、Inspector 模式等会话状态，隔离 React Flow 视图事件与可持久化修改                               |
-| `workflow/canvas/rendering/`                               | 节点 / 连线渲染、呈现规则与相邻 CSS Module                                                                 |
-| `workflow/inspector/design/`                               | 节点配置与草稿输入编辑                                                                                     |
-| `workflow/inspector/runtime/`                              | NodeRun / attempt、运行值与审批呈现，不修改草稿                                                            |
-| `workflow/inputs/definitions/`                             | 通用 Graph Input 定义、校验、类型选项与 Root / Body 共用编辑控件                                           |
-| `workflow/inputs/bindings/`                                | 通用图输入 binding 的写入、重命名及兼容性清理，不依赖 Iteration                                            |
-| `workflow/iteration/inputs/`                               | Iteration composite、Body / 不变输入及映射；依赖通用 Input 能力                                            |
-| `models/settings/`、`catalog/`、`shared/`                  | 设置会话与目录展示；`shared/` 放配置摘要和供应商 / 模型配置共用的 Schema 字段表单                          |
-| `models/providers/`、`configurations/`                     | 分别维护供应商及凭证表单、模型配置表单与列表；提交和密钥清理就近保留                                       |
-| `workflow/model-selection/selection/`                      | 选择 Context、用户级查询、恢复会话与选项推导，不持有凭证                                                   |
-| `workflow/model-selection/presentation/`、`configuration/` | 选项展示与明确的添加配置操作                                                                               |
+| 目录                                                       | 职责                                                                                                          |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `workflow/runtime/projection/`                             | Graph Execution Projection 的解析、查询缓存与按 Definition Location 保存的 execution selection；不负责状态 UI |
+| `workflow/runtime/presentation/`                           | Canvas 状态图标、徽标、投影提示及样式；只消费共享 projection / runtime context                                |
+| `workflow/runtime/runtime-status.ts`                       | Canvas / Inspector 共用的节点运行态计算与 Provider，保留为模块边界                                            |
+| `workflow/run/history/`                                    | 历史 Run 列表及其样式，不复制执行查看器或维护第二套 projection                                                |
+| `workflow/canvas/adapter/`                                 | 纯转换与领域编辑：节点 / 边序列化、投影、Handle 校验、连接 / 删除 / 重连；不弹窗或持有 React 状态             |
+| `workflow/canvas/editing/`                                 | 用户编辑操作：确认来源替换 / 候选、输入输出边界弹窗、Context 操作装配；领域修改调用 adapter 或已有领域工具    |
+| `workflow/canvas/view/`                                    | 选择、测量、Inspector 模式等会话状态，隔离 React Flow 视图事件与可持久化修改                                  |
+| `workflow/canvas/rendering/`                               | 节点 / 连线渲染、呈现规则与相邻 CSS Module                                                                    |
+| `workflow/inspector/design/`                               | 节点配置与草稿输入编辑                                                                                        |
+| `workflow/inspector/runtime/`                              | NodeRun / attempt、运行值与审批呈现，不修改草稿                                                               |
+| `workflow/inputs/definitions/`                             | 通用 Graph Input 定义、校验、类型选项与 Root / Body 共用编辑控件                                              |
+| `workflow/inputs/bindings/`                                | 通用图输入 binding 的写入、重命名及兼容性清理，不依赖 Iteration                                               |
+| `workflow/iteration/inputs/`                               | Iteration composite、Body / 不变输入及映射；依赖通用 Input 能力                                               |
+| `models/settings/`、`catalog/`、`shared/`                  | 设置会话与目录展示；`shared/` 放配置摘要和供应商 / 模型配置共用的 Schema 字段表单                             |
+| `models/providers/`、`configurations/`                     | 分别维护供应商及凭证表单、模型配置表单与列表；提交和密钥清理就近保留                                          |
+| `workflow/model-selection/selection/`                      | 选择 Context、用户级查询、恢复会话与选项推导，不持有凭证                                                      |
+| `workflow/model-selection/presentation/`、`configuration/` | 选项展示与明确的添加配置操作                                                                                  |
 
 Canvas 与 Inspector 根目录保留装配入口及共享类型 / 样式。内部模块直接依赖职责明确的文件；需要兼容调用方的适配导出集中在 `react-flow-adapter.ts`，不为每个搬移的组件增加转发文件。迁移目录时同步更新静态引用、测试 mock 和文档链接；重构优先运行现有行为测试，覆盖投影不持久化、过期删除 / 重连、显式替换确认、导航与运行上下文。
+
+## Server 测试与共享配置目录
+
+`packages/server/test/` 按被测模块组织，单元 / 集成性质继续由文件名和既有环境 gate 表达，不另建一套平行模块树：
+
+| 目录                                                                              | 职责                                                 |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `workflow/run/cancellation/`、`workflow/run/history/`、`workflow/run/repository/` | Run 取消闸门、历史查询与版本读取                     |
+| `workflow/runtime/execution/`                                                     | ChildExecution 生命周期、Iteration 与组合 checkpoint |
+| `workflow/execution-tree/`、`workflow/queue/`、`workflow/node/`                   | 执行树、投递命令与 Catalog 实例化                    |
+| `models/`、`artifacts/`、`storage/`、`secrets/`                                   | 模型权限、执行数据、对象存储和密钥服务               |
+| `migrations/`                                                                     | 隔离 schema 的无损迁移与数据库约束验证               |
+| `fixtures/`                                                                       | 供多个测试使用的数据样例，不注册到生产 Catalog       |
+
+Web 的执行投影测试对应 `test/workflow/runtime/`；历史、状态、恢复、结果和执行树测试分别放入 `test/workflow/run/` 的同名职责子目录。Run 创建 / 表单测试留在该目录入口层，不混放 nested projection 测试。普通 Vitest 与专项配置沿用递归 include，移动测试不减少覆盖。
+
+仓库级共享测试配置与其类型声明位于 `config/testing/`；各包根目录只保留 Vitest 约定入口，引用同一默认值。脚本的包级并发控制仍由 `scripts/task.mjs` 负责。
 
 ## 文档维护
 

@@ -10,7 +10,7 @@ import {
   WorkflowRunStatusView,
   workflowRunStatusDisplay,
 } from '../run/status/workflow-run-status-controls';
-import { WorkflowRunHistory } from '../run/workflow-run-history';
+import { WorkflowRunHistory } from '../run/history/workflow-run-history';
 import type { WorkflowVersionResponse } from '@dramaflow/contracts';
 import styles from './workflow-execution-workspace.module.css';
 

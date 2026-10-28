@@ -13,7 +13,7 @@ import type { GraphViewportController } from '../../editor/navigation/graph-navi
 import type { WorkflowBodyInputNode } from '../../iteration/body-input-boundary';
 import type { WorkflowEndNode, WorkflowOutputEdge } from '../../outputs/workflow-outputs';
 import type { WorkflowNode, WorkflowEdge } from '../adapter/types';
-import type { GraphExecutionProjection } from '../../runtime/graph-execution-projection';
+import type { GraphExecutionProjection } from '../../runtime/projection/graph-execution-projection';
 
 export type CanvasNode = WorkflowNode | WorkflowEndNode | WorkflowBodyInputNode;
 export type CanvasEdge = WorkflowEdge | WorkflowOutputEdge;

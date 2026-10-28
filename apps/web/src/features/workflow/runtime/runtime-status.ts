@@ -11,7 +11,7 @@ import {
   directGraphNodeRuns,
   groupGraphNodeAttempts,
   type GraphExecutionProjection,
-} from './graph-execution-projection';
+} from './projection/graph-execution-projection';
 import type {
   HumanReviewActions,
   HumanReviewState,

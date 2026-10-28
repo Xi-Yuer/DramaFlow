@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-import shared from '../../vitest.shared.mjs';
+import shared from '../../config/testing/vitest.shared.mjs';
 
 export default defineConfig({
   ...shared,

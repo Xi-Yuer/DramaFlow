@@ -5,17 +5,17 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HumanReviewCard } from '../../run/status/human-review-card';
-import { getRuntimeNodePresentation } from '../../runtime/runtime-presentation';
+import { getRuntimeNodePresentation } from '../../runtime/presentation/runtime-presentation';
 import {
   formatNodeRunDuration,
   useWorkflowNodeRuntime,
   useWorkflowRuntime,
 } from '../../runtime/runtime-status';
-import { RuntimeStatusBadge } from '../../runtime/runtime-status-badge';
+import { RuntimeStatusBadge } from '../../runtime/presentation/runtime-status-badge';
 import { resolveWorkflowNodePorts } from '../../ports/resolve-workflow-node-ports';
 import styles from '../workflow-node-inspector.module.css';
 import { NodeRuntimeValueView } from './node-runtime-value-view';
-import { GraphExecutionNotice } from '../../runtime/graph-execution-notice';
+import { GraphExecutionNotice } from '../../runtime/presentation/graph-execution-notice';
 
 function formatTime(value: string) {
   return new Date(value).toLocaleString('zh-CN', {

@@ -17,7 +17,7 @@ import { WorkflowEnd } from '../outputs/workflow-end';
 import { WorkflowBodyInputs } from '../iteration/body-input-boundary-node';
 import { WorkflowNodeInspector } from '../inspector/workflow-node-inspector';
 import { resolveWorkflowRuntimeNodes, WorkflowRuntimeProvider } from '../runtime/runtime-status';
-import { GraphExecutionNotice } from '../runtime/graph-execution-notice';
+import { GraphExecutionNotice } from '../runtime/presentation/graph-execution-notice';
 import { workflowNodeTypes } from './rendering/workflow-node';
 import { workflowEdgeTypes } from './rendering/workflow-edge';
 import { CanvasEditingProviders } from './editing/canvas-editing-providers';

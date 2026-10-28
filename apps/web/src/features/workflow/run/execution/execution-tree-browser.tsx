@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Breadcrumb, Button, Tag, Typography } from 'antd';
 import type { ExecutionTreeEntry, NodeRunStatus, WorkflowDefinition } from '@dramaflow/contracts';
-import { getRuntimeNodePresentation } from '../../runtime/runtime-presentation';
+import { getRuntimeNodePresentation } from '../../runtime/presentation/runtime-presentation';
 import { workflowApi } from '../../workflow-api';
 import {
   acceptExecutionPage,
