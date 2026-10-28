@@ -103,6 +103,9 @@ export class WorkflowRunQueryService {
       ...(run.outputs !== null ? { outputs: run.outputs } : {}),
       ...(run.error !== null ? { error: run.error } : {}),
       ...(run.startedAt !== null ? { startedAt: run.startedAt.toISOString() } : {}),
+      ...(run.cancellationRequestedAt != null
+        ? { cancellationRequestedAt: run.cancellationRequestedAt.toISOString() }
+        : {}),
       ...(run.completedAt !== null ? { completedAt: run.completedAt.toISOString() } : {}),
     });
   }
@@ -191,6 +194,7 @@ export class WorkflowRunQueryService {
         createdAt: true,
         startedAt: true,
         completedAt: true,
+        cancellationRequestedAt: true,
       },
     });
     if (!run) throw new NotFoundException('运行不存在或无权访问');

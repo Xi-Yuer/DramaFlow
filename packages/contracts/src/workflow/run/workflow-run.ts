@@ -23,6 +23,8 @@ export const workflowRunSchema = workflowRunMetadataSchema.extend({
   outputs: runtimeValueMapSchema.optional(),
   error: workflowRunErrorSchema.optional(),
   createdAt: z.iso.datetime(),
+  // 取消请求与执行终态独立；running + 此字段仍表示在途执行。
+  cancellationRequestedAt: z.iso.datetime().optional(),
 });
 
 export type WorkflowRunError = z.infer<typeof workflowRunErrorSchema>;

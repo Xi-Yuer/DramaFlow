@@ -40,7 +40,9 @@ export class WorkflowOutboxDispatcher {
     return (await this.dispatch()) !== 'idle';
   }
 
-  private async dispatch(executionId?: string): Promise<'published' | 'failed' | 'idle'> {
+  private async dispatch(
+    executionId?: string,
+  ): Promise<'published' | 'cancelled' | 'failed' | 'idle'> {
     // 行锁随事务结束自动释放；enqueue 已完成但 DB 未提交时，后续以确定性 Job ID 重投。
     return this.db.client.$transaction(
       async (tx) => {
@@ -56,8 +58,21 @@ export class WorkflowOutboxDispatcher {
           if (executionId) throw new NotFoundException('执行意图不存在');
           return 'idle';
         }
-        const row = await tx.workflowExecutionOutbox.findUniqueOrThrow({ where: { id } });
-        if (row.status !== 'pending') return 'published';
+        const row = await tx.workflowExecutionOutbox.findUniqueOrThrow({
+          where: { id },
+          include: { workflowRun: { select: { cancellationRequestedAt: true, status: true } } },
+        });
+        if (row.status !== 'pending') return row.status === 'cancelled' ? 'cancelled' : 'published';
+        if (
+          row.workflowRun.cancellationRequestedAt !== null ||
+          row.workflowRun.status === 'cancelled'
+        ) {
+          await tx.workflowExecutionOutbox.update({
+            where: { id },
+            data: { status: 'cancelled', completedAt: new Date() },
+          });
+          return 'cancelled'; // 正常结算，不作为队列故障重试；不需要删除 Redis Job。
+        }
         const job = workflowExecutionJobSchema.parse(row.payload);
         try {
           await this.queue.publish(job);

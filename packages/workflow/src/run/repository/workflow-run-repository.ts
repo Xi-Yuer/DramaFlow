@@ -23,3 +23,12 @@ export interface WorkflowRunRepository {
   markFailed(workflowRunId: string, error: WorkflowRunError): Promise<void>;
   markCancelled(workflowRunId: string): Promise<void>;
 }
+
+// 内部取消基础，不是公开 Cancel API；in_flight 不承诺当前 Graph 已停止。
+export type WorkflowRunCancellationResult = {
+  readonly outcome: 'cancelled' | 'in_flight' | 'terminal';
+  readonly run: WorkflowRun;
+};
+export interface WorkflowRunCancellationRepository {
+  requestCancellation(workflowRunId: string): Promise<WorkflowRunCancellationResult>;
+}

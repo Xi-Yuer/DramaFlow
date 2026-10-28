@@ -6,6 +6,7 @@ import {
   type ResumeWorkflowExecutionJob,
 } from '@dramaflow/contracts';
 import { Injectable } from '@nestjs/common';
+import { WorkflowRunNotPendingError, WorkflowRunNotWaitingError } from '@dramaflow/workflow';
 import { DatabaseService } from '../../database/database.service.js';
 import { WorkflowRuntimeFactory } from './workflow-runtime.factory.js';
 
@@ -43,6 +44,8 @@ export class WorkflowExecutionService {
     });
     if (!intent || !isDeepStrictEqual(workflowExecutionJobSchema.parse(intent.payload), job))
       throw new WorkflowExecutionTerminalError('WORKFLOW_EXECUTION_INTENT_INVALID');
+    if (intent.status === 'cancelled')
+      return { workflowRunId: job.workflowRunId, status: 'execution_cancelled' as const };
     if (intent.status === 'completed')
       return { workflowRunId: job.workflowRunId, status: 'already_processed' as const };
     if (intent.status === 'failed' || intent.status === 'recovery_required')
@@ -52,6 +55,13 @@ export class WorkflowExecutionService {
           : 'WORKFLOW_EXECUTION_RECOVERY_REQUIRED',
       );
     const run = intent.workflowRun;
+    if (
+      ['pending', 'published'].includes(intent.status) &&
+      (run.cancellationRequestedAt != null || run.status === 'cancelled')
+    ) {
+      await this.cancelUnclaimed(intent.id);
+      return { workflowRunId: run.id, status: 'cancellation_requested' as const };
+    }
     if (intent.status === 'executing') {
       // Graph 已返回终态 / 下一等待周期，但进程在确认命令完成前退出：只补记结果，不再 invoke。
       if (
@@ -105,6 +115,9 @@ export class WorkflowExecutionService {
         where: { id: intent.id },
         include: { workflowRun: true },
       });
+      // 请求在本次读取之后、claim 之前获胜：Runner 的拒绝不是业务失败。
+      if (latest.status === 'cancelled')
+        return { workflowRunId: run.id, status: 'execution_cancelled' as const };
       if (latest.status === 'completed')
         return { workflowRunId: run.id, status: 'already_processed' as const };
       if (latest.workflowRun.status === 'failed') {
@@ -120,11 +133,33 @@ export class WorkflowExecutionService {
           await this.finish(intent.id, 'completed');
           return { workflowRunId: run.id, status: 'already_processed' as const };
         }
+      }
+      if (
+        (error instanceof WorkflowRunNotPendingError ||
+          error instanceof WorkflowRunNotWaitingError) &&
+        (latest.workflowRun.cancellationRequestedAt != null ||
+          latest.workflowRun.status === 'cancelled')
+      ) {
+        await this.cancelUnclaimed(intent.id);
+        return { workflowRunId: run.id, status: 'cancellation_requested' as const };
+      }
+      if (latest.status === 'executing') {
         await this.finish(intent.id, 'recovery_required');
         throw new WorkflowExecutionTerminalError('WORKFLOW_EXECUTION_RECOVERY_REQUIRED');
       }
       throw error; // 未 claim 的基础设施故障由 Consumer 按稳定错误码决定是否重试。
     }
+  }
+
+  private async cancelUnclaimed(id: string): Promise<void> {
+    await this.database.client.workflowExecutionOutbox.updateMany({
+      where: {
+        id,
+        status: { in: ['pending', 'published'] },
+        workflowRun: { OR: [{ cancellationRequestedAt: { not: null } }, { status: 'cancelled' }] },
+      },
+      data: { status: 'cancelled', completedAt: new Date() },
+    });
   }
 
   private async finish(

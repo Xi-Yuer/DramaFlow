@@ -4,7 +4,9 @@
 
 ## 当前阶段
 
-Workflow Run History 最小查询与只读版本查看进入交付验收，等待人工检查历史分页、版本切换、嵌套执行和返回草稿；当前能力见[运行历史](architecture.md#web-workflow-run-history)。不扩展 cancel / retry、搜索或 Observability。
+Workflow Run Cancellation 第一阶段为持久化取消意图与未 claim 执行闸门，边界见[当前架构](architecture.md#workflow-run-cancellation-foundation)。后续需独立授权接入 Worker / LangGraph / Node / Plugin signal、取消分类、子执行生命周期收尾与迟到写回处理；当前不提供公开 Cancel API 或 Web 按钮。
+
+Workflow Run History 最小查询与只读版本查看进入交付验收，等待人工检查历史分页、版本切换、嵌套执行和返回草稿；当前能力见[运行历史](architecture.md#web-workflow-run-history)。不扩展 retry、搜索或 Observability。
 
 Catalog Entry → Composite 的 AI 文本纵向验收等待用户在 Web 完成。测试样例只保留为 test fixture；本机专用项目只创建普通 Draft，人工步骤见[开发指南](development.md#ai-文本-composite-人工验收)。用户检查下钻 Zoom / Grow、选择已有模型、修改内部 prompt / config、返回保存并刷新，再显式 Publish / Run，核对真实输出和 Execution Tree。自动测试使用 fake Provider，不替代真实模型与视觉验收。
 

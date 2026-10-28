@@ -156,26 +156,27 @@ model WorkflowVersion {
 
 // 运行仍保存逻辑版本 ID，由 Runner 经版本 Repository 核对归属；本轮不调整运行外键。
 model WorkflowRun {
-  id                String                    @id @default(uuid())
-  projectId         String                    @db.Uuid
-  workflowId        String
-  workflowVersionId String
-  invocationKey     String
-  threadId          String                    @unique
-  status            String                    @default("pending")
-  inputs            Json
-  outputs           Json?
-  error             Json?
-  createdAt         DateTime                  @default(now())
-  startedAt         DateTime?
-  completedAt       DateTime?
-  project           Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  nodeRuns          NodeRun[]
-  nodeOccurrences   NodeOccurrence[]
-  childExecutions   ChildExecution[]
-  waitingRevision   Int                       @default(0)
-  executions        WorkflowExecutionOutbox[]
-  artifacts         Artifact[]
+  id                      String                    @id @default(uuid())
+  projectId               String                    @db.Uuid
+  workflowId              String
+  workflowVersionId       String
+  invocationKey           String
+  threadId                String                    @unique
+  status                  String                    @default("pending")
+  inputs                  Json
+  outputs                 Json?
+  error                   Json?
+  createdAt               DateTime                  @default(now())
+  startedAt               DateTime?
+  completedAt             DateTime?
+  cancellationRequestedAt DateTime?
+  project                 Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  nodeRuns                NodeRun[]
+  nodeOccurrences         NodeOccurrence[]
+  childExecutions         ChildExecution[]
+  waitingRevision         Int                       @default(0)
+  executions              WorkflowExecutionOutbox[]
+  artifacts               Artifact[]
 
   @@unique([id, projectId])
   @@unique([workflowId, invocationKey])

@@ -15,6 +15,7 @@ Prisma 迁移保存身份、资料、会话、项目、Workflow / WorkflowVersio
 - 表名使用 lowercase snake_case。不使用 PascalCase、camelCase，也不靠双引号保留大小写。Prisma `@@map` 同样遵守。
 - 每项目一个 Workflow。版本不可更新，workflowId / version 与 workflowId / sourceRevision 唯一。
 - Run 的身份、invocationKey、版本和输入不可改写；状态转换由数据库约束保护。threadId 唯一，workflowId / invocationKey 唯一。Start key 随 Run 生命周期保留，新建无数据库默认 key。
+- Run cancellationRequestedAt 只写首次请求；pending 取消保留 startedAt 为空，running 请求不改为 cancelled。升级需应用取消意图增量 migration 并同步 API / Worker；旧 Writer 不得与新状态机混用。未 claim 的 Outbox 新增 cancelled 正常终态，不删除执行历史或 checkpoint。
 - NodeOccurrence 的 workflowRunId / scopeKey / nodeId 唯一；NodeRun 的 occurrenceId / attempt 唯一，attempt 为正数，复合外键保护项目 / Run / nodeId 归属，终态字段一致。
 - ChildExecution 的父 NodeRun / invocationKey 唯一，Run / scopeKey 唯一；Iteration 额外保留父 / index 唯一、typed index 与 metadata.index / invocationKey 一致约束。Body NodeRun 通过 childExecutionId 显式关联，root 为 null；复合外键与触发器保护项目 / Run / nodeId / scope、不可变身份及终态，不按 scopeKey 反查 child。index 不等于 attempt，结束时间沿用 completedAt。
 - Artifact 只有 writing / ready / failed；内容身份不可改，终态不可覆盖。对象本体不在数据库。删除项目时按已登记的 storageKey 删除对应对象。

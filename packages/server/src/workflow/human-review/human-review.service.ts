@@ -141,7 +141,8 @@ export class WorkflowHumanReviewService {
 
   async pending(ownerId: string, runId: string) {
     return this.locked(ownerId, runId, async (tx, run) => {
-      if (run.status !== 'waiting') return pendingHumanReviewsResponseSchema.parse({ items: [] });
+      if (run.status !== 'waiting' || run.cancellationRequestedAt != null)
+        return pendingHumanReviewsResponseSchema.parse({ items: [] });
       const review = await this.current(tx, run, ownerId);
       const intent = await tx.workflowExecutionOutbox.findUnique({
         where: {
@@ -167,7 +168,8 @@ export class WorkflowHumanReviewService {
   ): Promise<ResumeWorkflowExecutionJob> {
     const request = resumeWorkflowRunRequestSchema.parse(input);
     return this.locked(ownerId, runId, async (tx, run) => {
-      if (run.status !== 'waiting') throw new WorkflowRunNotWaitingError(run.id);
+      if (run.status !== 'waiting' || run.cancellationRequestedAt != null)
+        throw new WorkflowRunNotWaitingError(run.id);
       if (run.waitingRevision !== request.expectedWaitingRevision)
         throw new HumanReviewStateError('HUMAN_REVIEW_STALE');
       const current = await this.current(tx, run, ownerId);

@@ -182,6 +182,14 @@ Outbox 复用现有 value JSON，保存 `{ kind: "targeted_interrupt", interrupt
 
 claim 后进程退出或结果不明进入 recovery_required；已完成或进入下一 waiting 周期时只补记意图，不重新 invoke。尚无 recovery_required 人工处理入口。队列配置和数据保留见[部署](deployment.md#workflow-执行队列)。
 
+### Workflow Run Cancellation Foundation
+
+取消意图保存在 WorkflowRun.cancellationRequestedAt，与 status 独立。内部已授权 Repository 的 requestCancellation 在 Run 行锁内幂等写首次请求时间；pending / waiting 可结束为 cancelled，pending 保留 startedAt 为空；running 只记录请求并返回 in_flight，不声称当前 Graph 已停止。completed / failed / cancelled 不被新请求覆盖。已 claim 的执行仍可正常完成、失败或进入 waiting，保留取消请求；在途执行收尾留待后续协作取消生命周期处理。
+
+start / resume claim 的条件更新要求 cancellationRequestedAt 为空，与取消事务争用同一 Run 行，数据库同时拒绝带取消意图的 pending / waiting 转 running。取消获胜时同事务将 pending / published Outbox 结算为 cancelled；executing / recovery_required 保持真实状态。Dispatcher 跳过有取消意图的 Run，Worker 将取消的未执行命令正常结算，包括读取后、claim 前取消获胜的竞争，不投影为业务 failed 或 recovery_required。Redis Job 即使仍存在也不能绕过持久化闸门；不依赖 Job removal。
+
+当前只有内部 Repository 请求入口，现有 Run 查询可返回 cancellationRequestedAt；没有公开 Cancel API 或 Web 操作，没有 AbortSignal、NodeRun / ChildExecution cancelled 收尾，也不承诺停止已 claim 的节点、Item、SubWorkflow 或远端副作用。waiting 取消阻止新审批提交与恢复，不删除 checkpoint / interrupt，不终结 Human Review NodeRun。
+
 ## PostgreSQL Checkpointer
 
 API / Worker 启动时初始化官方 PostgresSaver，不提供内存回退。它与业务表使用同一 DATABASE_URL、独立连接池和 langgraph schema；初始化、备份与恢复见[部署](deployment.md#langgraph-postgresql-checkpointer)。
