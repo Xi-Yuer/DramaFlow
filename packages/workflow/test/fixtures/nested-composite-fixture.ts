@@ -1,5 +1,10 @@
-import { StringType, type WorkflowDefinition, type WorkflowRun } from '@dramaflow/contracts';
-import { MemorySaver, StateGraph } from '@langchain/langgraph';
+import {
+  StringType,
+  type GraphDefinitionPath,
+  type WorkflowDefinition,
+  type WorkflowRun,
+} from '@dramaflow/contracts';
+import { MemorySaver, StateGraph, type BaseCheckpointSaver } from '@langchain/langgraph';
 import { vi } from 'vitest';
 import {
   ActionNodeCompilationStrategy,
@@ -7,10 +12,14 @@ import {
   DefaultWorkflowOutputResolver,
   DefaultWorkflowRunner,
   WorkflowStateAnnotation,
+  type IterationRunRepository,
   type WorkflowState,
 } from '../../src/index.js';
 import { analyzeGraphCompilation } from '../../src/compiler/graph/compilation-plan.js';
-import { compileGraph } from '../../src/compiler/graph/graph-compiler.js';
+import {
+  compileGraph,
+  type GraphExecutionContext,
+} from '../../src/compiler/graph/graph-compiler.js';
 import { IfNodeCompilationStrategy } from '../../src/compiler/if/strategy.js';
 import { HumanReviewNodeCompilationStrategy } from '../../src/compiler/human-review/strategy.js';
 import { IterationNodeCompilationStrategy } from '../../src/compiler/iteration/strategy.js';
@@ -63,10 +72,22 @@ export function nestedCompositeFixture(nested = true) {
     f.run.inputs = { items: { storage: 'inline', type: array, value: ['A'] } };
   }
   const saver = new MemorySaver();
-  function compile(definition: WorkflowDefinition = f.definition, run: WorkflowRun = f.run) {
+  function compile(
+    definition: WorkflowDefinition = f.definition,
+    run: WorkflowRun = f.run,
+    options: {
+      checkpointer?: BaseCheckpointSaver;
+      execution?: GraphExecutionContext<WorkflowState>;
+      path?: GraphDefinitionPath;
+      runs?: IterationRunRepository;
+    } = {},
+  ) {
     const plan = analyzeGraphCompilation({
       definition,
-      definitionLocation: { workflowVersionId: run.workflowVersionId, path: [] },
+      definitionLocation: {
+        workflowVersionId: run.workflowVersionId,
+        path: [...(options.path ?? [])],
+      },
       registry: f.registry,
       strategies: {
         action: new ActionNodeCompilationStrategy(),
@@ -82,16 +103,17 @@ export function nestedCompositeFixture(nested = true) {
       Partial<WorkflowState>,
       string
     >(WorkflowStateAnnotation);
+    const runs = options.runs ?? f.nodeRuns;
     compileGraph({
       plan,
       registry: f.registry,
       run,
-      execution: { identity: { scopeKey: 'root' } },
+      execution: options.execution ?? { identity: { scopeKey: 'root' } },
       runtime: {
-        executor: new DefaultNodeExecutor(f.registry, f.bindings, f.codec, f.nodeRuns),
+        executor: new DefaultNodeExecutor(f.registry, f.bindings, f.codec, runs),
         services: { bindings: f.bindings, codec: f.codec },
-        iterationRuns: f.nodeRuns,
-        childGraphRuns: f.nodeRuns,
+        iterationRuns: runs,
+        childGraphRuns: runs,
       },
       target: {
         addNode: (id, node, options) => {
@@ -109,7 +131,7 @@ export function nestedCompositeFixture(nested = true) {
       },
     });
     return builder
-      .compile({ checkpointer: saver })
+      .compile({ checkpointer: options.checkpointer ?? saver })
       .withConfig({ recursionLimit: plan.budget.recursionLimit });
   }
   async function runWithRunner() {
