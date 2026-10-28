@@ -14,12 +14,19 @@ import {
   isGraphBubbleUp,
   type LangGraphRunnableConfig,
 } from '@langchain/langgraph';
-import type { RunnableInterface } from '@langchain/core/runnables';
+import {
+  RunnableLambda,
+  RunnableSequence,
+  type RunnableInterface,
+} from '@langchain/core/runnables';
 import type { NodeRegistry } from '../../node/registry/registry.js';
 import type { NodeDeclaration } from '../../node/registry/type.js';
 import type { NodeExecutor } from '../../runtime/node/node-executor.js';
 import type { ChildGraphRunRepository } from '../../runtime/execution/child-execution-repository.js';
-import { deriveChildScope } from '../../runtime/execution/execution-scope.js';
+import {
+  deriveChildScope,
+  graphExecutionIdentitySchema,
+} from '../../runtime/execution/execution-scope.js';
 import { createLocalGraphInvocation } from '../../runtime/execution/graph-invocation.js';
 import {
   failNodeRun,
@@ -30,10 +37,16 @@ import {
 } from '../../runtime/node/node-execution-error.js';
 import type { WorkflowState, WorkflowStateUpdate } from '../../runtime/state/state.js';
 import type { NodeCompilationStrategy, WorkflowValueServices } from '../strategy.js';
-import { compileGraph } from '../graph/graph-compiler.js';
+import {
+  compileGraph,
+  readGraphExecutionIdentity,
+  type GraphExecutionContext,
+  type GraphNodeRegistrationOptions,
+} from '../graph/graph-compiler.js';
 import type { GraphCompilationPlan, GraphStrategyStructure } from '../graph/compilation-plan.js';
 import {
   SUBWORKFLOW_FRAME,
+  SUBWORKFLOW_PARENT_EXECUTION,
   SUBWORKFLOW_CALL,
   SUBWORKFLOW_RESULT,
   SUBWORKFLOW_INVOCATION_KEY,
@@ -48,12 +61,12 @@ import {
   SubworkflowParentOutput,
 } from './state.js';
 
-export interface SubWorkflowCompilationContext {
+export interface SubWorkflowCompilationContext<State extends WorkflowState = WorkflowState> {
   node: NodeDefinition;
   declaration: NodeDeclaration;
   workflow: WorkflowDefinition;
   run: WorkflowRun;
-  scopeKey: string;
+  execution: GraphExecutionContext<State>;
   registry: NodeRegistry;
   executor?: NodeExecutor;
   services: WorkflowValueServices;
@@ -61,7 +74,8 @@ export interface SubWorkflowCompilationContext {
   childCompilation: GraphCompilationPlan;
   addNode(
     id: string,
-    node: RunnableInterface<WorkflowState, WorkflowStateUpdate, LangGraphRunnableConfig>,
+    node: RunnableInterface<State, WorkflowStateUpdate, LangGraphRunnableConfig>,
+    options?: GraphNodeRegistrationOptions,
   ): void;
 }
 export class SubWorkflowNodeCompilationStrategy implements NodeCompilationStrategy<SubWorkflowCompilationContext> {
@@ -71,13 +85,13 @@ export class SubWorkflowNodeCompilationStrategy implements NodeCompilationStrate
   graphStructure(): GraphStrategyStructure {
     return { wrapperNodes: 3, childBoundaries: { graph: { entry: true, completion: true } } };
   }
-  compile(context: SubWorkflowCompilationContext): void {
+  compile<State extends WorkflowState>(context: SubWorkflowCompilationContext<State>): void {
     const {
       node,
       declaration,
       workflow,
       run,
-      scopeKey,
+      execution: parentExecution,
       registry,
       executor,
       services,
@@ -129,8 +143,8 @@ export class SubWorkflowNodeCompilationStrategy implements NodeCompilationStrate
       },
       runtime: { executor, services, childGraphRuns: runs },
       target: {
-        addNode: (id, execute) => {
-          child.addNode(id, execute);
+        addNode: (id, execute, options) => {
+          child.addNode(id, execute, options);
         },
         addBoundaryNode: (id, execute) => {
           child.addNode(id, execute);
@@ -199,19 +213,25 @@ export class SubWorkflowNodeCompilationStrategy implements NodeCompilationStrate
         state.run.projectId !== run.projectId
       )
         throw new Error('SubWorkflow 与已授权 Run 不匹配');
+      const identity = graphExecutionIdentitySchema.parse(
+        'identity' in parentExecution
+          ? parentExecution.identity
+          : state[SUBWORKFLOW_PARENT_EXECUTION],
+      );
       const occurrence = await runs.getOrCreateOccurrence({
         workflowRunId: run.id,
         nodeId: node.id,
-        scopeKey,
+        scopeKey: identity.scopeKey,
       });
       const parent = await runs.createRunning({
         workflowRunId: run.id,
         nodeId: node.id,
         occurrenceId: occurrence.id,
+        ...(identity.childExecutionId ? { childExecutionId: identity.childExecutionId } : {}),
       });
       let inputs: Record<string, RuntimeValue>;
       let local: ReturnType<typeof createLocalGraphInvocation>;
-      const childScope = deriveChildScope(scopeKey, {
+      const childScope = deriveChildScope(identity.scopeKey, {
         kind: 'subworkflow_call',
         ownerOccurrenceId: occurrence.id,
         ownerNodeRunId: parent.id,
@@ -277,6 +297,19 @@ export class SubWorkflowNodeCompilationStrategy implements NodeCompilationStrate
     invocation.addEdge('prepare', 'graph');
     invocation.addEdge('graph', 'collect');
     invocation.addEdge('collect', END);
-    context.addNode(node.id, invocation.compile());
+    const compiled = invocation.compile();
+    if ('identity' in parentExecution) {
+      context.addNode(node.id, compiled);
+      return;
+    }
+    // 先读取调用图的完整 State；原生子图输入过滤后只保留明确的执行身份。
+    // 使用 Runnable 管道并显式登记子图，不手写 invoke，不更改原生 checkpoint 调度。
+    const input = RunnableLambda.from((state: State, config: LangGraphRunnableConfig) => ({
+      ...state,
+      [SUBWORKFLOW_PARENT_EXECUTION]: readGraphExecutionIdentity(parentExecution, state, config),
+    }));
+    context.addNode(node.id, RunnableSequence.from<State, WorkflowStateUpdate>([input, compiled]), {
+      subgraphs: [compiled],
+    });
   }
 }

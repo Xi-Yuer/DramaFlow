@@ -4,8 +4,6 @@
 
 ## 当前阶段
 
-Iteration Item Execution Selector 等待人工浏览器验收：检查乱序 Item 的默认选择、手动切换、Canvas / Inspector 一致性、刷新保留、所选实例消失后的回退，以及完整分页前的 loading。能力与边界见 [Graph Execution Projection](architecture.md#graph-execution-projection)。Root / SubWorkflow 的真实 Run 浏览器验收已确认；本轮不重跑 Browser E2E 或真实 Provider。Tree 条目跳转画布、多槽位关联、Item Retry / Resume 及更多 Iteration UI / Runtime 扩展继续留待独立授权。
-
 Catalog Entry → Composite 的 AI 文本纵向验收等待用户在 Web 完成。测试样例只保留为 test fixture；本机专用项目只创建普通 Draft，人工步骤见[开发指南](development.md#ai-文本-composite-人工验收)。用户检查下钻 Zoom / Grow、选择已有模型、修改内部 prompt / config、返回保存并刷新，再显式 Publish / Run，核对真实输出和 Execution Tree。自动测试使用 fake Provider，不替代真实模型与视觉验收。
 
 Canvas / Adapter / Node Inspector、通用 Input / Iteration 输入、模型设置与模型选择的职责拆分进入结构与交互验收；目录边界见[开发指南](development.md#前端职责目录)，实现入口见[当前架构](architecture.md#web-graph-input-编辑职责)。保持现有协议、提交与显式选择规则，只调整 Web 模块组织。Template 编辑器、Editor 项目元数据会话、后端模型服务与发布校验的集中职责留待后续分别处理，不与本轮通用输入和模型管理迁移混改。
@@ -20,6 +18,7 @@ Canvas 小范围视觉优化待人工验收：运行焦点、人工等待、失�
 
 ## 待决策与后续边界
 
+- Tree 条目跳转画布、多槽位关联、Item Retry / Resume 及更多 Iteration UI / Runtime 扩展继续留待独立授权；现有投影与选择边界见 [Graph Execution Projection](architecture.md#graph-execution-projection)。
 - Workflow Web 数据依赖可视化仍待人工 Canvas 验收；Template variable candidate、Switch / N-way 和 Nested If 不在当前授权范围。
 
 - Runtime 运维：recovery_required 人工处理、业务记录 / checkpoint 对账、运行删除与保留策略；[独立实验](../experiments/langgraph-iteration-runtime/README.md)已复现 LangGraph 1.5.0 maxConcurrency=1 异常，依赖处理方案待独立评审，本轮不升级或绕过。
@@ -40,4 +39,4 @@ Canvas 小范围视觉优化待人工验收：运行焦点、人工等待、失�
 
 ### 下一步最小独立实施任务
 
-SubWorkflow v1 的固定单次调用、持久化与 checkpoint 已接入，允许的子图集合见[当前架构](architecture.md#scoped-graph-compilation)。现有 Web 子图编辑继续进行人工验收；跨版本或跨项目调用、Batch、单 item Retry / Resume 继续另行授权。AI 文本样例验收后保留为 test fixture，不恢复 production development Entry；如需正式通用产品 Entry，另行确认产品需求。
+Iteration → SubWorkflow 继续保持 Publish / Compiler 与 Picker 门禁；[动态执行身份基础](architecture.md#scoped-graph-compilation)不能替代组合执行验收。后续最小范围须先补跨 Composite 失败传播、组合 checkpoint / re-entry 测试及 Web 祖先 Item selection 传递，再独立决定是否开放该组合。跨版本或跨项目调用、Batch、单 item Retry / Resume 继续另行授权。AI 文本样例验收后保留为 test fixture，不恢复 production development Entry；如需正式通用产品 Entry，另行确认产品需求。

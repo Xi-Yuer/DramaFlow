@@ -119,8 +119,8 @@ export class DefaultWorkflowCompiler implements WorkflowCompiler {
       execution: { identity: { scopeKey: ROOT_EXECUTION_SCOPE_KEY } },
       runtime: { executor, services: valueServices, reviewRuns, iterationRuns, childGraphRuns },
       target: {
-        addNode: (id, execute) => {
-          graph.addNode(id, execute);
+        addNode: (id, execute, options) => {
+          graph.addNode(id, execute, options);
         },
         addBoundaryNode: (id, execute) => {
           graph.addNode(id, execute);

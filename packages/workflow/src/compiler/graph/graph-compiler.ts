@@ -1,7 +1,13 @@
 import type { ChildGraphRunRepository } from '../../runtime/execution/child-execution-repository.js';
 import type { RuntimeValue, WorkflowRun } from '@dramaflow/contracts';
 import type { RunnableInterface } from '@langchain/core/runnables';
-import { START, END, type LangGraphRunnableConfig } from '@langchain/langgraph';
+import {
+  START,
+  END,
+  type AddNodeOptions,
+  type LangGraphRunnableConfig,
+} from '@langchain/langgraph';
+import type { GraphExecutionIdentity } from '../../runtime/execution/execution-scope.js';
 import type { NodeRegistry } from '../../node/registry/registry.js';
 import type { NodeExecutor } from '../../runtime/node/node-executor.js';
 import type { HumanReviewNodeRunRepository } from '../../runtime/execution/node-run-repository.js';
@@ -13,18 +19,15 @@ import { collectNodeDependencies, DependencyCompiler } from '../dependency/depen
 import { readIfRoute } from '../if/strategy.js';
 import type { GraphCompilationPlan } from './compilation-plan.js';
 
-export interface GraphExecutionIdentity {
-  scopeKey: string;
-  childExecutionId?: string;
-}
+export type { GraphExecutionIdentity } from '../../runtime/execution/execution-scope.js';
 export type GraphExecutionContext<State extends WorkflowState> =
   | { identity: GraphExecutionIdentity }
   | { resolve(state: State, config: LangGraphRunnableConfig): GraphExecutionIdentity };
 export type CompiledGraphNode<State extends WorkflowState> =
-  | LangGraphNode<State>
-  | RunnableInterface<WorkflowState, WorkflowStateUpdate, LangGraphRunnableConfig>;
+  LangGraphNode<State> | RunnableInterface<State, WorkflowStateUpdate, LangGraphRunnableConfig>;
+export type GraphNodeRegistrationOptions = Pick<AddNodeOptions, 'subgraphs'>;
 export interface GraphCompilationTarget<State extends WorkflowState> {
-  addNode(id: string, node: CompiledGraphNode<State>): void;
+  addNode(id: string, node: CompiledGraphNode<State>, options?: GraphNodeRegistrationOptions): void;
   addBoundaryNode(
     id: string,
     node: (state: State, config: LangGraphRunnableConfig) => Promise<Partial<State>>,
@@ -152,13 +155,13 @@ export function compileGraph<State extends WorkflowState>(
           declaration,
           workflow: definition,
           run,
-          scopeKey: fixedIdentity(execution).scopeKey,
+          execution,
           registry,
           executor: runtime.executor,
           services: runtime.services,
           runs: runtime.childGraphRuns,
           childCompilation: child.plan,
-          addNode: (id, graph) => target.addNode(id, graph),
+          addNode: (id, graph, options) => target.addNode(id, graph, options),
         });
         break;
       }
@@ -179,6 +182,7 @@ export function compileGraph<State extends WorkflowState>(
           executor: runtime.executor,
           services: runtime.services,
           runs: runtime.iterationRuns,
+          childGraphRuns: runtime.childGraphRuns,
           bodyCompilation: body.plan,
           addNode: (id, child) => target.addNode(id, child),
         });

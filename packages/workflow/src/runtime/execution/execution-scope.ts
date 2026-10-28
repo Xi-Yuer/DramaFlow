@@ -6,6 +6,14 @@ import {
 } from '@dramaflow/contracts';
 import { z } from 'zod';
 
+export const graphExecutionIdentitySchema = z
+  .object({
+    scopeKey: executionScopeKeySchema,
+    childExecutionId: workflowIdentifierSchema.optional(),
+  })
+  .strict();
+export type GraphExecutionIdentity = z.infer<typeof graphExecutionIdentitySchema>;
+
 // 内部调用描述，不进入 Workflow Contract。新增 kind 必须同时定义规范编码。
 const owner = {
   ownerOccurrenceId: workflowIdentifierSchema,

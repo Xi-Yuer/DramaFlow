@@ -10,7 +10,9 @@ import {
   workflowStateSchema,
   type WorkflowState,
 } from '../../runtime/state/state.js';
+import type { GraphExecutionIdentity } from '../../runtime/execution/execution-scope.js';
 
+export const SUBWORKFLOW_PARENT_EXECUTION = '__dramaflow:subworkflow_parent_execution';
 export const SUBWORKFLOW_FRAME = '__dramaflow:subworkflow_frame';
 export const SUBWORKFLOW_CALL = '__dramaflow:subworkflow_call';
 export const SUBWORKFLOW_RESULT = '__dramaflow:subworkflow_result';
@@ -34,6 +36,7 @@ const ParentInput = Annotation.Root({
   outputs: Annotation<WorkflowState['outputs']>(),
   variables: Annotation<WorkflowState['variables']>(),
   execution: Annotation<WorkflowState['execution']>(),
+  [SUBWORKFLOW_PARENT_EXECUTION]: Annotation<GraphExecutionIdentity>(),
 });
 const ParentOutput = Annotation.Root({ outputs: Annotation<WorkflowState['outputs']>() });
 export const SubworkflowState = Annotation.Root({

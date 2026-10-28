@@ -21,6 +21,7 @@ import {
 } from '@langchain/langgraph';
 import { NodeRegistry } from '../../node/registry/registry.js';
 import type { IterationRunRepository } from './execution-repository.js';
+import type { ChildGraphRunRepository } from '../../runtime/execution/child-execution-repository.js';
 import {
   failNodeRun,
   ChildExecutionRecordingError,
@@ -72,6 +73,7 @@ export interface IterationCompilationContext {
   executor: NodeExecutor;
   services: WorkflowValueServices;
   runs: IterationRunRepository;
+  childGraphRuns?: ChildGraphRunRepository;
   bodyCompilation: GraphCompilationPlan;
   addNode(
     id: string,
@@ -133,10 +135,10 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
           childExecutionId: itemId(state),
         }),
       },
-      runtime: { executor, services, iterationRuns: runs },
+      runtime: { executor, services, iterationRuns: runs, childGraphRuns: context.childGraphRuns },
       target: {
-        addNode: (id, execute) => {
-          itemGraph.addNode(id, execute);
+        addNode: (id, execute, options) => {
+          itemGraph.addNode(id, execute, options);
         },
         addBoundaryNode: (id, execute) => {
           itemGraph.addNode(id, execute);
