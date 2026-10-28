@@ -15,6 +15,25 @@
 
 按变更执行相关检查；只改文档时验证格式、链接和现状一致性，无需业务测试。测试替身不能成为生产兜底。具体用例与隔离规则以 [集成入口](../scripts/integration.mjs)及测试代码为准，不在文档复制断言或执行流水。
 
+## 测试并发与日常筛选
+
+`pnpm test` 仍运行全仓单元 / 组件测试，默认 Turbo 同时测试 1 个包，各包共享 Vitest 配置、最多 2 个 workers，避免包级并发与 CPU 自动扩张叠加。数据库 / HTTP / 存储专项继续保持已有显式入口和隔离要求，不默认运行浏览器或真实 Provider。没有提高超时、自动重试或减少测试覆盖。
+
+日常修改优先按包或文件运行；单文件参数前不再隐含追加整个 test 目录：
+
+```sh
+# 构建依赖后，只测一个包
+pnpm test --filter=@dramaflow/workflow
+# 构建依赖后，只测指定文件
+pnpm test --filter=@dramaflow/workflow -- test/run/workflow-resume.test.ts
+# 依赖已构建时，直接启动单文件 watch
+pnpm --filter @dramaflow/workflow exec vitest test/run/workflow-resume.test.ts
+# 资源充足时显式调高包级并发；Vitest workers 也可通过 CLI 覆盖
+pnpm test --concurrency=2 -- --maxWorkers=2
+```
+
+`vitest.shared.mjs` 是默认配置来源，Web alias、API globals 和专项串行 / timeout 配置保留在各包中。测试结果继续不使用 Turbo 缓存。
+
 ## 测试与环境边界
 
 集成测试使用独立 dramaflow_test、随机 dramaflow-test-* 队列前缀，应用现有迁移，只清理自建账号及其项目、模型、对象和 thread；禁止指向业务库或清空共享队列。MemorySaver 仅用于单元测试，Human Review 通过内存 Checkpointer 验证暂停、串行恢复、If 组合和审计生命周期，NodeRun 隔离 PostgreSQL 用例验证 occurrence 身份、各 occurrence 内并发 attempt 分配、审核复用和权限。独立[迁移用例](../packages/server/test/node-occurrence-migration.spec.ts)在 dramaflow_test 的随机 schema 重放旧 DDL 与新迁移，验证审计 / Artifact 保留及约束；该用例仅在显式 DRAMAFLOW_INTEGRATION=1 下运行。[ChildExecution 隔离 PostgreSQL 用例](../packages/server/test/iteration-item-runs.spec.ts)执行真实 Iteration 编译图，验证单 item 身份、并行失败、复用与 attempt 隔离、嵌套父链、权限及数据库不可变约束，同样要求 DRAMAFLOW_INTEGRATION=1 与本机 dramaflow_test。[运行树查询集成用例](../packages/server/test/execution-tree.integration.spec.ts)在同一隔离条件下验证真实外键、嵌套父链、独立状态、权限、分页和查询不改写审计；Contract / 通用查询单测另验证非 Iteration source、非法父链及边界投影。Web 单元 / 组件测试覆盖文本审批和恢复交互，真实浏览器仍需人工验收；本机协议替身不代表收费模型验收。

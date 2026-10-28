@@ -15,7 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:dev": "prisma migrate dev",
-    "test": "pnpm -w exec vitest run --root packages/database test",
+    "test": "pnpm -w exec vitest run --root packages/database",
     "lint": "eslint src test"
   },
   "dependencies": {
