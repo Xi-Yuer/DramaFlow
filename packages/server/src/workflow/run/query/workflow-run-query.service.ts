@@ -1,5 +1,9 @@
 import {
   nodeRunSchema,
+  workflowRunHistoryQuerySchema,
+  workflowRunHistoryResponseSchema,
+  encodeWorkflowRunCursor,
+  decodeWorkflowRunCursor,
   workflowInvocationKeySchema,
   workflowIdentifierSchema,
   workflowRunResponseSchema,
@@ -16,6 +20,75 @@ const workflowNodeRunsResponseSchema = z.object({ items: z.array(nodeRunSchema) 
 @Injectable()
 export class WorkflowRunQueryService {
   constructor(private readonly database: DatabaseService) {}
+
+  async listRuns(ownerId: string, rawProjectId: string, rawWorkflowId: string, query: unknown) {
+    const projectId = z.uuid().parse(rawProjectId);
+    const workflowId = workflowIdentifierSchema.parse(rawWorkflowId);
+    const { cursor: token } = workflowRunHistoryQuerySchema.parse(query);
+    const cursor = token ? decodeWorkflowRunCursor(token) : undefined;
+    const workflow = await this.database.client.workflow.findFirst({
+      where: { id: workflowId, projectId, project: { ownerId } },
+      select: { id: true },
+    });
+    if (!workflow) throw new NotFoundException('工作流不存在或无权访问');
+    const rows = await this.database.client.workflowRun.findMany({
+      where: {
+        workflowId,
+        projectId,
+        project: { ownerId },
+        ...(cursor
+          ? {
+              OR: [
+                { createdAt: { lt: new Date(cursor.createdAt) } },
+                { createdAt: new Date(cursor.createdAt), id: { lt: cursor.id } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 21,
+      select: {
+        id: true,
+        workflowId: true,
+        workflowVersionId: true,
+        status: true,
+        createdAt: true,
+        startedAt: true,
+        completedAt: true,
+        error: true,
+      },
+    });
+    const page = rows.slice(0, 20);
+    const versions = page.length
+      ? await this.database.client.workflowVersion.findMany({
+          where: {
+            id: { in: [...new Set(page.map((row) => row.workflowVersionId))] },
+            workflowId,
+            workflow: { projectId, project: { ownerId } },
+          },
+          select: { id: true, version: true },
+        })
+      : [];
+    const versionNumbers = new Map(versions.map((version) => [version.id, version.version]));
+    const last = page.at(-1);
+    return workflowRunHistoryResponseSchema.parse({
+      items: page.map((row) => ({
+        id: row.id,
+        workflowId: row.workflowId,
+        workflowVersionId: row.workflowVersionId,
+        version: versionNumbers.get(row.workflowVersionId) ?? null,
+        status: row.status,
+        createdAt: row.createdAt.toISOString(),
+        ...(row.startedAt ? { startedAt: row.startedAt.toISOString() } : {}),
+        ...(row.completedAt ? { completedAt: row.completedAt.toISOString() } : {}),
+        ...(row.error !== null ? { error: row.error } : {}),
+      })),
+      nextCursor:
+        rows.length > 20 && last
+          ? encodeWorkflowRunCursor({ createdAt: last.createdAt.toISOString(), id: last.id })
+          : null,
+    });
+  }
 
   async getRun(ownerId: string, runId: string): Promise<WorkflowRunResponse> {
     const run = await this.authorizedRun(ownerId, runId);

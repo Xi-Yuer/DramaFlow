@@ -10,6 +10,8 @@ import {
   WorkflowRunStatusView,
   workflowRunStatusDisplay,
 } from '../run/status/workflow-run-status-controls';
+import { WorkflowRunHistory } from '../run/workflow-run-history';
+import type { WorkflowVersionResponse } from '@dramaflow/contracts';
 import styles from './workflow-execution-workspace.module.css';
 
 type PanelTab = 'settings' | 'result';
@@ -18,6 +20,8 @@ export interface WorkflowExecutionWorkspaceProps {
   publication: ReactNode;
   run: ComponentProps<typeof WorkflowRunControls>;
   recovery: InvocationRecoveryState;
+  history?: ComponentProps<typeof WorkflowRunHistory>;
+  executionVersion?: WorkflowVersionResponse | null;
   onRetryRecovery(): void;
   onSelectRecovered(key: string): void;
 }
@@ -30,6 +34,8 @@ export function WorkflowExecutionWorkspace({
   recovery,
   onRetryRecovery,
   onSelectRecovered,
+  history,
+  executionVersion,
 }: WorkflowExecutionWorkspaceProps) {
   const [executionReload, setExecutionReload] = useState(0);
   const [view, setView] = useState({
@@ -78,14 +84,23 @@ export function WorkflowExecutionWorkspace({
   const display = status ? workflowRunStatusDisplay[status] : null;
   const currentRun = run.runStatus.run;
   const executionDefinition =
-    run.version && currentRun && run.version.id === currentRun.workflowVersionId
-      ? run.version.definition
+    (executionVersion ?? run.version)?.id === currentRun?.workflowVersionId
+      ? ((executionVersion ?? run.version)?.definition ?? null)
       : null;
   return (
     <>
       <div className={styles.toolbar} role="group" aria-label="工作流执行工具栏">
         <div className={styles.publication}>{publication}</div>
         <Space size={8} className={styles.tools}>
+          {history ? (
+            <WorkflowRunHistory
+              {...history}
+              onSelect={(selected) => {
+                history.onSelect(selected);
+                setView((current) => ({ ...current, open: true, tab: 'result', dismissed: false }));
+              }}
+            />
+          ) : null}
           {trackedId || needsAttention || run.state.phase === 'submitting' ? (
             <Button
               size="small"

@@ -15,7 +15,7 @@ export const workflowRunStatusDisplay: Record<WorkflowRunStatus, { label: string
     cancelled: { label: '已取消', color: 'default' },
   };
 
-function formatTime(value: string) {
+export function formatWorkflowRunTime(value: string) {
   return new Date(value).toLocaleString('zh-CN', {
     timeZone: 'Asia/Shanghai',
     hour12: false,
@@ -61,16 +61,16 @@ export function WorkflowRunStatusView({
       {run ? (
         <Descriptions size="small" column={1}>
           <Descriptions.Item label="创建时间">
-            <time dateTime={run.createdAt}>{formatTime(run.createdAt)}</time>
+            <time dateTime={run.createdAt}>{formatWorkflowRunTime(run.createdAt)}</time>
           </Descriptions.Item>
           {run.startedAt ? (
             <Descriptions.Item label="开始时间">
-              <time dateTime={run.startedAt}>{formatTime(run.startedAt)}</time>
+              <time dateTime={run.startedAt}>{formatWorkflowRunTime(run.startedAt)}</time>
             </Descriptions.Item>
           ) : null}
           {run.completedAt ? (
             <Descriptions.Item label="结束时间">
-              <time dateTime={run.completedAt}>{formatTime(run.completedAt)}</time>
+              <time dateTime={run.completedAt}>{formatWorkflowRunTime(run.completedAt)}</time>
             </Descriptions.Item>
           ) : null}
         </Descriptions>

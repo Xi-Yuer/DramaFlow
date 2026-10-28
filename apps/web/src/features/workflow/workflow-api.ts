@@ -1,5 +1,6 @@
 import {
   executionTreeQuerySchema,
+  workflowRunHistoryResponseSchema,
   executionTreeResponseSchema,
   nodeRunSchema,
   publishWorkflowRequestSchema,
@@ -25,6 +26,8 @@ import { ApiError, jsonBody, request } from '../../lib/http';
 const workflowNodeRunsResponseSchema = z.object({ items: z.array(nodeRunSchema) }).strict();
 
 export const workflowKeys = {
+  runHistory: (projectId: string, workflowId: string) =>
+    ['workflow-run-history', projectId, workflowId] as const,
   version: (versionId: string) => ['workflow-version', versionId] as const,
   versions: (workflowId: string) => ['workflow-versions', workflowId] as const,
   publication: (workflowId: string, revision: number) =>
@@ -33,6 +36,12 @@ export const workflowKeys = {
 };
 
 export const workflowApi = {
+  listRuns: (projectId: string, workflowId: string, cursor?: string, signal?: AbortSignal) =>
+    request(
+      `/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(workflowId)}/runs${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+      workflowRunHistoryResponseSchema,
+      { signal },
+    ),
   lookupInvocation: (workflowId: string, invocationKey: string) =>
     request(
       `/workflow-runs/by-invocation/${encodeURIComponent(workflowId)}/${encodeURIComponent(invocationKey)}`,

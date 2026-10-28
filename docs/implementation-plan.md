@@ -4,6 +4,8 @@
 
 ## 当前阶段
 
+Workflow Run History 最小查询与只读版本查看进入交付验收，等待人工检查历史分页、版本切换、嵌套执行和返回草稿；当前能力见[运行历史](architecture.md#web-workflow-run-history)。不扩展 cancel / retry、搜索或 Observability。
+
 Catalog Entry → Composite 的 AI 文本纵向验收等待用户在 Web 完成。测试样例只保留为 test fixture；本机专用项目只创建普通 Draft，人工步骤见[开发指南](development.md#ai-文本-composite-人工验收)。用户检查下钻 Zoom / Grow、选择已有模型、修改内部 prompt / config、返回保存并刷新，再显式 Publish / Run，核对真实输出和 Execution Tree。自动测试使用 fake Provider，不替代真实模型与视觉验收。
 
 Canvas / Adapter / Node Inspector、通用 Input / Iteration 输入、模型设置与模型选择的职责拆分进入结构与交互验收；目录边界见[开发指南](development.md#前端职责目录)，实现入口见[当前架构](architecture.md#web-graph-input-编辑职责)。保持现有协议、提交与显式选择规则，只调整 Web 模块组织。Template 编辑器、Editor 项目元数据会话、后端模型服务与发布校验的集中职责留待后续分别处理，不与本轮通用输入和模型管理迁移混改。

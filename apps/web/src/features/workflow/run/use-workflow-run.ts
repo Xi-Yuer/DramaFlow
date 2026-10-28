@@ -17,6 +17,8 @@ import {
 import { workflowRunTrackingId } from './status/workflow-run-status';
 import { useWorkflowRunStatus } from './status/use-workflow-run-status';
 
+import type { WorkflowRunSummary } from '@dramaflow/contracts';
+
 type PublishedVersion = WorkflowVersionListResponse['items'][number];
 
 function initialInputValues(version: WorkflowVersionResponse): WorkflowInputFormValues {
@@ -48,6 +50,23 @@ export function useWorkflowRun(
   workflowId: string,
   preferredVersion: PublishedVersion | null,
 ) {
+  const [historyRun, setHistoryRun] = useState<WorkflowRunSummary | null>(null);
+  const historyVersion = useQuery({
+    queryKey: workflowKeys.version(historyRun?.workflowVersionId ?? 'none'),
+    enabled: !!historyRun,
+    queryFn: async () => {
+      if (!historyRun) throw new ApiError('尚未选择历史运行', 400);
+      const result = await workflowApi.getVersion(historyRun.workflowVersionId);
+      if (
+        result.id !== historyRun.workflowVersionId ||
+        result.workflowId !== workflowId ||
+        result.projectId !== projectId
+      )
+        throw new ApiError('历史版本与当前工作流不匹配', 200);
+      return result;
+    },
+    staleTime: Infinity,
+  });
   const identity = useIdentity();
   const { modal } = App.useApp();
   const { recovery, state: recoveryState } = useInvocationRecovery(
@@ -153,6 +172,7 @@ export function useWorkflowRun(
     const built = buildWorkflowRunInputs(selected.definition.inputs, values);
     if (!built.ok) return;
     const submit = () => {
+      setHistoryRun(null);
       setTrackingSelection(null);
       return controller.startNew({ workflowVersionId: selected.id, inputs: built.inputs });
     };
@@ -176,11 +196,31 @@ export function useWorkflowRun(
     modal,
   ]);
 
+  const validHistoryVersion =
+    historyRun &&
+    historyVersion.data &&
+    historyVersion.data.id === historyRun.workflowVersionId &&
+    historyVersion.data.workflowId === workflowId &&
+    historyVersion.data.projectId === projectId
+      ? historyVersion.data
+      : null;
   return {
+    historyRun,
+    historyVersion: validHistoryVersion,
+    historyVersionError:
+      historyVersion.isError || (!!historyRun && !!historyVersion.data && !validHistoryVersion),
+    retryHistoryVersion: () => historyVersion.refetch(),
+    selectHistoryRun: (run: WorkflowRunSummary) => {
+      if (run.workflowId !== workflowId) return;
+      setHistoryRun(run);
+      setTrackingSelection(run.id);
+    },
+    returnToDraft: () => setHistoryRun(null),
     recovery: recoveryState,
     uncertainInvocation: unresolved,
     retryRecovery: () => recovery?.refresh(),
     selectRecovered: (key: string) => {
+      setHistoryRun(null);
       recovery?.select(key);
       const run = recoveryState.entries.find((entry) => entry.receipt.invocationKey === key)?.run;
       if (run) setTrackingSelection(run.id);
@@ -194,7 +234,18 @@ export function useWorkflowRun(
     versionError: version.isError,
     values,
     state,
-    runStatus: runStatus.state,
+    runStatus:
+      historyRun && runStatus.state.runId !== historyRun.id
+        ? {
+            ...runStatus.state,
+            phase: 'loading' as const,
+            runId: historyRun.id,
+            run: null,
+            nodeRuns: undefined,
+            review: null,
+            error: null,
+          }
+        : runStatus.state,
     reviewActions: runStatus.reviewActions,
     selectVersion,
     changeInput,

@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Header, HttpCode, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  Inject,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { Actor } from '../../auth/auth.guard.js';
 import type { AuthActor } from '../../auth/auth.service.js';
 import { WorkflowRuntimeService } from './workflow-runtime.service.js';
@@ -47,5 +57,20 @@ export class WorkflowRunsController {
   @Header('Cache-Control', 'no-store')
   resume(@Actor() actor: AuthActor, @Param('runId') runId: string, @Body() body: unknown) {
     return this.runtime.resumeRun(actor.user.id, runId, body);
+  }
+}
+
+@Controller('projects/:projectId/workflows/:workflowId/runs')
+export class WorkflowRunHistoryController {
+  constructor(@Inject(WorkflowRuntimeService) private readonly runtime: WorkflowRuntimeService) {}
+  @Get()
+  @Header('Cache-Control', 'no-store')
+  list(
+    @Actor() actor: AuthActor,
+    @Param('projectId') projectId: string,
+    @Param('workflowId') workflowId: string,
+    @Query() query: unknown,
+  ) {
+    return this.runtime.listRuns(actor.user.id, projectId, workflowId, query);
   }
 }

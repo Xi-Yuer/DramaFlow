@@ -153,11 +153,14 @@ dirty、修订冲突或保存未确认时禁止发布；发布锁定 Draft 编�
 | 方法与路径                                                  | 行为                                                                |
 | ----------------------------------------------------------- | ------------------------------------------------------------------- |
 | POST /workflow-runs                                         | 固定 workflowVersionId、invocationKey、inputs；受理返回 202         |
+| GET /projects/:projectId/workflows/:workflowId/runs         | 按授权 Project / Workflow 查询运行历史，cursor 分页，不执行         |
 | GET /workflow-runs/:runId                                   | 安全 Run projection，含可选 outputs / error，不含 threadId          |
 | GET /workflow-runs/:runId/execution-tree                    | 按 parent 只读一层 NodeRun 或 Child Execution；不执行、不修改状态   |
 | GET /workflow-runs/by-invocation/:workflowId/:invocationKey | 授权 Workflow 下只读 lookup，返回 `{ run }` 或 `{ run: null }`      |
 | GET /workflow-runs/:runId/pending-human-reviews             | 查询当前单个待审核产品对象；非 waiting 返回空 items                 |
 | POST /workflow-runs/:runId/resume                           | 指定 interruptId / expectedWaitingRevision 与 V1 decision；202 受理 |
+
+Run History 复用 WorkflowRun 查询服务，不新增持久化模型。列表每页 20 项，按 createdAt DESC、id DESC 稳定排序；沿用 base64url JSON cursor 与 `{ items, nextCursor }`，游标同时保存毫秒时间和 id，后续页取严格小于的联合边界。查询和版本号读取均限定当前 owner / Project / Workflow，不读取 Draft。摘要只返回 Run ID、Workflow / Version ID、可用版本号、status、时间和已有 error；不返回 inputs / outputs、invocationKey、threadId、Outbox / Job / checkpoint 字段。版本不可用时保留真实 Version ID，版本号为 null。
 
 Start key 的等价性与终态保留规则见 [Workflow](workflow-model.md#start-invocation-身份)。入队确认失败返回 `WORKFLOW_QUEUE_UNAVAILABLE`（503），携带已持久化的 Run ID / key。lookup 不创建 Run / Outbox、不投递或执行；查无结果不能证明原 POST 不会稍后提交。
 
@@ -308,6 +311,12 @@ Web 普通 Picker 使用 `isNodeCatalogEntryVisible` 只显示 public，并按 E
 [Run Form](../apps/web/src/features/workflow/run/workflow-run-controls.tsx)从明确选中的已发布版本读取 Graph Input 声明，以 DataType 驱动文本、数字、布尔、文本列表与数字列表控件，不依赖名称、连接目标或 Iteration。列表从空数组开始，按项添加、删除并保留顺序，不要求手写 JSON。scalar text 保留原文与空字符串，number / boolean 保留 0 / false；原有 scalar nullable 与不支持类型的拦截行为保持。
 
 [提交转换](../apps/web/src/features/workflow/run/workflow-run.ts)继续生成现有 inline RuntimeValue 与 Start 请求。required 列表至少一项；文本列表逐项拒绝空字符串 / 纯空白，其他文本原文保留。数字列表逐项校验十进制数字文本并转换为有限 number，拒绝空值、NaN、Infinity 与非法项，不通过过滤或填 0 修复。任一无效项阻止整个请求。optional 未勾选「提供此输入」时省略字段；明确提供的空列表按实际值提交 `[]`，不制造空白项，不改变后端 optional 语义。输入由页面级 Hook 持有，切换版本重置，提交中锁定增删与编辑。
+
+### Web Workflow Run History
+
+执行工具栏的“运行历史”打开轻量抽屉，按需加载、刷新和分页；列表显示状态、创建 / 开始 / 完成时间、版本及失败摘要。选择 Run 后，页面级 Run hook 继续使用原有 Run / NodeRun 查询与轮询，按该 Run 的 workflowVersionId 读取 immutable Version。Canvas 使用同一个 GraphCanvasSession 只读展示该版本 Definition，继续复用 Execution Tree、Graph Execution Projection、Item / ancestor selection 和 Inspector；创建、拖动、配置写入被锁定，下钻仍可使用。
+
+历史查看不覆盖当前 Draft，也不把历史视口写入项目。版本加载失败时明确显示不可用，不借用 Draft；“返回草稿”恢复当前编辑定义，若与被查看 Run 的版本不同，仍由现有 version mismatch 规则撤下运行投影。运行表单的版本选择独立于历史查看版本，不能用于解释历史执行。没有新增 cancel、retry、rerun、搜索、归档或 Observability 操作。
 
 ### Web Workflow Run Result
 

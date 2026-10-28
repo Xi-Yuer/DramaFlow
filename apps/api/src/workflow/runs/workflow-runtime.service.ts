@@ -63,6 +63,10 @@ export class WorkflowRuntimeService {
     return workflowRunResponseSchema.parse(response);
   }
 
+  listRuns(ownerId: string, projectId: string, workflowId: string, query: unknown) {
+    return this.runs.listRuns(ownerId, projectId, workflowId, query);
+  }
+
   async getRun(ownerId: string, rawId: string): Promise<WorkflowRunResponse> {
     const runId = workflowIdentifierSchema.parse(rawId);
     return this.httpOperation('WORKFLOW_RUN_NOT_FOUND', () => this.runs.getRun(ownerId, runId));

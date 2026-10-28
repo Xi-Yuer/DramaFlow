@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { Alert, Button, Spin } from 'antd';
 import { useRouter } from 'next/navigation';
 import '@xyflow/react/dist/style.css';
 import type { Project, WorkflowResponse } from '@dramaflow/contracts';
@@ -94,6 +95,13 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
         onClose={modelSettings.closeSettings}
       />
       <WorkflowExecutionWorkspace
+        history={{
+          projectId: project.id,
+          workflowId: draft.workflowId,
+          selectedId: workflowRun.historyRun?.id,
+          onSelect: workflowRun.selectHistoryRun,
+        }}
+        executionVersion={workflowRun.historyVersion}
         publication={
           <WorkflowPublishControls
             compact
@@ -141,25 +149,50 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
         onRetryRecovery={() => void workflowRun.retryRecovery()}
         onSelectRecovered={workflowRun.selectRecovered}
       >
-        <GraphCanvasSession
-          ref={graphSession}
-          key={draft.workflowId}
-          projectId={project.id}
-          workflowId={draft.workflowId}
-          workflow={draft.definition}
-          onEdit={draft.edit}
-          onOpenProvider={modelSettings.openProvider}
-          modelResume={modelResume}
-          onModelResumeConsumed={modelSettings.consumeResume}
-          reloading={draft.operation === 'reloading'}
-          interactionLocked={modelSettingsOpen || publication.publishing}
-          initialRootViewport={project.viewport}
-          onRootViewportChange={metadata.onMoveEnd}
-          runStatus={workflowRun.runStatus}
-          nodeRuns={workflowRun.runStatus.nodeRuns}
-          reviewActions={workflowRun.reviewActions}
-          onRefreshRunStatus={() => void workflowRun.refreshRunStatus()}
-        />
+        {workflowRun.historyRun ? (
+          <Alert
+            type="info"
+            title={`正在只读查看历史运行${workflowRun.historyVersion ? ` · v${workflowRun.historyVersion.version}` : ''}`}
+            action={<Button onClick={workflowRun.returnToDraft}>返回草稿</Button>}
+          />
+        ) : null}
+        {workflowRun.historyRun && !workflowRun.historyVersion ? (
+          workflowRun.historyVersionError ? (
+            <Alert
+              type="error"
+              title="历史发布版本读取失败"
+              action={<Button onClick={() => void workflowRun.retryHistoryVersion()}>重试</Button>}
+            />
+          ) : (
+            <Spin tip="正在读取历史发布版本…">
+              <div style={{ minHeight: 180 }} />
+            </Spin>
+          )
+        ) : (
+          <GraphCanvasSession
+            ref={workflowRun.historyRun ? undefined : graphSession}
+            key={workflowRun.historyRun ? `history:${workflowRun.historyRun.id}` : draft.workflowId}
+            projectId={project.id}
+            workflowId={draft.workflowId}
+            workflow={workflowRun.historyVersion?.definition ?? draft.definition}
+            onEdit={(apply) => {
+              if (!workflowRun.historyRun) draft.edit(apply);
+            }}
+            onOpenProvider={modelSettings.openProvider}
+            modelResume={workflowRun.historyRun ? null : modelResume}
+            onModelResumeConsumed={modelSettings.consumeResume}
+            reloading={draft.operation === 'reloading'}
+            interactionLocked={
+              !!workflowRun.historyRun || modelSettingsOpen || publication.publishing
+            }
+            initialRootViewport={workflowRun.historyRun ? project.viewport : metadata.viewport}
+            onRootViewportChange={workflowRun.historyRun ? () => undefined : metadata.onMoveEnd}
+            runStatus={workflowRun.runStatus}
+            nodeRuns={workflowRun.runStatus.nodeRuns}
+            reviewActions={workflowRun.reviewActions}
+            onRefreshRunStatus={() => void workflowRun.refreshRunStatus()}
+          />
+        )}
       </WorkflowExecutionWorkspace>
     </main>
   );

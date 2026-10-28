@@ -36,3 +36,5 @@ export * from './node/composite.js';
 export * from './graph/traversal.js';
 
 export * from './node/catalog.js';
+
+export * from './workflow/run/workflow-run-history.js';
