@@ -228,7 +228,7 @@ export function analyzeGraphCompilation(input: GraphCompilationInput): GraphComp
 export function prepareGraphCompilation(input: GraphCompilationInput): GraphCompilationPlan {
   const { definition, definitionLocation, registry } = input;
   const entries = resolveEntries(input);
-  // 分发能力与产品准入分离；局部 body 仍受原 Action-only 门禁约束。
+  // 分发能力与产品准入分离；Body 允许普通 Action / SubWorkflow v1，后者的 graph 仅允许 Action DAG。
   if (input.capability === 'iteration_body_v1' || input.capability === 'subworkflow_graph_v1')
     assertGraphExecutionCapabilities(definition, registry, {
       definitionPath: definitionLocation.path,

@@ -4,7 +4,7 @@
 
 DramaFlow 是团队自部署的 AI 视频生产工作流平台，漫剧优先，也可承载广告、产品宣传和口播。当前图为有向无环，普通多上游使用确定性 ALL Join。条件路由、显式迭代、人工审核和内嵌 SubWorkflow v1 的实际准入见当前架构；Batch 与其他控制能力按后续明确任务加入。任意循环、公开 SaaS、商业计费、长期记忆和知识库不在范围内。成本观察不等于计费。
 
-一个项目恰好一张画布、一个逻辑 Workflow，可以有多次运行。Project、Canvas、Workflow 职责不同，不据此增加多画布或多工作流层级。被调用流程属于它自己的项目；组合时引用对方的固定版本，不能因此获得其他项目的权限。
+一个项目恰好一张画布、一个逻辑 Workflow，可以有多次运行。Project、Canvas、Workflow 职责不同，不据此增加多画布或多工作流层级。当前 `flow.subworkflow@1` 的定义直接内嵌在 NodeDefinition 的 `composite.graph: GraphDefinition`，随所属 WorkflowDefinition / WorkflowVersion 一起版本化，不是对另一个 Workflow / WorkflowVersion 的运行时引用。当前没有 Shared SubWorkflow 或跨项目 Workflow 调用；引用独立 Workflow / 固定 WorkflowVersion 的 reusable workflow component 属于未来独立能力，不是当前 SubWorkflow v1 语义。
 
 | 概念               | 边界                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------ |

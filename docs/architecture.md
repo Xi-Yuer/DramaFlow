@@ -90,7 +90,7 @@ body 的嵌套 composite、If / control、Human Review / interaction 均拒绝�
 
 [Iteration strategy](../packages/workflow/src/compiler/iteration/strategy.ts)沿用 prepare → 原生 Send / compiled Body → collect：prepare 创建父 NodeRun 并审计输入；Body 入口创建或复用 ChildExecution，向 NodeExecutor 显式传递 childExecutionId；declared outputs 成功后结束 child，collect 完成父 NodeRun。空集合与普通数组 Action 不创建 child。业务失败仍通过 Iteration helper 在同事务记录 child 与父失败，同 item 并行失败保留首次摘要；通用 markChildExecutionFailed 仅结束 child。SubWorkflow 的业务失败使用 markChildExecutionAndParentFailed，在同一事务结束该 child 与父 NodeRun；Iteration helper 继续拒绝其他 kind。GraphInterrupt / ParentCommand 原样交还 LangGraph，记录保持 running；仓储故障不伪装业务失败。
 
-[增量迁移](../packages/database/prisma/migrations/20261027000000_child_executions/migration.sql)原地 rename iteration_item_run / NodeRun 旧归属列，保留 ID、索引位置、归属、时间与错误，补齐 kind / invocationKey / metadata。父链可以表达 NodeRun → ChildExecution → NodeRun → ChildExecution；这不开放嵌套 Composite 执行。Iteration scope 派生和已持久化 checkpoint channel / frame / result 字段名保持不变，私有旧字段承载的 ID 现在指向 ChildExecution；不改写现有版本或 checkpoint。
+[增量迁移](../packages/database/prisma/migrations/20261027000000_child_executions/migration.sql)原地 rename iteration_item_run / NodeRun 旧归属列，保留 ID、索引位置、归属、时间与错误，补齐 kind / invocationKey / metadata。父链可以表达 NodeRun → ChildExecution → NodeRun → ChildExecution；当前正式支持的嵌套组合为 Iteration → SubWorkflow v1 → Action DAG。仍拒绝 Iteration → Iteration、SubWorkflow → SubWorkflow、SubWorkflow → Iteration、nested Human Review、SubWorkflow 内 If / Candidate，以及任意递归 Composite。Iteration scope 派生和已持久化 checkpoint channel / frame / result 字段名保持不变，私有旧字段承载的 ID 现在指向 ChildExecution；不改写现有版本或 checkpoint。
 
 审计与 checkpoint 不构成跨系统原子提交。原生重入复用同一父 attempt 与 child；崩溃后审计先落库但 checkpoint 未落库的窗口，仍需既有 recovery_required / 对账，不能自动重放受理不明的副作用。没有新增 Retry / Resume / interrupt 状态。
 
@@ -98,7 +98,7 @@ body 的嵌套 composite、If / control、Human Review / interaction 均拒绝�
 
 当前链为 WorkflowRun → Parent NodeOccurrence → Parent NodeRun attempt → ChildExecution → child NodeOccurrences / NodeRuns。NodeOccurrence 继续以 Run / scopeKey / nodeId 标识逻辑节点，attempt 只在 occurrence 内编号；ChildExecution 的具体父 NodeRun 隔离不同父 attempt。scope 是稳定 opaque 身份材料，不能还原静态定义路径；root 仍为约定字符串，没有独立 ExecutionScope 表。Outbox 的 executionId 是 start / resume 投递身份，与 child 调用不同。
 
-通用 Contract、Executor context、NodeRun ownership、Repository 与 Tree Adapter 已使用 ChildExecution；Iteration 保留集合快照、current_item / current_index 映射、Send、有序聚合及 index extension。SubWorkflow v1 复用同一 ChildExecution，kind 为 `subworkflow`，invocationKey 固定为 `subworkflow:graph`，不使用 index。Compiler 的独立控制策略与 capability gate 继续保留。Definition Location 仍与 scope 分离，目前不提供通用关系型 definitionRef 或 Execution → Canvas projection。进一步的 occurrence / scope 归属统一、跨版本子图授权与 scoped resume 必须独立设计，不能因为持久化已通用就宣称这些能力已完成。Web 支持 Definition nested graph 编辑，但尚无单次调用 Retry / Resume。
+通用 Contract、Executor context、NodeRun ownership、Repository 与 Tree Adapter 已使用 ChildExecution；Iteration 保留集合快照、current_item / current_index 映射、Send、有序聚合及 index extension。SubWorkflow v1 复用同一 ChildExecution，kind 为 `subworkflow`，invocationKey 固定为 `subworkflow:graph`，不使用 index。Compiler 的独立控制策略与 capability gate 继续保留。Definition Location 仍与 scope 分离；Web 已有 [Graph Execution Projection](#graph-execution-projection)、Iteration Item Selector、祖先 execution selection 传递与 SubWorkflow nested projection，Canvas / Inspector 共享同一投影。Execution Tree 当前没有持久化 definitionRef，投影依靠 immutable WorkflowVersion 中的 Definition Location 与显式 execution parent relation 逐层解析；未来 multi-slot 或更复杂 Composite 可能需要显式 execution → definition reference。进一步的 occurrence / scope 归属统一、跨版本子图授权与 scoped resume 必须独立设计，不能因为持久化已通用就宣称这些能力已完成。Web 支持 Definition nested graph 编辑，但尚无单次调用 Retry / Resume。
 
 ## Execution Tree 只读查询
 
@@ -281,7 +281,7 @@ NodeRegistry 负责 Runtime 类型声明与实现；独立 NodeCatalog 负责产
 | `human-review`       | `flow.human_review@1` | public   | 工作流控制 |
 | `conditional-branch` | `flow.if@1`           | advanced | 工作流控制 |
 | `iteration`          | `flow.iteration@1`    | internal | 高级能力   |
-| `subworkflow`        | `flow.subworkflow@1`  | internal | 高级能力   |
+| `subworkflow`        | `flow.subworkflow@1`  | public   | 高级能力   |
 
 `GET /api/v1/workflow/node-types` 继续返回完整 Runtime Manifest，供已有节点渲染、Inspector、端口及 nested graph 编辑使用。Manifest 保留 Runtime 类型版本、端口、配置字段、executionKind、capabilities 与显示信息，不包含产品 exposure 或完整 GraphDefinition。独立 `GET /api/v1/workflow/node-catalog` 返回 Entry；两者均认证、no-store。Catalog 装配校验唯一 Entry ID、精确目标版本与实例 contract，返回独立数据副本，不公开服务实现。
 
@@ -291,7 +291,7 @@ Web 普通 Picker 使用 `isNodeCatalogEntryVisible` 只显示 public，并按 E
 
 已有 Iteration / SubWorkflow 可继续加载、选择、Inspector 编辑、进入嵌套图、保存与发布。没有数据库 Template / TemplateVersion、共享子图引用或领域业务 Composite Entry；正式支持 Iteration → SubWorkflow v1 → Action DAG，其他嵌套组合继续拒绝，见 [capability matrix](node-model.md#composite-capability-matrix)。
 
-正式“子流程”Catalog Entry（`subworkflow`）为 public，显式创建空的 `composite.graph`，用于封装当前版本内可编辑的 Action DAG；不从 Manifest 直接创建节点。Iteration Body Picker 允许该精确 target，SubWorkflow graph Picker 仅显示普通 Action，不能通过创建入口扩大递归组合边界。
+正式“子流程”Catalog Entry（`subworkflow`）为 public，这是当前通用编辑入口的产品状态。Runtime capability 与 Catalog exposure 是两个维度，不代表所有 engine primitive 都应 public；SubWorkflow 长期可能迁移为 advanced / context-sensitive creation capability，但当前尚未实现该产品层。该 Entry 显式创建空的 `composite.graph`，用于封装当前版本内可编辑的 Action DAG；不从 Manifest 直接创建节点。Iteration Body Picker 允许该精确 target，SubWorkflow graph Picker 仅显示普通 Action，不能通过创建入口扩大递归组合边界。
 
 领域无关的 AI 文本 Composite 实例化样例仅保存在 [test fixture](../packages/server/test/fixtures/ai-text-composite-entry.json)，不注册到生产 NodeCatalog，不进入 Catalog API 或普通 Picker。`internal` 是产品暴露策略，不是测试样例存储。测试条目以 `flow.subworkflow@1` 为 target，copy-on-create 的 graph 声明 `text:string` 输入、一个 `ai.text_generate@1` 和 `result:string` 输出；prompt 绑定局部 `workflow_input.text`，system 是摘要指令，模型配置为空，由用户在实例的正式模型选择器中补齐 `modelConfigurationId`。实例继续使用普通 Draft / Publish / Compiler / Capability / Plugin 协议。
 

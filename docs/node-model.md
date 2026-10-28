@@ -38,7 +38,7 @@ body 使用同一 GraphDefinition / NodeDefinition / DataEdge / ControlEdge / �
 
 [resolveNodePorts](../packages/contracts/src/node/ports.ts)是静态语义端口入口：普通节点复用 Manifest；Iteration 按实例 itemType / invariantInputs 推导输入，并将每个 body declared output U 提升为同名 Array<U>，数组 U 保持嵌套，不 flatten。Manifest 的 portDerivation=iteration 标识需结合实例解析，静态 outputs=[] 不能解释为没有有效输出，也不接受手工固定 outputs。
 
-Draft 可保存缺少 composite、空 body、未完成映射及既有 sources=[] 输出编辑态；结构、局部引用与联合 DAG 仍遵循原 Graph Draft 校验。Publish 检查完整映射、已知元素类型（不接受顶层 any）、必填来源、有效非空 Action body、类型及输出。body 可不声明输出，遵循既有 Graph outputs=[] 语义。
+Draft 可保存缺少 composite、空 body、未完成映射及既有 sources=[] 输出编辑态；结构、局部引用与联合 DAG 仍遵循原 Graph Draft 校验。Publish 检查完整映射、已知元素类型（不接受顶层 any）、必填来源、合法且非空的 Body GraphDefinition、类型及输出。Body 当前正式允许普通 Action 与精确 flow.subworkflow@1；SubWorkflow.graph 继续只允许 v1 Action DAG 能力，不允许任意 Composite。body 可不声明输出，遵循既有 Graph outputs=[] 语义。
 
 v1 Publish 允许 body 内普通 Action 与精确 flow.subworkflow@1；后者的 graph 仅允许普通 Action DAG。拒绝 nested Iteration、其他版本或类型的 composite、If、Human Review、其他 control / interaction，以及带命名控制出口的特殊 Action。Contract 的递归表达能力不代表 Publish 或 Runtime 放行。Candidate 等表达继续受既有互斥来源证明约束，不因为进入 body 放松。
 
