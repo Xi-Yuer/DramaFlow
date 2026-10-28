@@ -17,11 +17,52 @@ export interface GraphExecutionSelection {
   workflowRunId: string;
   definition: { workflowVersionId: string; path: GraphDefinitionPath };
   parentNodeRunId: string;
+  parentInstance: GraphExecutionInstance;
   candidates: readonly {
     executionId: string;
     kind: string;
     metadata: Extract<ExecutionTreeEntry, { type: 'child_execution' }>['metadata'];
   }[];
+}
+export interface GraphExecutionChoice {
+  workflowRunId: string;
+  definition: GraphExecutionSelection['definition'];
+  parentInstance: GraphExecutionInstance;
+  parentNodeRunId: string;
+  executionId: string;
+}
+export function graphExecutionChoiceKey(
+  input: Pick<GraphExecutionChoice, 'workflowRunId' | 'definition'>,
+): string {
+  return JSON.stringify([
+    input.workflowRunId,
+    input.definition.workflowVersionId,
+    input.definition.path.map(({ nodeId, graphKey }) => [nodeId, graphKey]),
+  ]);
+}
+export function graphPathContains(
+  ancestor: GraphDefinitionPath,
+  path: GraphDefinitionPath,
+): boolean {
+  return (
+    ancestor.length <= path.length &&
+    ancestor.every(
+      (step, index) =>
+        step.nodeId === path[index]?.nodeId && step.graphKey === path[index]?.graphKey,
+    )
+  );
+}
+export function validGraphExecutionChoice(
+  selection: GraphExecutionSelection,
+  choice: GraphExecutionChoice,
+): boolean {
+  return (
+    graphExecutionChoiceKey(selection) === graphExecutionChoiceKey(choice) &&
+    selection.parentNodeRunId === choice.parentNodeRunId &&
+    selection.parentInstance.type === choice.parentInstance.type &&
+    selection.parentInstance.id === choice.parentInstance.id &&
+    selection.candidates.some((candidate) => candidate.executionId === choice.executionId)
+  );
 }
 export type GraphExecutionProjection = (
   | {
@@ -190,16 +231,26 @@ export async function loadExecutionChildren(
   return items;
 }
 
-export async function resolveNestedGraphExecution(input: {
+export interface NestedGraphExecutionInput {
   root: Extract<GraphExecutionProjection, { phase: 'resolved' }>;
   location: GraphDefinitionPath;
   version: WorkflowVersionResponse;
   run: WorkflowRunResponse;
   nodeRuns: readonly NodeRun[];
-  load: ExecutionTreeLoad;
-  signal?: AbortSignal;
-}): Promise<GraphExecutionProjection> {
+  choices?: readonly GraphExecutionChoice[];
+}
+// 同一逐层解析供异步加载与同步缓存读取使用；每步只消费当前父实例的直属记录。
+function* graphExecutionPath(
+  input: NestedGraphExecutionInput,
+): Generator<ExecutionTreeParentRef, GraphExecutionProjection, readonly ExecutionTreeEntry[]> {
   let current: GraphExecutionProjection = input.root;
+  if (
+    input.root.definition.workflowVersionId !== input.version.id ||
+    input.run.workflowVersionId !== input.version.id
+  )
+    return { phase: 'version_mismatch', reason: '执行选择与运行绑定的版本不一致。' };
+  if (input.root.instance.type !== 'workflow_run' || input.root.instance.id !== input.run.id)
+    return { phase: 'unavailable', reason: '根执行实例不属于当前运行。' };
   let graph = input.version.definition;
   for (const step of input.location) {
     if (current.phase !== 'resolved') return current;
@@ -213,12 +264,7 @@ export async function resolveNestedGraphExecution(input: {
     const attempt = ownerAttempts?.at(-1);
     if (!attempt)
       return { phase: 'no_execution', reason: '该节点在当前 graph 执行实例中尚无运行记录。' };
-    const children = await loadExecutionChildren(
-      input.load,
-      input.run,
-      { type: 'node_run', id: attempt.id },
-      input.signal,
-    );
+    const children = yield { type: 'node_run', id: attempt.id };
     if (children.some((entry) => entry.type !== 'child_execution'))
       return { phase: 'unavailable', reason: '父节点下返回了不匹配的执行记录。' };
     if (children.length === 0)
@@ -227,25 +273,68 @@ export async function resolveNestedGraphExecution(input: {
       workflowRunId: input.run.id,
       definition: { workflowVersionId: input.version.id, path: [...current.definition.path, step] },
       parentNodeRunId: attempt.id,
+      parentInstance: current.instance,
       candidates: children.flatMap((child) =>
         child.type === 'child_execution'
           ? [{ executionId: child.id, kind: child.kind, metadata: child.metadata }]
           : [],
       ),
     };
-    if (children.length !== 1)
+    const choice = input.choices?.find(
+      (choice) => graphExecutionChoiceKey(choice) === graphExecutionChoiceKey(selection),
+    );
+    if (choice && !validGraphExecutionChoice(selection, choice))
+      return {
+        phase: 'unavailable',
+        reason: '原先选择的子执行已不存在或不再属于当前父执行，请重新选择。',
+        selection,
+      };
+    if (!choice && children.length !== 1)
       return {
         phase: 'ambiguous',
         reason: '该子图有多个执行实例，需要明确选择子执行。',
         selection,
       };
-    const child = children[0]!;
     current = selectGraphExecutionInstance({
       selection,
-      executionId: child.id,
+      executionId: choice?.executionId ?? children[0]!.id,
       nodeRuns: input.nodeRuns,
     });
     graph = slot.graph;
   }
   return current;
+}
+
+export async function resolveNestedGraphExecution(
+  input: NestedGraphExecutionInput & {
+    load: ExecutionTreeLoad;
+    signal?: AbortSignal;
+    loadChildren?: (parent: ExecutionTreeParentRef) => Promise<readonly ExecutionTreeEntry[]>;
+  },
+): Promise<GraphExecutionProjection> {
+  const path = graphExecutionPath(input);
+  let step = path.next();
+  while (!step.done) {
+    input.signal?.throwIfAborted();
+    const children = await (input.loadChildren?.(step.value) ??
+      loadExecutionChildren(input.load, input.run, step.value, input.signal));
+    input.signal?.throwIfAborted();
+    step = path.next(children);
+  }
+  return step.value;
+}
+
+export function projectCachedNestedGraphExecution(
+  input: NestedGraphExecutionInput & {
+    readChildren: (parent: ExecutionTreeParentRef) => readonly ExecutionTreeEntry[] | undefined;
+  },
+): GraphExecutionProjection | undefined {
+  const path = graphExecutionPath(input);
+  let step = path.next();
+  while (!step.done) {
+    const children = input.readChildren(step.value);
+    if (children === undefined) return undefined;
+    step = path.next(children);
+  }
+  return step.value;
 }

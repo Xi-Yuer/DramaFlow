@@ -171,3 +171,74 @@ export function iterationExecutionFixture(indexes = [2, 0, 1]) {
   f.nodeRuns.splice(0, f.nodeRuns.length, f.parentRun, ...itemRuns);
   return { ...f, executions, itemRuns };
 }
+
+export function iterationSubworkflowExecutionFixture() {
+  const f = iterationExecutionFixture();
+  const inner = structuredClone(f.child);
+  inner.nodes[0]!.id = 'action';
+  inner.outputs[0]!.source = { nodeId: 'action', outputKey: 'text' };
+  const sub: NodeDefinition = {
+    ...f.owner,
+    id: 'sub',
+    name: '子流程',
+    type: 'flow.subworkflow',
+    inputs: { text: { type: 'workflow_input', key: 'text' } },
+    composite: { kind: 'subworkflow', graph: inner },
+  };
+  f.child.nodes = [sub];
+  f.child.outputs[0]!.source = { nodeId: 'sub', outputKey: 'result' };
+  for (const record of f.itemRuns) record.nodeId = 'sub';
+  const calls: Extract<ExecutionTreeEntry, { type: 'child_execution' }>[] = f.itemRuns.map(
+    (parent) => ({
+      ...f.execution,
+      type: 'child_execution',
+      kind: 'subworkflow',
+      id: `sub-${parent.childExecutionId}`,
+      parent: { type: 'node_run', id: parent.id },
+      metadata: {},
+      status: parent.status,
+    }),
+  );
+  const actionRuns: NodeRun[] = f.itemRuns.map((parent, index) => ({
+    ...parent,
+    id: `action-${parent.id}`,
+    nodeId: 'action',
+    occurrenceId: `action-${parent.occurrenceId}`,
+    childExecutionId: calls[index]!.id,
+    scopeKey: `action-scope-${index}`,
+    outputs: {
+      text: {
+        storage: 'inline',
+        type: StringType,
+        value: `Action ${parent.childExecutionId} output`,
+      },
+    },
+    ...(parent.status === 'failed'
+      ? {
+          error: {
+            code: 'NODE_EXECUTION_FAILED',
+            stage: 'execute',
+            message: `Error ${parent.childExecutionId}`,
+          },
+        }
+      : {}),
+  }));
+  f.nodeRuns.push(...actionRuns);
+  f.version.definition = structuredClone(f.workflow);
+  const descendant = [...f.location, { nodeId: 'sub', graphKey: 'graph' as const }];
+  const treePage = (
+    parentId: string,
+    items?: ExecutionTreeEntry[],
+    nextCursor: string | null = null,
+  ): ExecutionTreeResponse => ({
+    run: { ...f.run, type: 'workflow_run' },
+    parent: { type: 'node_run', id: parentId },
+    items:
+      items ??
+      (parentId === f.parentRun.id
+        ? f.executions
+        : calls.filter((call) => call.parent.id === parentId)),
+    nextCursor,
+  });
+  return { ...f, sub, inner, calls, actionRuns, descendant, treePage };
+}

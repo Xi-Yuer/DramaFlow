@@ -13,6 +13,7 @@ import { motion } from 'motion/react';
 import { ReactFlowProvider, type OnMove } from '@xyflow/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGraphExecutionProjection } from '../../runtime/use-graph-execution-projection';
+import { useGraphExecutionSelection } from '../../runtime/use-graph-execution-selection';
 import { workflowKeys } from '../../workflow-api';
 import { selectGraphExecutionInstance } from '../../runtime/graph-execution-projection';
 import { useIterationItemSelection } from '../../iteration/execution/use-iteration-item-selection';
@@ -121,12 +122,14 @@ export const GraphCanvasSession = forwardRef<
   const viewportControllerRef = useRef<GraphViewportController | null>(null);
   const location = currentGraphLocation(navigation);
   const queryClient = useQueryClient();
+  const executionSelection = useGraphExecutionSelection();
   const discoveredProjection = useGraphExecutionProjection({
     workflow,
     workflowId,
     projectId,
     location,
     runStatus,
+    choices: executionSelection.choices,
   });
   const step = location.at(-1);
   const owner = step
@@ -138,9 +141,10 @@ export const GraphCanvasSession = forwardRef<
     projection: discoveredProjection,
     location,
     enabled: step?.graphKey === 'body' && owner?.composite?.kind === 'iteration',
+    state: executionSelection,
   });
   const projection =
-    itemSelection.phase === 'ready'
+    itemSelection.phase === 'ready' && itemSelection.selector.executionId
       ? selectGraphExecutionInstance({
           selection: itemSelection.selection,
           executionId: itemSelection.selector.executionId,

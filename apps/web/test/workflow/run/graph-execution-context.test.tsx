@@ -14,9 +14,14 @@ import {
 import type { Edge, Node, ReactFlowProps } from '@xyflow/react';
 import { StringType, type WorkflowVersionResponse } from '@dramaflow/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useGraphExecutionSelection } from '../../../src/features/workflow/runtime/use-graph-execution-selection';
 import { useGraphExecutionProjection } from '../../../src/features/workflow/runtime/use-graph-execution-projection';
 import { workflowApi, workflowKeys } from '../../../src/features/workflow/workflow-api';
-import { graphExecutionFixture, iterationExecutionFixture } from '../../fixtures/graph-execution';
+import {
+  graphExecutionFixture,
+  iterationExecutionFixture,
+  iterationSubworkflowExecutionFixture,
+} from '../../fixtures/graph-execution';
 import { GraphCanvasSession } from '../../../src/features/workflow/editor/navigation/graph-canvas-session';
 import { nodeCatalogKeys } from '../../../src/features/workflow/node-catalog/node-catalog-api';
 import { nodeTypeKeys } from '../../../src/features/workflow/node-catalog/node-type-api';
@@ -242,8 +247,9 @@ describe('Nested Canvas 与 Inspector 共用执行投影', () => {
   );
 });
 
-function mountIterationItems(indexes = [2, 0, 1]) {
-  const f = iterationExecutionFixture(indexes);
+function mountIterationItems(indexes = [2, 0, 1], nested = false) {
+  const nestedFixture = nested ? iterationSubworkflowExecutionFixture() : undefined;
+  const f = nestedFixture ?? iterationExecutionFixture(indexes);
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: 0 } },
   });
@@ -251,9 +257,16 @@ function mountIterationItems(indexes = [2, 0, 1]) {
   cache.setQueryData(nodeCatalogKeys.list, []);
   cache.setQueryData(nodeTypeKeys.list, [
     createIterationNodeType().manifest,
+    createSubworkflowNodeType().manifest,
     createTextGenerationNodeType().manifest,
   ]);
-  const tree = vi.spyOn(workflowApi, 'getExecutionTree').mockResolvedValue(f.page(f.executions));
+  const tree = vi
+    .spyOn(workflowApi, 'getExecutionTree')
+    .mockImplementation(async (_run, query) =>
+      nestedFixture
+        ? nestedFixture.treePage(query.parentId ?? f.parentRun.id)
+        : f.page(f.executions),
+    );
   const view = render(
     <ConfigProvider theme={{ token: { motion: false } }}>
       <App>
@@ -370,15 +383,21 @@ describe('Iteration Item Selector 的真实执行选择', () => {
     await waitFor(() => expectItem(2, 'running'));
   });
 
-  it('所选 executionId 消失后回退到最小 index，旧 ID 再出现也不抢走 fallback', async () => {
+  it('所选 executionId 消失后不映射其他 Item，重新明确选择后保持新 ID', async () => {
     const f = mountIterationItems();
     f.enter();
     await waitFor(() => expectItem(0, 'completed'));
     await chooseItem('Item 3');
     await f.refresh(f.executions.filter((entry) => entry.id !== 'item-2'));
-    expectItem(0, 'completed');
+    await waitFor(() =>
+      expect(document.querySelector('[data-execution-projection="unavailable"]')).toBeTruthy(),
+    );
+    expect(document.querySelector('[data-execution-instance]')).toBeNull();
+    expect(screen.getByText('请选择 Item')).toBeTruthy();
+    await chooseItem('Item 2');
+    expectItem(1, 'failed');
     await f.refresh();
-    expectItem(0, 'completed');
+    expectItem(1, 'failed');
   });
 
   it('完整收集分页前保持 loading，不能把第一页的单 Item 提前当作唯一实例', async () => {
@@ -418,5 +437,175 @@ describe('Iteration Item Selector 的真实执行选择', () => {
     expect(
       await screen.findByText('Item 执行记录缺少有效且唯一的序号，暂时无法选择。'),
     ).toBeTruthy();
+  });
+});
+
+describe('祖先 Item selection 的更深层 projection', () => {
+  function enterSub() {
+    fireEvent.doubleClick(screen.getByTestId('flow-sub'));
+  }
+  function back() {
+    fireEvent.click(screen.getByRole('button', { name: '返回上一层' }));
+  }
+  function expectAction(index: number, status: string) {
+    expect(document.querySelector(`[data-execution-instance="sub-item-${index}"]`)).toBeTruthy();
+    expect(
+      screen.getByTestId('flow-action').querySelector(`[data-runtime-status="${status}"]`),
+    ).toBeTruthy();
+  }
+  function inspect() {
+    fireEvent.click(screen.getByTestId('flow-action'));
+    fireEvent.click(screen.getByRole('tab', { name: '运行状态' }));
+    return screen.getByRole('complementary', { name: '节点检查器' });
+  }
+
+  it('Item 2 → SubWorkflow 保持真实 ChildExecution，切换祖先后 Canvas / Inspector 不串同名 action', async () => {
+    const f = mountIterationItems(undefined, true);
+    const action = f.nodeRuns.find((record) => record.childExecutionId === 'sub-item-1')!;
+    action.attempt = 3;
+    f.nodeRuns.push({
+      ...action,
+      id: 'old-action-attempt',
+      attempt: 1,
+      outputs: { text: { storage: 'inline', type: StringType, value: 'Old action output' } },
+    });
+    f.enter();
+    await screen.findByRole('combobox', { name: '选择 Item 执行' });
+    await chooseItem('Item 2');
+    enterSub();
+    await waitFor(() => expectAction(1, 'failed'));
+    let inspector = inspect();
+    expect(inspector.querySelector('[data-runtime-status="failed"]')).toBeTruthy();
+    expect(within(inspector).getByText('Action item-1 output')).toBeTruthy();
+    expect(within(inspector).getByText('Error item-1')).toBeTruthy();
+    expect(within(inspector).getByRole('button', { name: 'Attempt 3' })).toBeTruthy();
+    fireEvent.click(within(inspector).getByRole('button', { name: 'Attempt 1' }));
+    expect(within(inspector).getByText('Old action output')).toBeTruthy();
+    expect(f.tree).toHaveBeenCalledTimes(2);
+    back();
+    await chooseItem('Item 3');
+    enterSub();
+    await waitFor(() => expectAction(2, 'running'));
+    inspector = inspect();
+    expect(inspector.querySelector('[data-runtime-status="running"]')).toBeTruthy();
+    expect(within(inspector).getByText('Action item-2 output')).toBeTruthy();
+    expect(within(inspector).queryByText('Action item-1 output')).toBeNull();
+    expect(within(inspector).queryByText('Error item-1')).toBeNull();
+    expect(within(inspector).queryByText('Old action output')).toBeNull();
+    expect(within(inspector).queryByRole('button', { name: 'Attempt 3' })).toBeNull();
+    expect(f.tree).toHaveBeenCalledTimes(3);
+    back();
+    await chooseItem('Item 2');
+    enterSub();
+    await waitFor(() => expectAction(1, 'failed'));
+    expect(f.tree).toHaveBeenCalledTimes(3);
+    back();
+    back();
+    f.enter();
+    enterSub();
+    await waitFor(() => expectAction(1, 'failed'));
+    expect(f.tree).toHaveBeenCalledTimes(3);
+  });
+
+  it('深层刷新保留有效 ancestor ID；ID 消失则撤下旧状态，不映射另一 Item', async () => {
+    const f = mountIterationItems(undefined, true);
+    f.enter();
+    await screen.findByRole('combobox', { name: '选择 Item 执行' });
+    await chooseItem('Item 2');
+    enterSub();
+    await waitFor(() => expectAction(1, 'failed'));
+    await act(async () => {
+      await f.cache.invalidateQueries({ queryKey: ['graph-execution-projection'] });
+    });
+    await waitFor(() => expectAction(1, 'failed'));
+    expect(f.tree).toHaveBeenCalledTimes(4);
+    f.executions.splice(
+      f.executions.findIndex((item) => item.id === 'item-1'),
+      1,
+    );
+    await act(async () => {
+      await f.cache.invalidateQueries({ queryKey: ['graph-execution-projection'] });
+    });
+    await waitFor(() =>
+      expect(document.querySelector('[data-execution-projection="unavailable"]')).toBeTruthy(),
+    );
+    expect(document.querySelector('[data-execution-instance]')).toBeNull();
+    expect(f.tree).toHaveBeenCalledTimes(5);
+    back();
+    expect(screen.getByText('请选择 Item')).toBeTruthy();
+    await chooseItem('Item 1');
+    enterSub();
+    await waitFor(() => expectAction(0, 'completed'));
+    expect(f.tree).toHaveBeenCalledTimes(6);
+  });
+
+  it('旧 Item 的迟到 Tree 响应不能覆盖新祖先下的 descendant', async () => {
+    const data = iterationSubworkflowExecutionFixture();
+    const pending = deferred<ReturnType<typeof data.treePage>>();
+    const f = mountIterationItems(undefined, true);
+    f.tree.mockImplementation(async (_run, query) =>
+      query.parentId === 'item-node-run-1'
+        ? pending.promise
+        : data.treePage(query.parentId ?? data.parentRun.id),
+    );
+    f.enter();
+    await screen.findByRole('combobox', { name: '选择 Item 执行' });
+    await chooseItem('Item 2');
+    enterSub();
+    await waitFor(() => expect(f.tree).toHaveBeenCalledTimes(2));
+    expect(document.querySelector('[data-execution-projection="loading"]')).toBeTruthy();
+    back();
+    await chooseItem('Item 3');
+    enterSub();
+    await waitFor(() => expectAction(2, 'running'));
+    await act(async () => {
+      pending.resolve(data.treePage('item-node-run-1'));
+    });
+    expectAction(2, 'running');
+    const inspector = inspect();
+    expect(within(inspector).getByText('Action item-2 output')).toBeTruthy();
+    expect(within(inspector).queryByText('Action item-1 output')).toBeNull();
+    expect(f.tree).toHaveBeenCalledTimes(3);
+  });
+
+  it('统一 selection store 在祖先改变时清除后代，同 ID 重选与其他 Run/版本独立', () => {
+    const f = iterationSubworkflowExecutionFixture();
+    const parentInstance = { type: 'workflow_run' as const, id: f.run.id };
+    const parent = {
+      workflowRunId: f.run.id,
+      definition: { workflowVersionId: f.version.id, path: f.location },
+      parentInstance,
+      parentNodeRunId: f.parentRun.id,
+      candidates: f.executions.map((item) => ({
+        executionId: item.id,
+        kind: item.kind,
+        metadata: item.metadata,
+      })),
+    };
+    const descendant = {
+      ...parent,
+      definition: { ...parent.definition, path: f.descendant },
+      parentInstance: { type: 'child_execution' as const, id: 'item-1' },
+      parentNodeRunId: 'item-node-run-1',
+      candidates: [{ executionId: 'sub-item-1', kind: 'subworkflow', metadata: {} }],
+    };
+    const view = renderHook(useGraphExecutionSelection);
+    act(() => view.result.current.select(parent, 'item-1'));
+    act(() => view.result.current.select(descendant, 'sub-item-1'));
+    act(() => view.result.current.select(parent, 'item-1'));
+    expect(view.result.current.choices).toHaveLength(2);
+    act(() => view.result.current.select({ ...parent, workflowRunId: 'other-run' }, 'item-0'));
+    act(() =>
+      view.result.current.select(
+        { ...parent, definition: { ...parent.definition, workflowVersionId: 'other-version' } },
+        'item-0',
+      ),
+    );
+    act(() => view.result.current.select(parent, 'item-2'));
+    expect(view.result.current.choices.map((choice) => choice.executionId)).toEqual([
+      'item-0',
+      'item-0',
+      'item-2',
+    ]);
   });
 });

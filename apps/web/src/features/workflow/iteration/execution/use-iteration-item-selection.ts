@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import {
   iterationItemExecutionMetadataSchema,
   type GraphDefinitionPath,
@@ -9,6 +8,12 @@ import type {
   GraphExecutionProjection,
   GraphExecutionSelection,
 } from '../../runtime/graph-execution-projection';
+import {
+  graphExecutionChoiceKey,
+  graphPathContains,
+  validGraphExecutionChoice,
+} from '../../runtime/graph-execution-projection';
+import type { GraphExecutionSelectionState } from '../../runtime/use-graph-execution-selection';
 
 export interface IterationItemOption {
   executionId: string;
@@ -16,7 +21,7 @@ export interface IterationItemOption {
 }
 export interface IterationItemSelectorState {
   items: readonly IterationItemOption[];
-  executionId: string;
+  executionId?: string;
   onSelect: (executionId: string) => void;
 }
 
@@ -44,37 +49,39 @@ export function useIterationItemSelection({
   projection,
   location,
   enabled,
+  state,
 }: {
   projection: GraphExecutionProjection;
   location: GraphDefinitionPath;
   enabled: boolean;
+  state: GraphExecutionSelectionState;
 }):
   | { phase: 'inactive' }
   | { phase: 'unavailable'; reason: string }
   | { phase: 'ready'; selection: GraphExecutionSelection; selector: IterationItemSelectorState } {
-  const [remembered, setRemembered] = useState<Readonly<Record<string, string>>>({});
   const selection = projection.selection;
   // 不把祖先图的歧义错误投影到当前更深的 Definition Location。
   if (
     !enabled ||
     !selection ||
-    !['resolved', 'ambiguous'].includes(projection.phase) ||
-    JSON.stringify(selection.definition.path) !== JSON.stringify(location)
+    !['resolved', 'ambiguous', 'unavailable'].includes(projection.phase) ||
+    selection.definition.path.length !== location.length ||
+    !graphPathContains(selection.definition.path, location)
   )
     return { phase: 'inactive' };
   const items = iterationItemOptions(selection);
   if (!items || items.length === 0)
     return { phase: 'unavailable', reason: 'Item 执行记录缺少有效且唯一的序号，暂时无法选择。' };
-  const key = JSON.stringify([
-    selection.workflowRunId,
-    selection.definition,
-    selection.parentNodeRunId,
-  ]);
-  const executionId =
-    items.find((item) => item.executionId === remembered[key])?.executionId ??
-    items[0]!.executionId;
-  // fallback 立即成为当前选择；旧 ID 后续重新出现也不抢走用户正在查看的 Item。
-  if (remembered[key] !== executionId) setRemembered({ ...remembered, [key]: executionId });
+  const remembered = state.choices.find(
+    (choice) => graphExecutionChoiceKey(choice) === graphExecutionChoiceKey(selection),
+  );
+  const executionId = remembered
+    ? validGraphExecutionChoice(selection, remembered)
+      ? remembered.executionId
+      : undefined
+    : items[0]!.executionId;
+  // 首次进入 Body 才应用产品默认值；失效 ID 需要重新选择，不能静默换 Item。
+  if (!remembered && executionId) state.select(selection, executionId);
   return {
     phase: 'ready',
     selection,
@@ -82,8 +89,7 @@ export function useIterationItemSelection({
       items,
       executionId,
       onSelect: (id) => {
-        if (items.some((item) => item.executionId === id))
-          setRemembered((current) => ({ ...current, [key]: id }));
+        if (items.some((item) => item.executionId === id)) state.select(selection, id);
       },
     },
   };

@@ -5,9 +5,14 @@ import {
   resolveNestedGraphExecution,
   loadExecutionChildren,
   selectGraphExecutionInstance,
+  type GraphExecutionChoice,
 } from '../../../src/features/workflow/runtime/graph-execution-projection';
 import { resolveWorkflowRuntimeNodes } from '../../../src/features/workflow/runtime/runtime-status';
-import { graphExecutionFixture, iterationExecutionFixture } from '../../fixtures/graph-execution';
+import {
+  graphExecutionFixture,
+  iterationExecutionFixture,
+  iterationSubworkflowExecutionFixture,
+} from '../../fixtures/graph-execution';
 import { pendingReview } from '../../fixtures/human-review';
 
 function fixture() {
@@ -302,5 +307,142 @@ describe('通用 Graph Execution Projection', () => {
     await expect(read()).rejects.toThrow('分页位置重复');
     f.load.mockRejectedValue(new Error('读取失败'));
     await expect(read()).rejects.toThrow('读取失败');
+  });
+});
+
+describe('逐层消费 Definition Location execution selection', () => {
+  function scenario() {
+    const f = iterationSubworkflowExecutionFixture();
+    const root = projectRootGraphExecution({ ...f, workflowId: f.run.workflowId });
+    if (root.phase !== 'resolved') throw new Error('测试 root 无效');
+    const load = vi.fn().mockImplementation(async (_run, query) => f.treePage(query.parentId));
+    const resolve = (choices: readonly GraphExecutionChoice[] = [], location = f.descendant) =>
+      resolveNestedGraphExecution({ ...f, root, load, location, choices });
+    const choose = async (id: string): Promise<GraphExecutionChoice> => {
+      const discovered = await resolve([], f.location);
+      if (!discovered.selection) throw new Error('缺少候选');
+      return { ...discovered.selection, executionId: id };
+    };
+    return { ...f, root, load, resolve, choose };
+  }
+
+  it('祖先未选择保持 ambiguous，不向任意 Item 的同名 sub 继续解析', async () => {
+    const f = scenario();
+    expect(await f.resolve()).toMatchObject({
+      phase: 'ambiguous',
+      selection: { definition: { path: f.location } },
+    });
+    expect(f.load).toHaveBeenCalledOnce();
+  });
+
+  it('三个 Item 的同名 sub/action 只沿 selected ChildExecution 逐层解析', async () => {
+    const f = scenario();
+    for (const index of [1, 2, 0]) {
+      const choice = await f.choose(`item-${index}`);
+      f.load.mockClear();
+      const projection = await f.resolve([choice]);
+      const action = f.actionRuns.find(
+        (record) => record.childExecutionId === `sub-item-${index}`,
+      )!;
+      expect(projection).toMatchObject({
+        phase: 'resolved',
+        definition: { path: f.descendant },
+        instance: { type: 'child_execution', id: `sub-item-${index}` },
+        nodeRuns: [action],
+      });
+      expect(f.load.mock.calls.map((call) => call[1].parentId)).toEqual([
+        f.parentRun.id,
+        `item-node-run-${index}`,
+      ]);
+    }
+  });
+
+  it('ID 不存在、parent execution 或 owner attempt 不匹配均不可换 Item', async () => {
+    const f = scenario();
+    const choice = await f.choose('item-1');
+    for (const bad of [
+      { ...choice, executionId: 'missing' },
+      { ...choice, parentNodeRunId: 'old-attempt' },
+      { ...choice, parentInstance: { type: 'child_execution' as const, id: 'another-parent' } },
+    ]) {
+      f.load.mockClear();
+      expect(await f.resolve([bad])).toMatchObject({ phase: 'unavailable' });
+      expect(f.load).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('祖先改变时，旧 descendant selection 即使同名也被拒绝', async () => {
+    const f = scenario();
+    const choice = await f.choose('item-1');
+    const first = await f.resolve([choice]);
+    if (!first.selection) throw new Error('缺少 descendant context');
+    const descendant = { ...first.selection, executionId: 'sub-item-1' };
+    expect(await f.resolve([await f.choose('item-2'), descendant])).toMatchObject({
+      phase: 'unavailable',
+    });
+    expect(await f.resolve([await f.choose('item-2')])).toMatchObject({
+      phase: 'resolved',
+      instance: { id: 'sub-item-2' },
+    });
+  });
+
+  it('有效 ID 在乱序刷新后保持，版本和 Run 身份不能复用', async () => {
+    const f = scenario();
+    const choice = await f.choose('item-1');
+    f.executions.reverse();
+    choice.definition.path = choice.definition.path.map(({ nodeId, graphKey }) => ({
+      graphKey,
+      nodeId,
+    }));
+    expect(await f.resolve([choice])).toMatchObject({
+      phase: 'resolved',
+      instance: { id: 'sub-item-1' },
+    });
+    expect((await f.resolve([{ ...choice, workflowRunId: 'other-run' }])).phase).toBe('ambiguous');
+    expect(
+      (
+        await f.resolve([
+          { ...choice, definition: { ...choice.definition, workflowVersionId: 'old-version' } },
+        ])
+      ).phase,
+    ).toBe('ambiguous');
+    expect(
+      await resolveNestedGraphExecution({
+        ...f,
+        root: f.root,
+        choices: [choice],
+        location: f.descendant,
+        version: { ...f.version, id: 'different' },
+      }),
+    ).toMatchObject({ phase: 'version_mismatch' });
+  });
+
+  it('祖先及 descendant 分页全部完成后才校验 selection，不漏第二页的已选 ID', async () => {
+    const f = scenario();
+    const choice = await f.choose('item-1');
+    f.load.mockImplementation(async (_run, query) => {
+      if (query.parentId === f.parentRun.id)
+        return f.treePage(
+          query.parentId,
+          query.after ? f.executions.slice(1) : f.executions.slice(0, 1),
+          query.after ? null : 'ancestor-next',
+        );
+      return f.treePage(
+        query.parentId,
+        query.after ? f.calls.filter((call) => call.parent.id === query.parentId) : [],
+        query.after ? null : 'child-next',
+      );
+    });
+    f.load.mockClear();
+    expect(await f.resolve([choice])).toMatchObject({
+      phase: 'resolved',
+      instance: { id: 'sub-item-1' },
+    });
+    expect(f.load.mock.calls.map((call) => call[1].after)).toEqual([
+      undefined,
+      'ancestor-next',
+      undefined,
+      'child-next',
+    ]);
   });
 });

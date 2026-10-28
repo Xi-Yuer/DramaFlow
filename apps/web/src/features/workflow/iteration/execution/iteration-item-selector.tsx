@@ -8,7 +8,7 @@ export function IterationItemSelector({
   onSelect,
 }: IterationItemSelectorState) {
   const { token } = theme.useToken();
-  if (items.length <= 1) return null;
+  if (items.length === 0 || (items.length === 1 && executionId)) return null;
   return (
     <Space
       className={styles.context}
@@ -26,6 +26,7 @@ export function IterationItemSelector({
         aria-label="选择 Item 执行"
         size="small"
         value={executionId}
+        placeholder="请选择 Item"
         onChange={onSelect}
         popupMatchSelectWidth={false}
         options={items.map((item) => ({
