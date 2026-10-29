@@ -4,7 +4,7 @@ import type { WorkflowState } from '../state/state.js';
 import type { RuntimeValueContext } from '../values/value-codec.js';
 
 export interface CapabilityInvoker {
-  invoke(capability: string, input: unknown): Promise<unknown>;
+  invoke(capability: string, input: unknown, options?: { signal?: AbortSignal }): Promise<unknown>;
 }
 
 // 节点 execute 只看见这次调用的上下文，不依赖 Executor 实现。

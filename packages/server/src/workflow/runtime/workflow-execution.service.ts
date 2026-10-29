@@ -1,3 +1,4 @@
+import { observeWorkflowCancellation } from './cancellation/observe-cancellation.js';
 import { isDeepStrictEqual } from 'node:util';
 import {
   workflowExecutionJobSchema,
@@ -6,7 +7,11 @@ import {
   type ResumeWorkflowExecutionJob,
 } from '@dramaflow/contracts';
 import { Injectable } from '@nestjs/common';
-import { WorkflowRunNotPendingError, WorkflowRunNotWaitingError } from '@dramaflow/workflow';
+import {
+  WorkflowRunNotPendingError,
+  WorkflowRunNotWaitingError,
+  WorkflowExecutionCancellation,
+} from '@dramaflow/workflow';
 import { DatabaseService } from '../../database/database.service.js';
 import { WorkflowRuntimeFactory } from './workflow-runtime.factory.js';
 
@@ -63,6 +68,10 @@ export class WorkflowExecutionService {
       return { workflowRunId: run.id, status: 'cancellation_requested' as const };
     }
     if (intent.status === 'executing') {
+      if (run.status === 'cancelled') {
+        await this.finish(intent.id, 'cancelled');
+        return { workflowRunId: run.id, status: 'execution_cancelled' as const };
+      }
       // Graph 已返回终态 / 下一等待周期，但进程在确认命令完成前退出：只补记结果，不再 invoke。
       if (
         run.status === 'completed' ||
@@ -98,8 +107,15 @@ export class WorkflowExecutionService {
         throw new WorkflowExecutionTerminalError('WORKFLOW_EXECUTION_INTENT_INVALID');
       resumeTarget = target.data;
     }
-    const runner = await this.runtimes.forProject(run.project.ownerId, run.projectId, intent.id);
+    const cancellation = new WorkflowExecutionCancellation(run.id);
+    const stopObserving = observeWorkflowCancellation(this.database, cancellation);
     try {
+      const runner = await this.runtimes.forProject(
+        run.project.ownerId,
+        run.projectId,
+        intent.id,
+        cancellation,
+      );
       const result =
         job.kind === 'start'
           ? await runner.executeStart(job.workflowRunId)
@@ -108,6 +124,7 @@ export class WorkflowExecutionService {
               value: resumeTarget ? resumeTarget.value : job.value,
               ...(resumeTarget ? { interruptId: resumeTarget.interruptId } : {}),
             });
+      await stopObserving();
       await this.finish(intent.id, 'completed');
       return result;
     } catch (error) {
@@ -118,6 +135,10 @@ export class WorkflowExecutionService {
       // 请求在本次读取之后、claim 之前获胜：Runner 的拒绝不是业务失败。
       if (latest.status === 'cancelled')
         return { workflowRunId: run.id, status: 'execution_cancelled' as const };
+      if (latest.workflowRun.status === 'cancelled') {
+        await this.finish(intent.id, 'cancelled');
+        return { workflowRunId: run.id, status: 'execution_cancelled' as const };
+      }
       if (latest.status === 'completed')
         return { workflowRunId: run.id, status: 'already_processed' as const };
       if (latest.workflowRun.status === 'failed') {
@@ -148,6 +169,8 @@ export class WorkflowExecutionService {
         throw new WorkflowExecutionTerminalError('WORKFLOW_EXECUTION_RECOVERY_REQUIRED');
       }
       throw error; // 未 claim 的基础设施故障由 Consumer 按稳定错误码决定是否重试。
+    } finally {
+      await stopObserving();
     }
   }
 
@@ -164,7 +187,7 @@ export class WorkflowExecutionService {
 
   private async finish(
     id: string,
-    status: 'completed' | 'failed' | 'recovery_required',
+    status: 'completed' | 'failed' | 'recovery_required' | 'cancelled',
   ): Promise<void> {
     await this.database.client.workflowExecutionOutbox.updateMany({
       where: { id, status: { in: ['pending', 'published', 'executing', 'recovery_required'] } },

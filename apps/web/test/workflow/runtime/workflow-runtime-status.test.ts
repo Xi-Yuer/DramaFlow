@@ -306,12 +306,13 @@ describe('集中式 Runtime Node Status（真实 NodeRun execution facts 优先�
       waiting: '等待人工操作',
       completed: '执行完成',
       failed: '执行失败',
+      cancelled: '已取消',
     };
     for (const [status, label] of Object.entries(expectedLabels) as [RuntimeNodeStatus, string][]) {
       const presentation = getRuntimeNodePresentation(status);
       expect(presentation.label).toBe(label);
       expect(presentation.canvasLabel).toBe(label);
-      expect(presentation.tone).toBe(status);
+      expect(presentation.tone).toBe(status === 'cancelled' ? 'idle' : status);
     }
     const humanReviewWaiting = getRuntimeNodePresentation('waiting', { isHumanReview: true });
     expect(humanReviewWaiting.label).toBe('等待人工审核');

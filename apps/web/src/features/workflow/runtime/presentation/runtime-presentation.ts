@@ -67,6 +67,16 @@ const BASE_PRESENTATION: Record<RuntimeNodeStatus, RuntimeStatusPresentation> = 
     badgeStatus: 'success',
     canvas: { icon: 'check', display: 'icon' },
   },
+  cancelled: {
+    status: 'cancelled',
+    label: '已取消',
+    canvasLabel: '已取消',
+    description: '当前节点已因工作流取消而结束。',
+    tone: 'idle',
+    tagColor: 'default',
+    badgeStatus: 'default',
+    canvas: { icon: 'clock', display: 'icon' },
+  },
   failed: {
     status: 'failed',
     label: '执行失败',

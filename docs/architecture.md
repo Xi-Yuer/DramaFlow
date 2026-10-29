@@ -184,11 +184,19 @@ claim 后进程退出或结果不明进入 recovery_required；已完成或进�
 
 ### Workflow Run Cancellation Foundation
 
-取消意图保存在 WorkflowRun.cancellationRequestedAt，与 status 独立。内部已授权 Repository 的 requestCancellation 在 Run 行锁内幂等写首次请求时间；pending / waiting 可结束为 cancelled，pending 保留 startedAt 为空；running 只记录请求并返回 in_flight，不声称当前 Graph 已停止。completed / failed / cancelled 不被新请求覆盖。已 claim 的执行仍可正常完成、失败或进入 waiting，保留取消请求；在途执行收尾留待后续协作取消生命周期处理。
+取消意图保存在 WorkflowRun.cancellationRequestedAt，与 status 正交。内部已授权 Repository 的 requestCancellation 在 Run 行锁内幂等写首次请求时间；pending / waiting 可结束为 cancelled，pending 保留 startedAt 为空；running 只记录请求并返回 in_flight，不声称当前 Graph 已停止。completed / failed / cancelled 不被新请求覆盖，不新增 cancelling Run status。
 
-start / resume claim 的条件更新要求 cancellationRequestedAt 为空，与取消事务争用同一 Run 行，数据库同时拒绝带取消意图的 pending / waiting 转 running。取消获胜时同事务将 pending / published Outbox 结算为 cancelled；executing / recovery_required 保持真实状态。Dispatcher 跳过有取消意图的 Run，Worker 将取消的未执行命令正常结算，包括读取后、claim 前取消获胜的竞争，不投影为业务 failed 或 recovery_required。Redis Job 即使仍存在也不能绕过持久化闸门；不依赖 Job removal。
+start / resume claim 的条件更新要求 cancellationRequestedAt 为空，与取消事务争用同一 Run 行，数据库同时拒绝带取消意图的 pending / waiting 转 running。取消获胜时同事务将 pending / published Outbox 结算为 cancelled；Dispatcher 跳过投递，Worker 将未执行命令正常结算。Redis Job 即使仍存在也不能绕过持久化 gate；不依赖 Job removal。
 
-当前只有内部 Repository 请求入口，现有 Run 查询可返回 cancellationRequestedAt；没有公开 Cancel API 或 Web 操作，没有 AbortSignal、NodeRun / ChildExecution cancelled 收尾，也不承诺停止已 claim 的节点、Item、SubWorkflow 或远端副作用。waiting 取消阻止新审批提交与恢复，不删除 checkpoint / interrupt，不终结 Human Review NodeRun。
+在途执行由 [Worker 观察器](../packages/server/src/workflow/runtime/cancellation/observe-cancellation.ts)每 250ms 串行读取持久化意图；跨进程不依赖内存通知。暂时读取失败继续观察，不伪造取消；执行返回、失败或等待后释放 timer。一次 execution 只创建一个取消源，经 Runner 的 RunnableConfig.signal 进入原生 LangGraph，Action 接收 task config.signal，DefaultNodeExecutor 为 Capability 绑定同一 signal，模型配置工厂继续按正式模型 / Owner / 凭证机制传入 Plugin。两个文本插件复用 SDK 的 signal + deadline，不增加远端取消。原生 Send、compiled subgraph、checkpoint 调度保持不变。
+
+[WorkflowExecutionCancelled](../packages/workflow/src/runtime/execution/cancellation/execution-cancellation.ts)是明确的执行控制类型；不解析错误 message，不当成 Human Review interrupt，也不包装为业务 NodeExecutionError。Plugin 的安全错误保留 timeout / network / execution category；Root Run cancellation 由调用方 signal 的明确 reason 识别。Aggregate 保留原对象并识别取消；记录故障仍穿透，不伪装取消成功。
+
+NodeRun / ChildExecution 新增 cancelled，保留已有输入，结束时间写 completedAt，不写伪造业务 error 或 outputs。每个 owner 创建记录时注册该记录的取消写入，完成后解除注册；不扫描整树、不由父 Composite 批量终结其他 owner。取消时只等待已开始的审计创建事务与取消写入，不等待不协作业务 Promise；注册与取消竞争仍补齐该记录收尾。Runner 确认这些写入后终结 Run，Outbox 正常结算 cancelled，BullMQ Job 正常完成。已完成 / 已失败 sibling 保留原事实，未开始节点不创建假 NodeRun。
+
+创建记录使用 Run 行锁检查持久化取消 gate；迟到完成 / 失败只允许条件更新 running，NodeRun 与 ChildExecution 的数据库终态保护拒绝覆盖。业务 Promise 可在 graph.invoke 提前退出后继续，但不能改写 cancelled Run / NodeRun / ChildExecution 或重新激活执行。持久化收尾失败保留 infrastructure / recovery_required 边界，不承诺已成功取消；崩溃后未确认的 executing 命令仍沿用原有恢复边界，不自动 replay。
+
+当前只有内部 Repository 请求入口，没有正式 Cancel API 或 Web 按钮。既有状态展示兼容 cancelled 审计；不做 Provider remote cancel、Artifact upload abort、timeout policy 或 checkpoint 删除。已经进入 waiting 后由内部请求取消的 Human Review NodeRun / pending interrupt 收尾仍不在本轮在途 signal 范围。停止本地等待不保证远端没有执行或计费。
 
 ## PostgreSQL Checkpointer
 
@@ -203,7 +211,7 @@ API / Worker 启动时初始化官方 PostgresSaver，不提供内存回退。�
 | text_generation@1   | 正式 OpenAI / Anthropic 文本实现，SDK 只在插件内部使用  |
 | openai_compatible@1 | 高级 Custom OpenAI-Compatible，可显式配置兼容地址与模型 |
 
-两个插件关闭自动重试并隔离日志 / tracing，拒绝 redirect、空白、截断、过滤、工具调用等无效文本；成功正文包含本次实际 API credential 时以 `CAPABILITY_OUTPUT_INVALID` 拒绝，不返回正文、不重发。错误投影不带原始请求、响应或凭证。共用参数边界在[文本参数 Schema](../packages/plugins/src/text/parameters.ts)，各插件在此基础上收紧自己的配置。CapabilityInvoker 尚未透传取消信号，调用依赖插件 deadline。它们不构成通用媒体或内容安全框架。
+两个插件关闭自动重试并隔离日志 / tracing，拒绝 redirect、空白、截断、过滤、工具调用等无效文本；成功正文包含本次实际 API credential 时以 `CAPABILITY_OUTPUT_INVALID` 拒绝，不返回正文、不重发。错误投影不带原始请求、响应或凭证。共用参数边界在[文本参数 Schema](../packages/plugins/src/text/parameters.ts)，各插件在此基础上收紧自己的配置。CapabilityInvoker 透传在途 execution signal，插件同时保留各自 deadline；两者来源与语义独立。它们不构成通用媒体或内容安全框架。
 
 ## Plugin / Provider / 模型配置管理 HTTP
 
@@ -338,7 +346,7 @@ reference 只展示类型、kind 与 ID（Asset 包含版本），提示暂不�
 
 [执行工作区](../apps/web/src/features/workflow/editor/workflow-execution-workspace.tsx)的「状态与结果」在现有 Run 状态下增加只读执行过程。[浏览器](../apps/web/src/features/workflow/run/execution/execution-tree-browser.tsx)调用 `GET /workflow-runs/:runId/execution-tree`，只读取当前 parent 的一层；打开 Run 不递归加载整棵树。NodeRun 先查询 `parentType=node_run`，没有 Child Execution 时留在当前层并显示「无子执行」，不进入空层。Child Execution 用返回条目的 `type` 与 `id` 作为下一层 parent。面包屑保存每一层 parent 和进入时的显示名；返回上一级与点击上级都使用这条 parent。手动刷新只来自状态面板的刷新按钮，不跟随运行状态的定时查询，也不另建轮询。
 
-`metadata.index` 为非负整数时显示 `#n`，不读取其他 metadata，也不展示 child execution、occurrence 或 Run 的持久化 id。状态复用 [runtime-presentation](../apps/web/src/features/workflow/runtime/presentation/runtime-presentation.ts) 的 running / completed / failed 文案。failed 且 DTO 带 error 时只读展示 message、stage 与 code。同一层不按 nodeId 合并 attempt。`nextCursor` 非空时追加下一页。列表直接使用 DTO 状态，不把 Human Review 的 waiting 合成进这一层；根画布仍按原规则合成。
+`metadata.index` 为非负整数时显示 `#n`，不读取其他 metadata，也不展示 child execution、occurrence 或 Run 的持久化 id。状态复用 [runtime-presentation](../apps/web/src/features/workflow/runtime/presentation/runtime-presentation.ts) 的 running / completed / failed / cancelled 文案。failed 且 DTO 带 error 时只读展示 message、stage 与 code。同一层不按 nodeId 合并 attempt。`nextCursor` 非空时追加下一页。列表直接使用 DTO 状态，不把 Human Review 的 waiting 合成进这一层；根画布仍按原规则合成。
 
 节点名称来自与本次 Run `workflowVersionId` 一致的已加载版本定义：沿 composite body 按 nodeId 收集名称，仅在名称唯一时使用，否则显示「节点」。这不建立执行归属。[Tree 摘要投影](../apps/web/src/features/workflow/run/execution/execution-browse.ts)保留 NodeRun 的 id、nodeId、occurrenceId、attempt、status、parent 与 error。Tree 浏览仍为独立只读视图，不提供点击条目直接打开 Definition Canvas；Canvas 下钻中的唯一实例关联由 [Graph Execution Projection](#graph-execution-projection)负责。ChildExecution 没有持久化 definitionRef 或图路径，不提供 Retry、Resume、Cancel 或结果修改。
 

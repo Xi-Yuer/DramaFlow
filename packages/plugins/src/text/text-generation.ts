@@ -46,6 +46,7 @@ export class TextGenerationPlugin implements ProviderPlugin {
         const configuration = configurationSchema.parse(context.configuration);
         const credentials = openAICompatibleCredentialsSchema.parse(context.credentials);
         const settings = settingsSchema.parse(context.settings);
+        const deadline = AbortSignal.timeout(configuration.timeoutMs);
         // 每次调用使用本次解密的 key；不使用默认 Provider、环境凭证或全局 client 缓存。
         const options = {
           baseURL: configuration.baseURL,
@@ -85,7 +86,7 @@ export class TextGenerationPlugin implements ProviderPlugin {
             maxRetries: 0,
             stopWhen: isStepCount(1),
             abortSignal: AbortSignal.any([
-              AbortSignal.timeout(configuration.timeoutMs),
+              deadline,
               ...(context.signal === undefined ? [] : [context.signal]),
             ]),
             telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
@@ -98,8 +99,9 @@ export class TextGenerationPlugin implements ProviderPlugin {
         } catch (error) {
           if (error instanceof CapabilityError) throw error;
           // SDK 使用 statusCode；只交给既有安全投影，不保留原始错误或 cause。
-          throw externalCapabilityError({
+          throw externalCapabilityError(error, {
             status: APICallError.isInstance(error) ? error.statusCode : undefined,
+            ...(deadline.aborted ? { category: 'timeout' as const } : {}),
           });
         }
       },

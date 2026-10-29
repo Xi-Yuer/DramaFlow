@@ -1,4 +1,10 @@
 import {
+  executionCancellation,
+  throwIfExecutionCancelled,
+  WorkflowExecutionCancelled,
+  type WorkflowExecutionCancellation,
+} from '../../runtime/execution/cancellation/execution-cancellation.js';
+import {
   runtimeValueMapSchema,
   workflowIdentifierSchema,
   workflowRunSchema,
@@ -84,6 +90,7 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
     private readonly runs: WorkflowRunRepository,
     private readonly compiler: WorkflowCompiler,
     private readonly outputResolver: WorkflowOutputResolver,
+    private readonly cancellation?: WorkflowExecutionCancellation,
   ) {}
 
   async executeStart(workflowRunId: string): Promise<StartWorkflowRunResult> {
@@ -180,12 +187,16 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
     input: WorkflowState | WorkflowResumeCommand,
     targetInterruptId?: string,
   ): Promise<StartWorkflowRunResult> {
-    const config = createWorkflowRunConfig(run, {
-      id: version.id,
-      workflowId: version.workflowId,
-      version: version.version,
-      publishedAt: version.publishedAt,
-    });
+    const config = createWorkflowRunConfig(
+      run,
+      {
+        id: version.id,
+        workflowId: version.workflowId,
+        version: version.version,
+        publishedAt: version.publishedAt,
+      },
+      { signal: this.cancellation?.signal },
+    );
     let invocation = input;
     if (input instanceof Command) {
       try {
@@ -210,7 +221,9 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
     }
     let result: unknown;
     try {
+      throwIfExecutionCancelled(this.cancellation?.signal);
       result = await graph.invoke(invocation, config);
+      throwIfExecutionCancelled(this.cancellation?.signal);
     } catch (error) {
       return this.fail(run, 'invoke', error);
     }
@@ -235,6 +248,7 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
         stage = 'resolve_output';
         outputs = runtimeValueMapSchema.parse(this.outputResolver.resolve(definition, state));
       }
+      throwIfExecutionCancelled(this.cancellation?.signal);
     } catch (error) {
       return this.fail(run, stage, error);
     }
@@ -242,15 +256,28 @@ export class DefaultWorkflowRunner implements WorkflowRunner {
     // 记录服务自身失败原样上抛，不反向 markFailed；成功确认后才向调用方返回结果。
     if (waiting) {
       await this.runs.markWaiting(run.id);
+      const cancelled = executionCancellation(this.cancellation?.signal);
+      if (cancelled) return this.fail(run, 'inspect_state', cancelled);
+      this.cancellation?.finish();
       return { workflowRunId: run.id, threadId: run.threadId, status: 'waiting' };
     }
     if (outputs === undefined) throw new Error('工作流最终输出未解析');
     await this.runs.markCompleted(run.id, outputs);
+    this.cancellation?.finish();
     return { workflowRunId: run.id, threadId: run.threadId, status: 'completed', outputs };
   }
 
   private async fail(run: WorkflowRun, stage: WorkflowRunStage, error: unknown): Promise<never> {
-    if (classifyGraphExecutionFailure(error).kind === 'control') throw error;
+    const failure = classifyGraphExecutionFailure(error);
+    const cancellation = executionCancellation(this.cancellation?.signal);
+    if (failure.kind === 'infrastructure' && cancellation) throw error;
+    if (failure.kind === 'cancellation' || cancellation) {
+      this.cancellation?.request();
+      await this.cancellation?.settle();
+      await this.runs.markCancelled(run.id);
+      throw cancellation ?? new WorkflowExecutionCancelled(run.id);
+    }
+    if (failure.kind === 'control') throw error;
     try {
       await this.runs.markFailed(run.id, toWorkflowRunError(stage, error));
     } catch (recordingError) {

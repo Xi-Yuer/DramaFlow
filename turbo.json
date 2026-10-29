@@ -5,8 +5,6 @@
     "REDIS_URL",
     "CREDENTIAL_ENCRYPTION_KEY",
     "API_URL",
-    "STORAGE_DRIVER",
-    "STORAGE_PATH",
     "S3_ENDPOINT",
     "S3_REGION",
     "S3_BUCKET",

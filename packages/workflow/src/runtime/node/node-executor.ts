@@ -1,3 +1,4 @@
+import { throwIfExecutionCancelled } from '../execution/cancellation/execution-cancellation.js';
 import type { NodeDefinition, RuntimeValue } from '@dramaflow/contracts';
 import { NodeRegistry } from '../../node/registry/registry.js';
 import type { BindingResolver } from '../binding/binding-resolver.js';
@@ -23,7 +24,24 @@ export class DefaultNodeExecutor implements NodeExecutor {
     private readonly capabilities?: CapabilityInvoker,
   ) {}
 
+  private executionCapabilities(signal?: AbortSignal): CapabilityInvoker | undefined {
+    const capabilities = this.capabilities;
+    if (!capabilities || !signal) return capabilities;
+    return {
+      invoke(capability, value, options) {
+        throwIfExecutionCancelled(signal);
+        return capabilities.invoke(capability, value, {
+          signal:
+            options?.signal && options.signal !== signal
+              ? AbortSignal.any([signal, options.signal])
+              : signal,
+        });
+      },
+    };
+  }
+
   async execute(node: NodeDefinition, context: NodeExecutionContext): Promise<NodeExecutionResult> {
+    throwIfExecutionCancelled(context.signal);
     // Repository 故障属于基础设施异常，必须位于业务失败的 catch 范围之外。
     const occurrence = await this.nodeRunRepository.getOrCreateOccurrence({
       workflowRunId: context.workflowRunId,
@@ -49,6 +67,7 @@ export class DefaultNodeExecutor implements NodeExecutor {
         workflowInputs: context.workflow.inputs,
       });
     } catch (cause) {
+      throwIfExecutionCancelled(context.signal);
       return failNodeRun(this.nodeRunRepository, node, nodeRun.id, 'resolve_input', cause);
     }
 
@@ -66,16 +85,20 @@ export class DefaultNodeExecutor implements NodeExecutor {
       const input = nodeType.inputSchema.parse(rawInputs);
       stage = 'validate_config';
       const config = nodeType.configSchema.parse(node.config);
+      throwIfExecutionCancelled(context.signal);
+      const capabilities = this.executionCapabilities(context.signal);
       stage = 'execute';
       const rawOutput = await nodeType.execute(input, config, {
         ...context,
         nodeRunId: nodeRun.id,
-        ...(this.capabilities ? { capabilities: this.capabilities } : {}),
+        ...(capabilities ? { capabilities } : {}),
       });
+      throwIfExecutionCancelled(context.signal);
       stage = 'validate_output';
       const output = nodeType.outputSchema.parse(rawOutput);
       stage = 'encode_output';
       for (const port of nodeType.manifest.outputs) {
+        throwIfExecutionCancelled(context.signal);
         encodedOutputs[port.key] = await this.runtimeValueCodec.encode(output[port.key], {
           type: port.dataType,
           storagePolicy: port.storagePolicy ?? 'auto',
@@ -89,9 +112,11 @@ export class DefaultNodeExecutor implements NodeExecutor {
         });
       }
     } catch (cause) {
+      throwIfExecutionCancelled(context.signal);
       return failNodeRun(this.nodeRunRepository, node, nodeRun.id, stage, cause);
     }
 
+    throwIfExecutionCancelled(context.signal);
     await this.nodeRunRepository.markCompleted(nodeRun.id, encodedOutputs);
     return { output: encodedOutputs };
   }

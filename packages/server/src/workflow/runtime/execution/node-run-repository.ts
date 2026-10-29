@@ -1,3 +1,4 @@
+import type { WorkflowExecutionCancellation } from '@dramaflow/workflow';
 import { workflowIdentifierSchema } from '@dramaflow/contracts';
 import type { HumanReviewNodeRunRepository, IterationRunRepository } from '@dramaflow/workflow';
 import { Injectable, NotFoundException } from '@nestjs/common';
@@ -14,9 +15,12 @@ export class NodeRunRepositories {
     ownerId: string,
     rawProjectId: string,
     rawWorkflowRunId: string,
+    cancellation?: WorkflowExecutionCancellation,
   ): Promise<HumanReviewNodeRunRepository & IterationRunRepository> {
     const projectId = z.uuid().parse(rawProjectId);
     const workflowRunId = workflowIdentifierSchema.parse(rawWorkflowRunId);
+    if (cancellation && cancellation.workflowRunId !== workflowRunId)
+      throw new Error('取消上下文与当前 Run 不匹配');
     const run = await this.db.client.workflowRun.findFirst({
       where: { id: workflowRunId, projectId, project: { ownerId } },
       select: { id: true },
@@ -26,6 +30,7 @@ export class NodeRunRepositories {
       ownerId,
       projectId,
       workflowRunId,
+      ...(cancellation ? { cancellation } : {}),
     });
   }
 }

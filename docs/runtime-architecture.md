@@ -70,6 +70,8 @@ Graph 返回后核对 checkpoint 身份、next / tasks、任务错误和 interru
 
 正式 Human Review 恢复传入持久化目标 token 与不透明 value；Runner 核对 checkpoint 后使用显式 interrupt ID map，不猜目标或解释业务决策。底层通用兼容路径的单 interrupt false / 0 / null 仍使用原生 ID map，避免依赖库 truthy 判断。恢复后可再次 waiting。Runner 不按 interaction NodeRun 自建暂停状态机；Human Review 专用策略在 interrupt 前获取或创建 attempt 1 running 审计、首次记录输入，恢复时比较并复用原输入；合法决策完成同一 NodeRun 后才写 State。原生控制流不记 failed，审核等待仍用 WorkflowRun / checkpoint 表达；inline string 限制与拓扑门禁见[当前架构](architecture.md#human-review-声明与纯业务边界)。
 
+在途 cooperative cancellation 使用 RunnableConfig.signal，持久化意图仍是 correctness source；控制分类、owner 审计终结和迟到写回约束见[取消基础](architecture.md#workflow-run-cancellation-foundation)。取消不使用 Human Review resume，也不删除 checkpoint。
+
 ### 最终输出
 
 [OutputResolver](../packages/workflow/src/runtime/state/workflow-output-resolver.ts)仅按最终 State 解析声明：单 source 维持原行为；sources 恰好一个自身来源存在才返回原 RuntimeValue，零个报 WORKFLOW_OUTPUT_MISSING，多个报 WORKFLOW_OUTPUT_AMBIGUOUS，类型不符报 WORKFLOW_OUTPUT_TYPE_MISMATCH。不读取条件、ControlEdge 或 controlResults，不做优先选择、内容合并或 Artifact materialization。这些异常沿现有 resolve_output 失败路径记录 WORKFLOW_OUTPUT_RESOLUTION_FAILED，不返回部分结果。

@@ -6,6 +6,7 @@ import {
   DefaultWorkflowRunner,
   NodeRegistry,
   type WorkflowRunner,
+  type WorkflowExecutionCancellation,
 } from '@dramaflow/workflow';
 import { Injectable } from '@nestjs/common';
 import { WorkflowCheckpointerService } from '../../checkpoint/workflow-checkpointer.service.js';
@@ -35,6 +36,7 @@ export class WorkflowRuntimeFactory {
     ownerId: string,
     projectId: string,
     executionId?: string,
+    cancellation?: WorkflowExecutionCancellation,
   ): Promise<WorkflowRunner> {
     const versions = await this.versions.forProject(ownerId, projectId);
     const runs = await this.runs.forProject(ownerId, projectId, executionId);
@@ -45,7 +47,7 @@ export class WorkflowRuntimeFactory {
           this.registry,
           this.bindings,
           valueServices?.codec ?? (await this.artifacts.forRun(ownerId, projectId, run.id)),
-          await this.nodeRuns.forRun(ownerId, projectId, run.id),
+          await this.nodeRuns.forRun(ownerId, projectId, run.id, cancellation),
           this.capabilities.forRun(ownerId, projectId, run.id),
         ),
       this.checkpointer.saver,
@@ -53,10 +55,10 @@ export class WorkflowRuntimeFactory {
         bindings: this.bindings,
         codec: await this.artifacts.forRun(ownerId, projectId, run.id),
       }),
-      async (run) => this.nodeRuns.forRun(ownerId, projectId, run.id),
-      async (run) => this.nodeRuns.forRun(ownerId, projectId, run.id),
-      async (run) => this.nodeRuns.forRun(ownerId, projectId, run.id),
+      async (run) => this.nodeRuns.forRun(ownerId, projectId, run.id, cancellation),
+      async (run) => this.nodeRuns.forRun(ownerId, projectId, run.id, cancellation),
+      async (run) => this.nodeRuns.forRun(ownerId, projectId, run.id, cancellation),
     );
-    return new DefaultWorkflowRunner(versions, runs, compiler, this.outputs);
+    return new DefaultWorkflowRunner(versions, runs, compiler, this.outputs, cancellation);
   }
 }

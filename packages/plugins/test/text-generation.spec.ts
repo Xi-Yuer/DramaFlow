@@ -148,7 +148,13 @@ describe.each(['openai', 'anthropic'] as const)(
           status,
           outcome: status >= 400 && status < 500 ? 'rejected' : 'outcome_unknown',
         });
-        expect(Object.keys(error as Error).sort()).toEqual(['code', 'name', 'outcome', 'status']);
+        expect(Object.keys(error as Error).sort()).toEqual([
+          'category',
+          'code',
+          'name',
+          'outcome',
+          'status',
+        ]);
         for (const secret of [
           `test-only-${provider}-secret`,
           '测试提示词',

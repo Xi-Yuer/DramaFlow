@@ -55,10 +55,10 @@ export function createTextGenerationNodeType(): NodeType<
     outputSchema: textGenerationOutputSchema,
     async execute(input, config, context) {
       if (!context.capabilities) throw new TextGenerationCapabilityNotConfiguredError();
-      return context.capabilities.invoke('text.generate', {
-        modelConfigurationId: config.modelConfigurationId,
-        input,
-      });
+      const request = { modelConfigurationId: config.modelConfigurationId, input };
+      return context.signal
+        ? context.capabilities.invoke('text.generate', request, { signal: context.signal })
+        : context.capabilities.invoke('text.generate', request);
     },
   };
 }

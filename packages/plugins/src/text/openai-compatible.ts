@@ -1,10 +1,10 @@
 import { textGenerationInputSchema, textGenerationOutputSchema } from '@dramaflow/contracts';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { ChatOpenAICompletions } from '@langchain/openai';
+import { ChatOpenAICompletions, OpenAIClient } from '@langchain/openai';
 import { RunTree } from 'langsmith';
 import { withRunTree } from 'langsmith/traceable';
 import { z } from 'zod';
-import { CapabilityError } from '../plugin/capability-error.js';
+import { CapabilityError, externalCapabilityError } from '../plugin/capability-error.js';
 import type { ProviderPlugin } from '../plugin/provider-plugin.js';
 import {
   openAICompatibleConfigurationSchema,
@@ -48,6 +48,7 @@ export class OpenAICompatiblePlugin implements ProviderPlugin {
         const configuration = openAICompatibleConfigurationSchema.parse(context.configuration);
         const credentials = openAICompatibleCredentialsSchema.parse(context.credentials);
         const settings = textGenerationSettingsSchema.parse(context.settings);
+        const deadline = AbortSignal.timeout(configuration.timeoutMs);
         const model = new ChatOpenAICompletions({
           model: context.model,
           apiKey: credentials.apiKey,
@@ -79,18 +80,29 @@ export class OpenAICompatiblePlugin implements ProviderPlugin {
           new HumanMessage(input.prompt),
         ];
         const signal = AbortSignal.any([
-          AbortSignal.timeout(configuration.timeoutMs),
+          deadline,
           ...(context.signal === undefined ? [] : [context.signal]),
         ]);
         // 隔离父图 callback / tracing context；供应商凭证与原始错误不进入自动 trace。
-        const output = await withRunTree(
-          new RunTree({ name: 'DramaFlow text capability', tracingEnabled: false }),
-          () =>
-            model.invoke(messages, {
-              callbacks: [],
-              signal,
-            }),
-        );
+        let output: Awaited<ReturnType<typeof model.invoke>>;
+        try {
+          output = await withRunTree(
+            new RunTree({ name: 'DramaFlow text capability', tracingEnabled: false }),
+            () =>
+              model.invoke(messages, {
+                callbacks: [],
+                signal,
+              }),
+          );
+        } catch (error) {
+          const category =
+            deadline.aborted || error instanceof OpenAIClient.APIConnectionTimeoutError
+              ? 'timeout'
+              : error instanceof OpenAIClient.APIConnectionError
+                ? 'network'
+                : undefined;
+          throw externalCapabilityError(error, category ? { category } : {});
+        }
         const response = completionResponseSchema.safeParse(
           output.additional_kwargs.__raw_response,
         );

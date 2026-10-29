@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-Workflow Run Cancellation 第一阶段为持久化取消意图与未 claim 执行闸门，边界见[当前架构](architecture.md#workflow-run-cancellation-foundation)。后续需独立授权接入 Worker / LangGraph / Node / Plugin signal、取消分类、子执行生命周期收尾与迟到写回处理；当前不提供公开 Cancel API 或 Web 按钮。
+Workflow Run Cancellation 第二阶段贯通在途 signal，边界见[当前架构](architecture.md#workflow-run-cancellation-foundation)。正式 Cancel API / UI 继续等待独立评估与授权；waiting Human Review 的审计 / pending interrupt 收尾、崩溃后的取消对账及产品确认语义需要先明确。本轮不增加 timeout、retry、远端取消或删除 checkpoint。
 
 Workflow Run History 最小查询与只读版本查看进入交付验收，等待人工检查历史分页、版本切换、嵌套执行和返回草稿；当前能力见[运行历史](architecture.md#web-workflow-run-history)。不扩展 retry、搜索或 Observability。
 

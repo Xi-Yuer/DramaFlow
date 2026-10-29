@@ -1,3 +1,4 @@
+import { assertCancellationGate } from '../cancellation/cancellation-records.js';
 import {
   nodeOccurrenceSchema,
   workflowIdentifierSchema,
@@ -22,6 +23,7 @@ export class NodeOccurrenceRepository {
     if (identity.workflowRunId !== workflowRunId) throw new Error('节点执行记录与已授权运行不匹配');
     return this.db.client.$transaction(
       async (tx) => {
+        await assertCancellationGate(tx, this.scope);
         const run = await tx.workflowRun.findFirst({
           where: { id: workflowRunId, projectId, project: { ownerId } },
           select: { id: true },
@@ -50,6 +52,7 @@ export class NodeOccurrenceRepository {
     if (input.workflowRunId !== workflowRunId) throw new Error('节点执行记录与已授权运行不匹配');
     const nodeId = workflowIdentifierSchema.parse(input.nodeId);
     const occurrenceId = z.uuid().parse(input.occurrenceId);
+    await assertCancellationGate(tx, this.scope);
     const run = await tx.workflowRun.findFirst({
       where: { id: workflowRunId, projectId, project: { ownerId } },
       select: { workflowId: true, workflowVersionId: true, status: true },

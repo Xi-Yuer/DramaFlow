@@ -1,3 +1,7 @@
+import {
+  CancellationRecordingError,
+  WorkflowExecutionCancelled,
+} from '../execution/cancellation/execution-cancellation.js';
 import { isGraphBubbleUp } from '@langchain/langgraph';
 import type { NodeRunRepository } from '../execution/node-run-repository.js';
 import type { NodeDefinition, NodeRunError } from '@dramaflow/contracts';
@@ -65,13 +69,15 @@ export class ChildExecutionRecordingError extends AggregateError {
 
 export type GraphExecutionFailure =
   | { kind: 'execution'; executionError: NodeExecutionError }
-  | { kind: 'control' | 'infrastructure' | 'unknown' };
+  | { kind: 'control' | 'cancellation' | 'infrastructure' | 'unknown' };
 
 // 只将已明确标记的执行错误投影为业务失败；未知 throw 不能冒充业务失败。
 // Aggregate 保留原对象；控制流、记录故障优先于执行错误，未知成员保守穿透。
 export function classifyGraphExecutionFailure(cause: unknown): GraphExecutionFailure {
   const seen = new Set<unknown>();
   const classify = (error: unknown): GraphExecutionFailure => {
+    if (error instanceof WorkflowExecutionCancelled) return { kind: 'cancellation' };
+    if (error instanceof CancellationRecordingError) return { kind: 'infrastructure' };
     if (error !== null && isGraphBubbleUp(error)) return { kind: 'control' };
     if (error instanceof NodeRunRecordingError || error instanceof ChildExecutionRecordingError)
       return { kind: 'infrastructure' };
@@ -80,7 +86,9 @@ export function classifyGraphExecutionFailure(cause: unknown): GraphExecutionFai
     try {
       if (error instanceof NodeExecutionError) {
         const nested = classify(error.cause);
-        return nested.kind === 'control' || nested.kind === 'infrastructure'
+        return nested.kind === 'control' ||
+          nested.kind === 'cancellation' ||
+          nested.kind === 'infrastructure'
           ? nested
           : { kind: 'execution', executionError: error };
       }
@@ -89,6 +97,8 @@ export function classifyGraphExecutionFailure(cause: unknown): GraphExecutionFai
         if (failures.some((failure) => failure.kind === 'control')) return { kind: 'control' };
         if (failures.some((failure) => failure.kind === 'infrastructure'))
           return { kind: 'infrastructure' };
+        if (failures.some((failure) => failure.kind === 'cancellation'))
+          return { kind: 'cancellation' };
         if (failures.some((failure) => failure.kind === 'unknown')) return { kind: 'unknown' };
         return failures.find((failure) => failure.kind === 'execution') ?? { kind: 'unknown' };
       }
@@ -109,11 +119,17 @@ export async function failNodeRun(
   cause: unknown,
 ): Promise<never> {
   const failure = classifyGraphExecutionFailure(cause);
-  if (failure.kind === 'control' || failure.kind === 'infrastructure') throw cause;
+  if (
+    failure.kind === 'control' ||
+    failure.kind === 'cancellation' ||
+    failure.kind === 'infrastructure'
+  )
+    throw cause;
   const error = new NodeExecutionError(node.id, node.type, stage, cause);
   try {
     await repository.markFailed(nodeRunId, toNodeRunError(error));
   } catch (recordingError) {
+    if (recordingError instanceof WorkflowExecutionCancelled) throw recordingError;
     throw new NodeRunRecordingError(nodeRunId, error, recordingError);
   }
   throw error;

@@ -17,6 +17,8 @@ export async function failCompositeExecution(
     try {
       await transition(toNodeRunError(failure.executionError));
     } catch (recordingError) {
+      if (classifyGraphExecutionFailure(recordingError).kind === 'cancellation')
+        throw recordingError;
       throw new ChildExecutionRecordingError(childExecutionId, cause, recordingError);
     }
   }

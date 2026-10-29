@@ -1,3 +1,4 @@
+import type { WorkflowExecutionCancellation } from '@dramaflow/workflow';
 import type { Prisma } from '@dramaflow/database';
 import { z } from 'zod';
 
@@ -5,6 +6,7 @@ export interface RepositoryScope {
   readonly ownerId: string;
   readonly projectId: string;
   readonly workflowRunId: string;
+  readonly cancellation?: WorkflowExecutionCancellation;
 }
 
 export function runningChild(scope: RepositoryScope, id: string): Prisma.ChildExecutionWhereInput {

@@ -138,6 +138,7 @@ export function compileGraph<State extends WorkflowState>(
           executionContext: (config, state) => ({
             workflow: definition,
             runnableConfig: config,
+            signal: config.signal,
             ...readGraphExecutionIdentity(execution, state, config),
           }),
           addNode,

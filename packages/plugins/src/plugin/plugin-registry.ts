@@ -192,6 +192,7 @@ export class PluginRegistry {
         throw new CapabilityError(error.code, {
           status: error.status,
           outcome: error.outcome,
+          category: error.category,
         });
       throw externalCapabilityError(error);
     }

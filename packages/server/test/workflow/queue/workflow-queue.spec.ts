@@ -91,7 +91,12 @@ describe('Worker 只使用匹配持久化意图的 targeted resume', () => {
       interruptId: 'review-token',
       value: { action: 'reject', feedback: '修改意见' },
     });
-    expect(f.runtime.forProject).toHaveBeenCalledWith('owner', 'project', 'intent');
+    expect(f.runtime.forProject).toHaveBeenCalledWith(
+      'owner',
+      'project',
+      'intent',
+      expect.objectContaining({ workflowRunId: 'run' }),
+    );
   });
   it('Job 目标被改写时与 Outbox 不一致，在构造 Runner 前拒绝', async () => {
     const f = fixture();

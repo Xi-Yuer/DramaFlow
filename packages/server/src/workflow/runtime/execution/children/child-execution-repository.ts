@@ -1,3 +1,9 @@
+import {
+  assertCancellationGate,
+  ownExecutionRecord,
+  cancelOwnedChild,
+  assertExecutionWrite,
+} from '../cancellation/cancellation-records.js';
 import { isDeepStrictEqual } from 'node:util';
 import {
   childExecutionSchema,
@@ -16,12 +22,7 @@ import {
 import { NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 import type { DatabaseService } from '../../../../database/database.service.js';
-import {
-  assertChanged,
-  runningChild,
-  runningNodeRun,
-  type RepositoryScope,
-} from '../repository-scope.js';
+import { runningChild, runningNodeRun, type RepositoryScope } from '../repository-scope.js';
 
 export class ChildExecutionRepository {
   constructor(
@@ -94,54 +95,66 @@ export class ChildExecutionRepository {
         : null;
     if (index !== null && input.invocationKey !== iterationItemInvocationKey(index))
       throw new Error('Iteration invocation identity 无效');
-    return this.db.client.$transaction(
-      async (tx) => {
-        const parent = await tx.nodeRun.findFirst({
-          where: {
-            ...runningNodeRun(this.scope, input.parentNodeRunId),
-            nodeId: input.parentNodeId,
+    return ownExecutionRecord(
+      this.scope,
+      'child',
+      () =>
+        this.db.client.$transaction(
+          async (tx) => {
+            await assertCancellationGate(tx, this.scope);
+            const parent = await tx.nodeRun.findFirst({
+              where: {
+                ...runningNodeRun(this.scope, input.parentNodeRunId),
+                nodeId: input.parentNodeId,
+              },
+              include: { occurrence: true },
+            });
+            if (!parent) throw new NotFoundException('Parent NodeRun 不存在、已结束或无权访问');
+            if (
+              index !== null &&
+              input.scopeKey !==
+                deriveChildScope(parent.occurrence.scopeKey, {
+                  kind: 'iteration_item',
+                  ownerOccurrenceId: parent.occurrenceId,
+                  ownerNodeRunId: parent.id,
+                  slot: 'body',
+                  index,
+                })
+            )
+              throw new Error('Iteration scope 与父 NodeRun 不匹配');
+            if (input.scopeKey === parent.occurrence.scopeKey)
+              throw new Error('Child scope 不能等于 parent scope');
+            const lockKey = JSON.stringify([
+              workflowRunId,
+              input.parentNodeRunId,
+              input.invocationKey,
+            ]);
+            await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+            const existing = await tx.childExecution.findUnique({
+              where: {
+                parentNodeRunId_invocationKey: {
+                  parentNodeRunId: input.parentNodeRunId,
+                  invocationKey: input.invocationKey,
+                },
+              },
+            });
+            if (
+              existing &&
+              (existing.status !== 'running' ||
+                existing.scopeKey !== input.scopeKey ||
+                existing.kind !== input.kind ||
+                existing.parentNodeId !== input.parentNodeId ||
+                !isDeepStrictEqual(this.childRecord(existing).metadata, input.metadata))
+            )
+              throw new Error('ChildExecution 已结束或身份不匹配');
+            return this.childRecord(
+              existing ??
+                (await tx.childExecution.create({ data: { ...input, projectId, index } })),
+            );
           },
-          include: { occurrence: true },
-        });
-        if (!parent) throw new NotFoundException('Parent NodeRun 不存在、已结束或无权访问');
-        if (
-          index !== null &&
-          input.scopeKey !==
-            deriveChildScope(parent.occurrence.scopeKey, {
-              kind: 'iteration_item',
-              ownerOccurrenceId: parent.occurrenceId,
-              ownerNodeRunId: parent.id,
-              slot: 'body',
-              index,
-            })
-        )
-          throw new Error('Iteration scope 与父 NodeRun 不匹配');
-        if (input.scopeKey === parent.occurrence.scopeKey)
-          throw new Error('Child scope 不能等于 parent scope');
-        const lockKey = JSON.stringify([workflowRunId, input.parentNodeRunId, input.invocationKey]);
-        await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
-        const existing = await tx.childExecution.findUnique({
-          where: {
-            parentNodeRunId_invocationKey: {
-              parentNodeRunId: input.parentNodeRunId,
-              invocationKey: input.invocationKey,
-            },
-          },
-        });
-        if (
-          existing &&
-          (existing.status !== 'running' ||
-            existing.scopeKey !== input.scopeKey ||
-            existing.kind !== input.kind ||
-            existing.parentNodeId !== input.parentNodeId ||
-            !isDeepStrictEqual(this.childRecord(existing).metadata, input.metadata))
-        )
-          throw new Error('ChildExecution 已结束或身份不匹配');
-        return this.childRecord(
-          existing ?? (await tx.childExecution.create({ data: { ...input, projectId, index } })),
-        );
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+          { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+        ),
+      (id) => cancelOwnedChild(this.db, this.scope, id),
     );
   }
 
@@ -162,7 +175,8 @@ export class ChildExecutionRepository {
       where: runningChild(this.scope, id),
       data: { status: 'completed', completedAt: new Date() },
     });
-    assertChanged(result.count);
+    await assertExecutionWrite(this.db, this.scope, 'child', id, result.count);
+    this.scope.cancellation?.release(`child:${id}`);
   }
   async markIterationItemCompleted(id: string) {
     return this.markChildExecutionCompleted(id);
@@ -187,7 +201,10 @@ export class ChildExecutionRepository {
       const child = await tx.childExecution.findFirst({
         where: { ...runningChild(this.scope, id), status: { in: ['running', 'failed'] } },
       });
-      if (!child) throw new Error('ChildExecution 不存在、无权访问或已结束');
+      if (!child) {
+        await assertExecutionWrite(this.db, this.scope, 'child', id, 0);
+        throw new Error('ChildExecution 不存在、无权访问或已结束');
+      }
       if (expectedKind && child.kind !== expectedKind)
         throw new Error('Iteration helper 不接受其他 ChildExecution kind');
       const completedAt = new Date();

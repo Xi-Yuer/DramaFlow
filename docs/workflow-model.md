@@ -40,7 +40,7 @@ Repository 不判断等价性；运行身份与 inputs 不可改写。lookup 只
 
 ## 运行
 
-状态转换为 pending → running，running → waiting / completed / failed / cancelled，waiting → running / cancelled；终态不可更新。首次进入 running 写 startedAt，恢复不改；终态写 completedAt。threadId 必填且独立于 Run.id，不从缺省值猜测。
+状态转换为 pending → running / cancelled，running → waiting / completed / failed / cancelled，waiting → running / cancelled；终态不可更新。首次进入 running 写 startedAt，恢复不改；终态写 completedAt。threadId 必填且独立于 Run.id，不从缺省值猜测。
 
 inputs / outputs 为 RuntimeValue map，error 仅含安全 stage / 可选 code / message。提交只保存 pending 与 start 意图，恢复只建当前 waiting 周期的唯一意图；执行时 claim。resume 使用原 Run / version / thread，不创建新 invocation，非 waiting 明确拒绝。Human Review 产品 HTTP 使用 Pending 查询返回的 opaque interruptId / waitingRevision，以及严格 approve / reject decision；旧周期请求明确冲突，已提交决策不能修改。具体 HTTP 及 Outbox 边界见[当前架构](architecture.md#human-review-查询与恢复)。
 

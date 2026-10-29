@@ -14,28 +14,65 @@ const messages = {
 } as const;
 
 export type CapabilityErrorCode = keyof typeof messages;
+export type CapabilityFailureCategory = 'timeout' | 'network' | 'execution';
 export type CapabilityCallOutcome = 'rejected' | 'outcome_unknown';
 
 // 只接受平台定义的摘要，绝不持有供应商 message、response、headers 或 cause。
 export class CapabilityError extends Error {
   readonly status?: number;
+  readonly category: CapabilityFailureCategory;
   readonly outcome?: CapabilityCallOutcome;
 
   constructor(
     public readonly code: CapabilityErrorCode,
-    details: { status?: number; outcome?: CapabilityCallOutcome } = {},
+    details: {
+      status?: number;
+      outcome?: CapabilityCallOutcome;
+      category?: CapabilityFailureCategory;
+    } = {},
   ) {
     super(messages[code]);
     this.name = 'CapabilityError';
     if (Number.isInteger(details.status) && details.status! >= 100 && details.status! <= 599)
       this.status = details.status;
     this.outcome = details.outcome;
+    this.category = details.category ?? 'execution';
   }
 }
 
-export function externalCapabilityError(error: unknown): CapabilityError {
+function failureCategory(error: unknown): CapabilityFailureCategory {
+  const seen = new Set<unknown>();
+  for (let current = error; current && !seen.has(current);) {
+    seen.add(current);
+    if (current instanceof DOMException && current.name === 'TimeoutError') return 'timeout';
+    if (typeof current !== 'object') break;
+    if (
+      'code' in current &&
+      typeof current.code === 'string' &&
+      [
+        'ECONNRESET',
+        'ECONNREFUSED',
+        'ENOTFOUND',
+        'EAI_AGAIN',
+        'ETIMEDOUT',
+        'EPIPE',
+        'UND_ERR_CONNECT_TIMEOUT',
+        'UND_ERR_SOCKET',
+      ].includes(current.code)
+    )
+      return 'network';
+    current = 'cause' in current ? current.cause : undefined;
+  }
+  return 'execution';
+}
+
+export function externalCapabilityError(
+  error: unknown,
+  details: { status?: number; category?: CapabilityFailureCategory } = {},
+): CapabilityError {
   const status =
-    typeof error === 'object' &&
+    details.status ??
+    (typeof error === 'object' &&
     error !== null &&
     'status' in error &&
     typeof error.status === 'number' &&
@@ -43,8 +80,9 @@ export function externalCapabilityError(error: unknown): CapabilityError {
     error.status >= 100 &&
     error.status <= 599
       ? error.status
-      : undefined;
+      : undefined);
   return new CapabilityError('CAPABILITY_INVOCATION_FAILED', {
+    category: details.category ?? failureCategory(error),
     ...(status === undefined ? {} : { status }),
     // 连接断开、超时、5xx 等不能证明供应商未受理，禁止据此自动重试。
     outcome: status !== undefined && status >= 400 && status < 500 ? 'rejected' : 'outcome_unknown',

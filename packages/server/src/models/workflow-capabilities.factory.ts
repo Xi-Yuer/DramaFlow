@@ -1,6 +1,6 @@
 import { capabilityInvocationSchema } from '@dramaflow/contracts';
 import { PluginRegistry } from '@dramaflow/plugins';
-import type { CapabilityInvoker } from '@dramaflow/workflow';
+import { throwIfExecutionCancelled, type CapabilityInvoker } from '@dramaflow/workflow';
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
 import { SecretsService } from '../secrets/secrets.service.js';
@@ -16,7 +16,8 @@ export class WorkflowCapabilitiesFactory {
 
   forRun(ownerId: string, projectId: string, workflowRunId: string): CapabilityInvoker {
     return {
-      invoke: async (capability, rawInput) => {
+      invoke: async (capability, rawInput, options) => {
+        throwIfExecutionCancelled(options?.signal);
         const request = capabilityInvocationSchema.safeParse(rawInput);
         if (!request.success) throw new ModelConfigurationError('MODEL_CONFIGURATION_INVALID');
         const run = await this.db.client.workflowRun.findFirst({
@@ -49,16 +50,25 @@ export class WorkflowCapabilitiesFactory {
         } catch {
           throw new ModelConfigurationError('MODEL_CREDENTIALS_UNAVAILABLE');
         }
-        return this.plugins.invoke({
-          pluginId: model.provider.pluginId,
-          pluginVersion: model.provider.pluginVersion,
-          capability,
-          input: request.data.input,
-          configuration: model.provider.configuration,
-          credentials,
-          model: model.model,
-          settings: model.settings,
-        });
+        try {
+          throwIfExecutionCancelled(options?.signal);
+          const output = await this.plugins.invoke({
+            pluginId: model.provider.pluginId,
+            pluginVersion: model.provider.pluginVersion,
+            capability,
+            input: request.data.input,
+            configuration: model.provider.configuration,
+            credentials,
+            model: model.model,
+            settings: model.settings,
+            signal: options?.signal,
+          });
+          throwIfExecutionCancelled(options?.signal);
+          return output;
+        } catch (error) {
+          throwIfExecutionCancelled(options?.signal);
+          throw error;
+        }
       },
     };
   }

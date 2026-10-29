@@ -180,6 +180,7 @@ describe('OpenAI-compatible 真实本机 HTTP 协议（非真实模型）', () =
       .catch((error: unknown) => error);
     await vi.waitFor(() => expect(calls).toBe(1));
     expect(await timed).toMatchObject({
+      category: 'timeout',
       code: 'CAPABILITY_INVOCATION_FAILED',
       outcome: 'outcome_unknown',
     });

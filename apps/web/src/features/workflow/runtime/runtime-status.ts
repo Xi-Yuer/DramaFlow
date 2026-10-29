@@ -19,7 +19,8 @@ import type {
   WorkflowRunStatusState,
 } from '../run/status/workflow-run-status';
 
-export type RuntimeNodeStatus = 'idle' | 'pending' | 'running' | 'waiting' | 'completed' | 'failed';
+export type RuntimeNodeStatus =
+  'idle' | 'pending' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
 
 export interface WorkflowNodeRuntimeState {
   nodeId: string;

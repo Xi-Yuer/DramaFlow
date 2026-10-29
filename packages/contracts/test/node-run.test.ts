@@ -23,10 +23,10 @@ describe('NodeRun 记录协议', () => {
     value,
   });
 
-  it('只接受普通 Action 的三种状态，要求开始时间且与静态定义分离', () => {
-    for (const status of ['running', 'completed', 'failed'])
+  it('记录运行、完成、失败与取消事实，要求开始时间且与静态定义分离', () => {
+    for (const status of ['running', 'completed', 'failed', 'cancelled'])
       expect(nodeRunSchema.parse({ ...run, status }).status).toBe(status);
-    for (const status of ['pending', 'ready', 'waiting', 'skipped', 'cancelled', 'retrying'])
+    for (const status of ['pending', 'ready', 'waiting', 'skipped', 'retrying'])
       expect(nodeRunStatusSchema.safeParse(status).success).toBe(false);
     expect(nodeRunSchema.safeParse({ ...run, startedAt: undefined }).success).toBe(false);
     expect(nodeRunSchema.safeParse({ ...run, config: {} }).success).toBe(false);

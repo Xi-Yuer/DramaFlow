@@ -15,7 +15,7 @@ export const nodeOccurrenceSchema = z
   .strict();
 export type NodeOccurrence = z.infer<typeof nodeOccurrenceSchema>;
 
-export const nodeRunStatusSchema = z.enum(['running', 'completed', 'failed']);
+export const nodeRunStatusSchema = z.enum(['running', 'completed', 'failed', 'cancelled']);
 
 export const nodeRunErrorSchema = z
   .object({
