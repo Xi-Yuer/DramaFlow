@@ -22,6 +22,23 @@ afterEach(() => {
 });
 
 describe('Human Review 同一 Run 状态协调', () => {
+  it('刷新观察到 cancelled 后撤下旧审核，旧 token 不能触发 approve / reject', async () => {
+    const { controller, get, getPending, resume } = setup();
+    await flush();
+    expect(controller.getSnapshot().review?.item).toEqual(pendingReview);
+    get.mockResolvedValue({
+      ...waitingRun,
+      status: 'cancelled',
+      cancellationRequestedAt: '2026-10-29T00:00:00.000Z',
+    });
+    await controller.refresh();
+    expect(controller.getSnapshot()).toMatchObject({ run: { status: 'cancelled' }, review: null });
+    expect(getPending).toHaveBeenCalledOnce();
+    await controller.submit(pendingReview, 'reject');
+    await controller.submit(pendingReview, 'approve');
+    expect(resume).not.toHaveBeenCalled();
+    controller.stop('run-1');
+  });
   it('waiting 查询 Pending；pending 等待不启动高频 Run polling', async () => {
     vi.useFakeTimers();
     const { controller, get, getPending } = setup();

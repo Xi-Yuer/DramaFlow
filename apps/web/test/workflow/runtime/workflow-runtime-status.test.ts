@@ -81,6 +81,42 @@ function makeRunStatus(
 }
 
 describe('集中式 Runtime Node Status（真实 NodeRun execution facts 优先）', () => {
+  it('取消审核由同一 NodeRun 投影为 cancelled，旧 pending 不提供 Canvas / Inspector 操作', () => {
+    const nodeRun: NodeRun = {
+      id: 'cancelled-review',
+      workflowRunId: waitingRun.id,
+      nodeId: 'review-1',
+      occurrenceId: 'review-occurrence',
+      scopeKey: 'root',
+      attempt: 1,
+      status: 'cancelled',
+      startedAt: '2026-10-29T00:00:00.000Z',
+      completedAt: '2026-10-29T00:00:01.000Z',
+    };
+    const map = resolveWorkflowRuntimeNodes({
+      workflow: createWorkflow(),
+      runStatus: makeRunStatus(
+        { ...waitingRun, status: 'cancelled' },
+        {
+          phase: 'ready',
+          item: pendingReview,
+          feedback: '',
+          notice: null,
+        },
+        [nodeRun],
+      ),
+    });
+    expect(map.get('review-1')).toMatchObject({
+      status: 'cancelled',
+      isWaitingHumanReview: false,
+      review: null,
+      error: null,
+      nodeRun,
+      attempts: [nodeRun],
+    });
+    expect(map.get('node-if')?.nodeRun).toBeNull();
+    expect(map.get('node-if')?.status).toBe('idle');
+  });
   it('先选择 root occurrence，再比较其 attempt；其他 scope 的高 attempt 不代表最新 root 执行', () => {
     const root: NodeRun = {
       id: 'root-attempt',

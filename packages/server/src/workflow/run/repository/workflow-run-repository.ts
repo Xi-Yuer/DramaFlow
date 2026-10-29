@@ -24,6 +24,7 @@ import {
 } from '@dramaflow/workflow';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
+import { cancelWaitingReviews } from '../../human-review/cancel-waiting-reviews.js';
 
 const createInputSchema = z
   .object({
@@ -314,6 +315,8 @@ class PrismaWorkflowRunRepository
         };
       const requestedAt = row.cancellationRequestedAt ?? new Date();
       const inFlight = row.status === 'running';
+      const completedAt = new Date();
+      if (row.status === 'waiting') await cancelWaitingReviews(tx, row, completedAt);
       if (row.cancellationRequestedAt === null || !inFlight) {
         const changed = await tx.workflowRun.updateMany({
           where: {
@@ -323,7 +326,7 @@ class PrismaWorkflowRunRepository
           },
           data: {
             cancellationRequestedAt: requestedAt,
-            ...(!inFlight ? { status: 'cancelled', completedAt: new Date() } : {}),
+            ...(!inFlight ? { status: 'cancelled', completedAt } : {}),
           },
         });
         this.assertChanged(changed.count);
@@ -344,12 +347,15 @@ class PrismaWorkflowRunRepository
   async markCancelled(workflowRunId: string): Promise<void> {
     await this.db.client.$transaction(async (tx) => {
       const row = await this.lockRun(tx, workflowRunId);
+      const completedAt = new Date();
+      if (row.status === 'running' || row.status === 'waiting')
+        await cancelWaitingReviews(tx, row, completedAt);
       const changed = await tx.workflowRun.updateMany({
         where: { ...this.scoped(row.id), status: { in: ['running', 'waiting'] } },
         data: {
           status: 'cancelled',
           cancellationRequestedAt: row.cancellationRequestedAt ?? new Date(),
-          completedAt: new Date(),
+          completedAt,
         },
       });
       this.assertChanged(changed.count);

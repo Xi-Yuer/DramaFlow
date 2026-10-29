@@ -196,7 +196,11 @@ NodeRun / ChildExecution 新增 cancelled，保留已有输入，结束时间写
 
 创建记录使用 Run 行锁检查持久化取消 gate；迟到完成 / 失败只允许条件更新 running，NodeRun 与 ChildExecution 的数据库终态保护拒绝覆盖。业务 Promise 可在 graph.invoke 提前退出后继续，但不能改写 cancelled Run / NodeRun / ChildExecution 或重新激活执行。持久化收尾失败保留 infrastructure / recovery_required 边界，不承诺已成功取消；崩溃后未确认的 executing 命令仍沿用原有恢复边界，不自动 replay。
 
-当前只有内部 Repository 请求入口，没有正式 Cancel API 或 Web 按钮。既有状态展示兼容 cancelled 审计；不做 Provider remote cancel、Artifact upload abort、timeout policy 或 checkpoint 删除。已经进入 waiting 后由内部请求取消的 Human Review NodeRun / pending interrupt 收尾仍不在本轮在途 signal 范围。停止本地等待不保证远端没有执行或计费。
+当前只有内部 Repository 请求入口，没有正式 Cancel API 或 Web 按钮。既有状态展示兼容 cancelled 审计；不做 Provider remote cancel、Artifact upload abort、timeout policy 或 checkpoint 删除。已经进入 waiting 的 Human Review 取消由下述同事务收尾处理。停止本地等待不保证远端没有执行或计费。
+
+waiting Human Review 的取消请求在 Run 行锁内，通过[等待审核收尾](../packages/server/src/workflow/human-review/cancel-waiting-reviews.ts)将 running Review NodeRun 与其显式父链上的 running NodeRun / ChildExecution 结束为 cancelled，与 Run 和未 claim Outbox 同事务提交；任一写入失败整体回滚。Review 归属由该 Run 的 immutable WorkflowVersion、NodeRun.childExecutionId、ChildExecution.parentNodeRunId 与唯一 nestedGraphSlot 解析，不使用全局 nodeId 或 scopeKey。已结束记录与 sibling 不改写，未启动节点不建记录，不产生 reject、decision 或 feedback；没有开放 nested Human Review。
+
+checkpoint 与原生 pending interrupt 保留为执行证据；DramaFlow authoritative Run lifecycle 使其不可恢复。Pending 查询不返回 cancelled / 有取消意图的可操作审核，旧 interruptId / waitingRevision 无法重新提交或 claim。cancel 事务先胜时收尾 waiting；resume claim 先胜时只记录 in_flight，由既有 signal 链终止，确认 invocation 退出后同样补齐尚未重新登记到取消 scope 的旧等待审计。Web 沿用现有状态查询与共享 projection，刷新观察到 cancelled 后撤下审核操作并展示已取消，不解释为 rejected / failed。
 
 ## PostgreSQL Checkpointer
 

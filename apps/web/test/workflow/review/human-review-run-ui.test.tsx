@@ -81,6 +81,18 @@ afterEach(() => {
 });
 
 describe('现有执行面板中的人工审核闭环', () => {
+  it('刷新到 cancelled 后移除审核按钮，展示已取消，不提交 reject', async () => {
+    const { get, pending, resume } = setup();
+    await screen.findByRole('region', { name: '人工审核' });
+    get.mockResolvedValue({ ...waitingRun, status: 'cancelled' });
+    fireEvent.click(screen.getAllByRole('button', { name: '手动刷新' })[0]!);
+    await waitFor(() => expect(screen.queryByRole('region', { name: '人工审核' })).toBeNull());
+    expect(screen.getAllByText('已取消').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /拒\s*绝/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /通\s*过/ })).toBeNull();
+    expect(pending).toHaveBeenCalledOnce();
+    expect(resume).not.toHaveBeenCalled();
+  });
   it('waiting 展示产品内容与可选反馈，隐藏实现身份；通过时锁住按钮，受理后禁用审批', async () => {
     const { pending, resume, start, view } = setup();
     await screen.findByRole('region', { name: '人工审核' });
