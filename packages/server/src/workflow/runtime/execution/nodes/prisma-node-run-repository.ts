@@ -20,7 +20,7 @@ import type {
   HumanReviewNodeRunRepository,
   IterationRunRepository,
   CreateChildExecutionInput,
-  CreateIterationItemRunInput,
+  CreateIterationChildExecutionInput,
 } from '@dramaflow/workflow';
 import { z } from 'zod';
 import type { DatabaseService } from '../../../../database/database.service.js';
@@ -51,7 +51,7 @@ export class PrismaNodeRunRepository
     return this.occurrences.getOrCreateOccurrence(input);
   }
 
-  getOrCreateIterationItemRunning(input: CreateIterationItemRunInput) {
+  getOrCreateIterationItemRunning(input: CreateIterationChildExecutionInput) {
     return this.children.getOrCreateIterationItemRunning(input);
   }
 

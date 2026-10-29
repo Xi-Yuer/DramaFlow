@@ -14,7 +14,7 @@ Workflow（身份、元数据、draft）
 
 inputs / outputs 各自名称唯一，节点 ID 唯一；端口名称以英文字母开头，只含字母、数字、下划线，并拒绝原型保留名。
 
-Workflow Input 为 `{ name, type, required }`。required 缺省读取为 true，不回写已有不可变版本；false 允许省略 key，nullable 用 DataType union 表达。无默认值；null / false / 0 / 空字符串不算 missing。发布时 optional 来源只能绑定 Manifest 与实际 Schema 均允许省略的节点输入；模板中的 workflow_input 必须 required 且可赋给 string，不自动补空文本。
+Workflow Input 为 `{ name, type, required }`。required 必须显式声明；false 允许省略 key，nullable 用 DataType union 表达。无默认值；null / false / 0 / 空字符串不算 missing。发布时 optional 来源只能绑定 Manifest 与实际 Schema 均允许省略的节点输入；模板中的 workflow_input 必须 required 且可赋给 string，不自动补空文本。
 
 Submission 在创建 Run / Outbox 前调用独立 WorkflowInvocationContractValidator，按固定版本拒绝 missing、未知 key、类型标签不兼容和非法 inline 内容，不用转换 / 默认值改写输入。inline 同时检查实际标签和声明类型，named 必须注册真实 Schema；reference 只校验类型兼容，内容与授权留给执行时 Resolver。
 

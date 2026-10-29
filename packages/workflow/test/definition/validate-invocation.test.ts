@@ -2,7 +2,6 @@ import {
   BooleanType,
   NumberType,
   StringType,
-  workflowDefinitionSchema,
   type DataType,
   type RuntimeValue,
   type WorkflowInputDefinition,
@@ -19,7 +18,7 @@ const nullableString: DataType = {
   kind: 'union',
   types: [StringType, { kind: 'primitive', name: 'null' }],
 };
-const character: DataType = { kind: 'named', name: 'story.character' };
+const namedRecord: DataType = { kind: 'named', name: 'example.record' };
 const inline = (type: DataType, value: z.JSONType): RuntimeValue => ({
   storage: 'inline',
   type,
@@ -151,7 +150,7 @@ describe('Workflow Invocation Contract Validator', () => {
       const inputs: Record<string, RuntimeValue> = {
         content: {
           storage: 'reference',
-          type: character,
+          type: namedRecord,
           reference:
             kind === 'artifact'
               ? { kind, id: 'not-a-real-resource' }
@@ -160,7 +159,7 @@ describe('Workflow Invocation Contract Validator', () => {
       };
       const fetch = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('不能访问外部资源'));
       try {
-        expect(validator.validate(contract(character), inputs)).toEqual(inputs);
+        expect(validator.validate(contract(namedRecord), inputs)).toEqual(inputs);
         expect(() => validator.validate(contract(StringType), inputs)).toThrow(
           expect.objectContaining({ code: 'WORKFLOW_INVOCATION_INPUT_TYPE_MISMATCH' }),
         );
@@ -172,12 +171,12 @@ describe('Workflow Invocation Contract Validator', () => {
   );
 
   it('未注册 named inline 及嵌套 named 不猜测结构，any 目标也不降级', () => {
-    for (const type of [character, { kind: 'array', itemType: character } as const]) {
+    for (const type of [namedRecord, { kind: 'array', itemType: namedRecord } as const]) {
       for (const target of [type, { kind: 'any' } as const]) {
         expect(() => validator.validate(contract(target), { content: inline(type, []) })).toThrow(
           expect.objectContaining({
             code: 'WORKFLOW_INVOCATION_TYPE_SCHEMA_UNAVAILABLE',
-            dataTypeName: 'story.character',
+            dataTypeName: 'example.record',
           }),
         );
       }
@@ -188,9 +187,9 @@ describe('Workflow Invocation Contract Validator', () => {
     const registry = new DataTypeRegistry();
     registry.register({
       manifest: {
-        name: 'story.character',
-        displayName: '角色',
-        category: 'story',
+        name: 'example.record',
+        displayName: '示例记录',
+        category: 'example',
         storage: 'auto',
       },
       schema: z
@@ -198,25 +197,11 @@ describe('Workflow Invocation Contract Validator', () => {
         .transform((value) => ({ ...value, name: value.name.toUpperCase() })),
     });
     const registered = new WorkflowInvocationContractValidator(registry);
-    const inputs = { content: inline(character, { name: 'alice' }) };
-    expect(registered.validate(contract(character), inputs)).toEqual(inputs);
+    const inputs = { content: inline(namedRecord, { name: 'alice' }) };
+    expect(registered.validate(contract(namedRecord), inputs)).toEqual(inputs);
     expect(() =>
-      registered.validate(contract(character), { content: inline(character, { name: 123 }) }),
+      registered.validate(contract(namedRecord), { content: inline(namedRecord, { name: 123 }) }),
     ).toThrow(expect.objectContaining({ code: 'WORKFLOW_INVOCATION_INPUT_VALUE_INVALID' }));
-  });
-
-  it('历史 definition.required 缺省为 true，缺失调用仍拒绝，不回写旧定义', () => {
-    const legacy = {
-      inputs: [{ name: 'content', type: StringType }],
-      nodes: [],
-      edges: [],
-      outputs: [],
-    };
-    const definition = workflowDefinitionSchema.parse(legacy);
-    expect(() => validator.validate(definition.inputs, {})).toThrow(
-      expect.objectContaining({ code: 'WORKFLOW_INVOCATION_INPUT_REQUIRED' }),
-    );
-    expect(legacy.inputs[0]).not.toHaveProperty('required');
   });
 
   it('重复输入契约作为契约错误拒绝，不覆盖前一条声明', () => {

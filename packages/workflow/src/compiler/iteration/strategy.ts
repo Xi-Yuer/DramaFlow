@@ -48,7 +48,7 @@ import {
   AggregateOutput,
   FRAME,
   INVOCATION,
-  ITEM_RUN,
+  CHILD_EXECUTION,
   ItemInput,
   ItemOutput,
   ItemState,
@@ -110,7 +110,7 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
       typeof ItemOutput.spec
     >({ stateSchema: ItemState, input: ItemInput, output: ItemOutput });
     const itemId = (state: typeof ItemState.State) =>
-      workflowIdentifierSchema.parse(state[ITEM_RUN]);
+      workflowIdentifierSchema.parse(state[CHILD_EXECUTION]);
     // 原生控制流与仓储故障交回 LangGraph；不把未完成 / 受理不明记成业务失败。
     const failItem = (state: typeof ItemState.State, cause: unknown): Promise<never> =>
       failCompositeExecution(itemId(state), cause, (error) =>
@@ -153,7 +153,7 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
             scopeKey: invocation.scopeKey,
             index: invocation.index,
           });
-          return { [ITEM_RUN]: item.id };
+          return { [CHILD_EXECUTION]: item.id };
         },
       },
       completion: {
@@ -174,7 +174,7 @@ export class IterationNodeCompilationStrategy implements NodeCompilationStrategy
                 index: invocation.index,
                 ownerOccurrenceId: invocation.ownerOccurrenceId,
                 iterationNodeRunId: invocation.iterationNodeRunId,
-                iterationItemRunId: itemId(state),
+                childExecutionId: itemId(state),
                 scopeKey: invocation.scopeKey,
                 outputs,
               },

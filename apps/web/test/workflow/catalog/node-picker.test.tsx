@@ -44,13 +44,13 @@ describe('普通 Node Picker 产品条目', () => {
     expect(onSelect).toHaveBeenCalledExactlyOnceWith(publicEntry);
   });
 
-  it('data.format_text internal 条目不出现在普通 Picker', () => {
+  it('test.format_text internal 条目不出现在普通 Picker', () => {
     render(
       <NodePicker
         entries={[
           {
             ...entry('text-formatting', 'internal'),
-            target: { type: 'data.format_text', version: 1 },
+            target: { type: 'test.format_text', version: 1 },
           },
         ]}
         disabled={false}

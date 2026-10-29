@@ -64,7 +64,7 @@ const textManifest = nodeTypeManifestSchema.parse({
 });
 
 const formatManifest = nodeTypeManifestSchema.parse({
-  type: 'data.format_text',
+  type: 'test.format_text',
   version: 1,
   executionKind: 'action',
   metadata: { name: '文本格式化', category: 'data' },
@@ -143,7 +143,7 @@ function iterationNode(output: { name: string; type: DataType }): NodeDefinition
         nodes: [
           {
             id: 'format',
-            type: 'data.format_text',
+            type: 'test.format_text',
             typeVersion: 1,
             name: '格式化',
             inputs: {},

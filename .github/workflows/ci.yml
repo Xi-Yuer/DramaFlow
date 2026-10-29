@@ -26,8 +26,8 @@ jobs:
       - run: pnpm db:migrate
       - run: pnpm auth:bootstrap
       - run: pnpm check
-      - run: pnpm test:storage
-      - run: pnpm test:integration
+      - name: 隔离 HTTP / Worker / 持久化集成测试（不调用真实 AI）
+        run: pnpm test:integration
       - name: 服务日志
         if: failure()
         run: docker compose logs --tail=100 postgres redis rustfs

@@ -105,9 +105,9 @@ describe('命名数据类型注册', () => {
     const registry = new DataTypeRegistry();
     const definition = {
       manifest: {
-        name: 'story.character',
-        displayName: '角色',
-        category: 'story',
+        name: 'example.record',
+        displayName: '示例记录',
+        category: 'example',
         storage: 'auto' as const,
       },
       schema: z.object({ name: z.string() }).strict(),
@@ -116,18 +116,18 @@ describe('命名数据类型注册', () => {
     definition.manifest.displayName = '改动';
     const list = registry.listManifests();
     list[0]!.displayName = '另一改动';
-    expect(registry.get('story.character').manifest.displayName).toBe('角色');
+    expect(registry.get('example.record').manifest.displayName).toBe('示例记录');
     expect(JSON.stringify(registry.listManifests())).not.toContain('schema');
     expect(() => registry.register(definition)).toThrow('已注册');
-    expect(() => registry.get('story.missing')).toThrow('不可用');
+    expect(() => registry.get('example.missing')).toThrow('不可用');
   });
   it('递归真实值校验，nullable 不等于缺失，any 仍不能携带非 JSON', () => {
     const registry = new DataTypeRegistry();
     registry.register({
       manifest: {
-        name: 'story.character',
-        displayName: '角色',
-        category: 'story',
+        name: 'example.record',
+        displayName: '示例记录',
+        category: 'example',
         storage: 'auto',
       },
       schema: z.object({ name: z.string() }).strict(),
@@ -136,7 +136,7 @@ describe('命名数据类型注册', () => {
       kind: 'object',
       properties: {
         title: StringType,
-        characters: { kind: 'array', itemType: { kind: 'named', name: 'story.character' } },
+        records: { kind: 'array', itemType: { kind: 'named', name: 'example.record' } },
         note: { kind: 'union', types: [StringType, { kind: 'primitive', name: 'null' }] },
       },
     } as const;
@@ -152,12 +152,12 @@ describe('命名数据类型注册', () => {
       },
     };
     expect(
-      registry.parse(descriptor, { title: '剧本', characters: [{ name: '林雪' }], note: null }),
+      registry.parse(descriptor, { title: '标题', records: [{ name: '示例' }], note: null }),
     ).toHaveProperty('note', null);
     expect(() =>
-      registry.parse(descriptor, { title: '剧本', characters: [{ name: 1 }], note: null }),
+      registry.parse(descriptor, { title: '标题', records: [{ name: 1 }], note: null }),
     ).toThrow();
-    expect(() => registry.parse(descriptor, { title: '剧本', characters: [] })).toThrow();
+    expect(() => registry.parse(descriptor, { title: '标题', records: [] })).toThrow();
     expect(() => registry.parse({ kind: 'any' }, new Uint8Array([1]))).toThrow();
   });
 });

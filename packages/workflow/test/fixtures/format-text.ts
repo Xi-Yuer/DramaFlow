@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// data.format_text@1 的值契约。只替换本节点已声明输入的 {{name}}，
+// test.format_text@1 的值契约。只替换本节点已声明输入的 {{name}}，
 // 不解释 Graph TemplateBinding，也不执行表达式。
 export const formatTextVariableNames = ['text', 'index'] as const;
 export type FormatTextVariableName = (typeof formatTextVariableNames)[number];
@@ -89,4 +89,50 @@ export function applyFormatTextTemplate(template: string, input: FormatTextInput
       return segment.name === 'index' ? String(input.index) : input.text;
     })
     .join('');
+}
+
+import { NumberType, StringType } from '@dramaflow/contracts';
+import type { NodeType } from '../../src/node/registry/type.js';
+
+export const formatTextTemplateDefault = '{{text}}-{{index}}';
+
+// 普通 Action。编译继续走 ActionNodeCompilationStrategy，不单独提供策略。
+export function createFormatTextNodeType(): NodeType<
+  FormatTextInput,
+  FormatTextConfig,
+  FormatTextOutput
+> {
+  return {
+    manifest: {
+      type: 'test.format_text',
+      version: 1,
+      executionKind: 'action',
+      metadata: {
+        name: '文本格式化',
+        category: 'data',
+        description: '按模板把已声明输入插值为一段文本',
+      },
+      inputs: [
+        { key: 'text', name: '文本', dataType: StringType, required: true },
+        { key: 'index', name: '序号', dataType: NumberType, required: true },
+      ],
+      outputs: [{ key: 'text', name: '文本', dataType: StringType }],
+      config: [
+        {
+          key: 'template',
+          name: '格式模板',
+          type: 'string',
+          required: true,
+          defaultValue: formatTextTemplateDefault,
+          ui: { component: 'textarea', placeholder: formatTextTemplateDefault },
+        },
+      ],
+    },
+    inputSchema: formatTextInputSchema,
+    configSchema: formatTextConfigSchema,
+    outputSchema: formatTextOutputSchema,
+    async execute(input, config) {
+      return { text: applyFormatTextTemplate(config.template, input) };
+    },
+  };
 }

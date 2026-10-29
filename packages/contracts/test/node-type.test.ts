@@ -117,7 +117,7 @@ describe('可序列化 DataType 声明', () => {
     for (const type of types) expect(dataTypeSchema.parse(type)).toEqual(type);
     const nested = {
       kind: 'array',
-      itemType: { kind: 'array', itemType: { kind: 'named', name: 'story.shot' } },
+      itemType: { kind: 'array', itemType: { kind: 'named', name: 'example.record' } },
     };
     expect(dataTypeSchema.parse(JSON.parse(JSON.stringify(nested)))).toEqual(nested);
     expect(dataTypeSchema.safeParse(z.string()).success).toBe(false);

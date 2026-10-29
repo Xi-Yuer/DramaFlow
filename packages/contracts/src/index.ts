@@ -27,7 +27,6 @@ export * from './workflow/definition/condition.js';
 export * from './workflow/run/human-review.js';
 export * from './graph/definition.js';
 export * from './node/iteration.js';
-export * from './node/format-text.js';
 export * from './node/ports.js';
 export * from './workflow/run/execution-tree.js';
 

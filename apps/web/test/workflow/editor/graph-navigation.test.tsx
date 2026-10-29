@@ -91,7 +91,7 @@ const textManifest = manifest({
   config: [],
 });
 const formatManifest = manifest({
-  type: 'data.format_text',
+  type: 'test.format_text',
   version: 1,
   executionKind: 'action',
   metadata: {
@@ -436,7 +436,7 @@ describe('图导航模型', () => {
     expect(manifests.filter(isIterationBodyNode).map((item) => item.type)).toEqual([
       'test.format',
       'ai.text_generate',
-      'data.format_text',
+      'test.format_text',
       'flow.subworkflow',
     ]);
   });

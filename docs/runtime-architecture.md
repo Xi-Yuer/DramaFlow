@@ -4,7 +4,7 @@
 
 ## 编译与执行分离
 
-核心基础设施遵循[通用性与业务解耦原则](platform-model.md#workflow-通用性与业务解耦)。Binding 解析本图的显式数据来源，Executor 执行当前节点，Composite Strategy 解释控制语义；都不解释剧集、章节、商品或广告。共享子图执行归属与查询已使用通用 ChildExecution，当前 `childExecutionId` 的依赖及边界见[执行归属审计](architecture.md#execution-归属审计)；推荐设计见[实施方案](implementation-plan.md#execution-tree-演进设计)，通用只读 Run Tree DTO / 查询已实现，见[查询边界](architecture.md#execution-tree-只读查询)；通用 ExecutionScope 持久化尚未实现。
+核心基础设施遵循[通用性与业务解耦原则](platform-model.md#workflow-通用性与业务解耦)。Binding 解析本图的显式数据来源，Executor 执行当前节点，Composite Strategy 解释控制语义；都不解释剧集、章节、商品或广告。共享子图执行归属与查询使用 ChildExecution，边界见[执行归属审计](architecture.md#execution-归属审计)。只读 Run Tree 见[查询边界](architecture.md#execution-tree-只读查询)。没有通用 ExecutionScope 表。
 
 Compiler 冻结定义、校验精确 Registry 版本并连接依赖与 START / END；不创建 Run / thread 或执行业务。静态端口与 Schema 语义留在 definition；Publish 与 Compile 共用的执行种类和拓扑门禁在 `compiler/execution-capabilities.ts`。普通 Action 只实现 execute，经编译 wrapper 调用统一 NodeExecutor；其他 executionKind 必须使用独立策略。
 
@@ -40,7 +40,7 @@ Compiler 在创建 Executor / 图节点前确认节点种类与拓扑受支持�
 
 ### 简单 If 的条件路由与预算
 
-当前仅开放精确 `flow.if@1`，由独立 IfNodeCompilationStrategy 编译；普通 Action strategy / NodeExecutor 不变。If 复用 BindingResolver 与本次 Run 已授权的 Codec，校验 RuntimeValue 和解码后的 string，再调用 evaluateCondition 一次。它不创建 Action NodeRun，也不返回公开 Data Output。条件结果写入内部 `execution.controlResults[nodeId]`，boolean map reducer 合并并行 If、拒绝重复写入；旧空 execution 仍有效，checkpoint / resume 保存该结果。
+当前仅开放精确 `flow.if@1`，由独立 IfNodeCompilationStrategy 编译；普通 Action strategy / NodeExecutor 不变。If 复用 BindingResolver 与本次 Run 已授权的 Codec，校验 RuntimeValue 和解码后的 string，再调用 evaluateCondition 一次。它不创建 Action NodeRun，也不返回公开 Data Output。条件结果写入内部 `execution.controlResults[nodeId]`，boolean map reducer 合并并行 If、拒绝重复写入；无条件节点的图使用空 execution，checkpoint / resume 保存该结果。
 
 Compiler 使用 LangGraph 原生 addConditionalEdges，callback 只读取该 If 已写入的 boolean，不再 Binding / decode / 求值。true / false 各路由到一个不同的 Action entry，后继允许串行、并行和同一分支内部的 ALL join。多个独立 If 的 region 不得交叉。Branch Region 是 compiler/if/branch-regions.ts 的内部分析结果，不进入 Definition、State 或数据库。以两个 entry 为 seed，沿 collectNodeDependencies 的统一普通依赖传播，记录所有 membership、terminal、ordinary 节点及汇合 / 交叉证据；合法汇聚边界在编译期推导，分支传播在边界前停止。分支输入仅能来自本 region 或所属 If 之前确定完成的祖先；祖先由依赖推导，不看位置。
 
@@ -100,4 +100,4 @@ State 与 Annotation 共处 runtime/state/state.ts。run / inputs / variables / 
 
 ## 人工介入、并行与副作用
 
-人工审核采用 LangGraph interrupt / Command.resume，生成副作用与审核分离；重入不承诺外部 exactly-once。Send 需要 branch-local 输入；子流程必须显式输入输出映射，不能复制父 State。图级 maxConcurrency、Worker 跨运行并发和供应商配额是不同边界，测试夹具不是产品功能。
+人工审核采用 LangGraph interrupt / Command.resume，生成副作用与审核分离；重入不承诺外部 exactly-once。Send 需要 branch-local 输入；子流程必须显式输入输出映射，不能复制父 State。图级 maxConcurrency、Worker 跨运行并发和供应商配额是不同边界。LangGraph.js 1.5.0 的 Iteration 在任何节点执行前拒绝 `maxConcurrency=1`，不改写成其他值。测试夹具不是产品功能。

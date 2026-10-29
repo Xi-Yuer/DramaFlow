@@ -77,18 +77,6 @@ describe('节点类型目录 API', () => {
     expect(response.body).toMatchObject([
       { type: 'ai.text_generate', version: 1, executionKind: 'action' },
       {
-        type: 'data.format_text',
-        version: 1,
-        executionKind: 'action',
-        metadata: { category: 'data' },
-        inputs: [
-          { key: 'text', required: true },
-          { key: 'index', required: true },
-        ],
-        outputs: [{ key: 'text' }],
-        config: [{ key: 'template', defaultValue: '{{text}}-{{index}}' }],
-      },
-      {
         type: 'flow.if',
         version: 1,
         executionKind: 'control',
@@ -132,7 +120,7 @@ describe('节点类型目录 API', () => {
     expect(() => context.registry.getAction('flow.subworkflow', 1)).toThrow('不是普通');
     expect(context.registry.get('flow.human_review', 1)).not.toHaveProperty('execute');
     expect(() => context.registry.getAction('flow.human_review', 1)).toThrow('不是普通');
-    expect(context.registry.getAction('data.format_text', 1).manifest.capabilities).toBeUndefined();
+    expect(() => context.registry.get('data.format_text', 1)).toThrow('不可用');
     expect(context.requireSession).toHaveBeenCalledOnce();
   });
 
@@ -179,7 +167,6 @@ describe('节点类型目录 API', () => {
     const entries = nodeCatalogEntryListSchema.parse(response.body);
     expect(entries.map(({ id, target, exposure }) => [id, target.type, exposure])).toEqual([
       ['text-generation', 'ai.text_generate', 'public'],
-      ['text-formatting', 'data.format_text', 'internal'],
       ['conditional-branch', 'flow.if', 'advanced'],
       ['iteration', 'flow.iteration', 'internal'],
       ['subworkflow', 'flow.subworkflow', 'public'],

@@ -164,18 +164,6 @@ describe('正式 Registry 的静态发布校验', () => {
     );
   });
 
-  it('历史 input 缺少 required 时仍能向必填端口发布，原定义不回写', () => {
-    const graph = definition();
-    const legacy = { ...graph, inputs: [{ name: 'prompt', type: StringType }] };
-    expect(
-      validateWorkflowForPublish(
-        workflowDefinitionSchema.parse(legacy),
-        new NodeRegistry([createTextGenerationNodeType()]),
-      ),
-    ).toHaveLength(2);
-    expect(legacy.inputs[0]).not.toHaveProperty('required');
-  });
-
   it('合法文本 DAG 保留完整定义，不执行 Node 或回写默认值', () => {
     const nodeType = createTextGenerationNodeType();
     const execute = vi.spyOn(nodeType, 'execute');

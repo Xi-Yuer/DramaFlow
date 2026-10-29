@@ -1,6 +1,6 @@
 # 当前架构与目录职责
 
-只记录已实现能力及其入口。协议见 [Workflow](workflow-model.md)、[Node](node-model.md)、[数据模型](data-model.md)、[Runtime](runtime-architecture.md)；当前工作与待决策项见[实施方案](implementation-plan.md)。精确字段以 contracts、Schema 和 Controller 为准。跨模块设计遵循[Workflow 通用性与业务解耦原则](platform-model.md#workflow-通用性与业务解耦)。
+只记录已实现能力及其入口。协议见 [Workflow](workflow-model.md)、[Node](node-model.md)、[数据模型](data-model.md)、[Runtime](runtime-architecture.md)。精确字段以 contracts、Schema 和 Controller 为准。跨模块设计遵循[Workflow 通用性与业务解耦原则](platform-model.md#workflow-通用性与业务解耦)。
 
 ## 已实现的基础工程
 
@@ -46,7 +46,7 @@ Definition Location 沿既有 nestedGraphSlots 与 GraphDefinitionPath 追加 no
 
 NodeRun 查询新增安全的 occurrenceId / scopeKey，不返回 thread、checkpoint 或原生 task metadata。Canvas 与 Runtime Inspector 在明确的 graph execution boundary 内选择唯一 occurrence，再按其 attempt 排序；Root 与 Nested 共用投影，见 [Graph Execution Projection](#graph-execution-projection)。不以跨 occurrence 的最大 attempt 猜最新执行；Iteration Item Selector 只提供真实 ChildExecution 的显式选择。Artifact 继续只关联 nodeRunId，经 NodeRun 反查 occurrence，不复制 scope / occurrence 字段。
 
-[增量迁移](../packages/database/prisma/migrations/20261024000000_node_occurrences/migration.sql)将旧数据的每组 Run / node 全部 attempt 回填到同一个 root occurrence，保留 NodeRun ID、序号、状态、输入输出、时间和 Artifact 关联，不清空审计记录。旧 checkpoint 的 State 不增加必填字段，现有 root 审核恢复重新查得同一 occurrence。
+当前写入必须带 occurrence。没有真实 occurrence 身份的旧开发数据不能靠 checkpoint 猜测补齐。
 
 Iteration 的执行作用域通过下述 ChildExecution 与 NodeRun 父链关联。其他受信任的 scoped execution 仍需显式提供稳定 scopeKey、对应定义与权限上下文；没有 SubWorkflow 版本 / 权限解析，scopeKey 不能替代这些检查。
 
@@ -90,7 +90,7 @@ body 的嵌套 composite、If / control、Human Review / interaction 均拒绝�
 
 [Iteration strategy](../packages/workflow/src/compiler/iteration/strategy.ts)沿用 prepare → 原生 Send / compiled Body → collect：prepare 创建父 NodeRun 并审计输入；Body 入口创建或复用 ChildExecution，向 NodeExecutor 显式传递 childExecutionId；declared outputs 成功后结束 child，collect 完成父 NodeRun。空集合与普通数组 Action 不创建 child。业务失败仍通过 Iteration helper 在同事务记录 child 与父失败，同 item 并行失败保留首次摘要；通用 markChildExecutionFailed 仅结束 child。SubWorkflow 的业务失败使用 markChildExecutionAndParentFailed，在同一事务结束该 child 与父 NodeRun；Iteration helper 继续拒绝其他 kind。GraphInterrupt / ParentCommand 原样交还 LangGraph，记录保持 running；仓储故障不伪装业务失败。
 
-[增量迁移](../packages/database/prisma/migrations/20261027000000_child_executions/migration.sql)原地 rename iteration_item_run / NodeRun 旧归属列，保留 ID、索引位置、归属、时间与错误，补齐 kind / invocationKey / metadata。父链可以表达 NodeRun → ChildExecution → NodeRun → ChildExecution；当前正式支持的嵌套组合为 Iteration → SubWorkflow v1 → Action DAG。仍拒绝 Iteration → Iteration、SubWorkflow → SubWorkflow、SubWorkflow → Iteration、nested Human Review、SubWorkflow 内 If / Candidate，以及任意递归 Composite。Iteration scope 派生和已持久化 checkpoint channel / frame / result 字段名保持不变，私有旧字段承载的 ID 现在指向 ChildExecution；不改写现有版本或 checkpoint。
+父链可以表达 NodeRun → ChildExecution → NodeRun → ChildExecution。当前正式支持的嵌套组合为 Iteration → SubWorkflow v1 → Action DAG。仍拒绝 Iteration → Iteration、SubWorkflow → SubWorkflow、SubWorkflow → Iteration、nested Human Review、SubWorkflow 内 If / Candidate，以及任意递归 Composite。Iteration checkpoint 直接保存 childExecutionId。没有该身份的旧开发 checkpoint 不能恢复，也不按 index 猜测回填。
 
 审计与 checkpoint 不构成跨系统原子提交。原生重入复用同一父 attempt 与 child；崩溃后审计先落库但 checkpoint 未落库的窗口，仍需既有 recovery_required / 对账，不能自动重放受理不明的副作用。没有新增 Retry / Resume / interrupt 状态。
 
@@ -126,9 +126,9 @@ Publish / Compile 共用 Human Review 能力门禁：支持分支区域外有明
 
 Human Review 已有正式 NodeRun 审计：首次进入创建 attempt 1 running、首次记录 RuntimeValue inputs；WorkflowRun waiting 时 NodeRun 保持 running，interrupt 身份以 checkpoint 为权威，不写入 NodeRun outputs。resume 重入获取同一记录，比较重新解析的 inputs 与首次快照（对象键顺序无关），不再次 updateInputs。decision / 输出校验及编码成功后 markCompleted，再提交 State；approve 和 reject 均正常 completed。业务错误将原记录记 failed，原生 GraphInterrupt / ParentCommand 不记失败；仓储失败不反向标记业务 failed。
 
-[审核专用 Repository](../packages/server/src/workflow/runtime/execution/node-run-repository.ts)锁定明确 occurrence 获取 / 创建记录，核对 Owner / Project / Run、已 claim 的 running Run、固定 WorkflowVersion 中的精确 Human Review node，以及该 occurrence 唯一 attempt 1 running 历史；终态、多 attempt 或错误节点 / 版本明确拒绝，不按 latest running 猜测，也不自动新建 attempt 2。inputs 仍受原有一次写约束保护，完整执行的串行性依赖 Run / Outbox 的数据库 claim，获取 / 创建本身的唯一性由 occurrence 行锁与唯一约束保证。不同 scope 的同名节点不交叉复用审计；本轮未开放并行审核。
+[审核专用 Repository](../packages/server/src/workflow/runtime/execution/node-run-repository.ts)锁定明确 occurrence 获取 / 创建记录，核对 Owner / Project / Run、已 claim 的 running Run、固定 WorkflowVersion 中的精确 Human Review node，以及该 occurrence 唯一 attempt 1 running 历史；终态、多 attempt 或错误节点 / 版本明确拒绝，不按 latest running 猜测，也不自动新建 attempt 2。inputs 仍受原有一次写约束保护，完整执行的串行性依赖 Run / Outbox 的数据库 claim，获取 / 创建本身的唯一性由 occurrence 行锁与唯一约束保证。不同 scope 的同名节点不交叉复用审计。并行审核未开放。
 
-审核首次进入与 resume 通过同一 root scope 找到同一 occurrence，复用同一 running NodeRun attempt；本轮没有新增 NodeRun waiting、并行 pending projection、重试或恢复产品能力。审计 completed 与 Graph checkpoint 不构成跨系统原子提交；异常中断后的对账 / recovery_required 仍沿用既有边界，不重放终态记录。待审批查询与 targeted resume HTTP 已接入，Web 已提供单个文本审批闭环，Artifact 预览待后续任务。
+审核首次进入与 resume 通过同一 root scope 找到同一 occurrence，复用同一 running NodeRun attempt。没有 NodeRun waiting、并行 pending projection、重试或恢复产品能力。审计 completed 与 Graph checkpoint 不构成跨系统原子提交；异常中断后的对账 / recovery_required 不重放终态记录。待审批查询与 targeted resume HTTP 已接入，Web 提供单个文本审批闭环。Artifact 内容预览未接入。
 
 ## Workflow 编辑 HTTP API
 
@@ -204,7 +204,7 @@ checkpoint 与原生 pending interrupt 保留为执行证据；DramaFlow authori
 
 [取消核查](../packages/server/src/workflow/queue/workflow-cancellation-reconciler.ts)复用 Worker 的 Outbox Pump，不新增 lease、heartbeat、execution table 或 Graph scheduler。按 cancellationRequestedAt / id 游标每轮最多核查 5 个 Run；30 秒宽限期仅筛候选，不证明执行超时或 Worker 死亡。当前 running intent 精确匹配 waitingRevision=0 的 start 或 waitingRevision=N 的 resume；历史 start / resume 的 recovery_required 不影响当前执行。pending / waiting 复用已有取消事务；终态仅补齐对应 Outbox。健康且首次处理的 active Job + lock 只暂缓升级，Job 缺失、无锁、stalled/recovered 或 Redis 观察不可用均只能保守进入 recovery_required。核查在 Run 行锁下重读版本周期与终态，条件更新 Outbox；不批量结束 running NodeRun / ChildExecution。原 owner 后续正常完成、失败或确认 cooperative cancellation 仍可按既有生命周期收尾。
 
-Run GET 与 History 复用服务端 cancellation read projection：none / requested / uncertain；不公开 Outbox、lock、waitingRevision 或 worker 身份。查询响应始终返回该字段，受理响应与旧客户端数据允许省略。非终态有请求且当前 intent 为 recovery_required 时为 uncertain，running 缺少当前 intent 也不映射旧命令；terminal 优先，字段为 none，status 继续表达 completed / failed / cancelled。Web 状态面板和 History 只消费此投影，显示“取消中”或“暂无法确认停止”，取消操作见下文。维护进程不可用时核查不会运行；不把时间经过、队列 Job 消失或 checkpoint 存在解释为已停止，不自动恢复 checkpoint 或重试业务。
+Run GET 与 History 复用服务端 cancellation read projection：none / requested / uncertain；不公开 Outbox、lock、waitingRevision 或 worker 身份。查询响应始终返回该字段，提交受理响应允许省略。非终态有请求且当前 intent 为 recovery_required 时为 uncertain，running 缺少当前 intent 也不映射旧命令；terminal 优先，字段为 none，status 继续表达 completed / failed / cancelled。Web 状态面板和 History 只消费此投影，显示“取消中”或“暂无法确认停止”，取消操作见下文。维护进程不可用时核查不会运行；不把时间经过、队列 Job 消失或 checkpoint 存在解释为已停止，不自动恢复 checkpoint 或重试业务。
 
 正式取消接口 `POST /api/v1/projects/:projectId/workflows/:workflowId/runs/:runId/cancel` 接受严格空对象；认证与可信 Origin 沿用现有 AuthGuard，服务校验 Owner → Project → Workflow → Run，并由既有授权 Repository 事务重检项目权限。HTTP 200 + `{ outcome, run }` 表示请求处理结果：cancelled 为已取消，requested 为已受理（可能仍在途或 uncertain），terminal 为 completed / failed 已先发生；重复请求不新增 attempt 或重置首次取消时间。响应使用最新 Run 查询 DTO，不公开 thread / Outbox / Job / checkpoint 身份，不由 API 操作 BullMQ。
 
@@ -308,7 +308,6 @@ NodeRegistry 负责 Runtime 类型声明与实现；独立 NodeCatalog 负责产
 | Entry ID             | Runtime target        | 暴露     | 产品分类   |
 | -------------------- | --------------------- | -------- | ---------- |
 | `text-generation`    | `ai.text_generate@1`  | public   | AI 能力    |
-| `text-formatting`    | `data.format_text@1`  | internal | 数据处理   |
 | `human-review`       | `flow.human_review@1` | public   | 工作流控制 |
 | `conditional-branch` | `flow.if@1`           | advanced | 工作流控制 |
 | `iteration`          | `flow.iteration@1`    | internal | 高级能力   |
@@ -316,7 +315,7 @@ NodeRegistry 负责 Runtime 类型声明与实现；独立 NodeCatalog 负责产
 
 `GET /api/v1/workflow/node-types` 继续返回完整 Runtime Manifest，供已有节点渲染、Inspector、端口及 nested graph 编辑使用。Manifest 保留 Runtime 类型版本、端口、配置字段、executionKind、capabilities 与显示信息，不包含产品 exposure 或完整 GraphDefinition。独立 `GET /api/v1/workflow/node-catalog` 返回 Entry；两者均认证、no-store。Catalog 装配校验唯一 Entry ID、精确目标版本与实例 contract，返回独立数据副本，不公开服务实现。
 
-Web 普通 Picker 使用 `isNodeCatalogEntryVisible` 只显示 public，并按 Entry ID 选择；创建回调重新查找当前条目及其精确 target Manifest，继续叠加 Body 等局部图能力约束。两份查询独立，Entry 失败只禁用创建，已有节点仍使用完整 Manifest 编辑。advanced surface 策略可表达 public + advanced，当前没有模式切换 UI；internal 不供普通 Picker 创建。`data.format_text` 用于确定性 Runtime / 验收，不在普通 Picker 展示。
+Web 普通 Picker 使用 `isNodeCatalogEntryVisible` 只显示 public，并按 Entry ID 选择；创建回调重新查找当前条目及其精确 target Manifest，继续叠加 Body 等局部图能力约束。两份查询独立，Entry 失败只禁用创建，已有节点仍使用完整 Manifest 编辑。advanced surface 策略可表达 public + advanced，当前没有模式切换 UI；internal 不供普通 Picker 创建。确定性格式化 Action 仅存在于测试 helper，不注册到生产 Registry 或 Catalog。
 
 共享 `instantiateNodeCatalogEntry` 负责创建标准 NodeDefinition：Manifest 配置默认值由 Entry config 显式覆盖，inputs 来自 Entry（缺省为空），composite 来自 Entry；调用方只提供实例 ID、位置与可选名称覆盖。完整输入数据经深复制与既有 NodeDefinition contract 校验，子图 copy-on-create 后归当前父 Draft，来源与不同实例不共享可变数据。Entry 后续变化不更新已有节点；实例不保存 Entry ID 或来源引用。Draft / Publish / Compiler / Runtime 继续使用已有协议与能力门禁，不读取 Catalog。
 

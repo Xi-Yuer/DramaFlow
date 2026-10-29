@@ -1,3 +1,4 @@
+import { createFormatTextNodeType } from '../fixtures/format-text.js';
 import { describe, expect, it } from 'vitest';
 import {
   StringType,
@@ -8,7 +9,6 @@ import {
 } from '@dramaflow/contracts';
 import {
   NodeRegistry,
-  createFormatTextNodeType,
   createSubworkflowNodeType,
   validateWorkflowForPublish,
 } from '../../src/index.js';
@@ -31,7 +31,7 @@ describe('Catalog 实例复用现有 Draft / Publish 边界', () => {
             nodes: [
               {
                 id: 'format',
-                type: 'data.format_text',
+                type: 'test.format_text',
                 typeVersion: 1,
                 name: '格式化',
                 inputs: {
@@ -69,7 +69,7 @@ describe('Catalog 实例复用现有 Draft / Publish 边界', () => {
     );
     expect(validateWorkflowForPublish(definition, runtime).map(({ node }) => node.type)).toEqual([
       'flow.subworkflow',
-      'data.format_text',
+      'test.format_text',
     ]);
     expect(JSON.stringify(definition)).not.toContain(entry.id);
     expect(node).not.toHaveProperty('entryId');
@@ -81,12 +81,12 @@ describe('Catalog 实例复用现有 Draft / Publish 边界', () => {
       metadata: { name: '未完成测试' },
       category: 'data',
       exposure: 'internal',
-      target: { type: 'data.format_text', version: 1 },
+      target: { type: 'test.format_text', version: 1 },
       creation: {},
     };
     const node = instantiateNodeCatalogEntry(
       entry,
-      runtime.getAction('data.format_text', 1).manifest,
+      runtime.getAction('test.format_text', 1).manifest,
       { id: 'format', position: { x: 0, y: 0 } },
     );
     expect(node.config.template).toBe('{{text}}-{{index}}');

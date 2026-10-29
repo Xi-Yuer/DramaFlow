@@ -6,11 +6,11 @@ import {
   formatTextOutputSchema,
   formatTextVariableNames,
   readFormatTextTemplate,
-} from '../src/index.js';
+} from '../fixtures/format-text.js';
 
 const input = { text: 'A', index: 0 };
 
-describe('data.format_text@1 值契约', () => {
+describe('test.format_text@1 值契约', () => {
   it('声明输入与模板变量一致，并保留空字符串和有限数字', () => {
     expect(Object.keys(formatTextInputSchema.shape)).toEqual([...formatTextVariableNames]);
     expect(formatTextInputSchema.parse(input)).toEqual(input);

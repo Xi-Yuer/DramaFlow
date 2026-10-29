@@ -315,10 +315,28 @@ describe('真实 PostgreSQL occurrence 身份与 attempt 分配', () => {
     );
     expect(new Set(roots.map((item) => item.id)).size).toBe(1);
     const root = roots[0]!;
+    const ownerOccurrence = await first.getOrCreateOccurrence({
+      workflowRunId,
+      nodeId: 'owner',
+      scopeKey: 'root',
+    });
+    const owner = await first.createRunning({
+      workflowRunId,
+      nodeId: 'owner',
+      occurrenceId: ownerOccurrence.id,
+    });
     const childScope = deriveChildScope('root', {
       kind: 'iteration_item',
-      ownerOccurrenceId: root.id,
+      ownerOccurrenceId: ownerOccurrence.id,
+      ownerNodeRunId: owner.id,
       slot: 'body',
+      index: 0,
+    });
+    const execution = await first.getOrCreateIterationItemRunning({
+      workflowRunId,
+      parentNodeRunId: owner.id,
+      parentNodeId: 'owner',
+      scopeKey: childScope,
       index: 0,
     });
     const child = await first.getOrCreateOccurrence({
@@ -328,12 +346,7 @@ describe('真实 PostgreSQL occurrence 身份与 attempt 分配', () => {
     expect(
       await second.getOrCreateOccurrence({
         ...identity,
-        scopeKey: deriveChildScope('root', {
-          kind: 'iteration_item',
-          ownerOccurrenceId: root.id,
-          slot: 'body',
-          index: 0,
-        }),
+        scopeKey: childScope,
       }),
     ).toEqual(child);
     expect(child.id).not.toBe(root.id);
@@ -345,6 +358,7 @@ describe('真实 PostgreSQL occurrence 身份与 attempt 分配', () => {
               workflowRunId,
               nodeId: 'process',
               occurrenceId: occurrence.id,
+              ...(occurrence.id === child.id ? { childExecutionId: execution.id } : {}),
             }),
           ),
         ),
@@ -360,7 +374,7 @@ describe('真实 PostgreSQL occurrence 身份与 attempt 分配', () => {
       expect(rows[index]!.every((row) => row.scopeKey === occurrence.scopeKey)).toBe(true);
     }
     expect(await second.getOrCreateOccurrence(identity)).toEqual(root);
-    expect(await db.nodeOccurrence.count({ where: { workflowRunId } })).toBe(2);
+    expect(await db.nodeOccurrence.count({ where: { workflowRunId, nodeId: 'process' } })).toBe(2);
     await expect(
       db.nodeRun.create({
         data: {
@@ -368,6 +382,7 @@ describe('真实 PostgreSQL occurrence 身份与 attempt 分配', () => {
           workflowRunId,
           nodeId: 'process',
           occurrenceId: child.id,
+          childExecutionId: execution.id,
           attempt: 1,
         },
       }),
@@ -421,6 +436,15 @@ describe('真实 PostgreSQL Human Review 重入审计', () => {
   it('同名审核的不同 scope 各有独立 occurrence 和 running attempt，重入不交叉复用', async () => {
     const f = await reviewFixture();
     const root = await f.repository.getOrCreateHumanReviewRunning(f.input);
+    const execution = await f.repository.getOrCreateChildExecutionRunning({
+      workflowRunId: f.run.id,
+      parentNodeRunId: root.id,
+      parentNodeId: 'R1',
+      scopeKey: 'opaque-item-scope',
+      kind: 'test_scope',
+      invocationKey: 'review-child',
+      metadata: {},
+    });
     const child = await f.repository.getOrCreateOccurrence({
       workflowRunId: f.run.id,
       nodeId: 'R1',
@@ -429,9 +453,11 @@ describe('真实 PostgreSQL Human Review 重入审计', () => {
     const other = await f.repository.getOrCreateHumanReviewRunning({
       ...f.input,
       occurrenceId: child.id,
+      childExecutionId: execution.id,
     });
     expect(other).toMatchObject({
       occurrenceId: child.id,
+      childExecutionId: execution.id,
       attempt: 1,
       status: 'running',
     });
@@ -445,6 +471,7 @@ describe('真实 PostgreSQL Human Review 重入审计', () => {
       await f.repository.getOrCreateHumanReviewRunning({
         ...f.input,
         occurrenceId: child.id,
+        childExecutionId: execution.id,
       }),
     ).toMatchObject({ id: other.id, attempt: 1 });
   });

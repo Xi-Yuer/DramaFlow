@@ -113,7 +113,7 @@ describe('RuntimeValueCodec 单值解码', () => {
     const codec = decodeCodec({ resolve });
     expect(
       await codec.decode(
-        { storage: 'reference', type: { kind: 'named', name: 'story.character' }, reference },
+        { storage: 'reference', type: { kind: 'named', name: 'example.record' }, reference },
         context,
       ),
     ).toBe(character);
@@ -171,7 +171,7 @@ describe('RuntimeValueCodec 批量解码', () => {
       image,
       character: Object.freeze({
         storage: 'reference',
-        type: { kind: 'named', name: 'story.character' },
+        type: { kind: 'named', name: 'example.record' },
         reference: characterReference,
       } satisfies ReferenceRuntimeValue),
     });

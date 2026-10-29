@@ -1,12 +1,16 @@
 # DramaFlow
 
-团队自部署的 AI 视频生产工作流平台，漫剧优先。React Flow 编辑、LangGraph 执行、受信任插件接入生成能力。Workflow Engine 保持业务无关，业务通过节点扩展，流程通过图组合；开发前遵循[通用性与业务解耦原则](docs/platform-model.md#workflow-通用性与业务解耦)。
+团队自部署的 AI 视频生产工作流平台，漫剧优先。当前交付的是通用工作流：每个项目一张画布、一个 Workflow，发布后按不可变版本执行。
 
-开始任务先读 [AGENTS.md](AGENTS.md) 的按任务入口，不默认通读 docs。当前能力见[架构](docs/architecture.md)，当前工作见[实施方案](docs/implementation-plan.md)，检查见[开发指南](docs/development.md)。
+已接入文本生成、简单条件、人工审核、Iteration 和版本内嵌的 SubWorkflow。图片、视频、配音、素材库和自动建议尚未作为产品能力交付。
+
+## 技术栈
+
+TypeScript。React Flow 负责编辑，LangGraph 负责图执行，NestJS API 与独立 Worker 负责受理和运行。数据使用 PostgreSQL / pgvector、Redis 和 RustFS。协议在 `packages/contracts`，编译与执行适配在 `packages/workflow`，业务通过 Node 和受信任插件扩展，不改 Workflow Engine。
 
 ## 启动
 
-需要 Node.js 24 LTS、pnpm 10.7、Docker Compose。
+需要 Node.js 24、pnpm 10.7 和 Docker Compose。
 
 ```sh
 pnpm install
@@ -18,8 +22,33 @@ pnpm auth:bootstrap
 pnpm dev
 ```
 
-Web：http://localhost:3000；API 健康检查：http://localhost:3001/api/v1/health。管理员读取本机 `.env` 的 ADMIN_EMAIL / ADMIN_PASSWORD；公开注册关闭，禁止提交环境文件或凭证。
+Web：http://localhost:3000。API 健康检查：http://localhost:3001/api/v1/health。管理员来自本机 `.env` 的 `ADMIN_EMAIL` / `ADMIN_PASSWORD`。公开注册关闭。不要提交 `.env` 或真实凭证。
 
-PostgreSQL / Redis / RustFS 保持默认端口；完整容器启动用 `pnpm stack:up`，环境与数据操作见[部署](docs/deployment.md)。`pnpm check` 执行 lint、typecheck、单元测试和 build；真实基础设施、浏览器及收费模型验收须按开发指南选择。
+PostgreSQL、Redis、RustFS 使用默认端口。完整容器环境用 `pnpm stack:up`。
 
-`experiments/` 仅保留隔离验证结论与复现入口，不进入生产镜像或日常默认上下文；历史细节通过 Git 查询。
+## 验证
+
+```sh
+pnpm check
+pnpm test:integration
+```
+
+`pnpm check` 是 lint、typecheck、单元测试和 build。`pnpm test:integration` 使用独立测试库、随机队列前缀和独立对象存储桶，不调用真实 AI。浏览器和收费模型不在默认检查里。
+
+## 文档
+
+先读 [AGENTS.md](AGENTS.md) 的任务入口，再按需要打开下面的文档。接口和字段以代码为准。
+
+| 文档                                    | 职责                                      |
+| --------------------------------------- | ----------------------------------------- |
+| [当前架构](docs/architecture.md)        | 已经实现的能力和入口                      |
+| [平台边界](docs/platform-model.md)      | 产品范围，以及 Workflow 与业务解耦        |
+| [Workflow](docs/workflow-model.md)      | 定义、版本、运行和调用身份                |
+| [Node](docs/node-model.md)              | 节点、Catalog、Iteration、SubWorkflow、If |
+| [数据模型](docs/data-model.md)          | DataType、RuntimeValue、Binding、Artifact |
+| [Runtime](docs/runtime-architecture.md) | 编译、执行、State 和 Checkpointer         |
+| [认证](docs/authentication.md)          | 登录、权限和凭证                          |
+| [部署](docs/deployment.md)              | 数据库、队列、迁移和开发数据              |
+| [对象存储](docs/object-storage.md)      | RustFS 与 Artifact 写入                   |
+| [前端规范](docs/frontend-ui.md)         | 画布与交互约束                            |
+| [开发指南](docs/development.md)         | 检查命令、隔离规则和代码目录              |

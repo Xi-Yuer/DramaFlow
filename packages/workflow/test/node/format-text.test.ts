@@ -1,3 +1,4 @@
+import { createFormatTextNodeType, formatTextTemplateDefault } from '../fixtures/format-text.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
   NumberType,
@@ -13,8 +14,6 @@ import {
   NodeRegistry,
   WorkflowPublishValidationError,
   createBindingResolver,
-  createFormatTextNodeType,
-  formatTextTemplateDefault,
   validateWorkflowForPublish,
   type CapabilityInvoker,
   type NodeExecutionContext,
@@ -24,7 +23,7 @@ import { auditedNodeRunRepositoryFixture } from '../fixtures/node-run-fixture.js
 function node(template = formatTextTemplateDefault): NodeDefinition {
   return {
     id: 'format',
-    type: 'data.format_text',
+    type: 'test.format_text',
     typeVersion: 1,
     name: '格式化',
     inputs: {
@@ -98,12 +97,12 @@ function fixture(template = formatTextTemplateDefault) {
   };
 }
 
-describe('data.format_text@1 正式 Action', () => {
+describe('test.format_text@1 正式 Action', () => {
   it('以普通 Action 注册，不声明 Provider 能力，并使用现有 Action 编译策略', () => {
     const f = fixture();
-    const action = f.registry.getAction('data.format_text', 1);
+    const action = f.registry.getAction('test.format_text', 1);
     expect(action.manifest).toMatchObject({
-      type: 'data.format_text',
+      type: 'test.format_text',
       version: 1,
       executionKind: 'action',
       metadata: { category: 'data' },
@@ -111,13 +110,13 @@ describe('data.format_text@1 正式 Action', () => {
     });
     expect(action.manifest.capabilities).toBeUndefined();
     expect(new ActionNodeCompilationStrategy().supports(action.manifest)).toBe(true);
-    expect(f.registry.listManifests().map((item) => item.type)).toEqual(['data.format_text']);
+    expect(f.registry.listManifests().map((item) => item.type)).toEqual(['test.format_text']);
   });
 
   it('Publish 接受合法模板，非法模板在配置校验失败', () => {
     const registry = new NodeRegistry([createFormatTextNodeType()]);
     expect(validateWorkflowForPublish(definition(), registry)).toMatchObject([
-      { node: { id: 'format', type: 'data.format_text' } },
+      { node: { id: 'format', type: 'test.format_text' } },
     ]);
     expect(() => validateWorkflowForPublish(definition('{{caption}}'), registry)).toThrow(
       WorkflowPublishValidationError,

@@ -8,8 +8,6 @@ export interface DataStoragePolicyResolver {
 
 const namedPolicies: ReadonlyMap<string, ResolvedDataStoragePolicy> = new Map([
   ['system.json', 'inline'],
-  ['story.character', 'inline'],
-  ['story.scene', 'inline'],
   ['media.file', 'reference'],
   ['media.image', 'reference'],
   ['media.video', 'reference'],

@@ -3,7 +3,6 @@ import { isNodeCatalogEntryVisible, type NodeCatalogEntry } from '@dramaflow/con
 import {
   NodeRegistry,
   createTextGenerationNodeType,
-  createFormatTextNodeType,
   createIfNodeType,
   createIterationNodeType,
   createSubworkflowNodeType,
@@ -13,7 +12,6 @@ import { NodeCatalog, createBuiltinNodeCatalogEntries } from '../../../src/index
 function registry() {
   return new NodeRegistry([
     createTextGenerationNodeType(),
-    createFormatTextNodeType(),
     createIfNodeType(),
     createIterationNodeType(),
     createSubworkflowNodeType(),
@@ -21,18 +19,16 @@ function registry() {
   ]);
 }
 describe('独立产品 NodeCatalog', () => {
-  it('新增 Runtime 注册不自动暴露；正式子流程 Entry 可创建，format / iteration 保持 internal', () => {
+  it('新增 Runtime 注册不自动暴露；正式子流程 Entry 可创建，iteration 保持 internal', () => {
     const runtime = registry();
     expect(new NodeCatalog([], runtime).list()).toEqual([]);
     const entries = new NodeCatalog(createBuiltinNodeCatalogEntries(), runtime).list();
     expect(
       entries.filter((entry) => isNodeCatalogEntryVisible(entry)).map(({ target }) => target.type),
     ).toEqual(['ai.text_generate', 'flow.subworkflow', 'flow.human_review']);
-    expect(entries.find(({ target }) => target.type === 'data.format_text')?.exposure).toBe(
-      'internal',
-    );
-    expect(runtime.getAction('data.format_text', 1).execute).toBeTypeOf('function');
-    expect(runtime.listManifests()).toHaveLength(6);
+    expect(entries.some(({ target }) => target.type.startsWith('test.'))).toBe(false);
+    expect(() => runtime.get('data.format_text', 1)).toThrow('不可用');
+    expect(runtime.listManifests()).toHaveLength(5);
   });
   it('独立 Entry ID 可共用 target，装配与响应隔离来源数据', () => {
     const first = createBuiltinNodeCatalogEntries()[0]!;

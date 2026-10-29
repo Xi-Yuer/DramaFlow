@@ -84,8 +84,8 @@ export function createWorkflowSchemas<
   EdgeSchema extends z.ZodType,
 >(schemas: { dataType: DataTypeSchema; node: NodeSchema; edge: EdgeSchema }) {
   const portFields = { name: workflowPortNameSchema, type: schemas.dataType };
-  // 旧定义读取时补齐存在性语义；解析结果显式携带 required，不回写原始版本。
-  const inputSchema = z.object({ ...portFields, required: z.boolean().default(true) }).strict();
+  // 当前定义必须显式声明输入存在性语义。
+  const inputSchema = z.object({ ...portFields, required: z.boolean() }).strict();
   const draftOutputSchema = z
     .union([
       z

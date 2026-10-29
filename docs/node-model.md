@@ -96,7 +96,7 @@ If CompilationStrategy 不经 Action NodeExecutor，不提供 matched Data Outpu
 
 ## 视频领域能力与厂商边界
 
-领域类型可以专业化。用户选择 Provider，对应的受信任插件执行能力。图片、视频、语音可以使用各自插件，文本插件和 Vercel AI SDK 只负责当前的 `text.generate`。这些媒体能力、Asset、简单 If 之外的控制 / 交互执行与通用节点配置 UI 尚未交付，范围见[实施方案](implementation-plan.md)。
+领域类型可以专业化。用户选择 Provider，对应的受信任插件执行能力。当前生产文本能力是 `text.generate`，Vercel AI SDK 只在文本插件内部使用。图片、视频、语音节点和 Asset / Promote 尚未交付。If、Human Review、Iteration 与内嵌 SubWorkflow 的当前边界见本文与[架构](architecture.md)。
 
 ## Composite capability matrix
 

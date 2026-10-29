@@ -72,17 +72,12 @@ function definition(): WorkflowDefinition {
 }
 
 describe('正式 WorkflowDefinition 静态校验', () => {
-  it('历史 input 读取为 required=true，序列化显式保存且不修改原始定义', () => {
-    const legacy = {
+  it('输入必须显式声明 required，不接受缺失字段的定义', () => {
+    const input = {
       ...definition(),
-      inputs: [{ name: 'novel', type: { kind: 'primitive', name: 'string' } }],
+      inputs: [{ name: 'text', type: { kind: 'primitive', name: 'string' } }],
     };
-    const before = structuredClone(legacy);
-    const parsed = workflowDefinitionSchema.parse(legacy);
-    expect(parsed.inputs[0]?.required).toBe(true);
-    expect(JSON.parse(JSON.stringify(parsed)).inputs[0].required).toBe(true);
-    expect(legacy).toEqual(before);
-    expect(legacy.inputs[0]).not.toHaveProperty('required');
+    expect(workflowDefinitionSchema.safeParse(input).success).toBe(false);
   });
 
   it.each([true, false])('required=%s 与 nullable 独立，输出不增加 required', (required) => {

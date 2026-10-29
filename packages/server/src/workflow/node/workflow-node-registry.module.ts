@@ -1,7 +1,6 @@
 import {
   NodeRegistry,
   createTextGenerationNodeType,
-  createFormatTextNodeType,
   createIfNodeType,
   createIterationNodeType,
   createSubworkflowNodeType,
@@ -19,7 +18,6 @@ import { NodeCatalog, createBuiltinNodeCatalogEntries } from './node-catalog.js'
       useFactory: () =>
         new NodeRegistry([
           createTextGenerationNodeType(),
-          createFormatTextNodeType(),
           createIfNodeType(),
           createIterationNodeType(),
           createSubworkflowNodeType(),

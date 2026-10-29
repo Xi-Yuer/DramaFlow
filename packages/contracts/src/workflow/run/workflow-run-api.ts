@@ -28,7 +28,7 @@ export const workflowRunResponseSchema = workflowRunSchema
     threadId: true,
   })
   .extend({
-    // 查询始终返回；提交受理响应及旧客户端数据可省略。不是新的 Run lifecycle。
+    // 查询始终返回；提交受理响应可省略。不是新的 Run lifecycle。
     cancellation: workflowCancellationStateSchema.optional(),
   });
 

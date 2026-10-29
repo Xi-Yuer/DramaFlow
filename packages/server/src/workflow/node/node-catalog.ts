@@ -37,18 +37,6 @@ export function createBuiltinNodeCatalogEntries(): NodeCatalogEntry[] {
       creation: {},
     },
     {
-      id: 'text-formatting',
-      metadata: {
-        name: '文本格式化',
-        description: '按模板把已声明输入插值为一段文本',
-        icon: 'data',
-      },
-      category: 'data',
-      exposure: 'internal',
-      target: { type: 'data.format_text', version: 1 },
-      creation: {},
-    },
-    {
       id: 'conditional-branch',
       metadata: {
         name: '条件分支',

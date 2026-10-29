@@ -30,7 +30,7 @@ import { workflowRunnerFixture } from './workflow-runner-fixture.js';
 // 仅在 strategy 测试中装配合法内部调用；正式 Compiler / Publish 仍走原 gate。
 export function nestedCompositeFixture(nested = true) {
   const f = subworkflowRuntimeFixture();
-  const action = f.registry.getAction('data.format_text', 1);
+  const action = f.registry.getAction('test.format_text', 1);
   const execute = vi.fn(action.execute);
   f.registry.register({
     ...action,

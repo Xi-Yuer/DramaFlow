@@ -87,7 +87,7 @@ function manifest(input: unknown) {
 }
 
 const formatManifest = manifest({
-  type: 'data.format_text',
+  type: 'test.format_text',
   version: 1,
   executionKind: 'action',
   metadata: {
@@ -147,7 +147,7 @@ function iteration(extra: Record<string, unknown> = {}): NodeDefinition {
 function formatNode(inputs: NodeDefinition['inputs'] = {}): NodeDefinition {
   return {
     id: 'format',
-    type: 'data.format_text',
+    type: 'test.format_text',
     typeVersion: 1,
     name: '格式化',
     inputs,

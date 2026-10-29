@@ -10,7 +10,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const requestId = randomUUID();
     const path = host.switchToHttp().getRequest<Request>().originalUrl.split('?')[0] ?? '';
     const sensitive =
-      /^\/api\/v1\/(?:provider-plugins\/?$|projects\/[^/]+\/(?:providers|model-configurations)(?:\/|$))/.test(
+      /^\/api\/v1\/(?:provider-plugins|provider-catalog|model-catalog|providers|model-configurations)(?:\/|$)/.test(
         path,
       );
     if (sensitive) response.setHeader('Cache-Control', 'no-store');

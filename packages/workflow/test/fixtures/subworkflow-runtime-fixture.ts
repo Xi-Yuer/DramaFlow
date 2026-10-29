@@ -1,3 +1,4 @@
+import { createFormatTextNodeType } from './format-text.js';
 import { vi } from 'vitest';
 import { z } from 'zod';
 import { MemorySaver, type BaseCheckpointSaver } from '@langchain/langgraph';
@@ -11,7 +12,6 @@ import {
 } from '@dramaflow/contracts';
 import {
   createSubworkflowNodeType,
-  createFormatTextNodeType,
   createIterationNodeType,
   createIfNodeType,
   createHumanReviewNodeType,
@@ -46,7 +46,7 @@ type SubworkflowRuntimeFixture = {
 export function format(id = 'format', index = 1): NodeDefinition {
   return {
     id,
-    type: 'data.format_text',
+    type: 'test.format_text',
     typeVersion: 1,
     name: id,
     inputs: {

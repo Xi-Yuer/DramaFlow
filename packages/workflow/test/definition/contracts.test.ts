@@ -113,22 +113,6 @@ describe('Workflow 版本快照与运行绑定', () => {
     publishedAt: '2026-10-19T00:00:00.000Z',
   };
 
-  it('历史版本读取补齐 required，但不修改冻结的原始版本', () => {
-    const input = Object.freeze({ name: 'novel', type: 'text' });
-    const definition = Object.freeze({
-      inputs: Object.freeze([input]),
-      nodes: Object.freeze([]),
-      edges: Object.freeze([]),
-      outputs: Object.freeze([]),
-    });
-    const stored = Object.freeze({ ...metadata, definition });
-    const before = JSON.stringify(stored);
-    const snapshot = createWorkflowVersionSnapshot(schemas.versionSchema, stored);
-    expect(snapshot.definition.inputs).toEqual([{ name: 'novel', type: 'text', required: true }]);
-    expect(JSON.stringify(stored)).toBe(before);
-    expect(stored.definition.inputs[0]).not.toHaveProperty('required');
-  });
-
   it('复制并深度冻结完整定义，后续草稿修改不会改变快照', () => {
     const draft = {
       inputs: [{ name: 'novel', type: 'text', required: true }],

@@ -1,10 +1,5 @@
 import { END, interrupt, START, StateGraph } from '@langchain/langgraph';
-import {
-  NumberType,
-  StringType,
-  workflowDefinitionSchema,
-  type RuntimeValue,
-} from '@dramaflow/contracts';
+import { NumberType, StringType, type RuntimeValue } from '@dramaflow/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { DefaultWorkflowRunner, WorkflowStateAnnotation } from '../../src/index.js';
 import { workflowRunnerFixture } from '../fixtures/workflow-runner-fixture.js';
@@ -27,7 +22,7 @@ describe('Workflow 提交 / 执行边界', () => {
     if (kind === 'type') inputs.a = { storage: 'inline', type: StringType, value: '10' };
     if (kind === 'value') inputs.a = { storage: 'inline', type: NumberType, value: '伪造标签' };
     if (kind === 'named') {
-      const type = { kind: 'named' as const, name: 'story.unregistered' };
+      const type = { kind: 'named' as const, name: 'example.unregistered' };
       f.version.definition.inputs[0]!.type = type;
       inputs.a = { storage: 'inline', type, value: {} };
     }
@@ -45,18 +40,6 @@ describe('Workflow 提交 / 执行边界', () => {
     expect(run.inputs).toEqual(f.input.inputs);
     expect(run.inputs).not.toHaveProperty('note');
     expect(f.submissionRepository.createWithExecution).toHaveBeenCalledExactlyOnceWith(f.input);
-  });
-
-  it('历史版本输入缺省 required=true 的读取路径仍在创建 Run 前拒绝 missing', async () => {
-    const f = workflowRunnerFixture();
-    const legacy = { ...f.version.definition, inputs: [{ name: 'a', type: NumberType }] };
-    f.version.definition = workflowDefinitionSchema.parse(legacy);
-    await expect(f.submission.start({ ...f.input, inputs: {} })).rejects.toMatchObject({
-      code: 'WORKFLOW_INVOCATION_INPUT_REQUIRED',
-      inputName: 'a',
-    });
-    expect(f.submissionRepository.createWithExecution).not.toHaveBeenCalled();
-    expect(legacy.inputs[0]).not.toHaveProperty('required');
   });
 
   it('提交只创建 pending；新执行实例按 ID 读取原输入、版本与 thread，不再创建 Run', async () => {

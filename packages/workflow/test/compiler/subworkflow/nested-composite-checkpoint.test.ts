@@ -14,7 +14,7 @@ import {
 import * as graphCompiler from '../../../src/compiler/graph/graph-compiler.js';
 import {
   INVOCATION,
-  ITEM_RUN,
+  CHILD_EXECUTION,
   itemInvocationSchema,
 } from '../../../src/compiler/iteration/state.js';
 import {
@@ -125,7 +125,7 @@ async function checkpointIdentities(f: Fixture) {
         workflowVersionId: f.run.workflowVersionId,
         path,
       });
-      if (typeof values[ITEM_RUN] === 'string') items.add(values[ITEM_RUN]);
+      if (typeof values[CHILD_EXECUTION] === 'string') items.add(values[CHILD_EXECUTION]);
     }
     if (values[SUBWORKFLOW_FRAME])
       calls.add(subworkflowFrameSchema.parse(values[SUBWORKFLOW_FRAME]).childExecutionId);
@@ -177,7 +177,7 @@ describe('Iteration → SubWorkflow 原生组合 checkpoint 与身份', () => {
     f.definition.nodes.push({
       ...f.child.nodes[0]!,
       id: 'after',
-      type: 'data.format_text',
+      type: 'test.format_text',
       inputs: { text: { type: 'constant', value: 'done' }, index: { type: 'constant', value: 99 } },
     });
     f.definition.edges.push({

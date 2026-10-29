@@ -14,7 +14,7 @@ describe('统一自动存储策略', () => {
     },
   );
 
-  it.each(['system.json', 'story.character', 'story.scene'])('%s 的显式规则为 inline', (name) =>
+  it.each(['system.json'])('%s 的显式规则为 inline', (name) =>
     expect(new DefaultDataStoragePolicyResolver().resolve({ kind: 'named', name }, {})).toBe(
       'inline',
     ),
@@ -29,7 +29,7 @@ describe('统一自动存储策略', () => {
   );
 
   it.each<DataType>([
-    { kind: 'named', name: 'story.unregistered' },
+    { kind: 'named', name: 'example.unregistered' },
     { kind: 'any' },
     { kind: 'array', itemType: { kind: 'named', name: 'media.image' } },
     { kind: 'object', properties: { image: { kind: 'named', name: 'media.image' } } },
@@ -51,10 +51,10 @@ describe('统一自动存储策略', () => {
   });
 
   it('可集中注入其他命名规则，复制规则表以免运行中被外部修改', () => {
-    const rules = new Map([['story.novel', 'reference' as const]]);
+    const rules = new Map([['example.document', 'reference' as const]]);
     const resolver = new DefaultDataStoragePolicyResolver(rules);
     rules.clear();
-    expect(resolver.resolve({ kind: 'named', name: 'story.novel' }, '小说')).toBe('reference');
+    expect(resolver.resolve({ kind: 'named', name: 'example.document' }, '小说')).toBe('reference');
     expect(resolver.resolve({ kind: 'named', name: 'media.video' }, {})).toBe('reference');
   });
 });

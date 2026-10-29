@@ -681,7 +681,15 @@ describe('正式文本 AI：HTTP → Outbox → BullMQ → 独立 Worker → Pro
           Cookie: cookies.get(outsiderId) ?? '',
           ...(suffix ? { Origin: origin, 'Content-Type': 'application/json' } : {}),
         },
-        ...(suffix ? { body: JSON.stringify({ value: true }) } : {}),
+        ...(suffix
+          ? {
+              body: JSON.stringify({
+                interruptId: 'foreign-review',
+                expectedWaitingRevision: 1,
+                value: { action: 'approve' },
+              }),
+            }
+          : {}),
       });
       expect(response.status).toBe(404);
     }

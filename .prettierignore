@@ -5,3 +5,4 @@ dist
 .turbo
 generated
 coverage
+next-env.d.ts

@@ -121,10 +121,10 @@ describe('运行值、引用与持久内容协议', () => {
       id: 'asset-1',
       versionId: 'v1',
       projectId: 'p',
-      type: { kind: 'named', name: 'story.character' },
-      name: '林雪',
+      type: { kind: 'named', name: 'example.record' },
+      name: '示例记录',
       source: { type: 'artifact', artifactId: 'art-1' },
-      data: { storage: 'inline', value: { name: '林雪', appearance: '黑发' } },
+      data: { storage: 'inline', value: { name: '示例记录', note: '说明' } },
       createdAt: time,
       updatedAt: time,
     };

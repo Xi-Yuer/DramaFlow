@@ -140,11 +140,6 @@ describe('正式 Nest 应用的提交 / 队列 / 执行装配', () => {
             version: 1,
             executionKind: 'action',
           }),
-          expect.objectContaining({
-            type: 'data.format_text',
-            version: 1,
-            executionKind: 'action',
-          }),
         ]),
       );
     }

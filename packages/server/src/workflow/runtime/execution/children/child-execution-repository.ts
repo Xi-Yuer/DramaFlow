@@ -17,7 +17,7 @@ import {
   deriveChildScope,
   iterationItemInvocationKey,
   type CreateChildExecutionInput,
-  type CreateIterationItemRunInput,
+  type CreateIterationChildExecutionInput,
 } from '@dramaflow/workflow';
 import { NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
@@ -30,7 +30,7 @@ export class ChildExecutionRepository {
     private readonly scope: RepositoryScope,
   ) {}
 
-  async getOrCreateIterationItemRunning(raw: CreateIterationItemRunInput) {
+  async getOrCreateIterationItemRunning(raw: CreateIterationChildExecutionInput) {
     const input = z
       .object({
         workflowRunId: workflowIdentifierSchema,

@@ -42,7 +42,8 @@ const call = (
     method,
     headers: {
       ...(session ? { cookie: session } : {}),
-      ...(body ? { 'Content-Type': 'application/json', Origin: requestOrigin } : {}),
+      ...(!['GET', 'HEAD', 'OPTIONS'].includes(method) ? { Origin: requestOrigin } : {}),
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
@@ -146,11 +147,6 @@ it('真实密码登录、Cookie 会话和安全 DTO，不暴露凭证', async ()
     expect.arrayContaining([
       expect.objectContaining({
         type: 'ai.text_generate',
-        version: 1,
-        executionKind: 'action',
-      }),
-      expect.objectContaining({
-        type: 'data.format_text',
         version: 1,
         executionKind: 'action',
       }),

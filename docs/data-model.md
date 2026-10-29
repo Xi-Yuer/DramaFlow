@@ -17,7 +17,7 @@ Image 不等于 Asset，Character 不等于 Asset。签名 URL、供应商 URL �
 
 正式描述是纯 JSON：any；primitive（string / number / boolean / null）；named；array.itemType；object.properties；union.types。
 
-命名类型使用 namespace，例如 media.image、story.character、system.json。核心 union 不随领域名称增长。any 是独立 kind；system.json 不能自动等于所有语义类型。
+命名类型使用 namespace，例如 media.image、example.record、system.json。核心 union 不随领域名称增长。any 是独立 kind；system.json 不能自动等于所有语义类型。
 
 isTypeAssignable 前后端共用：
 
@@ -45,7 +45,7 @@ DataTypeManifest 只有 name、displayName、category、storage。服务端把 M
 
 ArtifactReference 为 `{kind:"artifact", id}`。AssetReference 为 `{kind:"asset", id, versionId}`。禁止缺少版本时选择最新版。
 
-storagePolicy 为 inline、reference 或 auto，省略按 auto。auto 只由 DataStoragePolicyResolver 按类型决定，不按 JSON 长度猜测。默认：primitive、system.json、story.character、story.scene 为 inline；media.file / image / video / audio / document 为 reference。未注册 named，以及 any / array / object / union 的 auto，报 DATA_STORAGE_POLICY_NOT_FOUND。显式 inline / reference 不调用 Resolver。普通 JSON 数组可显式选择 inline 或整体 Artifact reference；auto 数组继续要求显式策略，不启用大小阈值。媒体数组不能直接 encode 为 JSON（空数组除外），须逐元素用原有 BinaryContent / Artifact 管线 encode，再交给集合 Builder 保留引用；不能回写含临时 URL 的 MediaResource 数组。大型文本应显式 reference。
+storagePolicy 为 inline、reference 或 auto，省略按 auto。auto 只由 DataStoragePolicyResolver 按类型决定，不按 JSON 长度猜测。默认：primitive、system.json 为 inline；media.file / image / video / audio / document 为 reference。未注册 named，以及 any / array / object / union 的 auto，报 DATA_STORAGE_POLICY_NOT_FOUND。显式 inline / reference 不调用 Resolver。普通 JSON 数组可显式选择 inline 或整体 Artifact reference；auto 数组继续要求显式策略，不启用大小阈值。媒体数组不能直接 encode 为 JSON（空数组除外），须逐元素用原有 BinaryContent / Artifact 管线 encode，再交给集合 Builder 保留引用；不能回写含临时 URL 的 MediaResource 数组。大型文本应显式 reference。
 
 ## Artifact 与 Asset
 

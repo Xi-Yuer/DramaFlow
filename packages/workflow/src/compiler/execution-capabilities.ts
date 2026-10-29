@@ -196,7 +196,7 @@ export function validateGraphForPublish(
 }
 
 // 根 Workflow 与局部图共用静态协议；资源授权后仍必须执行 capability gate。
-// 旧入口被 Compiler 使用，保留其执行准入及错误优先级。
+// Compiler 入口先校验执行种类；根图拓扑由编译计划分析。
 export function validateWorkflowDefinitionSemantics(
   definition: GraphDefinition,
   registry: NodeRegistry,
@@ -204,7 +204,7 @@ export function validateWorkflowDefinitionSemantics(
   definition = graphDefinitionSchema.parse(definition);
   assertGraphExecutionKinds(definition, registry);
   const entries = validateGraphDefinitionSemantics(definition, registry);
-  // 旧入口对子图使用完整发布门禁；根图的拓扑分析仍由 Compiler 自身执行。
+  // 子图使用完整发布门禁；根图拓扑由 Compiler 分析。
   for (const node of definition.nodes)
     for (const slot of nestedGraphSlots(node))
       assertGraphExecutionCapabilities(slot.graph, registry, {
