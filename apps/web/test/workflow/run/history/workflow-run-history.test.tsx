@@ -191,6 +191,32 @@ async function selectRun(id = 'run') {
   fireEvent.click(await screen.findByRole('button', { name: `查看运行 ${id}` }));
 }
 describe('Run History 正式 Web 入口', () => {
+  it('只消费服务端 cancellation projection：取消中 / uncertain / cancelled，历史不推导 Outbox', async () => {
+    const f = graphExecutionFixture();
+    const base = summary(f);
+    vi.spyOn(workflowApi, 'listRuns').mockResolvedValue({
+      items: [
+        { ...base, id: 'requested', status: 'running', cancellation: 'requested' },
+        { ...base, id: 'uncertain', status: 'running', cancellation: 'uncertain' },
+        { ...base, id: 'cancelled', status: 'cancelled', cancellation: 'none' },
+      ],
+      nextCursor: null,
+    });
+    render(
+      provider(
+        <WorkflowRunHistory
+          projectId={f.projectId}
+          workflowId={f.run.workflowId}
+          onSelect={vi.fn()}
+        />,
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '运行历史' }));
+    await screen.findByText('取消中');
+    expect(screen.getByText('暂无法确认停止')).toBeTruthy();
+    expect(screen.getByText('已取消')).toBeTruthy();
+    expect(screen.queryByText('recovery_required')).toBeNull();
+  });
   it('懒加载、分页和摘要，不展示内部执行字段', async () => {
     const f = graphExecutionFixture();
     const first = summary(f),

@@ -37,6 +37,18 @@ const state = (status: WorkflowRunStatus): WorkflowRunStatusState => ({
 
 describe('Workflow Run Status 基础界面（静态组件测试）', () => {
   it.each([
+    ['requested', '取消中'],
+    ['uncertain', '暂无法确认停止'],
+  ] as const)('读取服务端 %s 投影，不伪造 cancelled', (cancellation, label) => {
+    const current = state('running');
+    current.run = { ...current.run!, cancellation };
+    const html = renderToStaticMarkup(
+      <WorkflowRunStatusView state={current} onRefresh={() => undefined} />,
+    );
+    expect(html).toContain(label);
+    expect(html).not.toContain('已取消');
+  });
+  it.each([
     ['pending', '等待执行'],
     ['running', '运行中'],
     ['waiting', '等待继续'],

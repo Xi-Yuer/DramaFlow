@@ -10,6 +10,7 @@ import {
   DefaultWorkflowOutputResolver,
   NodeRegistry,
   WorkflowExecutionCancelled,
+  WorkflowExecutionCancellation,
   type NodeExecutionContext,
 } from '@dramaflow/workflow';
 import { nestedCompositeFixture } from '../../../../../workflow/test/fixtures/nested-composite-fixture.js';
@@ -20,6 +21,7 @@ import { WorkflowVersionRepositories } from '../../../../src/workflow/run/reposi
 import { NodeRunRepositories } from '../../../../src/workflow/runtime/execution/node-run-repository.js';
 import { WorkflowRuntimeFactory } from '../../../../src/workflow/runtime/workflow-runtime.factory.js';
 import { WorkflowExecutionService } from '../../../../src/workflow/runtime/workflow-execution.service.js';
+import { WorkflowCancellationReconciler } from '../../../../src/workflow/queue/workflow-cancellation-reconciler.js';
 import { WorkflowCapabilitiesFactory } from '../../../../src/models/workflow-capabilities.factory.js';
 import type { ArtifactRuntimeFactory } from '../../../../src/artifacts/artifact-runtime.factory.js';
 import type { WorkflowCheckpointerService } from '../../../../src/checkpoint/workflow-checkpointer.service.js';
@@ -313,6 +315,52 @@ describe.skipIf(!enabled)(
       await new Promise((resolve) => setTimeout(resolve, 30));
       expect(f.invoke).not.toHaveBeenCalled();
       expect(await f.facts()).toEqual(before);
+    });
+
+    it('核查先进入 recovery_required 后，原 owner 的 cooperative 确认仍可正常收敛', async () => {
+      const f = await fixture('sub');
+      const execution = f.service.execute(f.job);
+      await vi.waitFor(() => expect(f.pluginSignals).toHaveLength(1));
+      let ready!: () => void, release!: () => void;
+      const cancelling = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const original = WorkflowExecutionCancellation.prototype.settle;
+      const recording = vi
+        .spyOn(WorkflowExecutionCancellation.prototype, 'settle')
+        .mockImplementation(async function (this: WorkflowExecutionCancellation) {
+          ready();
+          await released;
+          return original.call(this);
+        });
+      try {
+        await f.runs.requestCancellation(f.run.id);
+        await cancelling;
+        const probe = {
+          hasActiveExecutionEvidence: async () => false,
+        } as unknown as WorkflowExecutionQueue;
+        await new WorkflowCancellationReconciler(
+          database!,
+          probe,
+          new WorkflowRunRepositories(database!),
+        ).reconcile(f.run.id);
+        expect((await f.facts()).intent.status).toBe('recovery_required');
+        expect((await f.facts()).run.status).toBe('running');
+        release();
+        expect(await execution).toMatchObject({ status: 'execution_cancelled' });
+        const facts = await f.facts();
+        expect(facts.run.status).toBe('cancelled');
+        expect(facts.intent.status).toBe('cancelled');
+        expect(facts.nodes.every((node) => node.status === 'cancelled')).toBe(true);
+        expect(facts.children.every((child) => child.status === 'cancelled')).toBe(true);
+      } finally {
+        release();
+        recording.mockRestore();
+        await execution;
+      }
     });
 
     it('取消审计写入失败保留 infrastructure / recovery 边界，不伪造 Run cancelled 或 business failed', async () => {

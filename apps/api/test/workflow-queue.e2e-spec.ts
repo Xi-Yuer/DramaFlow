@@ -14,6 +14,8 @@ import {
   WorkflowRunSubmissionFactory,
   WorkflowVersionRepositories,
   workflowExecutionJobId,
+  WorkflowCancellationReconciler,
+  WorkflowRunQueryService,
 } from '@dramaflow/server';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { storeRuntimeTestVersion } from './fixtures/workflow-service.js';
@@ -179,6 +181,63 @@ afterAll(async () => {
 });
 
 describe('PostgreSQL Outbox + Redis BullMQ + 独立 Worker 进程', () => {
+  it.each(['claimed', 'executed'] as const)(
+    '取消 + %s 后 SIGKILL + recovered Job：不 invoke，核查与查询保留 uncertain',
+    async (crash) => {
+      const f = await fixture(false, crash === 'executed');
+      const run = await f.submission.start(f.input);
+      await dispatcher.publishStart(run.id);
+      const dying = launch({ mode: 'worker', crash });
+      await dying.wait('ready');
+      await queue.queue.resume();
+      await dying.wait(crash === 'executed' ? 'node_execute' : crash);
+      await dying.stop(true);
+      const repository = await runs.forProject(ownerId, f.input.projectId);
+      expect((await repository.requestCancellation(run.id)).outcome).toBe('in_flight');
+      const before = await db.nodeRun.findMany({ where: { workflowRunId: run.id } });
+      const reconciliation = new WorkflowCancellationReconciler(database, queue, runs);
+      const read = new WorkflowRunQueryService(database);
+      expect((await read.getRun(ownerId, run.id)).cancellation).toBe('requested');
+      await vi.waitFor(
+        async () =>
+          expect(
+            await queue.hasActiveExecutionEvidence({ kind: 'start', workflowRunId: run.id }),
+          ).toBe(false),
+        { timeout: 5000 },
+      );
+      await reconciliation.reconcile(run.id);
+      expect((await read.getRun(ownerId, run.id)).cancellation).toBe('uncertain');
+      const worker = launch({ mode: 'worker' });
+      await worker.wait('ready');
+      try {
+        await vi.waitFor(
+          async () =>
+            expect(
+              await db.workflowExecutionOutbox.findFirstOrThrow({
+                where: { workflowRunId: run.id },
+              }),
+            ).toMatchObject({ status: 'recovery_required' }),
+          { timeout: 15000 },
+        );
+        await reconciliation.reconcile(run.id);
+        expect(await read.getRun(ownerId, run.id)).toMatchObject({
+          status: 'running',
+          cancellation: 'uncertain',
+        });
+        expect(
+          (await read.listRuns(ownerId, f.input.projectId, f.input.workflowId, {})).items[0]!
+            .cancellation,
+        ).toBe('uncertain');
+        expect(await db.nodeRun.findMany({ where: { workflowRunId: run.id } })).toEqual(before);
+        expect(
+          worker.events.filter((event) => ['node_execute', 'invoke'].includes(event.event)),
+        ).toHaveLength(0);
+      } finally {
+        await worker.stop();
+        await queue.queue.pause();
+      }
+    },
+  );
   it('提交事务后、enqueue 前进程死亡：新 Dispatcher / Worker 从 Outbox 完成原 Run', async () => {
     const f = await fixture();
     const submitter = launch({

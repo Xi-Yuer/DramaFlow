@@ -7,6 +7,29 @@ import {
 } from '../src/index.js';
 
 describe('Workflow Run HTTP 契约', () => {
+  it('取消读模型只接受产品状态，不公开 execution intent / lock 身份', () => {
+    const response = {
+      id: 'run',
+      workflowId: 'workflow',
+      workflowVersionId: 'version',
+      invocationKey: 'key',
+      status: 'running',
+      inputs: {},
+      createdAt: '2026-10-29T00:00:00.000Z',
+    };
+    for (const cancellation of ['none', 'requested', 'uncertain'])
+      expect(workflowRunResponseSchema.parse({ ...response, cancellation }).cancellation).toBe(
+        cancellation,
+      );
+    for (const cancellation of ['recovery_required', 'executing', 'cancelling'])
+      expect(workflowRunResponseSchema.safeParse({ ...response, cancellation }).success).toBe(
+        false,
+      );
+    for (const field of ['executions', 'executionId', 'waitingRevision', 'lockToken'])
+      expect(
+        workflowRunResponseSchema.safeParse({ ...response, [field]: 'internal' }).success,
+      ).toBe(false);
+  });
   it('start 接收明确版本、调用 key 及 RuntimeValue inputs，拒绝指定执行身份和状态', () => {
     const request = { workflowVersionId: 'version-1', invocationKey: 'invocation-1', inputs: {} };
     expect(startWorkflowRunRequestSchema.parse(request)).toEqual(request);

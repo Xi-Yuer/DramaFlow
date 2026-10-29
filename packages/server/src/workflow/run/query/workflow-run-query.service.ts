@@ -13,6 +13,7 @@ import {
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 import { DatabaseService } from '../../../database/database.service.js';
+import { cancellationProjection } from '../cancellation/current-execution.js';
 
 const workflowNodeRunsResponseSchema = z.object({ items: z.array(nodeRunSchema) }).strict();
 
@@ -56,6 +57,9 @@ export class WorkflowRunQueryService {
         startedAt: true,
         completedAt: true,
         error: true,
+        cancellationRequestedAt: true,
+        waitingRevision: true,
+        executions: { select: { kind: true, waitingRevision: true, status: true } },
       },
     });
     const page = rows.slice(0, 20);
@@ -78,6 +82,7 @@ export class WorkflowRunQueryService {
         workflowVersionId: row.workflowVersionId,
         version: versionNumbers.get(row.workflowVersionId) ?? null,
         status: row.status,
+        cancellation: cancellationProjection(row),
         createdAt: row.createdAt.toISOString(),
         ...(row.startedAt ? { startedAt: row.startedAt.toISOString() } : {}),
         ...(row.completedAt ? { completedAt: row.completedAt.toISOString() } : {}),
@@ -98,6 +103,7 @@ export class WorkflowRunQueryService {
       workflowVersionId: run.workflowVersionId,
       invocationKey: run.invocationKey,
       status: run.status,
+      cancellation: cancellationProjection(run),
       inputs: run.inputs,
       createdAt: run.createdAt.toISOString(),
       ...(run.outputs !== null ? { outputs: run.outputs } : {}),
@@ -195,6 +201,8 @@ export class WorkflowRunQueryService {
         startedAt: true,
         completedAt: true,
         cancellationRequestedAt: true,
+        waitingRevision: true,
+        executions: { select: { kind: true, waitingRevision: true, status: true } },
       },
     });
     if (!run) throw new NotFoundException('运行不存在或无权访问');

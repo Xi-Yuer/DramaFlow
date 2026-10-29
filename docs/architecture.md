@@ -194,13 +194,17 @@ start / resume claim 的条件更新要求 cancellationRequestedAt 为空，与�
 
 NodeRun / ChildExecution 新增 cancelled，保留已有输入，结束时间写 completedAt，不写伪造业务 error 或 outputs。每个 owner 创建记录时注册该记录的取消写入，完成后解除注册；不扫描整树、不由父 Composite 批量终结其他 owner。取消时只等待已开始的审计创建事务与取消写入，不等待不协作业务 Promise；注册与取消竞争仍补齐该记录收尾。Runner 确认这些写入后终结 Run，Outbox 正常结算 cancelled，BullMQ Job 正常完成。已完成 / 已失败 sibling 保留原事实，未开始节点不创建假 NodeRun。
 
-创建记录使用 Run 行锁检查持久化取消 gate；迟到完成 / 失败只允许条件更新 running，NodeRun 与 ChildExecution 的数据库终态保护拒绝覆盖。业务 Promise 可在 graph.invoke 提前退出后继续，但不能改写 cancelled Run / NodeRun / ChildExecution 或重新激活执行。持久化收尾失败保留 infrastructure / recovery_required 边界，不承诺已成功取消；崩溃后未确认的 executing 命令仍沿用原有恢复边界，不自动 replay。
+创建记录使用 Run 行锁检查持久化取消 gate；迟到完成 / 失败只允许条件更新 running，NodeRun 与 ChildExecution 的数据库终态保护拒绝覆盖。业务 Promise 可在 graph.invoke 提前退出后继续，但不能改写 cancelled Run / NodeRun / ChildExecution 或重新激活执行。持久化收尾失败保留 infrastructure / recovery_required 边界，不承诺已成功取消；崩溃后未确认的 executing 命令由下述保守核查处理，不自动 replay。
 
 当前只有内部 Repository 请求入口，没有正式 Cancel API 或 Web 按钮。既有状态展示兼容 cancelled 审计；不做 Provider remote cancel、Artifact upload abort、timeout policy 或 checkpoint 删除。已经进入 waiting 的 Human Review 取消由下述同事务收尾处理。停止本地等待不保证远端没有执行或计费。
 
 waiting Human Review 的取消请求在 Run 行锁内，通过[等待审核收尾](../packages/server/src/workflow/human-review/cancel-waiting-reviews.ts)将 running Review NodeRun 与其显式父链上的 running NodeRun / ChildExecution 结束为 cancelled，与 Run 和未 claim Outbox 同事务提交；任一写入失败整体回滚。Review 归属由该 Run 的 immutable WorkflowVersion、NodeRun.childExecutionId、ChildExecution.parentNodeRunId 与唯一 nestedGraphSlot 解析，不使用全局 nodeId 或 scopeKey。已结束记录与 sibling 不改写，未启动节点不建记录，不产生 reject、decision 或 feedback；没有开放 nested Human Review。
 
 checkpoint 与原生 pending interrupt 保留为执行证据；DramaFlow authoritative Run lifecycle 使其不可恢复。Pending 查询不返回 cancelled / 有取消意图的可操作审核，旧 interruptId / waitingRevision 无法重新提交或 claim。cancel 事务先胜时收尾 waiting；resume claim 先胜时只记录 in_flight，由既有 signal 链终止，确认 invocation 退出后同样补齐尚未重新登记到取消 scope 的旧等待审计。Web 沿用现有状态查询与共享 projection，刷新观察到 cancelled 后撤下审核操作并展示已取消，不解释为 rejected / failed。
+
+[取消核查](../packages/server/src/workflow/queue/workflow-cancellation-reconciler.ts)复用 Worker 的 Outbox Pump，不新增 lease、heartbeat、execution table 或 Graph scheduler。按 cancellationRequestedAt / id 游标每轮最多核查 5 个 Run；30 秒宽限期仅筛候选，不证明执行超时或 Worker 死亡。当前 running intent 精确匹配 waitingRevision=0 的 start 或 waitingRevision=N 的 resume；历史 start / resume 的 recovery_required 不影响当前执行。pending / waiting 复用已有取消事务；终态仅补齐对应 Outbox。健康且首次处理的 active Job + lock 只暂缓升级，Job 缺失、无锁、stalled/recovered 或 Redis 观察不可用均只能保守进入 recovery_required。核查在 Run 行锁下重读版本周期与终态，条件更新 Outbox；不批量结束 running NodeRun / ChildExecution。原 owner 后续正常完成、失败或确认 cooperative cancellation 仍可按既有生命周期收尾。
+
+Run GET 与 History 复用服务端 cancellation read projection：none / requested / uncertain；不公开 Outbox、lock、waitingRevision 或 worker 身份。查询响应始终返回该字段，受理响应与旧客户端数据允许省略。非终态有请求且当前 intent 为 recovery_required 时为 uncertain，running 缺少当前 intent 也不映射旧命令；terminal 优先，字段为 none，status 继续表达 completed / failed / cancelled。Web 状态面板和 History 只消费此投影，显示“取消中”或“暂无法确认停止”，不增加 Cancel 按钮。维护进程不可用时核查不会运行；不把时间经过、队列 Job 消失或 checkpoint 存在解释为已停止，不自动恢复 checkpoint 或重试业务。
 
 ## PostgreSQL Checkpointer
 

@@ -1,5 +1,5 @@
 import { Alert, Button, Collapse, Descriptions, Space, Tag, Typography } from 'antd';
-import type { WorkflowRunStatus } from '@dramaflow/contracts';
+import type { WorkflowRunStatus, WorkflowRunResponse } from '@dramaflow/contracts';
 import { HumanReviewCard } from './human-review-card';
 import type { HumanReviewActions, WorkflowRunStatusState } from './workflow-run-status';
 import { WorkflowRunResult } from '../result/workflow-run-result';
@@ -22,6 +22,14 @@ export function formatWorkflowRunTime(value: string) {
   });
 }
 
+export function workflowRunDisplay(run: Pick<WorkflowRunResponse, 'status' | 'cancellation'>) {
+  if (!['completed', 'failed', 'cancelled'].includes(run.status)) {
+    if (run.cancellation === 'uncertain') return { label: '暂无法确认停止', color: 'warning' };
+    if (run.cancellation === 'requested') return { label: '取消中', color: 'processing' };
+  }
+  return workflowRunStatusDisplay[run.status];
+}
+
 export function WorkflowRunStatusView({
   state,
   onRefresh,
@@ -39,9 +47,7 @@ export function WorkflowRunStatusView({
         <Space wrap>
           <Typography.Text strong>运行状态</Typography.Text>
           {run ? (
-            <Tag color={workflowRunStatusDisplay[run.status].color}>
-              {workflowRunStatusDisplay[run.status].label}
-            </Tag>
+            <Tag color={workflowRunDisplay(run).color}>{workflowRunDisplay(run).label}</Tag>
           ) : null}
         </Space>
         <Button

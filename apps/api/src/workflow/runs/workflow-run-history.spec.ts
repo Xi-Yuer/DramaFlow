@@ -67,6 +67,7 @@ describe('正式 Run History HTTP 查询入口', () => {
       workflowVersionId: 'version',
       version: 1,
       status: 'completed',
+      cancellation: 'none',
       createdAt: '2026-10-28T00:00:00.000Z',
     });
     expect(JSON.stringify(response.body)).not.toContain('thread');

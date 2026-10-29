@@ -10,6 +10,7 @@ import {
 import { z } from 'zod';
 import { DatabaseService } from '../../database/database.service.js';
 import { WorkflowExecutionQueue } from './workflow-execution-queue.js';
+import { WorkflowCancellationReconciler } from './workflow-cancellation-reconciler.js';
 
 @Injectable()
 export class WorkflowOutboxDispatcher {
@@ -111,7 +112,10 @@ export class WorkflowOutboxPump implements OnApplicationBootstrap, OnModuleDestr
     .int()
     .min(100)
     .parse(process.env.WORKFLOW_OUTBOX_INTERVAL_MS ?? 1000);
-  constructor(private readonly dispatcher: WorkflowOutboxDispatcher) {}
+  constructor(
+    private readonly dispatcher: WorkflowOutboxDispatcher,
+    private readonly cancellations: WorkflowCancellationReconciler,
+  ) {}
   onApplicationBootstrap(): void {
     this.schedule(0);
   }
@@ -122,6 +126,11 @@ export class WorkflowOutboxPump implements OnApplicationBootstrap, OnModuleDestr
       }, delay);
   }
   private async tick(): Promise<void> {
+    try {
+      await this.cancellations.reconcileBatch();
+    } catch {
+      new Logger('WorkflowOutbox').warn('取消核查暂不可用，保留持久化事实等待下轮核查');
+    }
     try {
       for (let i = 0; i < 20 && !this.stopped; i++)
         if (!(await this.dispatcher.dispatchNext())) break;

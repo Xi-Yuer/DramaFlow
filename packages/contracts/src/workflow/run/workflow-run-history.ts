@@ -22,6 +22,7 @@ export const workflowRunSummarySchema = workflowRunResponseSchema
     startedAt: true,
     completedAt: true,
     error: true,
+    cancellation: true,
   })
   .extend({ version: z.number().int().positive().nullable() });
 export const workflowRunHistoryResponseSchema = z

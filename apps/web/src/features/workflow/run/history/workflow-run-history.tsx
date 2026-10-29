@@ -4,10 +4,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { Alert, Button, Drawer, Empty, Spin, Space, Tag, Typography, theme } from 'antd';
 import type { WorkflowRunSummary } from '@dramaflow/contracts';
 import { workflowApi, workflowKeys } from '../../workflow-api';
-import {
-  workflowRunStatusDisplay,
-  formatWorkflowRunTime,
-} from '../status/workflow-run-status-controls';
+import { workflowRunDisplay, formatWorkflowRunTime } from '../status/workflow-run-status-controls';
 import styles from './workflow-run-history.module.css';
 import { ApiError } from '../../../../lib/http';
 
@@ -67,7 +64,7 @@ export function WorkflowRunHistory({
             ) : null}
             <ul className={styles.list} aria-label="历史运行列表">
               {items.map((run) => {
-                const status = workflowRunStatusDisplay[run.status];
+                const status = workflowRunDisplay(run);
                 return (
                   <li
                     key={run.id}

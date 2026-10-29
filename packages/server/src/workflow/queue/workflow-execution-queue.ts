@@ -48,6 +48,27 @@ export class WorkflowExecutionQueue implements OnModuleDestroy {
   constructor() {
     this.queue.on('error', () => new Logger('WorkflowQueue').warn('执行队列暂不可用'));
   }
+  async hasActiveExecutionEvidence(input: WorkflowExecutionJob): Promise<boolean> {
+    // 仅用于暂缓升级为核查；无锁 / 不可读不证明 Worker 死亡。整个观察有界。
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        (async () => {
+          const job = await this.queue.getJob(workflowExecutionJobId(input));
+          if (!job || job.stalledCounter > 0 || job.attemptsStarted > 1) return false;
+          if ((await job.getState()) !== 'active') return false;
+          return (await this.redis.exists(`${this.queue.toKey(job.id!)}:lock`)) === 1;
+        })(),
+        new Promise<false>((resolve) => {
+          timer = setTimeout(() => resolve(false), 3000);
+        }),
+      ]);
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   async publish(input: WorkflowExecutionJob): Promise<void> {
     const job = workflowExecutionJobSchema.parse(input);
     let timeout: ReturnType<typeof setTimeout> | undefined;
