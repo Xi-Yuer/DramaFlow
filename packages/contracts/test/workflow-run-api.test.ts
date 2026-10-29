@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cancelWorkflowRunRequestSchema,
+  cancelWorkflowRunResponseSchema,
   resumeWorkflowRunRequestSchema,
   startWorkflowRunRequestSchema,
   workflowRunResponseSchema,
@@ -7,6 +9,31 @@ import {
 } from '../src/index.js';
 
 describe('Workflow Run HTTP 契约', () => {
+  it('Cancel 只接受空请求，响应区分 requested / cancelled / terminal，拒绝内部字段', () => {
+    expect(cancelWorkflowRunRequestSchema.parse({})).toEqual({});
+    expect(cancelWorkflowRunRequestSchema.safeParse({ status: 'cancelled' }).success).toBe(false);
+    const run = {
+      id: 'run',
+      workflowId: 'workflow',
+      workflowVersionId: 'version',
+      invocationKey: 'key',
+      status: 'running',
+      inputs: {},
+      createdAt: '2026-10-29T00:00:00.000Z',
+    };
+    for (const outcome of ['requested', 'cancelled', 'terminal'])
+      expect(cancelWorkflowRunResponseSchema.parse({ outcome, run }).outcome).toBe(outcome);
+    expect(cancelWorkflowRunResponseSchema.safeParse({ outcome: 'in_flight', run }).success).toBe(
+      false,
+    );
+    expect(
+      cancelWorkflowRunResponseSchema.safeParse({
+        outcome: 'requested',
+        run,
+        executionId: 'internal',
+      }).success,
+    ).toBe(false);
+  });
   it('取消读模型只接受产品状态，不公开 execution intent / lock 身份', () => {
     const response = {
       id: 'run',

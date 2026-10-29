@@ -23,6 +23,8 @@ export { WorkflowCheckpointerModule } from './checkpoint/workflow-checkpointer.m
 export { WorkflowCheckpointerService } from './checkpoint/workflow-checkpointer.service.js';
 export { NodeRunRepositories } from './workflow/runtime/execution/node-run-repository.js';
 export { WorkflowRunRepositories } from './workflow/run/repository/workflow-run-repository.js';
+export { WorkflowRunCancellationService } from './workflow/run/cancellation/workflow-run-cancellation.service.js';
+export { WorkflowRunCancellationModule } from './workflow/run/cancellation/workflow-run-cancellation.module.js';
 export { WorkflowCancellationReconciler } from './workflow/queue/workflow-cancellation-reconciler.js';
 export { WorkflowRunQueryModule } from './workflow/run/query/workflow-run-query.module.js';
 export { WorkflowRunQueryService } from './workflow/run/query/workflow-run-query.service.js';

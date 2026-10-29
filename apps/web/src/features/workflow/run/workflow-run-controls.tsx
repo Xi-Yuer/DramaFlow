@@ -45,6 +45,7 @@ export function WorkflowRunControls({
   onRetryVersion,
   onRefreshRunStatus,
   reviewActions,
+  onCancelRun,
   submissionDisabled = false,
   showStatus = true,
 }: {
@@ -67,6 +68,7 @@ export function WorkflowRunControls({
   onRetryVersion: () => void;
   onRefreshRunStatus: () => void;
   reviewActions?: HumanReviewActions;
+  onCancelRun?: (runId: string) => Promise<void>;
   submissionDisabled?: boolean;
   showStatus?: boolean;
 }) {
@@ -308,6 +310,7 @@ export function WorkflowRunControls({
       ) : null}
       {showStatus ? (
         <WorkflowRunStatusView
+          onCancel={onCancelRun}
           state={runStatus}
           onRefresh={onRefreshRunStatus}
           reviewActions={reviewActions}

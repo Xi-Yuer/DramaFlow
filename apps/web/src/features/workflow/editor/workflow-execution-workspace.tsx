@@ -8,7 +8,7 @@ import { InvocationRecoveryControls } from '../run/recovery/invocation-recovery-
 import type { InvocationRecoveryState } from '../run/recovery/invocation-recovery';
 import {
   WorkflowRunStatusView,
-  workflowRunStatusDisplay,
+  workflowRunDisplay,
 } from '../run/status/workflow-run-status-controls';
 import { WorkflowRunHistory } from '../run/history/workflow-run-history';
 import type { WorkflowVersionResponse } from '@dramaflow/contracts';
@@ -81,7 +81,7 @@ export function WorkflowExecutionWorkspace({
     invoker.current?.focus();
   }
   const status = run.runStatus.run?.status;
-  const display = status ? workflowRunStatusDisplay[status] : null;
+  const display = run.runStatus.run ? workflowRunDisplay(run.runStatus.run) : null;
   const currentRun = run.runStatus.run;
   const executionDefinition =
     (executionVersion ?? run.version)?.id === currentRun?.workflowVersionId
@@ -183,6 +183,14 @@ export function WorkflowExecutionWorkspace({
                       ) : (
                         <>
                           <WorkflowRunStatusView
+                            onCancel={
+                              run.onCancelRun
+                                ? async (target) => {
+                                    await run.onCancelRun!(target);
+                                    setExecutionReload((value) => value + 1);
+                                  }
+                                : undefined
+                            }
                             state={run.runStatus}
                             onRefresh={() => {
                               setExecutionReload((value) => value + 1);

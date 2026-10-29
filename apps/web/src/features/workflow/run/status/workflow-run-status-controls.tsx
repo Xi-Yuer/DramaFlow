@@ -1,6 +1,7 @@
 import { Alert, Button, Collapse, Descriptions, Space, Tag, Typography } from 'antd';
 import type { WorkflowRunStatus, WorkflowRunResponse } from '@dramaflow/contracts';
 import { HumanReviewCard } from './human-review-card';
+import { WorkflowRunCancelButton } from './workflow-run-cancel-button';
 import type { HumanReviewActions, WorkflowRunStatusState } from './workflow-run-status';
 import { WorkflowRunResult } from '../result/workflow-run-result';
 import styles from '../workflow-run.module.css';
@@ -34,10 +35,12 @@ export function WorkflowRunStatusView({
   state,
   onRefresh,
   reviewActions,
+  onCancel,
 }: {
   state: WorkflowRunStatusState;
   onRefresh: () => void;
   reviewActions?: HumanReviewActions;
+  onCancel?: (runId: string) => Promise<void>;
 }) {
   if (state.phase === 'idle') return null;
   const run = state.run;
@@ -50,14 +53,19 @@ export function WorkflowRunStatusView({
             <Tag color={workflowRunDisplay(run).color}>{workflowRunDisplay(run).label}</Tag>
           ) : null}
         </Space>
-        <Button
-          size="small"
-          loading={state.refreshing}
-          disabled={state.refreshing || state.review?.phase === 'submitting'}
-          onClick={onRefresh}
-        >
-          手动刷新
-        </Button>
+        <Space>
+          <WorkflowRunCancelButton state={state} onCancel={onCancel} />
+          <Button
+            size="small"
+            loading={state.refreshing}
+            disabled={
+              state.refreshing || state.cancelSubmitting || state.review?.phase === 'submitting'
+            }
+            onClick={onRefresh}
+          >
+            手动刷新
+          </Button>
+        </Space>
       </div>
 
       {state.phase === 'loading' && !run ? (
@@ -82,12 +90,15 @@ export function WorkflowRunStatusView({
         </Descriptions>
       ) : null}
 
-      {run?.status === 'waiting' ? (
+      {state.cancelNotice ? <Alert type="warning" showIcon title={state.cancelNotice} /> : null}
+      {run?.status === 'waiting' &&
+      !run.cancellationRequestedAt &&
+      (!run.cancellation || run.cancellation === 'none') ? (
         state.review && reviewActions ? (
           <HumanReviewCard
             review={state.review}
             actions={reviewActions}
-            refreshing={state.refreshing}
+            refreshing={state.refreshing || !!state.cancelSubmitting}
           />
         ) : (
           <Alert

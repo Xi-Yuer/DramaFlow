@@ -137,6 +137,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
           state: workflowRun.state,
           runStatus: workflowRun.runStatus,
           reviewActions: workflowRun.reviewActions,
+          onCancelRun: workflowRun.cancelRun,
           onSelectVersion: workflowRun.selectVersion,
           onChangeInput: workflowRun.changeInput,
           onRun: () => void workflowRun.run(),

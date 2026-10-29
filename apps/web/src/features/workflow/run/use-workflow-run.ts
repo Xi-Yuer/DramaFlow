@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WorkflowVersionListResponse, WorkflowVersionResponse } from '@dramaflow/contracts';
 import { App } from 'antd';
 import { useIdentity } from '../../auth/use-identity';
@@ -50,6 +50,7 @@ export function useWorkflowRun(
   workflowId: string,
   preferredVersion: PublishedVersion | null,
 ) {
+  const queryClient = useQueryClient();
   const [historyRun, setHistoryRun] = useState<WorkflowRunSummary | null>(null);
   const historyVersion = useQuery({
     queryKey: workflowKeys.version(historyRun?.workflowVersionId ?? 'none'),
@@ -135,7 +136,7 @@ export function useWorkflowRun(
   }, [controller, recoveryState.entries, state.phase, state.request]);
   const trackingId =
     trackingSelection ?? workflowRunTrackingId(state) ?? selectedRecovery?.id ?? null;
-  const runStatus = useWorkflowRunStatus(trackingId);
+  const runStatus = useWorkflowRunStatus(trackingId, { projectId, workflowId });
   useEffect(() => {
     if (runStatus.state.run) recovery?.observe(runStatus.state.run);
   }, [recovery, runStatus.state.run]);
@@ -247,6 +248,12 @@ export function useWorkflowRun(
           }
         : runStatus.state,
     reviewActions: runStatus.reviewActions,
+    cancelRun: async (target: string) => {
+      await runStatus.cancel(target);
+      await queryClient.invalidateQueries({
+        queryKey: workflowKeys.runHistory(projectId, workflowId),
+      });
+    },
     selectVersion,
     changeInput,
     run,

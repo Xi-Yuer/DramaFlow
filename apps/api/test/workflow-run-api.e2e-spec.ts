@@ -3,6 +3,7 @@ import { fork, type ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
+  cancelWorkflowRunResponseSchema,
   StringType,
   NumberType,
   pendingHumanReviewsResponseSchema,
@@ -17,6 +18,7 @@ import {
   WorkflowExecutionQueue,
   WorkflowExecutionService,
   WorkflowRuntimeFactory,
+  WorkflowRunRepositories,
   workflowExecutionJobId,
 } from '@dramaflow/server';
 import {
@@ -301,6 +303,83 @@ async function waiting() {
 }
 
 describe('真实异步 Workflow Run HTTP → Outbox → Redis → 独立 Worker', () => {
+  it.each(['pending', 'running'] as const)(
+    'Cancel 产品 HTTP：%s 使用真实授权、事务与查询投影',
+    async (status) => {
+      const identity = await version();
+      const run = await result(
+        await api(0, '', 'POST', {
+          workflowVersionId: identity.workflowVersionId,
+          invocationKey: randomUUID(),
+          inputs: {},
+        }),
+        202,
+      );
+      if (status === 'running') {
+        const intent = await db.workflowExecutionOutbox.findFirstOrThrow({
+          where: { workflowRunId: run.id },
+        });
+        const repository = await applications[0]!.app
+          .get(WorkflowRunRepositories)
+          .forProject(ownerId, identity.projectId, intent.id);
+        expect(await repository.claimPendingForStart(run.id)).not.toBeNull();
+      }
+      const url = `${applications[0]!.base}/api/v1/projects/${identity.projectId}/workflows/${run.workflowId}/runs/${run.id}/cancel`;
+      const post = (cookie = cookieA) =>
+        fetch(url, {
+          method: 'POST',
+          headers: { Origin: origin, Cookie: cookie, 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+      expect((await post(cookieB)).status).toBe(404);
+      const first = await post();
+      expect(first.status).toBe(200);
+      expect(first.headers.get('Cache-Control')).toBe('no-store');
+      const response = cancelWorkflowRunResponseSchema.parse(await first.json());
+      expect(response).toMatchObject({
+        outcome: status === 'pending' ? 'cancelled' : 'requested',
+        run: {
+          status: status === 'pending' ? 'cancelled' : 'running',
+          cancellation: status === 'pending' ? 'none' : 'requested',
+        },
+      });
+      expect(JSON.stringify(response)).not.toMatch(
+        /threadId|executionId|checkpoint|Outbox|lockToken/,
+      );
+      expect(cancelWorkflowRunResponseSchema.parse(await (await post()).json())).toEqual(response);
+    },
+  );
+
+  it('Cancel 产品 HTTP：waiting Review 收尾，不生成 reject，旧 token 不可 resume', async () => {
+    await startWorker();
+    await applications[0]!.app.get(WorkflowExecutionQueue).queue.resume();
+    const f = await waiting();
+    const response = await fetch(
+      `${applications[0]!.base}/api/v1/projects/${f.projectId}/workflows/${f.run.workflowId}/runs/${f.run.id}/cancel`,
+      {
+        method: 'POST',
+        headers: { Origin: origin, Cookie: cookieA, 'Content-Type': 'application/json' },
+        body: '{}',
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(cancelWorkflowRunResponseSchema.parse(await response.json())).toMatchObject({
+      outcome: 'cancelled',
+      run: { status: 'cancelled' },
+    });
+    expect((await pending(f.run.id)).items).toEqual([]);
+    await failure(
+      await api(0, `/${f.run.id}/resume`, 'POST', reviewBody(f.review)),
+      409,
+      'WORKFLOW_RUN_NOT_WAITING',
+    );
+    expect(
+      await db.nodeRun.findMany({
+        where: { workflowRunId: f.run.id },
+        select: { nodeId: true, status: true, outputs: true, error: true },
+      }),
+    ).toEqual([{ nodeId: 'first', status: 'cancelled', outputs: null, error: null }]);
+  });
   it.each([
     ['WORKFLOW_INVOCATION_INPUT_REQUIRED', {}],
     [

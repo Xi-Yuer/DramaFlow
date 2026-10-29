@@ -1,4 +1,5 @@
 import type {
+  CancelWorkflowRunResponse,
   NodeRun,
   PendingHumanReview,
   PendingHumanReviewsResponse,
@@ -28,6 +29,8 @@ export interface HumanReviewActions {
 }
 
 export interface WorkflowRunStatusState {
+  cancelSubmitting?: boolean;
+  cancelNotice?: string | null;
   phase: 'idle' | 'loading' | 'ready' | 'error';
   runId: string | null;
   run: WorkflowRunResponse | null;
@@ -38,6 +41,7 @@ export interface WorkflowRunStatusState {
 }
 
 interface WorkflowRunStatusOperations {
+  cancel?(runId: string): Promise<CancelWorkflowRunResponse>;
   get(runId: string, signal: AbortSignal): Promise<WorkflowRunResponse>;
   getPending(runId: string, signal: AbortSignal): Promise<PendingHumanReviewsResponse>;
   getNodeRuns?(runId: string, signal: AbortSignal): Promise<{ items: NodeRun[] }>;
@@ -59,6 +63,19 @@ export function workflowRunTrackingId(state: WorkflowRunState): string | null {
   if (state.phase === 'accepted' && state.accepted) return state.accepted.id;
   if (state.phase === 'error' && state.error?.workflowRunId) return state.error.workflowRunId;
   return null;
+}
+
+export function canCancelWorkflowRun(state: WorkflowRunStatusState): boolean {
+  return (
+    state.phase === 'ready' &&
+    !state.refreshing &&
+    !state.cancelSubmitting &&
+    state.review?.phase !== 'submitting' &&
+    !!state.run &&
+    ['pending', 'running', 'waiting'].includes(state.run.status) &&
+    !state.run.cancellationRequestedAt &&
+    (!state.run.cancellation || state.run.cancellation === 'none')
+  );
 }
 
 export class WorkflowRunStatusController {
@@ -99,6 +116,8 @@ export class WorkflowRunStatusController {
     this.targetGeneration++;
     this.update({
       phase: runId ? 'loading' : 'idle',
+      cancelSubmitting: false,
+      cancelNotice: null,
       runId,
       run: null,
       nodeRuns: [],
@@ -114,7 +133,12 @@ export class WorkflowRunStatusController {
   }
 
   async refresh(): Promise<void> {
-    if (!this.state.runId || this.state.review?.phase === 'submitting') return;
+    if (
+      !this.state.runId ||
+      this.state.review?.phase === 'submitting' ||
+      this.state.cancelSubmitting
+    )
+      return;
     await this.load(this.state.runId, this.targetGeneration);
   }
 
@@ -128,10 +152,42 @@ export class WorkflowRunStatusController {
     return (
       this.state.phase === 'ready' &&
       !this.state.refreshing &&
+      !this.state.cancelSubmitting &&
+      !this.state.run?.cancellationRequestedAt &&
+      (!this.state.run?.cancellation || this.state.run.cancellation === 'none') &&
       this.state.run?.status === 'waiting' &&
       this.state.review?.phase === 'ready' &&
       this.state.review.item.submissionStatus === 'pending'
     );
+  }
+
+  async cancel(expectedRunId: string): Promise<void> {
+    if (
+      this.state.runId !== expectedRunId ||
+      !canCancelWorkflowRun(this.state) ||
+      !this.operations.cancel
+    )
+      return;
+    const generation = this.targetGeneration;
+    const workflowId = this.state.run!.workflowId;
+    const isCurrent = () =>
+      generation === this.targetGeneration && this.state.runId === expectedRunId;
+    this.cancelActive();
+    this.update({ cancelSubmitting: true, cancelNotice: null, error: null });
+    let notice: string | null = null;
+    try {
+      const result = await this.operations.cancel(expectedRunId);
+      if (!isCurrent()) return;
+      if (result.run.id !== expectedRunId || result.run.workflowId !== workflowId)
+        throw new ApiError('取消响应与当前运行不匹配', 200);
+      this.update({ run: result.run, review: null });
+    } catch {
+      notice = '取消请求结果尚未确认，已重新查询运行状态；请核对后再操作。';
+    }
+    if (!isCurrent()) return;
+    this.update({ cancelSubmitting: false, cancelNotice: notice });
+    // 无论 POST 是否丢失响应，都只 GET 对账；不重放取消或创建另一套 timer。
+    await this.load(expectedRunId, generation);
   }
 
   async submit(identity: PendingHumanReview, action: 'approve' | 'reject'): Promise<void> {
@@ -190,15 +246,28 @@ export class WorkflowRunStatusController {
       const run = await this.operations.get(runId, request.signal);
       if (!isCurrent()) return;
       if (run.id !== runId) throw new ApiError('返回的运行身份与查询目标不匹配', 200);
-      this.update({ run });
+      const waitingForReview =
+        run.status === 'waiting' &&
+        !run.cancellationRequestedAt &&
+        (!run.cancellation || run.cancellation === 'none');
+      const cancellationKnown =
+        !!run.cancellationRequestedAt ||
+        run.cancellation === 'requested' ||
+        run.cancellation === 'uncertain' ||
+        ['completed', 'failed', 'cancelled'].includes(run.status);
+      this.update({
+        run,
+        review: waitingForReview ? this.state.review : null,
+        ...(cancellationKnown ? { cancelNotice: null } : {}),
+      });
       let nodeRuns: readonly NodeRun[] = this.state.nodeRuns ?? [];
       let review: HumanReviewState | null = null;
-      if (this.operations.getNodeRuns || run.status === 'waiting') {
+      if (this.operations.getNodeRuns || waitingForReview) {
         const [nodeRunsResult, pending] = await Promise.all([
           this.operations.getNodeRuns
             ? this.operations.getNodeRuns(runId, request.signal)
             : Promise.resolve(null),
-          run.status === 'waiting'
+          waitingForReview
             ? this.operations.getPending(runId, request.signal)
             : Promise.resolve(null),
         ]);

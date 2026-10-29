@@ -40,6 +40,15 @@ export type StartWorkflowRunRequest = z.infer<typeof startWorkflowRunRequestSche
 export type ResumeWorkflowRunRequest = z.infer<typeof resumeWorkflowRunRequestSchema>;
 export type WorkflowRunResponse = z.infer<typeof workflowRunResponseSchema>;
 
+export const cancelWorkflowRunRequestSchema = z.object({}).strict();
+export const cancelWorkflowRunResponseSchema = z
+  .object({
+    outcome: z.enum(['cancelled', 'requested', 'terminal']),
+    run: workflowRunResponseSchema,
+  })
+  .strict();
+export type CancelWorkflowRunResponse = z.infer<typeof cancelWorkflowRunResponseSchema>;
+
 // interruptId 是 opaque concurrency token；不携带 thread、task 或 checkpoint 数据。
 export const pendingHumanReviewSchema = z
   .object({

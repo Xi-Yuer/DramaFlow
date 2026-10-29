@@ -19,6 +19,8 @@ import { WorkflowRuntimeFactory } from '../../../src/workflow/runtime/workflow-r
 import { WorkflowExecutionService } from '../../../src/workflow/runtime/workflow-execution.service.js';
 import { WorkflowHumanReviewService } from '../../../src/workflow/human-review/human-review.service.js';
 import { WorkflowExecutionTreeService } from '../../../src/workflow/execution-tree/workflow-execution-tree.service.js';
+import { WorkflowRunCancellationService } from '../../../src/workflow/run/cancellation/workflow-run-cancellation.service.js';
+import { WorkflowRunQueryService } from '../../../src/workflow/run/query/workflow-run-query.service.js';
 import type { WorkflowCheckpointerService } from '../../../src/checkpoint/workflow-checkpointer.service.js';
 import type { ArtifactRuntimeFactory } from '../../../src/artifacts/artifact-runtime.factory.js';
 import type { WorkflowCapabilitiesFactory } from '../../../src/models/workflow-capabilities.factory.js';
@@ -176,9 +178,15 @@ describe.skipIf(!enabled)('waiting Human Review 取消事务 / 真实 checkpoint
     const before = await f.facts();
     const checkpoint = await saver!.getTuple(f.config);
     expect(checkpoint!.pendingWrites!.some(([, channel]) => channel === INTERRUPT)).toBe(true);
-    const result = await f.runs.requestCancellation(f.run.id);
+    const product = new WorkflowRunCancellationService(
+      database!,
+      repositories(),
+      new WorkflowRunQueryService(database!),
+    );
+    const cancel = () => product.cancel(owner, f.run.projectId, f.run.workflowId, f.run.id, {});
+    const result = await cancel();
     expect(result).toMatchObject({ outcome: 'cancelled', run: { status: 'cancelled' } });
-    expect(await f.runs.requestCancellation(f.run.id)).toEqual(result);
+    expect(await cancel()).toEqual(result);
     const after = await f.facts();
     const node = after.nodes.find((node) => node.nodeId === 'review')!;
     expect(node).toMatchObject({

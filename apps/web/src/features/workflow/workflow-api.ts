@@ -1,4 +1,6 @@
 import {
+  cancelWorkflowRunRequestSchema,
+  cancelWorkflowRunResponseSchema,
   executionTreeQuerySchema,
   workflowRunHistoryResponseSchema,
   executionTreeResponseSchema,
@@ -36,6 +38,15 @@ export const workflowKeys = {
 };
 
 export const workflowApi = {
+  cancelRun: (projectId: string, workflowId: string, runId: string) =>
+    request(
+      `/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}/cancel`,
+      cancelWorkflowRunResponseSchema,
+      {
+        method: 'POST',
+        body: jsonBody(cancelWorkflowRunRequestSchema.parse({})),
+      },
+    ),
   listRuns: (projectId: string, workflowId: string, cursor?: string, signal?: AbortSignal) =>
     request(
       `/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(workflowId)}/runs${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,

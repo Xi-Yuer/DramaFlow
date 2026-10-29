@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-Workflow Run Cancellation 已补齐在途 signal、waiting Human Review 收尾及 lost execution 保守核查 / 查询投影，边界见[当前架构](architecture.md#workflow-run-cancellation-foundation)。正式 Cancel API / UI 继续等待独立评估与授权；正式操作前应评估请求受理与已取消 / 无法确认停止的产品交互、授权及人工验收；不承诺失联自动收敛为 cancelled。本轮不增加 timeout、retry、远端取消或删除 checkpoint。
+Workflow Run Cancellation 已补齐在途 signal、waiting Human Review 收尾及 lost execution 保守核查 / 查询投影，边界见[当前架构](architecture.md#workflow-run-cancellation-foundation)。正式 Cancel API / Web 操作已接入上述基础，等待人工验收确认、取消中 / 无法确认停止展示、Human Review 收尾与并发竞争；不承诺失联自动收敛为 cancelled。本轮不增加 timeout、retry、远端取消或删除 checkpoint。
 
 Workflow Run History 最小查询与只读版本查看进入交付验收，等待人工检查历史分页、版本切换、嵌套执行和返回草稿；当前能力见[运行历史](architecture.md#web-workflow-run-history)。不扩展 retry、搜索或 Observability。
 
