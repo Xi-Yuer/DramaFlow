@@ -76,6 +76,7 @@ class PrismaWorkflowRunRepository
   constructor(
     private readonly db: DatabaseService,
     private readonly scope: RepositoryScope,
+    private readonly submissionTransaction?: Prisma.TransactionClient,
   ) {}
 
   private async createRecord(
@@ -109,23 +110,12 @@ class PrismaWorkflowRunRepository
     input: CreateWorkflowRunInput,
   ): Promise<{ run: WorkflowRun; created: boolean }> {
     const parsed = createInputSchema.parse(input);
-    try {
-      return await this.db.client.$transaction(async (tx) => {
-        const run = await this.createRecord(tx, parsed);
-        await tx.workflowExecutionOutbox.create({
-          data: {
-            kind: 'start',
-            workflowRunId: run.id,
-            payload: { kind: 'start', workflowRunId: run.id },
-          },
-        });
-        return { run, created: true };
-      });
-    } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
-        throw error;
-      // 唯一冲突结束并回滚本次事务后，再读取已提交的胜者；领域层判断调用是否等价。
-      const existing = await this.db.client.workflowRun.findFirst({
+    if (parsed.projectId !== this.scope.projectId) throw new Error('运行与已授权项目不匹配');
+    const accept = async (tx: Prisma.TransactionClient) => {
+      // 先序列化同一逻辑调用，避免唯一冲突使调用方组合事务失效；等价性仍由 Submission 判断。
+      const lock = JSON.stringify(['workflow-run-start', parsed.workflowId, parsed.invocationKey]);
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lock}, 0))`;
+      const existing = await tx.workflowRun.findFirst({
         where: {
           workflowId: parsed.workflowId,
           invocationKey: parsed.invocationKey,
@@ -133,9 +123,20 @@ class PrismaWorkflowRunRepository
           project: { ownerId: this.scope.ownerId },
         },
       });
-      if (!existing) throw error; // 其他唯一冲突不能伪装成幂等命中。
-      return { run: toWorkflowRun(existing), created: false };
-    }
+      if (existing) return { run: toWorkflowRun(existing), created: false };
+      const run = await this.createRecord(tx, parsed);
+      await tx.workflowExecutionOutbox.create({
+        data: {
+          kind: 'start',
+          workflowRunId: run.id,
+          payload: { kind: 'start', workflowRunId: run.id },
+        },
+      });
+      return { run, created: true };
+    };
+    return this.submissionTransaction
+      ? accept(this.submissionTransaction)
+      : this.db.client.$transaction(accept);
   }
 
   async createResumeExecution(input: {
@@ -367,6 +368,22 @@ class PrismaWorkflowRunRepository
 @Injectable()
 export class WorkflowRunRepositories {
   constructor(private readonly db: DatabaseService) {}
+
+  async inStartTransaction<T>(
+    ownerId: string,
+    rawProjectId: string,
+    operation: (tx: Prisma.TransactionClient, runs: WorkflowRunSubmissionRepository) => Promise<T>,
+  ): Promise<T> {
+    const projectId = z.uuid().parse(rawProjectId);
+    return this.db.client.$transaction(async (tx) => {
+      const project = await tx.project.findFirst({
+        where: { id: projectId, ownerId },
+        select: { id: true },
+      });
+      if (!project) throw new NotFoundException('项目不存在或无权访问');
+      return operation(tx, new PrismaWorkflowRunRepository(this.db, { ownerId, projectId }, tx));
+    });
+  }
 
   async forProject(
     ownerId: string,

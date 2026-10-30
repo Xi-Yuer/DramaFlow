@@ -77,6 +77,10 @@ export class ApiExceptionFilter implements ExceptionFilter {
         ...(value.code === 'WORKFLOW_QUEUE_UNAVAILABLE' && typeof value.invocationKey === 'string'
           ? { invocationKey: value.invocationKey }
           : {}),
+        ...(value.code === 'WORKFLOW_QUEUE_UNAVAILABLE' &&
+        typeof value.productWorkflowInvocationId === 'string'
+          ? { productWorkflowInvocationId: value.productWorkflowInvocationId }
+          : {}),
         requestId,
       });
       return;

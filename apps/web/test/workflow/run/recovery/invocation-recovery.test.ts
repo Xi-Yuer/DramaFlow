@@ -73,6 +73,28 @@ function fixture(storage = new MemoryStorage(), userScope = scope) {
 }
 
 describe('最小 metadata receipts', () => {
+  it('Canvas 与不同产品来源的恢复 namespace 隔离，退出登录全部清除', () => {
+    const storage = new MemoryStorage();
+    const scopes = [
+      scope,
+      { ...scope, callerNamespace: 'product-workflow:video-a' },
+      { ...scope, callerNamespace: 'product-workflow:video-b' },
+    ];
+    const stores = scopes.map((value) => new InvocationReceiptStore(value, () => storage));
+    stores.forEach((store, index) => store.save({ ...metadata, workflowRunId: `run-${index}` }));
+    stores.forEach((store, index) => {
+      expect(store.list().receipts.map((value) => value.workflowRunId)).toEqual([`run-${index}`]);
+      scopes.forEach((value, other) =>
+        expect(store.relevant(receiptStorageKey(value, metadata.invocationKey))).toBe(
+          index === other,
+        ),
+      );
+    });
+    clearUserInvocationReceipts(scope.userId, storage);
+    scopes.forEach((value) =>
+      expect(new InvocationReceiptStore(value, () => storage).list().receipts).toEqual([]),
+    );
+  });
   it('严格拒绝 inputs、secrets、outputs 等额外字段', () => {
     expect(invocationReceiptSchema.parse(metadata)).toEqual(metadata);
     for (const field of ['inputs', 'prompt', 'outputs', 'credential', 'definition', 'error', 'url'])

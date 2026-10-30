@@ -64,6 +64,8 @@ Execution Tree 是独立只读浏览器，每次读取 parent 的一层，使用
 
 invocation recovery 只在用户 namespace 保存 workflow / version / key、可选 Run ID 等身份，不保存输入内容或 Secret。页面重进只 lookup；未找到或查询失败时保留身份，不自动 POST 或换 key。storage event 同步集合，不当跨 Tab 锁；退出后清用户记录并拒绝晚到响应。终态 receipt 清理不清空当前页面结果。
 
+`useWorkflowRun` 可注入调用方的 start / lookup 与 callerNamespace，复用原表单和恢复控制器。视频产品入口使用产品 API 并按来源 Video 分隔 namespace；Canvas 默认 API 与存储 key 保持不变，产品记录不能被 Canvas 的通用 lookup 误恢复。视频详情将提交中和未确认调用状态合并到现有离开 guard；历史抽屉读取正式 Run 状态及执行树，不保存状态副本。
+
 ## 视觉与组件规范
 
 创作画布优先，使用近黑 / 炭灰、中灰与青色主题，正文约 13—14px；运行含义不能只依赖颜色。控件、确认和提示复用成熟组件，新增交互使用 Ant Design，不另建平行控件体系。

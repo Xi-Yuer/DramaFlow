@@ -8,7 +8,7 @@ import { useLeaveGuard } from '@/lib/navigation/use-leave-guard';
 import { useProjectNavigationGuard } from '@/features/projects/workspace/workspace-context';
 import { videoApi, videoKeys } from '../api/video-api';
 
-export function useVideoEditor(video: Video) {
+export function useVideoEditor(video: Video, invocationUnsafe = false) {
   const router = useRouter();
   const cache = useQueryClient();
   const { modal, message } = App.useApp();
@@ -27,7 +27,10 @@ export function useVideoEditor(video: Video) {
     };
   }, []);
   const dirty = name !== saved.name || status !== saved.status;
-  const { requestLeave } = useLeaveGuard(dirty || operation !== 'idle', '确认离开视频作品？');
+  const { requestLeave } = useLeaveGuard(
+    dirty || operation !== 'idle' || invocationUnsafe,
+    '确认离开视频作品？',
+  );
   useProjectNavigationGuard(requestLeave);
 
   async function save() {
@@ -99,7 +102,8 @@ export function useVideoEditor(video: Video) {
     if (lock.current) return;
     modal.confirm({
       title: `删除「${saved.name}」？`,
-      content: '将永久删除此视频作品身份，未保存的修改也会丢失。此操作不能撤销。',
+      content:
+        '将永久删除此视频作品身份，未保存的修改也会丢失。已经受理的调用、运行及产物历史会保留。此操作不能撤销。',
       okText: '删除',
       cancelText: '取消',
       okButtonProps: { danger: true },

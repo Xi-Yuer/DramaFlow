@@ -13,6 +13,10 @@ import { videoApi, videoKeys } from '../../src/features/videos/api/video-api';
 import { ApiError } from '../../src/lib/http';
 
 const navigation = vi.hoisted(() => ({ pathname: '', push: vi.fn(), replace: vi.fn() }));
+// 调用入口在独立组件测试中覆盖；本组聚焦作品 CRUD 与 Workspace 导航。
+vi.mock('../../src/features/videos/workflow-invocations/video-workflow-invocations', () => ({
+  VideoWorkflowInvocations: () => null,
+}));
 vi.mock('next/navigation', () => ({
   usePathname: () => navigation.pathname,
   useRouter: () => ({ push: navigation.push, replace: navigation.replace }),

@@ -9,6 +9,7 @@ const enabled = process.env.DRAMAFLOW_INTEGRATION === '1';
 const execute = promisify(execFile);
 const baseline = '20261030000000_foundation_v1_baseline';
 const videoMigration = '20261030032909_video_identity';
+const invocationMigration = '20261030062304_product_workflow_invocations';
 const databaseName = `dramaflow_test_baseline_${randomUUID().replaceAll('-', '')}`;
 const cwd = new URL('..', import.meta.url).pathname;
 let admin: pg.Client;
@@ -122,7 +123,11 @@ describe.skipIf(!enabled)('Foundation v1 空数据库基线', () => {
           'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY migration_name',
         )
       ).rows,
-    ).toEqual([{ migration_name: baseline }, { migration_name: videoMigration }]);
+    ).toEqual([
+      { migration_name: baseline },
+      { migration_name: videoMigration },
+      { migration_name: invocationMigration },
+    ]);
     expect(
       (await db.query("SELECT count(*)::int AS count FROM pg_namespace WHERE nspname='langgraph'"))
         .rows,
@@ -182,6 +187,54 @@ describe.skipIf(!enabled)('Foundation v1 空数据库基线', () => {
     await db.query("UPDATE video SET status='active',revision=2 WHERE id=$1", [id]);
     await db.query('DELETE FROM canvas_project WHERE id=$1', [first.project]);
     expect((await db.query('SELECT id FROM video ORDER BY id')).rows).toEqual([{ id: otherId }]);
+  });
+
+  it('产品来源受理后不可改挂或单独删除，Video 删除保留快照，Project 删除级联', async () => {
+    const first = await fixture(),
+      other = await fixture();
+    const video = randomUUID(),
+      foreignVideo = randomUUID(),
+      id = randomUUID();
+    await db.query(
+      'INSERT INTO video (id,"projectId",name,"updatedAt") VALUES ($1,$2,\'原始作品\',now()),($3,$4,\'其他作品\',now())',
+      [video, first.project, foreignVideo, other.project],
+    );
+    const insert =
+      'INSERT INTO product_workflow_invocation (id,"projectId","sourceVideoId","sourceVideoName","workflowRunId","invocationKey") VALUES ($1,$2,$3,\'原始作品\',$4,$5)';
+    await rejected(
+      insert,
+      [randomUUID(), first.project, foreignVideo, first.run, first.run],
+      '23503',
+    );
+    await rejected(insert, [randomUUID(), first.project, video, first.run, 'wrong-key']);
+    await rejected(insert, [randomUUID(), other.project, foreignVideo, first.run, first.run]);
+    await db.query(insert, [id, first.project, video, first.run, first.run]);
+    await rejected(insert, [randomUUID(), first.project, video, first.run, first.run], '23505');
+    await rejected('UPDATE product_workflow_invocation SET "sourceVideoId"=$2 WHERE id=$1', [
+      id,
+      foreignVideo,
+    ]);
+    await rejected(
+      'UPDATE product_workflow_invocation SET "sourceVideoName"=\'改写历史\' WHERE id=$1',
+      [id],
+    );
+    await rejected('DELETE FROM product_workflow_invocation WHERE id=$1', [id]);
+    await db.query('DELETE FROM video WHERE id=$1', [video]);
+    expect(
+      (
+        await db.query(
+          'SELECT "sourceVideoId","sourceVideoName","workflowRunId" FROM product_workflow_invocation WHERE id=$1',
+          [id],
+        )
+      ).rows,
+    ).toEqual([{ sourceVideoId: video, sourceVideoName: '原始作品', workflowRunId: first.run }]);
+    expect((await db.query('SELECT id FROM workflow_run WHERE id=$1', [first.run])).rowCount).toBe(
+      1,
+    );
+    await db.query('DELETE FROM canvas_project WHERE id=$1', [first.project]);
+    expect(
+      (await db.query('SELECT id FROM product_workflow_invocation WHERE id=$1', [id])).rowCount,
+    ).toBe(0);
   });
 
   it('版本不可变、Run 身份 / 生命周期 / 首次取消意图与 waitingRevision 由数据库保护', async () => {

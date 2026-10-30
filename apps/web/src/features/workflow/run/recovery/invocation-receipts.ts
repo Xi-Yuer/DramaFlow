@@ -16,6 +16,7 @@ export interface InvocationScope {
   userId: string;
   projectId: string;
   workflowId: string;
+  callerNamespace?: string;
 }
 const prefix = 'dramaflow:invocation:v1:';
 const userGenerations = new Map<string, number>();
@@ -23,7 +24,7 @@ const encode = encodeURIComponent;
 export const receiptUserPrefix = (userId: string) => `${prefix}${encode(userId)}:`;
 const logoutKey = (userId: string) => `${receiptUserPrefix(userId)}logout`;
 export const receiptScopePrefix = (scope: InvocationScope) =>
-  `${receiptUserPrefix(scope.userId)}${encode(scope.projectId)}:${encode(scope.workflowId)}:`;
+  `${receiptUserPrefix(scope.userId)}${scope.callerNamespace ? `caller/${encode(scope.callerNamespace)}/` : ''}${encode(scope.projectId)}:${encode(scope.workflowId)}:`;
 export const receiptStorageKey = (scope: InvocationScope, key: string) =>
   `${receiptScopePrefix(scope)}${encode(key)}`;
 export class InvocationReceiptError extends Error {

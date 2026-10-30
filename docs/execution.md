@@ -24,6 +24,8 @@ Run 的版本、thread、invocationKey 与输入不可改写。NodeOccurrence �
 
 Submission 先校验固定版本和输入，再原子创建 / 复用 Run 与 start Outbox。比较 workflow、version 和完整 RuntimeValues：对象键顺序无关，数组顺序、缺失 / null、类型和引用身份均参与，不读取引用内容。相同请求返回原 Run；不同请求返回 WORKFLOW_INVOCATION_CONFLICT，不重跑终态。
 
+Server Repository 以同一 workflow / key 的事务 advisory lock 串行受理，可绑定外层事务；Submission Factory 提供 `inProjectStartTransaction` 复用原有受理服务，不复制创建规则。产品来源记录与 Run / Outbox 的事务组合见[产品工作流调用来源](architecture.md#产品工作流调用来源)，通用 Run、Runner 与 Execution Tree 不理解来源业务身份。
+
 Dispatcher 投递持久化意图，Job 不复制定义、State 或 thread。Worker 验证 Job 与 Outbox payload 一致后原子 claim；只有 claim 胜者执行。claim 前基础设施故障可以重投，业务失败不自动重跑。claim 后失联或结果不明进入 recovery_required；已完成或已进入下一 waiting 周期时只结算对应意图，不重新 invoke。
 
 入队未确认可返回 503 和已持久化的 Run ID / key。lookup 只读取，不创建或投递；查无结果不能证明原 POST 不会稍后提交。没有 recovery_required 人工处置或自动重放入口。

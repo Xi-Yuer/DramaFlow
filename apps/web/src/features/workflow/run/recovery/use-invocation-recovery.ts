@@ -3,6 +3,12 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { InvocationReceiptStore } from './invocation-receipts';
 import { InvocationRecoveryController, type InvocationRecoveryState } from './invocation-recovery';
 import { workflowApi } from '../../workflow-api';
+import type { StartWorkflowRunRequest, WorkflowRunResponse } from '@dramaflow/contracts';
+export interface InvocationRecoveryOptions {
+  callerNamespace: string;
+  start: (request: StartWorkflowRunRequest) => Promise<WorkflowRunResponse>;
+  lookup: (workflowId: string, key: string) => Promise<{ run: WorkflowRunResponse | null }>;
+}
 const unavailable: InvocationRecoveryState = {
   checking: true,
   entries: [],
@@ -17,19 +23,31 @@ export function useInvocationRecovery(
   userId: string | undefined,
   projectId: string,
   workflowId: string,
+  options?: InvocationRecoveryOptions,
 ) {
+  const callerNamespace = options?.callerNamespace;
+  const lookup = options?.lookup ?? workflowApi.lookupInvocation;
+  const start = options?.start ?? workflowApi.startRun;
   const recovery = useMemo(
     () =>
       userId
         ? new InvocationRecoveryController(
             new InvocationReceiptStore(
-              { userId, projectId, workflowId },
+              {
+                userId,
+                projectId,
+                workflowId,
+                ...(callerNamespace ? { callerNamespace } : {}),
+              },
               () => window.localStorage,
             ),
-            { lookup: workflowApi.lookupInvocation, start: workflowApi.startRun },
+            {
+              lookup,
+              start,
+            },
           )
         : null,
-    [userId, projectId, workflowId],
+    [userId, projectId, workflowId, callerNamespace, lookup, start],
   );
   const state = useSyncExternalStore(
     recovery?.subscribe ?? noopSubscribe,

@@ -7,6 +7,7 @@ import {
 } from '@dramaflow/workflow';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
+import type { Prisma } from '@dramaflow/database';
 
 interface RepositoryScope {
   readonly ownerId: string;
@@ -15,13 +16,13 @@ interface RepositoryScope {
 
 class PrismaWorkflowVersionRepository implements WorkflowVersionRepository {
   constructor(
-    private readonly db: DatabaseService,
+    private readonly client: Pick<Prisma.TransactionClient, 'workflowVersion'>,
     private readonly scope: RepositoryScope,
   ) {}
 
   async getVersion(workflowVersionId: string): Promise<WorkflowVersionRecord | null> {
     // 每次查询重新检查归属，旧 Repository 不能保留项目转移前的访问权限。
-    const row = await this.db.client.workflowVersion.findFirst({
+    const row = await this.client.workflowVersion.findFirst({
       where: {
         id: workflowIdentifierSchema.parse(workflowVersionId),
         workflow: {
@@ -56,6 +57,17 @@ class PrismaWorkflowVersionRepository implements WorkflowVersionRepository {
 export class WorkflowVersionRepositories {
   constructor(private readonly db: DatabaseService) {}
 
+  forTransaction(
+    ownerId: string,
+    projectId: string,
+    tx: Prisma.TransactionClient,
+  ): WorkflowVersionRepository {
+    return new PrismaWorkflowVersionRepository(tx, {
+      ownerId,
+      projectId: z.uuid().parse(projectId),
+    });
+  }
+
   async findOwnedWorkflow(
     ownerId: string,
     rawVersionId: string,
@@ -78,6 +90,6 @@ export class WorkflowVersionRepositories {
       select: { id: true },
     });
     if (!project) throw new NotFoundException('项目不存在或无权访问');
-    return new PrismaWorkflowVersionRepository(this.db, { ownerId, projectId });
+    return new PrismaWorkflowVersionRepository(this.db.client, { ownerId, projectId });
   }
 }

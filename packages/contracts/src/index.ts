@@ -1,6 +1,7 @@
 export * from './identity.js';
 export * from './project.js';
 export * from './video.js';
+export * from './product/workflow-invocation.js';
 export * from './data/type.js';
 export * from './data/builtin-types.js';
 export * from './data/compatibility.js';

@@ -37,6 +37,9 @@
       "name": "node_run"
     },
     {
+      "name": "product_workflow_invocation"
+    },
+    {
       "name": "user_profile"
     },
     {
@@ -1128,6 +1131,69 @@
       "attgenerated": ""
     },
     {
+      "table_name": "product_workflow_invocation",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "invocationKey",
+      "type": "character varying(200)",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "projectId",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "sourceVideoId",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "sourceVideoName",
+      "type": "character varying(80)",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "workflowRunId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
       "table_name": "user_profile",
       "name": "bio",
       "type": "character varying(280)",
@@ -2039,6 +2105,51 @@
       "convalidated": true
     },
     {
+      "table_name": "product_workflow_invocation",
+      "name": "product_invocation_key_check",
+      "type": "c",
+      "definition": "CHECK (((length((\"invocationKey\")::text) > 0) AND ((\"invocationKey\")::text = btrim((\"invocationKey\")::text))))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "product_invocation_source_name_check",
+      "type": "c",
+      "definition": "CHECK ((length(btrim((\"sourceVideoName\")::text)) > 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "product_workflow_invocation_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "product_workflow_invocation_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"projectId\") REFERENCES canvas_project(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "product_workflow_invocation_workflowRunId_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"workflowRunId\", \"projectId\") REFERENCES workflow_run(id, \"projectId\") ON UPDATE RESTRICT ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
       "table_name": "user_profile",
       "name": "user_profile_pkey",
       "type": "p",
@@ -2531,6 +2642,31 @@
       "definition": "CREATE INDEX \"node_run_workflowRunId_nodeId_idx\" ON public.node_run USING btree (\"workflowRunId\", \"nodeId\")"
     },
     {
+      "table_name": "product_workflow_invocation",
+      "name": "product_workflow_invocation_pkey",
+      "definition": "CREATE UNIQUE INDEX product_workflow_invocation_pkey ON public.product_workflow_invocation USING btree (id)"
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "product_workflow_invocation_projectId_invocationKey_key",
+      "definition": "CREATE UNIQUE INDEX \"product_workflow_invocation_projectId_invocationKey_key\" ON public.product_workflow_invocation USING btree (\"projectId\", \"invocationKey\")"
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "product_workflow_invocation_projectId_sourceVideoId_created_idx",
+      "definition": "CREATE INDEX \"product_workflow_invocation_projectId_sourceVideoId_created_idx\" ON public.product_workflow_invocation USING btree (\"projectId\", \"sourceVideoId\", \"createdAt\", id)"
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "product_workflow_invocation_workflowRunId_key",
+      "definition": "CREATE UNIQUE INDEX \"product_workflow_invocation_workflowRunId_key\" ON public.product_workflow_invocation USING btree (\"workflowRunId\")"
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "product_workflow_invocation_workflowRunId_projectId_key",
+      "definition": "CREATE UNIQUE INDEX \"product_workflow_invocation_workflowRunId_projectId_key\" ON public.product_workflow_invocation USING btree (\"workflowRunId\", \"projectId\")"
+    },
+    {
       "table_name": "user_profile",
       "name": "user_profile_pkey",
       "definition": "CREATE UNIQUE INDEX user_profile_pkey ON public.user_profile USING btree (\"userId\")"
@@ -2681,6 +2817,18 @@
       "definition": "CREATE TRIGGER node_run_terminal_guard BEFORE UPDATE ON public.node_run FOR EACH ROW EXECUTE FUNCTION guard_node_run_terminal()"
     },
     {
+      "table_name": "product_workflow_invocation",
+      "name": "product_invocation_history_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER product_invocation_history_guard BEFORE DELETE OR UPDATE ON public.product_workflow_invocation FOR EACH ROW EXECUTE FUNCTION guard_product_workflow_invocation_history()"
+    },
+    {
+      "table_name": "product_workflow_invocation",
+      "name": "product_invocation_insert_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER product_invocation_insert_guard BEFORE INSERT ON public.product_workflow_invocation FOR EACH ROW EXECUTE FUNCTION guard_product_workflow_invocation_insert()"
+    },
+    {
       "table_name": "workflow_execution_outbox",
       "name": "workflow_execution_intent_guard",
       "enabled": "O",
@@ -2741,6 +2889,14 @@
     {
       "name": "guard_node_run_terminal",
       "definition": "CREATE OR REPLACE FUNCTION public.guard_node_run_terminal()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF OLD.\"status\" <> 'running' AND NEW IS DISTINCT FROM OLD THEN\n    RAISE EXCEPTION 'NodeRun terminal record is immutable' USING ERRCODE = '23514';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_product_workflow_invocation_history",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_product_workflow_invocation_history()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF TG_OP = 'UPDATE' THEN\n    RAISE EXCEPTION 'Product invocation source and run identity are immutable' USING ERRCODE = '23514';\n  END IF;\n  IF EXISTS (SELECT 1 FROM canvas_project WHERE id = OLD.\"projectId\") THEN\n    RAISE EXCEPTION 'Product invocation history belongs to project lifecycle' USING ERRCODE = '23514';\n  END IF;\n  RETURN OLD;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_product_workflow_invocation_insert",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_product_workflow_invocation_insert()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  PERFORM 1 FROM video WHERE id = NEW.\"sourceVideoId\" AND \"projectId\" = NEW.\"projectId\" FOR KEY SHARE;\n  IF NOT FOUND THEN\n    RAISE EXCEPTION 'Product invocation source must belong to project' USING ERRCODE = '23503';\n  END IF;\n  PERFORM 1 FROM workflow_run WHERE id = NEW.\"workflowRunId\" AND \"projectId\" = NEW.\"projectId\" AND \"invocationKey\" = NEW.\"invocationKey\" FOR KEY SHARE;\n  IF NOT FOUND THEN\n    RAISE EXCEPTION 'Product invocation must match accepted run identity' USING ERRCODE = '23514';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
     },
     {
       "name": "guard_workflow_execution_intent",

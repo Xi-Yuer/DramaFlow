@@ -50,7 +50,7 @@ Web 的 Project 是视频创作工作空间。`/projects/[id]` 重定向至 `/pr
 | `workflows` | 复用现有 Canvas、Draft、Publish、Run 与运行查看 |
 | `settings`  | 复用现有项目改名、修订冲突处理与删除            |
 
-项目身份与权限加载由共享布局负责，只有工作流页读取 Workflow；进入其他页面不会初始化、保存、发布或运行工作流。共享导航、返回项目列表和账号操作接入当前页面的离开保护；Canvas 与项目设置仍使用标准 beforeunload 保护，取消离开保留本地编辑。后台项目读取临时失败保留当前页面，明确拒绝访问则隐藏内容。
+项目身份与权限加载由共享布局负责，工作流页加载 Canvas，视频详情按需只读查询项目 Workflow 与已发布版本；页面进入不会自动初始化、保存、发布或运行工作流。共享导航、返回项目列表和账号操作接入当前页面的离开保护；Canvas 与项目设置仍使用标准 beforeunload 保护，取消离开保留本地编辑。后台项目读取临时失败保留当前页面，明确拒绝访问则隐藏内容。
 
 数据库仍是一个 Project 至多一个逻辑 Workflow（`Workflow.projectId` 唯一）；新建项目原子创建默认 Workflow，缺失时工作流页保留明确初始化操作。Project 名称、根视口与修订仍独立于 Workflow Draft 保存。这个关系足以支撑当前 Workspace；若后续需要项目内多个 Workflow，才需要调整基数与按 Project 定位 Workflow 的接口。没有 Asset 持久领域模型，也没有把通用 Artifact 当作产品素材库。
 
@@ -58,7 +58,7 @@ Web 的 Project 是视频创作工作空间。`/projects/[id]` 重定向至 `/pr
 
 ## Video 基础身份
 
-Video 是 Project 内持久的视频作品身份，可以先于 WorkflowRun、生成结果或最终文件存在。一个 Project 可以有多个 Video；Video 只保存 UUID、Project 归属、名称（1—80 字符）、生命周期、创建 / 更新时间和用于乐观并发控制的 revision。不包含剧本、分镜、镜头、prompt、Workflow 绑定或最终文件字段，不创建任何运行。
+Video 是 Project 内持久的视频作品身份，可以先于 WorkflowRun、生成结果或最终文件存在。一个 Project 可以有多个 Video；Video 只保存 UUID、Project 归属、名称（1—80 字符）、生命周期、创建 / 更新时间和用于乐观并发控制的 revision。不包含剧本、分镜、镜头、prompt、Workflow 绑定或最终文件字段；创建作品本身不创建运行。
 
 生命周期为 `draft`（草稿）、`active`（进行中）、`completed`（已完成），新建固定为 draft。名称与生命周期在作品详情页手动保存，状态表示用户维护的作品整体生命周期，不证明生成完成或已有视频文件；不承载具体生产阶段，也不从 Run 自动推导。
 
@@ -74,7 +74,26 @@ Contract 位于 `packages/contracts/src/video.ts`，应用服务和路由位于 
 
 持久化表为 `video`，Project 外键为 `ON DELETE CASCADE`，数据库 CHECK 限定状态、正修订和非空名称。追加迁移为 `20261030032909_video_identity`，不重写 Foundation baseline。移除行为沿用 Project 的明确确认后永久删除，没有归档 / 恢复或软删除系统。
 
-Web 的列表为 `/projects/[id]/videos`，详情为 `/projects/[id]/videos/[videoId]`，刷新详情直接按项目与作品身份读取；左侧视频菜单在详情页保持选中。空列表提供创建入口，查询失败显示错误而非空成功。详情只展示基础身份、手动编辑和删除，保存冲突保留本地修改，确认重读才替换。列表创建会话和详情编辑复用 Workspace 离开保护；后台临时读取失败保留编辑，明确拒绝访问则隐藏内容。前端实现位于 `features/videos/` 的 `api/`、`list/`、`detail/` 与 `presentation/`。
+Web 的列表为 `/projects/[id]/videos`，详情为 `/projects/[id]/videos/[videoId]`，刷新详情直接按项目与作品身份读取；左侧视频菜单在详情页保持选中。空列表提供创建入口，查询失败显示错误而非空成功。详情提供基础身份、手动编辑、删除与下述显式工作流调用，保存冲突保留本地修改，确认重读才替换。列表创建会话和详情编辑复用 Workspace 离开保护；后台临时读取失败保留编辑，明确拒绝访问则隐藏内容。前端实现位于 `features/videos/`，按 `api/`、`list/`、`detail/`、`presentation/` 与 `workflow-invocations/` 分工。
+
+## 产品工作流调用来源
+
+`ProductWorkflowInvocation` 是产品侧的受理来源记录。当前支持 Video，保存自身 UUID、projectId、不可变的 sourceVideoId / sourceVideoName 快照、唯一 workflowRunId、invocationKey 和 createdAt。没有运行状态、输入输出或错误副本，也不定义生产流程。运行事实仍以 WorkflowRun 为准，Artifact 经 Run 追溯来源；Canvas 直接运行可以没有产品调用记录。Workflow Foundation 和 Artifact 不包含 videoId。
+
+| API（均以 `/api/v1` 为前缀）                                     | 行为                                                                                 |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `POST /projects/:projectId/videos/:videoId/workflow-invocations` | 显式提交 workflowVersionId、inputs、invocationKey；202 返回 invocation 与 run        |
+| `GET /projects/:projectId/videos/:videoId/workflow-invocations`  | 来源历史，按 createdAt / ID 倒序，每页 20 个，游标分页；Video 删除后仍可查询已有历史 |
+| `GET /projects/:projectId/workflow-invocations/by-key/:key`      | 只读恢复；返回 invocation 或 null，不重新创建或投递                                  |
+| `GET /projects/:projectId/workflow-invocations/:id`              | 读取来源记录及当前正式 Run 响应；来源作品删除后仍有效                                |
+
+Contract 在 `packages/contracts/src/product/`，产品应用服务在 `apps/api/src/product-workflow-invocations/`。提交与查询复用 Project owner 权限；提交再次确认 Video、Workflow 和固定 WorkflowVersion 属于同一 Project。`WorkflowRunSubmissionFactory.inProjectStartTransaction` 在现有 Repository 边界提供组合事务，事务内复用同一个 DefaultWorkflowRunSubmissionService 的版本 / 输入校验、等价性判断及 Run + start Outbox 创建；产品记录同事务写入，整体提交后才调用现有 Dispatcher。关联写入失败或提交前异常会全部回滚。投递确认不明返回 503 / WORKFLOW_QUEUE_UNAVAILABLE，包含 productWorkflowInvocationId、workflowRunId、invocationKey，产品查询可恢复已受理身份。
+
+数据库表为 `product_workflow_invocation`，追加迁移 `20261030062304_product_workflow_invocations`。`(projectId, invocationKey)` 唯一，产品 key 比 Foundation 的 `(workflowId, invocationKey)` 范围更严格；来源不从 key 解析。同一来源 / key 必须由 Submission 确认 workflow、version、完整 RuntimeValues 等价才返回原调用。不同 Video 使用同 key，或试图认领已有 Canvas Run，返回 PRODUCT_WORKFLOW_INVOCATION_CONFLICT。Product key 与 Foundation start key 分别使用事务 advisory lock，避免并发唯一冲突破坏外层组合事务。
+
+Run 复合外键保证 Project 一致；插入 guard 验证当前 Video 属于 Project、Run 的 key 与产品 key 一致。来源 ID 没有 Video 外键，避免永久删除作品抹除来源；数据库禁止更新来源记录或在 Project 存在时单独删除历史。Video 改名不改写受理时名称，删除 Video 不删除调用、Run、Artifact 或执行树；Project 整体删除按既有生命周期级联清理。这不是 Video 软删除或归档系统。
+
+视频详情复用现有版本选择、Workflow Inputs 表单、运行身份恢复、状态 / 取消 / 审核和 ExecutionTreeBrowser。调用列表按需加载，选择后在抽屉读取真实 Run 状态和执行树；不复制状态表或搭建 Production History。恢复标识按用户、Project、Workflow 及产品来源 namespace 隔离；重进只查询，未确认请求接入作品离开保护。当前项目仍至多一个逻辑 Workflow，因此入口选择它的已发布版本，没有新增多 Workflow 模型或模板系统。
 
 ## Provider 与能力装配
 

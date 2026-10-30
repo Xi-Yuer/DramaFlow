@@ -6,6 +6,7 @@ import {
   workflowRunResponseSchema,
   type NodeRun,
   type WorkflowRunResponse,
+  type WorkflowRun,
 } from '@dramaflow/contracts';
 import {
   WorkflowRunSubmissionFactory,
@@ -36,7 +37,7 @@ export class WorkflowRuntimeService {
     const request = startWorkflowRunRequestSchema.parse(body);
     const version = await this.versions.findOwnedWorkflow(ownerId, request.workflowVersionId);
     if (!version) throw workflowResourceNotFound('WORKFLOW_VERSION_NOT_FOUND');
-    const run = await this.httpOperation('WORKFLOW_VERSION_NOT_FOUND', async () => {
+    return this.httpOperation('WORKFLOW_VERSION_NOT_FOUND', async () => {
       const pending = await this.submitStart(ownerId, {
         projectId: version.projectId,
         workflowId: version.workflowId,
@@ -44,22 +45,25 @@ export class WorkflowRuntimeService {
         invocationKey: request.invocationKey,
         inputs: request.inputs,
       });
-      // 成功响应前确认 Redis 入队；故障时 PostgreSQL Outbox 仍可由 Worker 重投。
-      if (pending.status === 'pending') {
-        try {
-          await this.dispatcher.publishStart(pending.id);
-        } catch {
-          throw new ServiceUnavailableException({
-            code: 'WORKFLOW_QUEUE_UNAVAILABLE',
-            message: '执行命令已持久保存，入队结果尚未确认',
-            workflowRunId: pending.id,
-            invocationKey: pending.invocationKey,
-          });
-        }
-      }
-      return pending;
+      return this.dispatchAcceptedStart(pending);
     });
-    const { projectId: _projectId, threadId: _threadId, ...response } = run;
+  }
+
+  // 仅接收已由 Submission 原子受理的记录；产品入口和 Canvas 共用既有投递与响应语义。
+  async dispatchAcceptedStart(pending: WorkflowRun): Promise<WorkflowRunResponse> {
+    if (pending.status === 'pending') {
+      try {
+        await this.dispatcher.publishStart(pending.id);
+      } catch {
+        throw new ServiceUnavailableException({
+          code: 'WORKFLOW_QUEUE_UNAVAILABLE',
+          message: '执行命令已持久保存，入队结果尚未确认',
+          workflowRunId: pending.id,
+          invocationKey: pending.invocationKey,
+        });
+      }
+    }
+    const { projectId: _projectId, threadId: _threadId, ...response } = pending;
     return workflowRunResponseSchema.parse(response);
   }
 

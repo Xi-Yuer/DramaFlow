@@ -107,19 +107,20 @@ model RateLimit {
 
 // 项目保存基础画布信息；Workflow 定义与运行入口独立接入。
 model Project {
-  id           String        @id @default(uuid()) @db.Uuid
-  ownerId      String
-  name         String        @db.VarChar(80)
-  revision     Int           @default(1)
-  viewport     Json
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  workflow     Workflow?
-  videos       Video[]
-  nodeRuns     NodeRun[]
-  workflowRuns WorkflowRun[]
-  artifacts    Artifact[]
+  id                  String                      @id @default(uuid()) @db.Uuid
+  ownerId             String
+  name                String                      @db.VarChar(80)
+  revision            Int                         @default(1)
+  viewport            Json
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+  owner               User                        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  workflow            Workflow?
+  videos              Video[]
+  nodeRuns            NodeRun[]
+  workflowRuns        WorkflowRun[]
+  artifacts           Artifact[]
+  workflowInvocations ProductWorkflowInvocation[]
 
   @@index([ownerId, updatedAt, id])
   @@map("canvas_project")
@@ -153,6 +154,24 @@ model Workflow {
   @@map("workflow")
 }
 
+// 产品调用来源快照；不外键关联可永久删除的 Video，不复制运行事实。
+model ProductWorkflowInvocation {
+  id              String      @id @default(uuid()) @db.Uuid
+  projectId       String      @db.Uuid
+  sourceVideoId   String      @db.Uuid
+  sourceVideoName String      @db.VarChar(80)
+  workflowRunId   String      @unique
+  invocationKey   String      @db.VarChar(200)
+  createdAt       DateTime    @default(now())
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowRun     WorkflowRun @relation(fields: [workflowRunId, projectId], references: [id, projectId], onDelete: Cascade, onUpdate: Restrict)
+
+  @@unique([projectId, invocationKey])
+  @@unique([workflowRunId, projectId])
+  @@index([projectId, sourceVideoId, createdAt, id])
+  @@map("product_workflow_invocation")
+}
+
 // 每个版本独立保存完整定义；迁移中的触发器禁止更新已创建版本。
 model WorkflowVersion {
   id             String   @id @default(uuid())
@@ -171,27 +190,28 @@ model WorkflowVersion {
 
 // 运行仍保存逻辑版本 ID，由 Runner 经版本 Repository 核对归属；本轮不调整运行外键。
 model WorkflowRun {
-  id                      String                    @id @default(uuid())
-  projectId               String                    @db.Uuid
+  id                      String                     @id @default(uuid())
+  projectId               String                     @db.Uuid
   workflowId              String
   workflowVersionId       String
   invocationKey           String
-  threadId                String                    @unique
-  status                  String                    @default("pending")
+  threadId                String                     @unique
+  status                  String                     @default("pending")
   inputs                  Json
   outputs                 Json?
   error                   Json?
-  createdAt               DateTime                  @default(now())
+  createdAt               DateTime                   @default(now())
   startedAt               DateTime?
   completedAt             DateTime?
   cancellationRequestedAt DateTime?
-  project                 Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   nodeRuns                NodeRun[]
   nodeOccurrences         NodeOccurrence[]
   childExecutions         ChildExecution[]
-  waitingRevision         Int                       @default(0)
+  waitingRevision         Int                        @default(0)
   executions              WorkflowExecutionOutbox[]
   artifacts               Artifact[]
+  productInvocation       ProductWorkflowInvocation?
 
   @@unique([id, projectId])
   @@unique([workflowId, invocationKey])

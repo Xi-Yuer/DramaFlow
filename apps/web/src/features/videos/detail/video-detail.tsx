@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Alert, Button, Descriptions, Form, Input, Select, Spin } from 'antd';
 import { z } from 'zod';
 import type { Video } from '@dramaflow/contracts';
@@ -12,6 +13,7 @@ import { videoStatusLabels, VideoStatusTag } from '../presentation/video-status'
 import { useVideoEditor } from './use-video-editor';
 import workspace from '@/features/projects/workspace/workspace.module.css';
 import styles from '../videos.module.css';
+import { VideoWorkflowInvocations } from '../workflow-invocations/video-workflow-invocations';
 
 export function VideoDetail({ videoId }: { videoId: string }) {
   const { project } = useProjectWorkspace();
@@ -63,7 +65,8 @@ export function VideoDetail({ videoId }: { videoId: string }) {
 
 function VideoEditor({ video }: { video: Video }) {
   const { project } = useProjectWorkspace();
-  const editor = useVideoEditor(video);
+  const [invocationUnsafe, setInvocationUnsafe] = useState(false);
+  const editor = useVideoEditor(video, invocationUnsafe);
   const busy = editor.operation !== 'idle';
   return (
     <>
@@ -73,6 +76,11 @@ function VideoEditor({ video }: { video: Video }) {
         <p>视频作品的基础信息。名称和生命周期可独立维护。</p>
       </div>
       <div className={styles.detail}>
+        <VideoWorkflowInvocations
+          projectId={project.id}
+          videoId={video.id}
+          onUnsafeChange={setInvocationUnsafe}
+        />
         {editor.error ? (
           <Alert
             type={editor.conflict ? 'warning' : 'error'}
@@ -145,7 +153,9 @@ function VideoEditor({ video }: { video: Video }) {
         </section>
         <section className={workspace.card} aria-label="删除视频作品">
           <h2>删除视频作品</h2>
-          <p className={workspace.description}>永久删除此作品身份，此操作不能撤销。</p>
+          <p className={workspace.description}>
+            永久删除此作品身份，保留已经受理的调用、运行及产物历史。此操作不能撤销。
+          </p>
           <Button danger disabled={busy} onClick={editor.remove}>
             删除视频
           </Button>

@@ -4,7 +4,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WorkflowVersionListResponse, WorkflowVersionResponse } from '@dramaflow/contracts';
 import { App } from 'antd';
 import { useIdentity } from '../../auth/use-identity';
-import { useInvocationRecovery } from './recovery/use-invocation-recovery';
+import {
+  useInvocationRecovery,
+  type InvocationRecoveryOptions,
+} from './recovery/use-invocation-recovery';
 import { ApiError } from '../../../lib/http';
 import { workflowApi, workflowKeys } from '../workflow-api';
 import {
@@ -49,6 +52,7 @@ export function useWorkflowRun(
   projectId: string,
   workflowId: string,
   preferredVersion: PublishedVersion | null,
+  invocationOptions?: InvocationRecoveryOptions,
 ) {
   const queryClient = useQueryClient();
   const [historyRun, setHistoryRun] = useState<WorkflowRunSummary | null>(null);
@@ -74,6 +78,7 @@ export function useWorkflowRun(
     identity.data?.id,
     projectId,
     workflowId,
+    invocationOptions,
   );
   const versions = useQuery({
     queryKey: workflowKeys.versions(workflowId),
