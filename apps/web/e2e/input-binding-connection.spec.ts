@@ -149,7 +149,7 @@ test('已有输入内容时连接前确认，取消保持原图，确认后才�
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 2400, height: 1400 });
   const project = await createProject(request);
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   const blank = node(page, 'blank');
   const constant = node(page, 'constant');
   const template = node(page, 'template');

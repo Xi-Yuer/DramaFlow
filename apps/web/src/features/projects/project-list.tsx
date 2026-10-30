@@ -56,7 +56,7 @@ function ProjectListBody() {
           </span>
           <span>DramaFlow</span>
         </div>
-        <span className="account-location">项目画布</span>
+        <span className="account-location">视频创作项目</span>
         <div className="account-actions">
           <AccountMenuButton />
         </div>
@@ -64,9 +64,9 @@ function ProjectListBody() {
       <section className="account-space">
         <div className="project-heading">
           <div>
-            <span className="small-kicker">ONE CANVAS, ONE PROJECT</span>
+            <span className="small-kicker">视频创作空间</span>
             <h1>你的项目</h1>
-            <p className="secondary-copy">每个项目就是一张画布，当前从空白画布开始。</p>
+            <p className="secondary-copy">从一个项目开始，组织你的视频创作与工作流。</p>
           </div>
           <Button type="primary" icon={<Plus size={16} />} onClick={() => setOpen(true)}>
             新建项目

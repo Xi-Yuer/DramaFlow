@@ -1,0 +1,191 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--background);
+}
+
+.header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 16px;
+  min-height: 76px;
+  padding: 12px 24px;
+  border-bottom: 1px solid #ffffff0c;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+  padding: 10px 0;
+}
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.identity span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.identity strong {
+  font-size: 16px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigation {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  padding: 0 24px;
+  overflow-x: auto;
+  border-bottom: 1px solid #ffffff0c;
+}
+
+.navigation a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 16px;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  font-size: 14px;
+}
+
+.navigation a:hover,
+.back:hover {
+  color: var(--foreground);
+}
+
+.navigation a[aria-current='page'] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.shell a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+
+.content > :global(.canvas-shell) {
+  height: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.content > :global(.page-loading) {
+  min-height: 0;
+  flex: 1;
+}
+
+.page {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 40px 32px;
+}
+
+.heading {
+  margin-bottom: 32px;
+}
+
+.heading h1 {
+  margin: 0 0 12px;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.heading p,
+.description {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.card {
+  min-width: 0;
+  border: 1px solid #ffffff12;
+  border-radius: 12px;
+  padding: 24px;
+  background: #151517;
+}
+
+.card h2 {
+  font-size: 18px;
+  margin: 16px 0 8px;
+}
+
+.card a {
+  display: inline-block;
+  padding: 10px 0;
+  font-size: 14px;
+}
+
+.empty {
+  padding: 64px 24px;
+  border: 1px dashed #ffffff20;
+  border-radius: 12px;
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 680px;
+}
+
+@media (max-width: 740px) {
+  .header {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .navigation {
+    gap: 0;
+    padding: 0 8px;
+  }
+
+  .navigation a {
+    padding: 0 12px;
+  }
+
+  .page {
+    padding: 28px 16px;
+  }
+
+  .cards {
+    grid-template-columns: 1fr;
+  }
+}

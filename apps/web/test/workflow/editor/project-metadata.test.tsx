@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react';
 import type { RefObject } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Project } from '@dramaflow/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../src/lib/http';
-import { projectApi } from '../../../src/features/projects/project-api';
+import { projectApi, projectKeys } from '../../../src/features/projects/project-api';
 import type { GraphCanvasSessionHandle } from '../../../src/features/workflow/editor/navigation/graph-canvas-session';
 import { useProjectMetadata } from '../../../src/features/workflow/editor/project/use-project-metadata';
 
@@ -18,7 +19,8 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: feedback.push }) }
 vi.mock('antd', () => ({
   App: { useApp: () => ({ message: feedback, modal: { confirm: feedback.confirm } }) },
 }));
-vi.mock('../../../src/features/projects/project-api', () => ({
+vi.mock('../../../src/features/projects/project-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/features/projects/project-api')>()),
   projectApi: { save: vi.fn(), get: vi.fn(), remove: vi.fn() },
 }));
 
@@ -32,10 +34,20 @@ const project: Project = {
 };
 
 function mount() {
+  const cache = new QueryClient();
+  cache.setQueryData(projectKeys.detail(project.id), project);
   const session: RefObject<GraphCanvasSessionHandle | null> = {
     current: { getRootViewport: () => project.viewport, setRootViewport: vi.fn() },
   };
-  return { ...renderHook(() => useProjectMetadata(project, session)), session };
+  return {
+    ...renderHook(() => useProjectMetadata(project, session), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={cache}>{children}</QueryClientProvider>
+      ),
+    }),
+    session,
+    cache,
+  };
 }
 
 beforeEach(() => vi.resetAllMocks());
@@ -49,7 +61,7 @@ describe('项目元数据保存与冲突恢复', () => {
         complete = resolve;
       }),
     );
-    const { result } = mount();
+    const { result, cache } = mount();
     act(() => result.current.setName('第一次修改'));
     let pending!: Promise<void>;
     act(() => {
@@ -72,6 +84,10 @@ describe('项目元数据保存与冲突恢复', () => {
     expect(result.current.name).toBe('保存期间继续修改');
     expect(result.current.dirty).toBe(true);
     expect(result.current.saving).toBe(false);
+    expect(cache.getQueryData(projectKeys.detail(project.id))).toMatchObject({
+      name: '第一次修改',
+      revision: 2,
+    });
   });
 
   it('409 保留本地修改并阻止覆盖，确认重读后同步根画布视口与修订', async () => {

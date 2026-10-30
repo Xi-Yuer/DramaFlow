@@ -60,7 +60,7 @@ Execution Tree 是独立只读浏览器，每次读取 parent 的一层，使用
 
 保存失败不显示已保存；修订冲突阻止覆盖。短暂后台会话检查故障保留 Editor，明确拒绝访问则隐藏内容。项目元数据与 Workflow 草稿分别保存。
 
-统一离开 guard 协调草稿与元数据保存、丢弃、取消；Logout 先确认，标准 beforeunload 保护未保存状态。不改写 Router / history，也不保证崩溃或强制关闭可拦截。
+统一离开 guard 协调草稿与元数据保存、丢弃、取消；Project 共享导航必须接入当前页面的 guard，页面卸载后解除注册，不能绕过 Canvas 或设置页的未保存保护。Logout 先确认，标准 beforeunload 保护未保存状态。不改写 Router / history，也不保证崩溃或强制关闭可拦截。
 
 invocation recovery 只在用户 namespace 保存 workflow / version / key、可选 Run ID 等身份，不保存输入内容或 Secret。页面重进只 lookup；未找到或查询失败时保留身份，不自动 POST 或换 key。storage event 同步集合，不当跨 Tab 锁；退出后清用户记录并拒绝晚到响应。终态 receipt 清理不清空当前页面结果。
 

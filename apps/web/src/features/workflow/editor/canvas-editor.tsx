@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useContext, useEffect, useRef } from 'react';
 import { Alert, Button, Spin } from 'antd';
 import { useRouter } from 'next/navigation';
 import '@xyflow/react/dist/style.css';
@@ -21,6 +21,10 @@ import { useProjectMetadata } from './project/use-project-metadata';
 import { useEditorModelSettings } from './models/use-editor-model-settings';
 import { EditorToolbar } from './presentation/editor-toolbar';
 import { EditorNotices } from './presentation/editor-notices';
+import {
+  ProjectWorkspaceContext,
+  useProjectNavigationGuard,
+} from '@/features/projects/workspace/workspace-context';
 
 export function CanvasEditor({
   project,
@@ -34,6 +38,7 @@ export function CanvasEditor({
 
 function CanvasBoard({ project, workflow }: { project: Project; workflow: WorkflowResponse }) {
   const router = useRouter();
+  const workspace = useContext(ProjectWorkspaceContext);
   const graphSession = useRef<GraphCanvasSessionHandle>(null);
   const draft = useWorkflowDraft(workflow);
   const publication = useWorkflowPublish(draft);
@@ -55,6 +60,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
     run: workflowRun.state,
     uncertainInvocation: workflowRun.uncertainInvocation,
   });
+  useProjectNavigationGuard(requestLeave);
 
   const saveDraft = draft.save;
   useEffect(() => {
@@ -77,12 +83,21 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
         : null);
 
   return (
-    <main className="canvas-shell" onContextMenu={(event) => event.preventDefault()}>
+    <main
+      className="canvas-shell"
+      aria-label="工作流画布"
+      onContextMenu={(event) => event.preventDefault()}
+    >
       <EditorToolbar
         metadata={metadata}
         draft={draft}
         publishing={publication.publishing}
-        onBack={() => requestLeave(() => router.push('/projects'))}
+        inWorkspace={!!workspace}
+        onBack={() =>
+          requestLeave(() =>
+            router.push(workspace ? `/projects/${project.id}/overview` : '/projects'),
+          )
+        }
         onOpenModels={modelSettings.openSettings}
         requestLeave={requestLeave}
       />

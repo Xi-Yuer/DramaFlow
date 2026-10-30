@@ -102,7 +102,7 @@ async function save(page: Page) {
   return response;
 }
 
-test('用户新建项目直接加载真实空草稿，不触发初始化 POST', async ({ page, request }) => {
+test('用户新建项目进入概览，再打开真实空草稿，不触发初始化 POST', async ({ page, request }) => {
   const initialized: string[] = [];
   page.on('request', (r) => {
     if (r.method() === 'POST' && r.url().endsWith('/workflow')) initialized.push(r.url());
@@ -118,6 +118,8 @@ test('用户新建项目直接加载真实空草稿，不触发初始化 POST', 
     .getByRole('button', { name: /^创\s*建$/ })
     .click();
   const project = projectSchema.parse(await (await created).json());
+  await expect(page).toHaveURL(`/projects/${project.id}/overview`);
+  await page.getByRole('link', { name: '工作流', exact: true }).click();
   await expect(status(page)).toHaveText('草稿已保存 · 修订 1');
   const workflow = await readWorkflow(request, project.id);
   expect(workflow.draft).toEqual({ inputs: [], nodes: [], edges: [], outputs: [] });
@@ -130,7 +132,7 @@ test('缺少工作流的项目必须明确初始化；失败可重试，重复�
   request,
 }) => {
   const projectId = process.env.WEB_TEST_UNINITIALIZED_PROJECT_ID!;
-  await page.goto(`/projects/${projectId}`);
+  await page.goto(`/projects/${projectId}/workflows`);
   await expect(page.getByRole('button', { name: '初始化工作流', exact: true })).toBeVisible();
   expect((await request.get(`/api/v1/projects/${projectId}/workflow`)).status()).toBe(404);
   await page.route('**/api/v1/projects/*/workflow', async (route) => {
@@ -161,7 +163,7 @@ test('真实 HTTP 草稿显示、移动、保存、刷新往返完整领域数�
 }) => {
   const graph = definition();
   const { project, workflow } = await createProject(request, graph);
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await expect(page.getByText('润色', { exact: true })).toBeVisible();
   await expect(node(page).locator('article')).not.toHaveAttribute('class', /undefined/);
   expect(await node(page).evaluate((element) => element.getBoundingClientRect().width)).toBe(300);
@@ -200,7 +202,7 @@ test('真实 HTTP 草稿显示、移动、保存、刷新往返完整领域数�
 
 test('删除数据连线可保存并刷新，其他领域字段不丢失', async ({ page, request }) => {
   const { project } = await createProject(request, definition());
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   const edge = page.locator('.react-flow__edge[data-id="text-edge"]');
   await expect(edge).toBeVisible();
   await edge.click();
@@ -220,7 +222,7 @@ test('409 保留本地图并阻止覆盖；取消读取不丢修改，确认读�
   request,
 }) => {
   const { project, workflow } = await createProject(request, definition());
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await move(page);
   await page.getByRole('textbox', { name: '项目名称' }).fill('本地名称');
   const server = definition();
@@ -250,7 +252,7 @@ test('409 保留本地图并阻止覆盖；取消读取不丢修改，确认读�
 
 test('服务端或网络保存失败保持未确认和原修订，重试可以成功', async ({ page, request }) => {
   const { project, workflow } = await createProject(request, definition());
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await move(page);
   await page.route('**/api/v1/workflows/*/draft', (route) =>
     route.fulfill({ status: 500, json: { message: '服务暂时不可用' } }),
@@ -273,7 +275,7 @@ test('服务端或网络保存失败保持未确认和原修订，重试可以�
 
 test('保存期间继续移动不会误报已全部保存，后一次保存使用新 revision', async ({ page, request }) => {
   const { project, workflow } = await createProject(request, definition());
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await move(page);
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
@@ -304,7 +306,7 @@ test('Workflow 读取失败没有本地空定义兜底，可明确重试', async
   await page.route('**/api/v1/projects/*/workflow', (route) =>
     route.fulfill({ status: 500, json: { message: '读取失败' } }),
   );
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await expect(page.getByText('工作流读取失败', { exact: true })).toBeVisible();
   await expect(page.locator('.react-flow')).toHaveCount(0);
   await page.unroute('**/api/v1/projects/*/workflow');
@@ -318,7 +320,7 @@ test('越权和不存在项目不能进入画布或初始化 Workflow', async ({
     if (r.method() === 'POST' && r.url().endsWith('/workflow')) writes.push(r.url());
   });
   for (const id of [foreignId, randomUUID()]) {
-    await page.goto(`/projects/${id}`);
+    await page.goto(`/projects/${id}/workflows`);
     await expect(page.getByRole('button', { name: '重新连接' })).toBeVisible();
     await expect(page.locator('.react-flow')).toHaveCount(0);
     await expect(page.getByRole('button', { name: '初始化工作流', exact: true })).toHaveCount(0);
@@ -328,7 +330,7 @@ test('越权和不存在项目不能进入画布或初始化 Workflow', async ({
 
 test('Project 冲突重新读取只替换元数据，保留未保存的图', async ({ page, request }) => {
   const { project, workflow } = await createProject(request, definition());
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await move(page);
   const localPosition = await node(page).getAttribute('style');
   await page.getByRole('textbox', { name: '项目名称' }).fill('本地名称');
@@ -354,7 +356,7 @@ test('Project 冲突重新读取只替换元数据，保留未保存的图', asy
 test('窄屏仍显示两个独立保存状态和操作，不产生页面横向溢出', async ({ page, request }) => {
   const { project } = await createProject(request);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await expect(status(page)).toBeVisible();
   await expect(page.getByRole('button', { name: '保存项目信息', exact: true })).toBeVisible();
   await expect(saveButton(page)).toBeVisible();
@@ -369,7 +371,7 @@ async function checkIdentityAgain(page: Page) {
 
 test('聚焦时的会话检查临时失败不丢失未保存草稿，恢复后仍能保存', async ({ page, request }) => {
   const { project, workflow } = await createProject(request, definition());
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await move(page);
   const localPosition = await node(page).getAttribute('style');
   await page.route('**/api/v1/users/me', (route) =>
@@ -394,7 +396,7 @@ test('聚焦时的会话检查临时失败不丢失未保存草稿，恢复后�
 for (const code of [401, 403]) {
   test(`会话检查明确返回 ${code} 时仍隐藏受保护编辑器`, async ({ page, request }) => {
     const { project } = await createProject(request, definition());
-    await page.goto(`/projects/${project.id}`);
+    await page.goto(`/projects/${project.id}/workflows`);
     await expect(node(page)).toBeVisible();
     await page.route('**/api/v1/users/me', (route) =>
       route.fulfill({ status: code, json: { message: '没有访问权限' } }),

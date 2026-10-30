@@ -20,7 +20,7 @@ const dialog = (page: Page, name: string) => page.getByRole('dialog', { name, ex
 const suppliersTab = (page: Page) => drawer(page).getByRole('tab', { name: /模型供应商/ });
 const modelsTab = (page: Page) => drawer(page).getByRole('tab', { name: /^模型（/ });
 async function open(page: Page, id: string) {
-  await page.goto(`/projects/${id}`);
+  await page.goto(`/projects/${id}/workflows`);
   await page.getByRole('button', { name: '模型设置', exact: true }).click();
   await expect(drawer(page).getByRole('tab', { name: /^模型（/ })).toBeVisible();
 }
@@ -365,18 +365,19 @@ test('切换项目复用当前用户配置；无权访问项目不能打开设�
   await addSupplier(page, `test-only-${randomUUID()}`);
   await addModel(page, 'project-a-model');
   await drawer(page).getByRole('button', { name: '关闭模型设置', exact: true }).click();
-  await page.getByRole('button', { name: '返回项目', exact: true }).click();
+  await page.getByRole('link', { name: '项目列表', exact: true }).click();
   await page
     .getByRole('button')
     .filter({ has: page.getByText('空白项目 B', { exact: true }) })
     .click();
+  await page.getByRole('link', { name: '工作流', exact: true }).click();
   await page.getByRole('button', { name: '模型设置', exact: true }).click();
   await expect(serviceCard(page, 'OpenAI').getByText('已配置', { exact: true })).toBeVisible();
   await expect(serviceCard(page, 'Anthropic').getByText('未配置', { exact: true })).toBeVisible();
   await modelsTab(page).click();
   await expect(drawer(page).getByText('project-a-model', { exact: true })).toBeVisible();
   expect((await readModels(request)).items).toHaveLength(1);
-  await page.goto(`/projects/${foreignId}`);
+  await page.goto(`/projects/${foreignId}/workflows`);
   await expect(page.getByRole('button', { name: '重新连接' })).toBeVisible();
   await expect(page.getByRole('button', { name: '模型设置', exact: true })).toHaveCount(0);
 });
@@ -523,7 +524,7 @@ test('模型设置保留画布内未保存的项目信息，管理操作不推�
   request,
 }) => {
   const p = await project(request);
-  await page.goto(`/projects/${p.id}`);
+  await page.goto(`/projects/${p.id}/workflows`);
   await page.getByRole('textbox', { name: '项目名称' }).fill('未保存的项目名称');
   await page.getByRole('button', { name: '模型设置', exact: true }).click();
   await expect(modelsTab(page)).toBeVisible();

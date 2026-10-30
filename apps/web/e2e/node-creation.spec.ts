@@ -50,7 +50,7 @@ test('从真实目录向空画布和已有画布添加 incomplete 节点，按�
   );
   const manifest = catalog.find((item) => item.type === 'ai.text_generate')!;
   expect(manifest).toBeDefined();
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await expect(nodes(page)).toHaveCount(0);
   await page.getByRole('button', { name: '添加节点', exact: true }).click();
   const option = page.getByRole('button', {
@@ -138,7 +138,7 @@ test('Picker 使用目录中的任意类型、版本、描述和默认配置，�
     },
   ]);
   await page.route('**/api/v1/workflow/node-types', (route) => route.fulfill({ json: catalog }));
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await page.getByRole('button', { name: '添加节点', exact: true }).click();
   const option = page.getByRole('button', { name: '添加 示例转换 · v9', exact: true });
   await expect(option).toContainText('仅用于验证通用目录创建');
@@ -163,7 +163,7 @@ for (const invalidCatalog of [false, true]) {
           : { status: 503, json: { message: '目录暂不可用' } },
       ),
     );
-    await page.goto(`/projects/${project.id}`);
+    await page.goto(`/projects/${project.id}/workflows`);
     await expect(page.getByText('节点目录加载失败，已有草稿仍保留。')).toBeVisible({
       timeout: 15000,
     });

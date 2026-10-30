@@ -38,6 +38,24 @@ React Flow 负责编辑，LangGraph 负责调度、State 通道、Send、checkpo
 - 服务端在所有读写边界验证权限与外部输入；密钥不进入前端、定义、模型上下文或运行日志。
 - 收费请求受理不明时不盲目重发，不承诺远端 exactly-once 或取消副作用。
 
+## Project Workspace
+
+Web 的 Project 是视频创作工作空间。`/projects/[id]` 重定向至 `/projects/[id]/overview`，共享 Project Layout 提供项目名称、返回项目列表、账号菜单和五个入口；各子路由可以直接访问及刷新恢复，不依赖页面内临时 Tab 状态。
+
+| 子路由      | 职责                                            |
+| ----------- | ----------------------------------------------- |
+| `overview`  | 项目概览与视频、素材、工作流入口                |
+| `videos`    | 正式视频页面入口；目前只显示功能未开放的空状态  |
+| `assets`    | 正式素材页面入口；目前只显示功能未开放的空状态  |
+| `workflows` | 复用现有 Canvas、Draft、Publish、Run 与运行查看 |
+| `settings`  | 复用现有项目改名、修订冲突处理与删除            |
+
+项目身份与权限加载由共享布局负责，只有工作流页读取 Workflow；进入其他页面不会初始化、保存、发布或运行工作流。共享导航、返回项目列表和账号操作接入当前页面的离开保护；Canvas 与项目设置仍使用标准 beforeunload 保护，取消离开保留本地编辑。后台项目读取临时失败保留当前页面，明确拒绝访问则隐藏内容。
+
+数据库仍是一个 Project 至多一个逻辑 Workflow（`Workflow.projectId` 唯一）；新建项目原子创建默认 Workflow，缺失时工作流页保留明确初始化操作。Project 名称、根视口与修订仍独立于 Workflow Draft 保存。这个关系足以支撑当前 Workspace 骨架；若后续需要项目内多个 Workflow，才需要调整基数与按 Project 定位 Workflow 的接口。没有 Video / Asset 领域模型，也没有把通用 Artifact 当作产品素材库。
+
+前端实现按职责放在 `features/projects/workspace/`：共享布局与导航在入口，页面在 `pages/`；Canvas 继续位于 `features/workflow/editor/`，通用 Workflow Foundation 语义保持独立。
+
 ## Provider 与能力装配
 
 调用链是 Node → Capability → ModelConfiguration → Provider Instance → Plugin → Provider API。节点只保存模型配置 ID；调用时重新校验 Run、项目权限、配置及 Provider 的 Owner / enabled，并解密当前凭证。

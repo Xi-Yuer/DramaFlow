@@ -92,7 +92,7 @@ test('文本节点只列出 text.generate 模型，选择后保存并在刷新�
   page.on('request', (incoming) => {
     if (incoming.url().includes('/model-catalog')) catalogUrls.push(incoming.url());
   });
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await page.getByRole('button', { name: '选择模型', exact: true }).click();
   const panel = selector(page);
   await expect(
@@ -149,7 +149,7 @@ test('供应商已配置但目录模型尚无配置时，用现有创建接口�
 }) => {
   const project = await createProject(request);
   await createProvider(request, 'openai');
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await page.getByRole('button', { name: '选择模型', exact: true }).click();
   await selector(page).getByRole('button', { name: '添加 GPT-4o', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '添加 GPT-4o', exact: true });
@@ -207,7 +207,7 @@ async function configureProvider(page: Page, name: string) {
 
 test('未配置供应商时从目录模型配置，添加后自动选择并在刷新后恢复', async ({ page, request }) => {
   const project = await createProject(request);
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await configureProvider(page, 'Anthropic');
   const dialog = page.getByRole('dialog', { name: '添加 Claude Sonnet 4', exact: true });
   await expect(dialog).toBeVisible();
@@ -259,7 +259,7 @@ test('供应商配置完成时目录模型已有可用配置，直接选中且�
     expect(created.ok()).toBeTruthy();
     await route.fulfill({ status: response.status(), json: provider });
   });
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await configureProvider(page, 'Anthropic');
   await expect(page.getByRole('dialog', { name: '添加 Claude Sonnet 4', exact: true })).toHaveCount(
     0,
@@ -280,7 +280,7 @@ test('供应商配置完成时目录模型已有可用配置，直接选中且�
 
 test('取消供应商配置或取消添加模型后，节点保持未选择', async ({ page, request }) => {
   const project = await createProject(request);
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await page.getByRole('button', { name: '选择模型', exact: true }).click();
   await selector(page).getByRole('button', { name: '配置 Anthropic', exact: true }).click();
   await page
@@ -304,7 +304,7 @@ test('取消供应商配置或取消添加模型后，节点保持未选择', as
 
 test('从设置页配置供应商不会继续节点上的模型选择', async ({ page, request }) => {
   const project = await createProject(request);
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   await page.getByRole('button', { name: '模型设置', exact: true }).click();
   const drawer = page.getByRole('dialog', { name: '模型设置', exact: true });
   await drawer.getByRole('tab', { name: /模型供应商/ }).click();

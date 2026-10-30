@@ -1,67 +1,12 @@
 'use client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Spin } from 'antd';
-import { z } from 'zod';
-import { AuthBoundary } from '@/features/auth/auth-boundary';
 import { CanvasEditor } from './canvas-editor';
-import { projectApi, projectKeys } from '../../projects/project-api';
 import type { Project } from '@dramaflow/contracts';
 import { ApiError } from '@/lib/http';
 import { workflowApi, workflowKeys } from '@/features/workflow/workflow-api';
 
-export function CanvasPage({ projectId }: { projectId: string }) {
-  return (
-    <AuthBoundary preserveEditsOnTransientError>
-      {() => <CanvasLoader projectId={projectId} />}
-    </AuthBoundary>
-  );
-}
-
-function CanvasLoader({ projectId }: { projectId: string }) {
-  const valid = z.string().uuid().safeParse(projectId).success;
-  const project = useQuery({
-    queryKey: projectKeys.detail(projectId),
-    queryFn: () => projectApi.get(projectId),
-    enabled: valid,
-    retry: false,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: 'always',
-    refetchOnReconnect: false,
-  });
-  if (!valid)
-    return (
-      <div className="page-loading">
-        <Alert type="error" title="项目地址无效" showIcon />
-      </div>
-    );
-  if (project.isPending || project.isFetching)
-    return (
-      <div className="page-loading">
-        <Spin size="large" />
-        <span>正在打开画布…</span>
-      </div>
-    );
-  if (project.error || !project.data) {
-    const message = project.error?.message ?? '无法打开画布';
-    return (
-      <div className="page-loading">
-        <Alert type="error" title={message} showIcon />
-        <Button
-          onClick={() => {
-            void project.refetch();
-          }}
-        >
-          重新连接
-        </Button>
-        <Button href="/projects">返回项目</Button>
-      </div>
-    );
-  }
-  return <WorkflowLoader key={project.data.id} project={project.data} />;
-}
-
-function WorkflowLoader({ project }: { project: Project }) {
+export function CanvasPage({ project }: { project: Project }) {
   const cache = useQueryClient();
   const key = workflowKeys.project(project.id);
   const workflow = useQuery({

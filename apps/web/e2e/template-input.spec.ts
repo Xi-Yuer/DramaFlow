@@ -104,7 +104,7 @@ test('文本节点插入多个上游变量，保存刷新后恢复，并过滤�
     }
     await route.fulfill({ json: [...body, imageManifest] });
   });
-  await page.goto(`/projects/${project.id}`);
+  await page.goto(`/projects/${project.id}/workflows`);
   const script = page.locator('.react-flow__node[data-id="script"]');
   const prompt = script.getByRole('group', { name: '提示词', exact: true });
   await prompt.getByRole('textbox').fill('请根据 ');

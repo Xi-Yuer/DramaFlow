@@ -1,6 +1,6 @@
-import { CanvasPage } from '@/features/workflow/editor/canvas-page';
+import { redirect } from 'next/navigation';
 
-export default async function ProjectCanvasPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <CanvasPage projectId={id} />;
+  redirect(`/projects/${encodeURIComponent(id)}/overview`);
 }

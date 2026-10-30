@@ -12,6 +12,7 @@ export function EditorToolbar({
   onBack,
   onOpenModels,
   requestLeave,
+  inWorkspace = false,
 }: {
   metadata: ProjectMetadata;
   draft: ReturnType<typeof useWorkflowDraft>;
@@ -19,13 +20,19 @@ export function EditorToolbar({
   onBack: () => void;
   onOpenModels: () => void;
   requestLeave: ReturnType<typeof useEditorLeaveGuard>['requestLeave'];
+  inWorkspace?: boolean;
 }) {
   const { name, setName, saving, reloadingProject, conflict, projectError, dirty, revision, save } =
     metadata;
   return (
     <header className="canvas-top">
-      <Button type="text" icon={<ArrowLeft size={16} />} onClick={onBack} aria-label="返回项目">
-        项目
+      <Button
+        type="text"
+        icon={<ArrowLeft size={16} />}
+        onClick={onBack}
+        aria-label={inWorkspace ? '返回项目概览' : '返回项目'}
+      >
+        {inWorkspace ? '概览' : '项目'}
       </Button>
       <input
         className="canvas-name"
@@ -100,7 +107,7 @@ export function EditorToolbar({
         >
           模型设置
         </Button>
-        <AccountMenuButton requestLeave={requestLeave} />
+        {!inWorkspace ? <AccountMenuButton requestLeave={requestLeave} /> : null}
       </div>
     </header>
   );

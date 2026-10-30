@@ -2,9 +2,10 @@ import { useCallback, useRef, useState, type RefObject } from 'react';
 import { useRouter } from 'next/navigation';
 import type { OnMove } from '@xyflow/react';
 import { App } from 'antd';
+import { useQueryClient } from '@tanstack/react-query';
 import { saveProjectSchema, type Project } from '@dramaflow/contracts';
 import { ApiError } from '@/lib/http';
-import { projectApi } from '@/features/projects/project-api';
+import { projectApi, projectKeys } from '@/features/projects/project-api';
 import type { GraphCanvasSessionHandle } from '../navigation/graph-canvas-session';
 import { clampViewport, draftSignature } from '../navigation/viewport';
 
@@ -12,6 +13,7 @@ export function useProjectMetadata(
   project: Project,
   graphSession: RefObject<GraphCanvasSessionHandle | null>,
 ) {
+  const cache = useQueryClient();
   const router = useRouter();
   const { message, modal } = App.useApp();
   const [name, setName] = useState(project.name);
@@ -61,6 +63,12 @@ export function useProjectMetadata(
       setRevision(result.revision);
       setSavedSignature(draftSignature(trimmed, view));
       setConflict(false);
+      cache.setQueryData<Project>(projectKeys.detail(project.id), (current) =>
+        current
+          ? { ...current, name: trimmed, viewport: view, revision: result.revision }
+          : current,
+      );
+      void cache.invalidateQueries({ queryKey: projectKeys.list, exact: true });
       void message.success('项目信息已保存');
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
@@ -83,6 +91,7 @@ export function useProjectMetadata(
     revision,
     viewport,
     graphSession,
+    cache,
   ]);
 
   function reloadProject() {
@@ -99,6 +108,7 @@ export function useProjectMetadata(
         setSavedSignature(draftSignature(result.name, result.viewport));
         setConflict(false);
         setProjectError(null);
+        cache.setQueryData(projectKeys.detail(project.id), result);
       } catch (error) {
         setProjectError(error instanceof Error ? error.message : '项目信息读取失败');
       } finally {

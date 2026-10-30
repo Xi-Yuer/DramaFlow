@@ -2,19 +2,44 @@
 import { App, ConfigProvider } from 'antd';
 import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useState, type ReactNode } from 'react';
+import { useState, type AnchorHTMLAttributes, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Project, WorkflowResponse } from '@dramaflow/contracts';
 import type { WorkflowRunState } from '../../../src/features/workflow/run/workflow-run';
 import { CanvasEditor } from '../../../src/features/workflow/editor/canvas-editor';
 import { useEditorLeaveGuard } from '../../../src/features/workflow/editor/navigation/use-editor-leave-guard';
 import type { EditorLeaveState } from '../../../src/features/workflow/editor/navigation/editor-leave-safety';
+import { ProjectWorkspace } from '../../../src/features/projects/workspace/project-workspace';
+import { projectApi } from '../../../src/features/projects/project-api';
 
 const editor = vi.hoisted(() => {
   const run: WorkflowRunState = { phase: 'idle', request: null, accepted: null, error: null };
   return { dirty: false, published: false, run, push: vi.fn(), signOut: vi.fn(async () => {}) };
 });
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: editor.push }) }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: editor.push }),
+  usePathname: () => `/projects/7ac10b00-33cc-4e50-9a2b-05ef764c44f4/workflows`,
+}));
+vi.mock('next/link', () => ({
+  default: ({
+    onNavigate,
+    ...props
+  }: AnchorHTMLAttributes<HTMLAnchorElement> & {
+    onNavigate?: (event: { preventDefault(): void }) => void;
+  }) => (
+    <a
+      {...props}
+      onClick={(event) => {
+        event.preventDefault();
+        onNavigate?.({ preventDefault() {} });
+      }}
+    />
+  ),
+}));
+vi.mock('../../../src/features/projects/project-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/features/projects/project-api')>()),
+  projectApi: { get: vi.fn(), save: vi.fn(), remove: vi.fn() },
+}));
 vi.mock('@xyflow/react', () => ({
   ReactFlowProvider: ({ children }: { children: ReactNode }) => children,
   useReactFlow: () => ({ getViewport: () => ({ x: 0, y: 0, zoom: 1 }), setViewport: vi.fn() }),
@@ -139,6 +164,62 @@ beforeEach(() => {
   editor.published = false;
   editor.run = { phase: 'idle', request: null, accepted: null, error: null };
   vi.clearAllMocks();
+  vi.mocked(projectApi.get).mockResolvedValue(project);
+});
+
+describe('Workspace 共享导航保护真实 Canvas', () => {
+  it.each([
+    ['概览', 'overview'],
+    ['视频', 'videos'],
+    ['素材', 'assets'],
+    ['设置', 'settings'],
+    ['项目列表', null],
+  ])('未保存草稿 → %s，取消保留编辑器，确认才导航', async (label, segment) => {
+    editor.dirty = true;
+    render(
+      <ProjectWorkspace projectId={project.id}>
+        <CanvasEditor project={project} workflow={workflow} />
+      </ProjectWorkspace>,
+      { wrapper: Wrapper },
+    );
+    const link = await screen.findByRole('link', { name: label });
+    fireEvent.click(link);
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(editor.push).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('status', { name: '工作流草稿状态' }).textContent).toBe('草稿未保存');
+    fireEvent.click(link);
+    fireEvent.click(await screen.findByRole('button', { name: /^离\s*开$/ }));
+    await waitFor(() =>
+      expect(editor.push).toHaveBeenCalledExactlyOnceWith(
+        segment ? `/projects/${project.id}/${segment}` : '/projects',
+      ),
+    );
+  });
+
+  it('保存状态变化会更新共享保护；编辑器卸载后不残留 guard', async () => {
+    editor.dirty = true;
+    const content = (child: ReactNode) => (
+      <ProjectWorkspace projectId={project.id}>{child}</ProjectWorkspace>
+    );
+    const view = render(content(<CanvasEditor project={project} workflow={workflow} />), {
+      wrapper: Wrapper,
+    });
+    await screen.findByRole('navigation');
+    editor.dirty = false;
+    view.rerender(content(<CanvasEditor project={project} workflow={workflow} />));
+    fireEvent.click(screen.getByRole('link', { name: '视频' }));
+    expect(editor.push).toHaveBeenLastCalledWith(`/projects/${project.id}/videos`);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    editor.dirty = true;
+    view.rerender(content(<CanvasEditor project={project} workflow={workflow} />));
+    view.rerender(content(<main>项目概览</main>));
+    fireEvent.click(screen.getByRole('link', { name: '素材' }));
+    expect(editor.push).toHaveBeenLastCalledWith(`/projects/${project.id}/assets`);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(unloadPrevented()).toBe(false);
+  });
 });
 afterEach(() => {
   cleanup();
