@@ -18,7 +18,9 @@ export function ProjectOverview() {
         <section className={styles.card}>
           <Film size={24} aria-hidden />
           <h2>视频</h2>
-          <p className={styles.description}>项目的视频作品空间，作品管理功能尚未开放。</p>
+          <p className={styles.description}>
+            创建视频作品、维护基础信息，并进入每个作品的独立空间。
+          </p>
           <WorkspaceLink href={`${base}/videos`}>查看视频空间</WorkspaceLink>
         </section>
         <section className={styles.card}>

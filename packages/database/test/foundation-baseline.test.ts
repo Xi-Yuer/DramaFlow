@@ -8,6 +8,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 const enabled = process.env.DRAMAFLOW_INTEGRATION === '1';
 const execute = promisify(execFile);
 const baseline = '20261030000000_foundation_v1_baseline';
+const videoMigration = '20261030032909_video_identity';
 const databaseName = `dramaflow_test_baseline_${randomUUID().replaceAll('-', '')}`;
 const cwd = new URL('..', import.meta.url).pathname;
 let admin: pg.Client;
@@ -114,14 +115,14 @@ describe.skipIf(!enabled)('Foundation v1 空数据库基线', () => {
     }
   });
 
-  it('正式 deploy 从空库建立唯一 ledger，ORM schema 无漂移且不预建官方 checkpoint', async () => {
+  it('正式 deploy 从空库建立完整迁移序列，ORM schema 无漂移且不预建官方 checkpoint', async () => {
     expect(
       (
         await db.query(
-          'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL',
+          'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY migration_name',
         )
       ).rows,
-    ).toEqual([{ migration_name: baseline }]);
+    ).toEqual([{ migration_name: baseline }, { migration_name: videoMigration }]);
     expect(
       (await db.query("SELECT count(*)::int AS count FROM pg_namespace WHERE nspname='langgraph'"))
         .rows,
@@ -156,6 +157,31 @@ describe.skipIf(!enabled)('Foundation v1 空数据库基线', () => {
     for (const [key, sql] of Object.entries(queries))
       actual[key] = (await db.query<Record<string, unknown>>(sql)).rows;
     expect(actual).toEqual(expected);
+  });
+
+  it('Video 基础生命周期、名称、修订与 Project 外键受保护，项目删除级联且不影响其他项目', async () => {
+    const first = await fixture(),
+      other = await fixture();
+    const id = randomUUID(),
+      otherId = randomUUID();
+    await db.query(
+      'INSERT INTO video (id,"projectId",name,"updatedAt") VALUES ($1,$2,\'作品\',now()),($3,$4,\'其他作品\',now())',
+      [id, first.project, otherId, other.project],
+    );
+    expect((await db.query('SELECT status,revision FROM video WHERE id=$1', [id])).rows).toEqual([
+      { status: 'draft', revision: 1 },
+    ]);
+    await rejected("UPDATE video SET status='rendering' WHERE id=$1", [id]);
+    await rejected('UPDATE video SET revision=0 WHERE id=$1', [id]);
+    await rejected("UPDATE video SET name='   ' WHERE id=$1", [id]);
+    await rejected(
+      'INSERT INTO video (id,"projectId",name,"updatedAt") VALUES ($1,$2,\'无项目\',now())',
+      [randomUUID(), randomUUID()],
+      '23503',
+    );
+    await db.query("UPDATE video SET status='active',revision=2 WHERE id=$1", [id]);
+    await db.query('DELETE FROM canvas_project WHERE id=$1', [first.project]);
+    expect((await db.query('SELECT id FROM video ORDER BY id')).rows).toEqual([{ id: otherId }]);
   });
 
   it('版本不可变、Run 身份 / 生命周期 / 首次取消意图与 waitingRevision 由数据库保护', async () => {

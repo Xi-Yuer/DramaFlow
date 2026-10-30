@@ -1,13 +1,15 @@
 .shell {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100dvh;
+  overflow: hidden;
   background: var(--background);
 }
 
 .header {
+  grid-column: 1 / -1;
   display: flex;
-  flex-shrink: 0;
   align-items: center;
   gap: 16px;
   min-height: 76px;
@@ -47,26 +49,35 @@
 }
 
 .navigation {
+  grid-column: 1;
+  grid-row: 2;
   display: flex;
-  flex-shrink: 0;
-  gap: 8px;
-  padding: 0 24px;
-  overflow-x: auto;
-  border-bottom: 1px solid #ffffff0c;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 20px 12px;
+  overflow-y: auto;
+  border-right: 1px solid #ffffff0c;
+  background: #101012;
 }
 
 .navigation a {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
-  justify-content: center;
   gap: 8px;
-  min-height: 48px;
-  padding: 0 16px;
+  min-height: 44px;
+  padding: 0 14px;
   color: var(--muted);
   text-decoration: none;
   white-space: nowrap;
-  border-bottom: 2px solid transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
   font-size: 14px;
+}
+
+.navigation a svg {
+  flex-shrink: 0;
 }
 
 .navigation a:hover,
@@ -76,7 +87,8 @@
 
 .navigation a[aria-current='page'] {
   color: var(--accent);
-  border-color: var(--accent);
+  border-color: #67ded530;
+  background: #67ded510;
 }
 
 .shell a:focus-visible {
@@ -85,9 +97,10 @@
 }
 
 .content {
+  grid-column: 2;
+  grid-row: 2;
   display: flex;
   flex-direction: column;
-  flex: 1;
   min-height: 0;
   min-width: 0;
   overflow: auto;
@@ -167,18 +180,22 @@
 }
 
 @media (max-width: 740px) {
+  .shell {
+    grid-template-columns: 104px minmax(0, 1fr);
+  }
+
   .header {
     gap: 10px;
     padding: 12px;
   }
 
   .navigation {
-    gap: 0;
-    padding: 0 8px;
+    padding: 12px 6px;
   }
 
   .navigation a {
-    padding: 0 12px;
+    gap: 6px;
+    padding: 0 8px;
   }
 
   .page {

@@ -1,5 +1,6 @@
 import { ModelManagementModule } from './models/model-management.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
+import { VideosModule } from './videos/videos.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { UsersModule } from './users/users.module.js';
 import { Module } from '@nestjs/common';
@@ -17,6 +18,7 @@ import { WorkflowsModule } from './workflow/workflows/workflows.module.js';
     AuthModule,
     UsersModule,
     ProjectsModule,
+    VideosModule,
     NodeTypesModule,
     WorkflowRuntimeModule,
     WorkflowsModule,

@@ -7,7 +7,7 @@ DramaFlow 采用模块化单体 API 和独立执行 Worker。产品现状与方�
 | 位置                 | 长期职责                                                                               |
 | -------------------- | -------------------------------------------------------------------------------------- |
 | `apps/web`           | Next.js 产品界面；React Flow 编辑，TanStack Query 管理请求状态                         |
-| `apps/api`           | NestJS HTTP、认证授权、项目、草稿发布、运行受理和模型管理                              |
+| `apps/api`           | NestJS HTTP、认证授权、项目与视频作品、草稿发布、运行受理和模型管理                    |
 | `apps/worker`        | 消费持久化执行命令，构造 Runtime 并运行图                                              |
 | `packages/contracts` | 共享 JSON 协议及边界校验；不依赖 React Flow、NestJS、Prisma 或 LangGraph               |
 | `packages/workflow`  | 定义语义、Registry、Compiler、Binding、Codec、Submission 与 Runner；通过端口访问持久化 |
@@ -40,21 +40,41 @@ React Flow 负责编辑，LangGraph 负责调度、State 通道、Send、checkpo
 
 ## Project Workspace
 
-Web 的 Project 是视频创作工作空间。`/projects/[id]` 重定向至 `/projects/[id]/overview`，共享 Project Layout 提供项目名称、返回项目列表、账号菜单和五个入口；各子路由可以直接访问及刷新恢复，不依赖页面内临时 Tab 状态。
+Web 的 Project 是视频创作工作空间。`/projects/[id]` 重定向至 `/projects/[id]/overview`，共享 Project Layout 在顶部展示项目名称、返回项目列表和账号菜单，主体采用左侧纵向菜单、右侧页面内容的布局；窄屏收窄侧栏并保留文字入口。五个子路由可以直接访问及刷新恢复，不依赖页面内临时 Tab 状态。
 
 | 子路由      | 职责                                            |
 | ----------- | ----------------------------------------------- |
 | `overview`  | 项目概览与视频、素材、工作流入口                |
-| `videos`    | 正式视频页面入口；目前只显示功能未开放的空状态  |
+| `videos`    | 项目内视频作品列表、创建与独立作品详情入口      |
 | `assets`    | 正式素材页面入口；目前只显示功能未开放的空状态  |
 | `workflows` | 复用现有 Canvas、Draft、Publish、Run 与运行查看 |
 | `settings`  | 复用现有项目改名、修订冲突处理与删除            |
 
 项目身份与权限加载由共享布局负责，只有工作流页读取 Workflow；进入其他页面不会初始化、保存、发布或运行工作流。共享导航、返回项目列表和账号操作接入当前页面的离开保护；Canvas 与项目设置仍使用标准 beforeunload 保护，取消离开保留本地编辑。后台项目读取临时失败保留当前页面，明确拒绝访问则隐藏内容。
 
-数据库仍是一个 Project 至多一个逻辑 Workflow（`Workflow.projectId` 唯一）；新建项目原子创建默认 Workflow，缺失时工作流页保留明确初始化操作。Project 名称、根视口与修订仍独立于 Workflow Draft 保存。这个关系足以支撑当前 Workspace 骨架；若后续需要项目内多个 Workflow，才需要调整基数与按 Project 定位 Workflow 的接口。没有 Video / Asset 领域模型，也没有把通用 Artifact 当作产品素材库。
+数据库仍是一个 Project 至多一个逻辑 Workflow（`Workflow.projectId` 唯一）；新建项目原子创建默认 Workflow，缺失时工作流页保留明确初始化操作。Project 名称、根视口与修订仍独立于 Workflow Draft 保存。这个关系足以支撑当前 Workspace；若后续需要项目内多个 Workflow，才需要调整基数与按 Project 定位 Workflow 的接口。没有 Asset 持久领域模型，也没有把通用 Artifact 当作产品素材库。
 
 前端实现按职责放在 `features/projects/workspace/`：共享布局与导航在入口，页面在 `pages/`；Canvas 继续位于 `features/workflow/editor/`，通用 Workflow Foundation 语义保持独立。
+
+## Video 基础身份
+
+Video 是 Project 内持久的视频作品身份，可以先于 WorkflowRun、生成结果或最终文件存在。一个 Project 可以有多个 Video；Video 只保存 UUID、Project 归属、名称（1—80 字符）、生命周期、创建 / 更新时间和用于乐观并发控制的 revision。不包含剧本、分镜、镜头、prompt、Workflow 绑定或最终文件字段，不创建任何运行。
+
+生命周期为 `draft`（草稿）、`active`（进行中）、`completed`（已完成），新建固定为 draft。名称与生命周期在作品详情页手动保存，状态表示用户维护的作品整体生命周期，不证明生成完成或已有视频文件；不承载具体生产阶段，也不从 Run 自动推导。
+
+| API                                             | 行为                                                               |
+| ----------------------------------------------- | ------------------------------------------------------------------ |
+| `GET /api/v1/projects/:projectId/videos`        | 当前项目的视频列表；按创建时间与 ID 倒序，每页 30 个，游标加载更多 |
+| `POST /api/v1/projects/:projectId/videos`       | 只接受名称，创建作品身份                                           |
+| `GET /api/v1/projects/:projectId/videos/:id`    | 读取指定项目下的作品                                               |
+| `PUT /api/v1/projects/:projectId/videos/:id`    | 按 revision 原子保存名称与生命周期，旧修订返回 409                 |
+| `DELETE /api/v1/projects/:projectId/videos/:id` | 删除作品身份，成功返回 204                                         |
+
+Contract 位于 `packages/contracts/src/video.ts`，应用服务和路由位于 `apps/api/src/videos/`，沿用 Project Service 直接使用 Prisma 的分层方式。API 复用全局 AuthGuard 与写入 Origin 检查；所有读取、更新和删除同时约束路径 Project、Video ID 与 Project.ownerId，其他账号或同账号的其他 Project 都不能仅凭 Video ID 操作。创建在已授权 Project 行锁事务内完成，防止与项目删除交错。
+
+持久化表为 `video`，Project 外键为 `ON DELETE CASCADE`，数据库 CHECK 限定状态、正修订和非空名称。追加迁移为 `20261030032909_video_identity`，不重写 Foundation baseline。移除行为沿用 Project 的明确确认后永久删除，没有归档 / 恢复或软删除系统。
+
+Web 的列表为 `/projects/[id]/videos`，详情为 `/projects/[id]/videos/[videoId]`，刷新详情直接按项目与作品身份读取；左侧视频菜单在详情页保持选中。空列表提供创建入口，查询失败显示错误而非空成功。详情只展示基础身份、手动编辑和删除，保存冲突保留本地修改，确认重读才替换。列表创建会话和详情编辑复用 Workspace 离开保护；后台临时读取失败保留编辑，明确拒绝访问则隐藏内容。前端实现位于 `features/videos/` 的 `api/`、`list/`、`detail/` 与 `presentation/`。
 
 ## Provider 与能力装配
 

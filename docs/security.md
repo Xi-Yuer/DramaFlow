@@ -28,7 +28,7 @@
 | POST /api/v1/users/me/revoke-other-sessions | 保留当前设备                                            |
 | GET /api/v1/users                           | 仅平台管理员，最近 100 个账号；没有管理 UI              |
 
-注册、管理插件、模拟登录和删除账号的认证端点不公开。不另建 JWT。项目、Workflow、版本与 Run 都在服务端重新校验所有者；越权资源不因猜中 ID 而可见。运行查询与恢复见[Execution](execution.md)。
+注册、管理插件、模拟登录和删除账号的认证端点不公开。不另建 JWT。项目、Video、Workflow、版本与 Run 都在服务端重新校验所有者；越权资源不因猜中 ID 而可见，Video 还须匹配请求路径中的 Project。运行查询与恢复见[Execution](execution.md)。
 
 ## 业务权限与密钥边界
 

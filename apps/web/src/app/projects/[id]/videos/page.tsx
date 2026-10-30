@@ -1,5 +1,5 @@
-import { ProjectContentEmpty } from '@/features/projects/workspace/pages/project-content-empty';
+import { ProjectVideos } from '@/features/videos/list/project-videos';
 
 export default function VideosPage() {
-  return <ProjectContentEmpty kind="videos" />;
+  return <ProjectVideos />;
 }

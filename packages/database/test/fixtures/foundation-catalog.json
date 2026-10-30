@@ -40,6 +40,9 @@
       "name": "user_profile"
     },
     {
+      "name": "video"
+    },
+    {
       "name": "workflow"
     },
     {
@@ -1179,6 +1182,69 @@
       "attgenerated": ""
     },
     {
+      "table_name": "video",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "video",
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "video",
+      "name": "name",
+      "type": "character varying(80)",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "video",
+      "name": "projectId",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "video",
+      "name": "revision",
+      "type": "integer",
+      "not_null": true,
+      "default_value": "1",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "video",
+      "name": "status",
+      "type": "character varying(32)",
+      "not_null": true,
+      "default_value": "'draft'::character varying",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "video",
+      "name": "updatedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
       "table_name": "workflow",
       "name": "createdAt",
       "type": "timestamp(3) without time zone",
@@ -1991,6 +2057,51 @@
       "convalidated": true
     },
     {
+      "table_name": "video",
+      "name": "video_name_check",
+      "type": "c",
+      "definition": "CHECK ((length(btrim((name)::text)) > 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "video",
+      "name": "video_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "video",
+      "name": "video_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"projectId\") REFERENCES canvas_project(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "video",
+      "name": "video_revision_check",
+      "type": "c",
+      "definition": "CHECK ((revision > 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "video",
+      "name": "video_status_check",
+      "type": "c",
+      "definition": "CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'active'::character varying, 'completed'::character varying])::text[])))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
       "table_name": "workflow",
       "name": "workflow_draft_object",
       "type": "c",
@@ -2423,6 +2534,16 @@
       "table_name": "user_profile",
       "name": "user_profile_pkey",
       "definition": "CREATE UNIQUE INDEX user_profile_pkey ON public.user_profile USING btree (\"userId\")"
+    },
+    {
+      "table_name": "video",
+      "name": "video_pkey",
+      "definition": "CREATE UNIQUE INDEX video_pkey ON public.video USING btree (id)"
+    },
+    {
+      "table_name": "video",
+      "name": "video_projectId_createdAt_id_idx",
+      "definition": "CREATE INDEX \"video_projectId_createdAt_id_idx\" ON public.video USING btree (\"projectId\", \"createdAt\", id)"
     },
     {
       "table_name": "workflow",

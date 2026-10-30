@@ -34,7 +34,7 @@ Next.js 同源代理使用 `API_INTERNAL_URL`，否则使用 `API_URL`。生产 
 
 ## 数据库迁移
 
-`packages/database/prisma/schema.prisma` 是唯一 canonical ORM schema；`20261030000000_foundation_v1_baseline` 从空库直接创建当前结构。Baseline 还包含 Prisma 无法表达的 CHECK、trigger / function、身份与生命周期保护，不能仅从模型重新生成后覆盖。pgvector 由 baseline 初始化。
+`packages/database/prisma/schema.prisma` 是唯一 canonical ORM schema；空库按序应用 `20261030000000_foundation_v1_baseline` 和后续追加迁移。Baseline 还包含 Prisma 无法表达的 CHECK、trigger / function、身份与生命周期保护，不能仅从模型重新生成后覆盖。pgvector 由 baseline 初始化。
 
 新环境依次运行 `pnpm db:generate`、`pnpm db:migrate`、`pnpm auth:bootstrap`。迁移 ledger 由 Prisma 管理，不手工修复。正式部署后的变更使用新的 append-only migration，不 rewrite / squash 已部署历史；部署前审阅 SQL、备份并验证升级，避免混用不同 schema 的写入器。
 

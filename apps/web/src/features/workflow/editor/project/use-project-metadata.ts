@@ -134,7 +134,7 @@ export function useProjectMetadata(
     modal.confirm({
       title: `删除「${label}」？`,
       content:
-        '将删除该项目的工作流、版本、运行记录、队列任务、Checkpoint 和已保存素材。账号中的模型配置会保留。此操作不能撤销。',
+        '将删除该项目的视频作品、工作流、版本、运行记录、队列任务、Checkpoint 和已保存素材。账号中的模型配置会保留。此操作不能撤销。',
       okText: '删除',
       cancelText: '取消',
       okButtonProps: { danger: true },

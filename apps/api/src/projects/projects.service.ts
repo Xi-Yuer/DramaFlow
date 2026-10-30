@@ -119,7 +119,7 @@ export class ProjectsService {
     return { revision: input.revision + 1 };
   }
 
-  // 模型供应商和模型配置属于账号，不随项目删除。项目内的工作流、运行和素材由外键级联删除。
+  // 模型配置属于账号，不随项目删除。项目内的视频、工作流、运行和素材由外键级联删除。
   async remove(ownerId: string, rawId: string): Promise<void> {
     const id = z.string().uuid().parse(rawId);
     const removed = await this.db.client.$transaction(async (tx) => {

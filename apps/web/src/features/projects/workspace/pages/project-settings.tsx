@@ -64,7 +64,9 @@ export function ProjectSettings() {
         </section>
         <section className={styles.card} aria-label="删除项目">
           <h2>删除项目</h2>
-          <p className={styles.description}>删除项目及其关联的工作流和运行数据，此操作不能撤销。</p>
+          <p className={styles.description}>
+            删除项目及其视频作品、工作流和运行数据，此操作不能撤销。
+          </p>
           <Button
             danger
             onClick={metadata.removeProject}

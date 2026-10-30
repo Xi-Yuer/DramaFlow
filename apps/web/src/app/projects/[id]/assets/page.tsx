@@ -1,5 +1,5 @@
-import { ProjectContentEmpty } from '@/features/projects/workspace/pages/project-content-empty';
+import { ProjectAssets } from '@/features/projects/workspace/pages/project-assets';
 
 export default function AssetsPage() {
-  return <ProjectContentEmpty kind="assets" />;
+  return <ProjectAssets />;
 }

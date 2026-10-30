@@ -1,0 +1,46 @@
+.heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: 20px;
+}
+
+.name {
+  overflow-wrap: anywhere;
+}
+
+.name a {
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.name a:hover {
+  color: var(--accent);
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  min-height: 240px;
+}
+
+.more {
+  margin-top: 24px;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 720px;
+  overflow-wrap: anywhere;
+}

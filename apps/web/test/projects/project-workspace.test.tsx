@@ -14,6 +14,7 @@ import WorkflowsPage from '../../src/app/projects/[id]/workflows/page';
 import SettingsPage from '../../src/app/projects/[id]/settings/page';
 import { projectApi, projectKeys } from '../../src/features/projects/project-api';
 import { workflowApi } from '../../src/features/workflow/workflow-api';
+import { videoApi } from '../../src/features/videos/api/video-api';
 import { ApiError } from '../../src/lib/http';
 
 const navigation = vi.hoisted(() => ({
@@ -57,6 +58,10 @@ vi.mock('../../src/features/projects/project-api', async (importOriginal) => ({
 vi.mock('../../src/features/workflow/workflow-api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/features/workflow/workflow-api')>()),
   workflowApi: { get: vi.fn(), initialize: vi.fn() },
+}));
+vi.mock('../../src/features/videos/api/video-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/features/videos/api/video-api')>()),
+  videoApi: { list: vi.fn() },
 }));
 vi.mock('../../src/features/workflow/editor/canvas-editor', () => ({
   CanvasEditor: ({ project, workflow }: { project: Project; workflow: WorkflowResponse }) => (
@@ -126,6 +131,7 @@ beforeEach(() => {
   vi.mocked(projectApi.save).mockReset().mockResolvedValue({ revision: 2 });
   vi.mocked(workflowApi.get).mockReset().mockResolvedValue(workflow);
   vi.mocked(workflowApi.initialize).mockReset().mockResolvedValue(workflow);
+  vi.mocked(videoApi.list).mockReset().mockResolvedValue({ items: [], nextCursor: null });
 });
 afterEach(() => {
   cleanup();
@@ -172,16 +178,16 @@ describe('Project Workspace 路由与导航', () => {
     expect(workflowApi.get).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['videos', '视频作品管理尚未开放'],
-    ['assets', '素材管理尚未开放'],
-  ])('%s 展示诚实空状态且没有创建操作', async (segment, message) => {
-    await mount(segment);
-    expect(await screen.findByText(message)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /上传|新建视频|生成视频/ })).toBeNull();
-    expect(workflowApi.get).not.toHaveBeenCalled();
-    expect(workflowApi.initialize).not.toHaveBeenCalled();
-  });
+  it.each([['assets', '素材管理尚未开放']])(
+    '%s 展示诚实空状态且没有创建操作',
+    async (segment, message) => {
+      await mount(segment);
+      expect(await screen.findByText(message)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /上传|新建视频|生成视频/ })).toBeNull();
+      expect(workflowApi.get).not.toHaveBeenCalled();
+      expect(workflowApi.initialize).not.toHaveBeenCalled();
+    },
+  );
 
   it('非法项目地址不发出项目请求或展示页面内容', async () => {
     await mount('overview', 'invalid');
