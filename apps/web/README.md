@@ -15,4 +15,4 @@
 
 `test/models/` 与 `test/workflow/` 按功能组织现有测试，跨场景 fixture 放在 `test/fixtures/`。内部调用直接引用职责模块；界面和保存协议的行为由测试约束。格式统一继承仓库根配置。
 
-行为见 [当前架构](../../docs/architecture.md)。样式见 [前端规范](../../docs/frontend-ui.md)。启动与检查见 [根 README](../../README.md)。
+行为见 [当前架构](../../docs/architecture.md)。样式见 [前端规范](../../docs/frontend.md)。启动与检查见 [根 README](../../README.md)。

@@ -11,7 +11,7 @@
 ## 稳定边界
 
 - 产品是团队自部署的 AI 视频生产工作流平台，漫剧优先；每项目一张画布、一个逻辑 Workflow。首期范围见平台模型，不因候选清单提前建设功能。
-- Workflow / Compiler / Runtime / Execution / Binding 保持业务无关；业务能力通过 Node + Plugin + Contract 扩展，宏观业务流程通过 Node + Edge + Binding + Control Node 组合表达。实施前先判断是业务节点能力还是通用编排能力，新增业务不应要求修改 Workflow Engine；完整原则见[平台边界](docs/platform-model.md#workflow-通用性与业务解耦)。
+- Workflow / Compiler / Runtime / Execution / Binding 保持业务无关；业务能力通过 Node + Plugin + Contract 扩展，宏观业务流程通过 Node + Edge + Binding + Control Node 组合表达。实施前先判断是业务节点能力还是通用编排能力，新增业务不应要求修改 Workflow Engine；完整原则见[平台边界](docs/architecture.md#业务解耦)。
 - 数据基数不等于执行基数，数组输出不自动创建多次执行。Composite 的子图调用、执行归属、Run Tree、Retry / Resume 与观测应复用通用机制；专用字段进入通用 NodeRun / Runtime 前先审查是否属于通用 Execution 概念。具体控制语义留在对应 Strategy，业务节点允许业务化，不为尚未需要的能力预建抽象。
 - React Flow 负责编辑，LangGraph 负责图执行。LangChain 在需要时提供 Tool / Agent 抽象。平台实现领域协议及编译适配，不自建画布引擎、图调度器或暂停恢复状态机。
 - TypeScript 严格模式，外部数据在边界校验；不用无依据的 any、@ts-ignore、关闭检查或空 catch 隐藏问题。contracts 不依赖 React Flow、NestJS、Prisma 或 LangGraph；后端保持模块化单体与独立 worker。
@@ -24,15 +24,15 @@
 
 仅加载当前任务需要的文档段落，不默认通读 docs；接口与字段先查代码。文档内仍有效的专题约束须遵守。
 
-| 任务                              | 入口                                                                                                                                                 |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 确认当前实现范围                  | [当前架构](docs/architecture.md)                                                                                                                     |
-| 产品范围、上下文与建议            | [平台模型](docs/platform-model.md)                                                                                                                   |
-| Workflow / Node / 数据 / Runtime  | 按问题选择 [Workflow](docs/workflow-model.md)、[Node](docs/node-model.md)、[数据模型](docs/data-model.md) 或 [Runtime](docs/runtime-architecture.md) |
-| 页面与交互                        | [前端规范](docs/frontend-ui.md)，实施前必读；复用成熟组件                                                                                            |
-| 身份、权限、会话与凭证            | [认证与安全](docs/authentication.md)                                                                                                                 |
-| 数据库、部署、数据重置 / 对象存储 | [部署与数据](docs/deployment.md) / [RustFS](docs/object-storage.md)                                                                                  |
-| 启动命令 / 检查与文档维护         | [README](README.md) / [开发指南](docs/development.md)                                                                                                |
+| 任务                              | 入口                                                                                            |
+| --------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 确认当前实现范围                  | [当前架构](docs/architecture.md)                                                                |
+| 产品范围、上下文与建议            | [产品与方向](docs/product.md)                                                                   |
+| Workflow / Node / 数据 / Runtime  | 按问题选择 [Workflow](docs/workflow.md)、[Execution](docs/execution.md) 或 [数据](docs/data.md) |
+| 页面与交互                        | [前端规范](docs/frontend.md)，实施前必读；复用成熟组件                                          |
+| 身份、权限、会话与凭证            | [认证与安全](docs/security.md)                                                                  |
+| 数据库、部署、数据重置 / 对象存储 | [部署与数据](docs/deployment.md) / [内容存储](docs/data.md#对象存储与生命周期)                  |
+| 启动命令 / 检查与文档维护         | [README](README.md) / [开发指南](docs/development.md)                                           |
 
 ## 数据与交付
 

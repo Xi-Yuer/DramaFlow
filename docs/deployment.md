@@ -1,96 +1,71 @@
-# 部署、迁移与数据
+# 部署与运维
 
-开发环境用 `pnpm infra:up` 启动 PostgreSQL / pgvector、Redis 和 RustFS，用 `pnpm dev` 启动应用。完整容器环境用 `pnpm stack:up`。
+## 部署结构
 
-向量检索使用 PostgreSQL pgvector，不增加独立向量数据库。端口保持 5432、6379、9000、9001，前端 3000。宿主只监听 127.0.0.1；Docker 内部通过 postgres、redis、rustfs 服务名访问。对象存储见 [RustFS](object-storage.md)。
+支持本机源码开发和团队自部署。完整容器环境使用 `pnpm stack:up`；仅启动依赖服务使用 `pnpm infra:up`。Compose 的 migrate 服务应用 Prisma 迁移并幂等创建管理员，存储初始化服务创建桶，API 健康后启动 Worker 与 Web。修改源码后需要重建镜像。
 
-Compose 先迁移并幂等创建初始管理员、初始化存储桶，再启动 API；Worker 和 Web 等 API 健康后启动。更新源码后需要重新构建镜像。
+| 服务                  | 本机端口    | 容器地址                      |
+| --------------------- | ----------- | ----------------------------- |
+| Web                   | 3000        | `web:3000`                    |
+| API                   | 3001        | `api:3001`                    |
+| PostgreSQL / pgvector | 5432        | `postgres:5432`               |
+| Redis                 | 6379        | `redis:6379`                  |
+| RustFS API / console  | 9000 / 9001 | `rustfs:9000` / `rustfs:9001` |
 
-## 当前库约束
+基础设施端口在宿主仅监听 127.0.0.1。数据使用独立持久卷；不要用 `down -v` 处理普通故障。当前 RustFS 为单节点，无数据冗余。
 
-Prisma 迁移保存身份、资料、会话、项目、Workflow / WorkflowVersion、Run、NodeRun、ChildExecution、Outbox、Artifact 元数据和模型 Provider / 配置。当前模型不含工作空间。完整 DSL 在发布和读取边界校验，不在数据库里拼接。
+## 环境与秘密
 
-需要遵守的约束：
+`pnpm env:init` 创建权限为 0600 的根 `.env`，为新环境生成数据库、认证、加密和存储秘密；已有配置只补齐缺项。不要提交环境文件，也不依赖隐藏默认 Provider。
 
-- 表名使用 lowercase snake_case。不使用 PascalCase、camelCase，也不靠双引号保留大小写。Prisma `@@map` 同样遵守。
-- 每项目一个 Workflow。版本不可更新，workflowId / version 与 workflowId / sourceRevision 唯一。
-- Run 的身份、invocationKey、版本和输入不可改写；状态转换由数据库约束保护。threadId 唯一，workflowId / invocationKey 唯一。Start key 随 Run 生命周期保留，新建无数据库默认 key。
-- Run cancellationRequestedAt 只写首次请求；pending 取消保留 startedAt 为空，running 请求不改为 cancelled。未 claim 的 Outbox 可以进入 cancelled 终态，不删除执行历史或 checkpoint。
-- NodeRun / ChildExecution 有 cancelled 终态和终态写保护。取消不新增 Run status 或数据表。Worker 轮询数据库里的取消意图，不需要单独的 Redis channel。旧写入器不能把取消投影成 failed。
-- NodeOccurrence 的 workflowRunId / scopeKey / nodeId 唯一；NodeRun 的 occurrenceId / attempt 唯一，attempt 为正数，复合外键保护项目 / Run / nodeId 归属，终态字段一致。
-- ChildExecution 的父 NodeRun / invocationKey 唯一，Run / scopeKey 唯一；Iteration 额外保留父 / index 唯一、typed index 与 metadata.index / invocationKey 一致约束。Body NodeRun 通过 childExecutionId 显式关联，root 为 null；复合外键与触发器保护项目 / Run / nodeId / scope、不可变身份及终态，不按 scopeKey 反查 child。index 不等于 attempt，结束时间沿用 completedAt。
-- Artifact 只有 writing / ready / failed；内容身份不可改，终态不可覆盖。对象本体不在数据库。删除项目时按已登记的 storageKey 删除对应对象。
-- Provider / ModelConfiguration 归用户所有，两者 Owner 由复合外键保持一致；删除项目不删除模型资源。Provider 的插件版本、configuration，以及模型的 Provider、capability、model、settings 创建后不可改。enabled 和凭证密文可以按服务操作更新。删除配置不是已交付的产品入口。
-- Outbox 与 start 同事务写入；恢复意图按 waiting 周期唯一。running → waiting 时由数据库递增 waitingRevision，也作为 Human Review 产品乐观锁返回；客户端只提交 expectedWaitingRevision，不能改写周期。targeted token / decision 复用现有 value JSON，未新增数据库字段或约束。
+| 配置                                       | 用途                                    |
+| ------------------------------------------ | --------------------------------------- |
+| `DATABASE_URL`、`REDIS_URL`                | API / Worker 共用持久化服务             |
+| `WORKFLOW_QUEUE_PREFIX`                    | 同一部署的执行队列 namespace            |
+| `BETTER_AUTH_URL`、`WEB_ORIGIN`            | 浏览器实际站点与可信 Origin             |
+| `BETTER_AUTH_SECRET`                       | 会话 Cookie 保护                        |
+| `CREDENTIAL_ENCRYPTION_KEY`                | Provider 凭证加密主密钥，备份须分开保存 |
+| `S3_ENDPOINT`、`S3_REGION`、`S3_BUCKET`    | 内部存储连接与私有桶                    |
+| `S3_ACCESS_KEY_ID`、`S3_SECRET_ACCESS_KEY` | 服务端 S3 凭证                          |
+| `S3_ACCESS_ENDPOINT`                       | 访问方可达的签名 URL 端点               |
+| `TRUSTED_PROXY_CIDRS`                      | 明确信任的反向代理来源                  |
 
-升级前审阅实际 Prisma migration SQL，确认可能删除的废弃开发表并备份；禁止重写已在生产或外部共享环境应用的迁移。缺少真实 sourceRevision 的旧开发版本不能伪造来源，只能按下方开发数据授权处理。
+Next.js 同源代理使用 `API_INTERNAL_URL`，否则使用 `API_URL`。生产 HTTPS、Cookie、反向代理和账号开通见[安全](security.md)。服务端秘密不进入 NEXT_PUBLIC_*。
 
-执行前核对 DATABASE_URL 属于本项目开发库，然后 `pnpm db:generate` 和 `pnpm db:migrate`。当前基础迁移不需要例行 reset 或删除卷。
+## 数据库迁移
 
-## LangGraph PostgreSQL Checkpointer
+`packages/database/prisma/schema.prisma` 是唯一 canonical ORM schema；`20261030000000_foundation_v1_baseline` 从空库直接创建当前结构。Baseline 还包含 Prisma 无法表达的 CHECK、trigger / function、身份与生命周期保护，不能仅从模型重新生成后覆盖。pgvector 由 baseline 初始化。
 
-API 与 Worker 用应用级 WorkflowCheckpointerService 和官方 PostgresSaver，连接同一 DATABASE_URL 的独立 pg 池。langgraph schema 由官方 setup() 管理，不进入 Prisma，也不在用户首次运行时初始化。
+新环境依次运行 `pnpm db:generate`、`pnpm db:migrate`、`pnpm auth:bootstrap`。迁移 ledger 由 Prisma 管理，不手工修复。正式部署后的变更使用新的 append-only migration，不 rewrite / squash 已部署历史；部署前审阅 SQL、备份并验证升级，避免混用不同 schema 的写入器。
 
-初始化用事务级 advisory lock 串行 setup()，再用 getTuple() 验证读取。失败报告 WORKFLOW_CHECKPOINT_UNAVAILABLE 并阻止就绪。每进程连接池上限 10，连接超时 5 秒，单条 SQL 超时 10 秒。数据库角色须能创建该 schema 及其中的表。
+开发库重建是破坏性操作，规则和命令见[开发指南](development.md#数据库开发)。不要把开发 reset 用于生产或外部共享环境。
 
-备份和恢复必须同时覆盖业务表与 langgraph schema。只恢复 Run 或 threadId 不能恢复图。删除项目时按该项目运行的 threadId 调用官方 deleteThread，并移除对应的执行队列任务；数据库外键不会自动清理 checkpoint。升级官方包前，在独立环境验证 setup 和数据兼容。
+## Checkpoint 与数据库
 
-## Workflow 执行队列
+API / Worker 使用官方 PostgresSaver，与业务表共用 DATABASE_URL、独立连接池和 `langgraph` schema。该 schema 由官方 setup 管理，不进入 Prisma baseline。应用启动时以事务 advisory lock 串行初始化，再以 getTuple 验证可读；失败阻止就绪，无 MemorySaver 回退。
 
-BullMQ 使用既有 REDIS_URL，队列名 workflow-execution，并与业务 Redis 客户端分开。Compose 启用 Redis AOF 和 noeviction。所有 API / Worker 必须使用相同数据库、Redis 和 WORKFLOW_QUEUE_PREFIX（默认 dramaflow-workflow）。同一前缀不能连接两个业务库。集成测试使用随机 dramaflow-test-* 前缀。
+连接池每进程上限 10，连接超时 5 秒，单条 SQL 超时 10 秒；数据库角色须能创建官方 schema。恢复须同时具备业务表、原 thread 的 checkpoint、对应版本与可用实现。升级官方依赖前在隔离环境验证恢复。
 
-WORKFLOW_WORKER_CONCURRENCY 默认 4，范围 1—64。Outbox 扫描间隔默认 1000 毫秒、最小 100。队列锁和 stalled 间隔默认 30000 毫秒、最小 1000。不能靠缩短锁期限掩盖业务副作用。
+## 执行队列
 
-claim 前的投递失败按指数退避重试，最多约 30 秒，基础设施故障最多 5 次。业务失败不自动重跑。Redis 完成 Job 最多保留 1 天或 10000 条，失败 Job 最多 7 天或 10000 条。正确性依赖 PostgreSQL 意图，不依赖 Redis 记录一直存在。
+BullMQ 使用同一 REDIS_URL、队列名 workflow-execution，与普通 Redis 客户端分开。Redis 启用 AOF 与 noeviction；同一 WORKFLOW_QUEUE_PREFIX 不能连接两个业务库。
 
-入队未确认时返回 503，Run 和 Outbox 仍可能已经保存。claim 后进程退出或结果不明记 recovery_required，原 Run 保持真实状态；已有 completed 或下一次 waiting 时只补记意图。没有自动重跑或人工恢复入口。不要只删 Job 或把 running 改回 pending。
+`WORKFLOW_WORKER_CONCURRENCY` 默认 4，范围 1—64；Outbox 默认每 1000ms 扫描，最小 100ms。队列锁与 stalled 默认 30000ms，最小 1000ms。Worker 跨 Run 并发、图级 maxConcurrency 和供应商配额是不同限制，不可用缩短锁期限掩盖副作用。
 
-Worker 必须常驻，否则 API 可以受理但不会执行。Outbox 没有独立清理任务；删除 Run 会按外键清理其意图。
+claim 前基础设施故障采用有界指数退避，业务失败不自动重跑。完成 Job 最多保留 1 天或 10000 条，失败 Job 最多 7 天或 10000 条；正确性依赖数据库意图，不依赖 Job 永远存在。Worker 必须常驻。
 
-## 文本模型 Provider 配置
+recovery_required 没有自动重放或人工处置产品入口；不要删除 Job 后把 running 改回 pending。取消的 requested / uncertain 含义见[执行语义](execution.md#cooperative-cancellation)。
 
-模型配置的 HTTP 见 [架构](architecture.md#plugin--provider--模型配置管理-http)。服务端也可以用 CLI 按当前插件 Schema 创建实例，每次都新建，不更新、不去重；Provider 与模型配置不是同一次原子写入。官方 OpenAI / Anthropic 由 `GET /api/v1/provider-catalog` 提供定义，创建实例时不手填 endpoint。这个 CLI 仍按插件 Schema 创建，下面的示例是高级 Custom OpenAI-Compatible，不是普通 Provider 的默认配置方式。
+## 对象存储
 
-```sh
-pnpm build
-pnpm model:configure /受保护目录/model-provider.json
-```
+RustFS 镜像固定为 `rustfs/rustfs:1.0.1`，S3 私有桶由 `storage:init` 使用官方 SDK 幂等创建。配置或网络故障直接失败，无本地文件回退。控制台在 `http://localhost:9001/rustfs/console/`，凭证来自受保护环境。
 
-配置文件只保存非秘密项和凭证环境变量名，不存在默认厂商或默认模型：
+容器内部 S3_ENDPOINT 为 `http://rustfs:9000`。若客户端或 Provider 在容器外访问签名 URL，须显式配置其可达的 S3_ACCESS_ENDPOINT 和 HTTPS 代理；不能签名后替换 host。签名资源与内容生命周期见[数据](data.md#对象存储与生命周期)。
 
-```json
-{
-  "ownerId": "用户 ID",
-  "name": "自选文本服务",
-  "pluginId": "openai_compatible",
-  "pluginVersion": 1,
-  "configuration": {
-    "baseURL": "https://models.example.com/v1",
-    "timeoutMs": 60000
-  },
-  "credentialsEnv": { "apiKey": "DRAMAFLOW_MODEL_API_KEY" },
-  "model": {
-    "capability": "text.generate",
-    "model": "明确选择的模型名",
-    "settings": { "temperature": 0.7, "maxOutputTokens": 2048 }
-  }
-}
-```
+## 备份、恢复与排障
 
-先提供对应 API Key 和 CREDENTIAL_ENCRYPTION_KEY。CLI 可加载根 `.env`，但不得提交该文件，也不得把密钥写入命令行、JSON 或日志。工具只校验并写库，不调用模型，只输出 providerId / modelConfigurationId。API 与 Worker 的加密主密钥必须一致。调用参数、重试和错误投影见 [架构](architecture.md#文本-ai-与-provider-plugin)。
+备份覆盖业务数据库、官方 langgraph schema、对象存储和需要保留的秘密；数据库备份与加密主密钥分开保管。在独立环境验证恢复，不能仅恢复 Run 或 threadId。对象可通过 S3 工具复制到独立存储。
 
-## 开发数据变更与授权
+删除项目服务会按登记 key、thread 与 Job 清理关联资源；失败明确报告。单独删除业务元数据不会自动清对象，系统没有通用垃圾回收或自动对账，不应把对象缺失或时间经过解释为执行已经停止。
 
-当前开发阶段不要求兼容旧数据、表结构或业务协议。不为临时开发数据增加兼容层、双写或历史迁移逻辑。
-
-为落实本项目开发中的不兼容变更，可以直接清空本项目开发环境的数据并重新初始化，无需为同一授权重复确认。授权不包含生产、外部共享环境或其他项目的数据。
-
-重置必须服务于当前变更。操作前核对目标环境以及数据库、桶或卷的范围，只清理确有必要的数据，并在交付说明中记录。确定开发环境可以整体重建时，允许重建迁移基线；不得重写已被生产或外部共享环境使用的迁移。本节不表示每轮都要重置。
-
-## 数据保留与排障
-
-不兼容的 schema 变更先停止 API / Worker 写入，备份业务表和 langgraph schema，再执行 migrate deploy 并同步部署。新写入使用 occurrenceId 与 childExecutionId，不能和旧写入器混用。没有 childExecutionId 的旧开发 checkpoint 不能恢复。不重写已被生产或外部共享环境使用的迁移。
-
-持久化卷保留 PostgreSQL、Redis、RustFS 和日志。不要用 `down -v` 排障。备份覆盖数据库、langgraph schema、对象和需要保留的秘密，恢复先在独立环境验证。
-
-入口：`docker compose ps`、`docker compose logs --tail=100 postgres redis rustfs`，以及 `/api/v1/health`。账号、HTTPS 和反向代理见 [认证](authentication.md)。
+基本入口：`docker compose ps`、`docker compose logs --tail=100 postgres redis rustfs`、`GET /api/v1/health`。健康检查覆盖 PostgreSQL、Checkpointer、Redis、RustFS，不等于真实 Provider 可用性测试。

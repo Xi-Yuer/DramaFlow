@@ -100,7 +100,7 @@ try {
 } finally {
   try {
     if (created) {
-      // 只清本轮随机测试桶；绝不清空配置中的开发素材桶。
+      // 只清当前测试进程创建的随机桶；绝不清空配置中的开发素材桶。
       for (;;) {
         const page = await storage.send(new ListObjectsV2Command({ Bucket: bucket }));
         if (!page.Contents?.length) break;

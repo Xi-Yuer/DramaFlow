@@ -25,13 +25,13 @@
     "test:integration": "node scripts/integration.mjs",
     "storage:init": "node scripts/storage-init.mjs",
     "model:configure": "node scripts/configure-model-provider.mjs",
-    "fixture:ai-text": "pnpm exec turbo run build --filter=@dramaflow/api && node scripts/create-ai-text-acceptance.mjs",
     "test:ai:live": "node scripts/test-ai-live.mjs",
     "test:storage": "node scripts/test-storage.mjs",
     "auth:bootstrap": "pnpm exec turbo run build --filter=@dramaflow/api && node scripts/provision-user.mjs --admin",
     "auth:create-user": "pnpm exec turbo run build --filter=@dramaflow/api && node scripts/provision-user.mjs",
-    "test:web:workflow": "node scripts/test-web-workflow.mjs",
-    "test:web:models": "node scripts/test-web-workflow.mjs model-settings.spec.ts"
+    "db:reset": "node scripts/reset-development-database.mjs",
+    "test:migrations": "node scripts/test-migrations.mjs",
+    "test:browser": "node scripts/test-browser.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

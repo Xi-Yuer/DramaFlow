@@ -125,8 +125,11 @@ test('用户新建项目直接加载真实空草稿，不触发初始化 POST', 
   expect(initialized).toEqual([]);
 });
 
-test('旧项目必须明确初始化；失败可重试，重复初始化返回同一 Workflow', async ({ page, request }) => {
-  const projectId = process.env.WEB_TEST_LEGACY_PROJECT_ID!;
+test('缺少工作流的项目必须明确初始化；失败可重试，重复初始化返回同一 Workflow', async ({
+  page,
+  request,
+}) => {
+  const projectId = process.env.WEB_TEST_UNINITIALIZED_PROJECT_ID!;
   await page.goto(`/projects/${projectId}`);
   await expect(page.getByRole('button', { name: '初始化工作流', exact: true })).toBeVisible();
   expect((await request.get(`/api/v1/projects/${projectId}/workflow`)).status()).toBe(404);

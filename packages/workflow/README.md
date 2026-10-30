@@ -1,6 +1,6 @@
 # @dramaflow/workflow
 
-领域校验、Registry、编译、Codec、提交和执行。不含 HTTP、数据库或 Checkpointer。
+领域校验、Registry、编译、Codec、提交和执行。不实现 HTTP、数据库或 Checkpointer 存储。
 
 各目录根上只留该层的装配入口。同一职责的实现放进子目录，不把无关文件平铺在一起。
 
@@ -26,8 +26,8 @@
 
 依赖方向：definition 与 node 不引用编译策略；compiler 使用 definition 与 runtime；run 使用 compiler 完成一次 Run。执行归属端口不进入受理。
 
-`definition/publish/validate-publish.ts` 负责递归装配校验；`semantics/` 分别维护节点、连线、输入和输出的静态语义，保持原有校验顺序与子图错误路径。共享类型和错误定义不依赖这些校验实现。
+`definition/publish/validate-publish.ts` 负责递归装配校验；`semantics/` 分别维护节点、连线、输入和输出的静态语义，按固定校验顺序维护子图错误路径。共享类型和错误定义不依赖这些校验实现。
 
-`test/` 对应划分为 `definition/`、`node/`、`compiler/`、`runtime/` 和 `run/`；复用的运行 fixture 集中在 `fixtures/`。测试仍从包的正式入口或具体职责模块验证行为。
+`test/` 对应划分为 `definition/`、`node/`、`compiler/`、`runtime/` 和 `run/`；复用的运行 fixture 集中在 `fixtures/`。测试从包的正式入口或具体职责模块验证行为。
 
-协议见 [数据模型](../../docs/data-model.md)、[Node](../../docs/node-model.md) 和 [Runtime](../../docs/runtime-architecture.md)。已实现范围见 [当前架构](../../docs/architecture.md)。
+协议见 [数据模型](../../docs/data.md)、[Workflow](../../docs/workflow.md) 和 [Execution](../../docs/execution.md)。已实现范围见 [当前架构](../../docs/architecture.md)。

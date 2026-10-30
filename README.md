@@ -1,16 +1,12 @@
 # DramaFlow
 
-团队自部署的 AI 视频生产工作流平台，漫剧优先。当前交付的是通用工作流：每个项目一张画布、一个 Workflow，发布后按不可变版本执行。
+团队自部署的可视化 Workflow 工具，当前 AI 生产能力以文本生成为主。用户在项目画布中组合节点，发布不可变版本，再运行、审核和查看结果。
 
-已接入文本生成、简单条件、人工审核、Iteration 和版本内嵌的 SubWorkflow。图片、视频、配音、素材库和自动建议尚未作为产品能力交付。
+已提供文本生成、受限条件分支、人工审核、Iteration、版本内嵌 SubWorkflow、运行历史、执行树和协作式取消。长期方向是 Workflow 驱动的 AI 内容生产平台；素材库、图片 / 配音 / 视频生产、Timeline、全局 Agent 和作品交付尚未形成产品能力。
 
-## 技术栈
+## 快速开始
 
-TypeScript。React Flow 负责编辑，LangGraph 负责图执行，NestJS API 与独立 Worker 负责受理和运行。数据使用 PostgreSQL / pgvector、Redis 和 RustFS。协议在 `packages/contracts`，编译与执行适配在 `packages/workflow`，业务通过 Node 和受信任插件扩展，不改 Workflow Engine。
-
-## 启动
-
-需要 Node.js 24、pnpm 10.7 和 Docker Compose。
+需要 Node.js 24、pnpm 10.7、Docker Compose。
 
 ```sh
 pnpm install
@@ -22,9 +18,9 @@ pnpm auth:bootstrap
 pnpm dev
 ```
 
-Web：http://localhost:3000。API 健康检查：http://localhost:3001/api/v1/health。管理员来自本机 `.env` 的 `ADMIN_EMAIL` / `ADMIN_PASSWORD`。公开注册关闭。不要提交 `.env` 或真实凭证。
+Web：http://localhost:3000。健康检查：http://localhost:3001/api/v1/health。使用 `.env` 的 ADMIN_EMAIL / ADMIN_PASSWORD 登录；公开注册关闭，不要提交环境文件或真实凭证。
 
-PostgreSQL、Redis、RustFS 使用默认端口。完整容器环境用 `pnpm stack:up`。
+完整容器部署使用 `pnpm stack:up`。数据库从 Foundation v1 baseline 初始化，正式部署后的变化采用 append-only migration。配置、备份和迁移见[部署](docs/deployment.md)，本机重置规则见[开发](docs/development.md#数据库开发)。
 
 ## 验证
 
@@ -33,22 +29,20 @@ pnpm check
 pnpm test:integration
 ```
 
-`pnpm check` 是 lint、typecheck、单元测试和 build。`pnpm test:integration` 使用独立测试库、随机队列前缀和独立对象存储桶，不调用真实 AI。浏览器和收费模型不在默认检查里。
+check 运行 lint、typecheck、默认测试和 build。integration 使用隔离数据库、随机队列前缀、独立存储桶、HTTP 和独立 Worker，不调用真实 AI。专项迁移、存储、浏览器和真实模型测试见[开发指南](docs/development.md#测试策略)。
 
-## 文档
+## 文档导航
 
-先读 [AGENTS.md](AGENTS.md) 的任务入口，再按需要打开下面的文档。接口和字段以代码为准。
+| 文档                           | 职责                                              |
+| ------------------------------ | ------------------------------------------------- |
+| [产品](docs/product.md)        | 当前用户路径、产品边界与设计方向                  |
+| [架构](docs/architecture.md)   | 应用 / 包分层、技术责任和业务解耦                 |
+| [Workflow](docs/workflow.md)   | 定义、版本、节点、Catalog、编译和组合准入         |
+| [Execution](docs/execution.md) | 运行身份、checkpoint、审核、取消和运行观测        |
+| [数据](docs/data.md)           | 类型、运行值、Artifact / Asset 边界及内容生命周期 |
+| [前端](docs/frontend.md)       | Canvas、Inspector、下钻、运行工作区与交互规范     |
+| [安全](docs/security.md)       | 登录、会话、权限、凭证和账号开通                  |
+| [开发](docs/development.md)    | 编码规范、命令、测试策略和数据库开发              |
+| [部署](docs/deployment.md)     | 基础设施、环境、迁移部署、备份与排障              |
 
-| 文档                                    | 职责                                      |
-| --------------------------------------- | ----------------------------------------- |
-| [当前架构](docs/architecture.md)        | 已经实现的能力和入口                      |
-| [平台边界](docs/platform-model.md)      | 产品范围，以及 Workflow 与业务解耦        |
-| [Workflow](docs/workflow-model.md)      | 定义、版本、运行和调用身份                |
-| [Node](docs/node-model.md)              | 节点、Catalog、Iteration、SubWorkflow、If |
-| [数据模型](docs/data-model.md)          | DataType、RuntimeValue、Binding、Artifact |
-| [Runtime](docs/runtime-architecture.md) | 编译、执行、State 和 Checkpointer         |
-| [认证](docs/authentication.md)          | 登录、权限和凭证                          |
-| [部署](docs/deployment.md)              | 数据库、队列、迁移和开发数据              |
-| [对象存储](docs/object-storage.md)      | RustFS 与 Artifact 写入                   |
-| [前端规范](docs/frontend-ui.md)         | 画布与交互约束                            |
-| [开发指南](docs/development.md)         | 检查命令、隔离规则和代码目录              |
+开发协作约束见 [AGENTS.md](AGENTS.md)。接口字段以 `packages/contracts`、Prisma schema 和 Controller 为准。

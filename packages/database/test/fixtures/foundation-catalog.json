@@ -1,0 +1,2638 @@
+{
+  "tables": [
+    {
+      "name": "artifact"
+    },
+    {
+      "name": "auth_account"
+    },
+    {
+      "name": "auth_rate_limit"
+    },
+    {
+      "name": "auth_session"
+    },
+    {
+      "name": "auth_user"
+    },
+    {
+      "name": "auth_verification"
+    },
+    {
+      "name": "canvas_project"
+    },
+    {
+      "name": "child_execution"
+    },
+    {
+      "name": "model_configuration"
+    },
+    {
+      "name": "model_provider"
+    },
+    {
+      "name": "node_occurrence"
+    },
+    {
+      "name": "node_run"
+    },
+    {
+      "name": "user_profile"
+    },
+    {
+      "name": "workflow"
+    },
+    {
+      "name": "workflow_execution_outbox"
+    },
+    {
+      "name": "workflow_run"
+    },
+    {
+      "name": "workflow_version"
+    }
+  ],
+  "columns": [
+    {
+      "table_name": "artifact",
+      "name": "checksum",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "cleanupRequired",
+      "type": "boolean",
+      "not_null": true,
+      "default_value": "false",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "completedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "contentKind",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "failureStage",
+      "type": "text",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "mimeType",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "nodeId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "nodeRunId",
+      "type": "uuid",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "outputKey",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "projectId",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "size",
+      "type": "integer",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default_value": "'writing'::text",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "storageKey",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "type",
+      "type": "jsonb",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "artifact",
+      "name": "workflowRunId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "accessToken",
+      "type": "text",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "accessTokenExpiresAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "accountId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "idToken",
+      "type": "text",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "password",
+      "type": "text",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "providerId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "refreshToken",
+      "type": "text",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "refreshTokenExpiresAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "scope",
+      "type": "text",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "updatedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_account",
+      "name": "userId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_rate_limit",
+      "name": "count",
+      "type": "integer",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_rate_limit",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_rate_limit",
+      "name": "key",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_rate_limit",
+      "name": "lastRequest",
+      "type": "bigint",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_session",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_session",
+      "name": "expiresAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_session",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_session",
+      "name": "impersonatedBy",
+      "type": "text",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_session",
+      "name": "ipAddress",
+      "type": "text",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_session",
+      "name": "token",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_session",
+      "name": "updatedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_session",
+      "name": "userAgent",
+      "type": "text",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_session",
+      "name": "userId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_user",
+      "name": "banExpires",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_user",
+      "name": "banReason",
+      "type": "text",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_user",
+      "name": "banned",
+      "type": "boolean",
+      "not_null": true,
+      "default_value": "false",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_user",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_user",
+      "name": "email",
+      "type": "character varying(254)",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_user",
+      "name": "emailVerified",
+      "type": "boolean",
+      "not_null": true,
+      "default_value": "false",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_user",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_user",
+      "name": "image",
+      "type": "text",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_user",
+      "name": "name",
+      "type": "character varying(80)",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_user",
+      "name": "role",
+      "type": "character varying(32)",
+      "not_null": true,
+      "default_value": "'user'::character varying",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_user",
+      "name": "updatedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_verification",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_verification",
+      "name": "expiresAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_verification",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_verification",
+      "name": "identifier",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_verification",
+      "name": "updatedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "auth_verification",
+      "name": "value",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "canvas_project",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "canvas_project",
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "canvas_project",
+      "name": "name",
+      "type": "character varying(80)",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "canvas_project",
+      "name": "ownerId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "canvas_project",
+      "name": "revision",
+      "type": "integer",
+      "not_null": true,
+      "default_value": "1",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "canvas_project",
+      "name": "updatedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "canvas_project",
+      "name": "viewport",
+      "type": "jsonb",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "completedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "error",
+      "type": "jsonb",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "index",
+      "type": "integer",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "invocationKey",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "kind",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "metadata",
+      "type": "jsonb",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "parentNodeId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "parentNodeRunId",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "projectId",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "scopeKey",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "startedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default_value": "'running'::text",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "child_execution",
+      "name": "workflowRunId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "capability",
+      "type": "character varying(100)",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "enabled",
+      "type": "boolean",
+      "not_null": true,
+      "default_value": "true",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "model",
+      "type": "character varying(200)",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "ownerId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "providerId",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "settings",
+      "type": "jsonb",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_provider",
+      "name": "configuration",
+      "type": "jsonb",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_provider",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_provider",
+      "name": "enabled",
+      "type": "boolean",
+      "not_null": true,
+      "default_value": "true",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_provider",
+      "name": "encryptedCredentials",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_provider",
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_provider",
+      "name": "name",
+      "type": "character varying(80)",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_provider",
+      "name": "ownerId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_provider",
+      "name": "pluginId",
+      "type": "character varying(100)",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_provider",
+      "name": "pluginVersion",
+      "type": "integer",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "model_provider",
+      "name": "providerDefinitionId",
+      "type": "character varying(100)",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "nodeId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "projectId",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "scopeKey",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "workflowRunId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "attempt",
+      "type": "integer",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "childExecutionId",
+      "type": "uuid",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "completedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "error",
+      "type": "jsonb",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "id",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "inputs",
+      "type": "jsonb",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "nodeId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "occurrenceId",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "outputs",
+      "type": "jsonb",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "projectId",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "startedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default_value": "'running'::text",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "node_run",
+      "name": "workflowRunId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "user_profile",
+      "name": "bio",
+      "type": "character varying(280)",
+      "not_null": true,
+      "default_value": "''::character varying",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "user_profile",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "user_profile",
+      "name": "locale",
+      "type": "character varying(32)",
+      "not_null": true,
+      "default_value": "'zh-CN'::character varying",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "user_profile",
+      "name": "timeZone",
+      "type": "character varying(64)",
+      "not_null": true,
+      "default_value": "'Asia/Shanghai'::character varying",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "user_profile",
+      "name": "updatedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "user_profile",
+      "name": "userId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow",
+      "name": "draft",
+      "type": "jsonb",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow",
+      "name": "name",
+      "type": "character varying(80)",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow",
+      "name": "projectId",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow",
+      "name": "revision",
+      "type": "integer",
+      "not_null": true,
+      "default_value": "1",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow",
+      "name": "updatedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "attempts",
+      "type": "integer",
+      "not_null": true,
+      "default_value": "0",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "availableAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "completedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "kind",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "payload",
+      "type": "jsonb",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "publishedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default_value": "'pending'::text",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "waitingRevision",
+      "type": "integer",
+      "not_null": true,
+      "default_value": "0",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "workflowRunId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "cancellationRequestedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "completedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "error",
+      "type": "jsonb",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "inputs",
+      "type": "jsonb",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "invocationKey",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "outputs",
+      "type": "jsonb",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "projectId",
+      "type": "uuid",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "startedAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": false,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "status",
+      "type": "text",
+      "not_null": true,
+      "default_value": "'pending'::text",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "threadId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "waitingRevision",
+      "type": "integer",
+      "not_null": true,
+      "default_value": "0",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflowId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflowVersionId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "createdAt",
+      "type": "timestamp(3) without time zone",
+      "not_null": true,
+      "default_value": "CURRENT_TIMESTAMP",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "definition",
+      "type": "jsonb",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "id",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "sourceRevision",
+      "type": "integer",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "version",
+      "type": "integer",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "workflowId",
+      "type": "text",
+      "not_null": true,
+      "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    }
+  ],
+  "constraints": [
+    {
+      "table_name": "artifact",
+      "name": "artifact_contentKind_check",
+      "type": "c",
+      "definition": "CHECK ((\"contentKind\" = ANY (ARRAY['json'::text, 'blob'::text])))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_nodeRunId_workflowRunId_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"nodeRunId\", \"workflowRunId\", \"projectId\") REFERENCES node_run(id, \"workflowRunId\", \"projectId\") ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"projectId\") REFERENCES canvas_project(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_size_check",
+      "type": "c",
+      "definition": "CHECK ((size >= 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_status_check",
+      "type": "c",
+      "definition": "CHECK ((status = ANY (ARRAY['writing'::text, 'ready'::text, 'failed'::text])))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_storageKey_key",
+      "type": "u",
+      "definition": "UNIQUE (\"storageKey\")",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_workflowRunId_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"workflowRunId\", \"projectId\") REFERENCES workflow_run(id, \"projectId\") ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_write_state",
+      "type": "c",
+      "definition": "CHECK ((((status = 'writing'::text) AND (\"completedAt\" IS NULL) AND (\"failureStage\" IS NULL) AND (NOT \"cleanupRequired\")) OR ((status = 'ready'::text) AND (\"completedAt\" IS NOT NULL) AND (\"failureStage\" IS NULL) AND (NOT \"cleanupRequired\")) OR ((status = 'failed'::text) AND (\"completedAt\" IS NOT NULL) AND (\"failureStage\" = 'upload'::text))))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "auth_account",
+      "name": "auth_account_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "auth_account",
+      "name": "auth_account_userId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"userId\") REFERENCES auth_user(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "auth_rate_limit",
+      "name": "auth_rate_limit_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "auth_session",
+      "name": "auth_session_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "auth_session",
+      "name": "auth_session_userId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"userId\") REFERENCES auth_user(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "auth_user",
+      "name": "auth_user_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "auth_verification",
+      "name": "auth_verification_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "canvas_project",
+      "name": "canvas_project_ownerId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"ownerId\") REFERENCES auth_user(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "canvas_project",
+      "name": "canvas_project_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_index_nonnegative",
+      "type": "c",
+      "definition": "CHECK ((index >= 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_invocation",
+      "type": "c",
+      "definition": "CHECK (((length(kind) > 0) AND (kind = btrim(kind)) AND (length(\"invocationKey\") > 0) AND (\"invocationKey\" = btrim(\"invocationKey\")) AND (\"scopeKey\" <> 'root'::text) AND (jsonb_typeof(metadata) = 'object'::text)))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_iteration_extension",
+      "type": "c",
+      "definition": "CHECK (\nCASE\n    WHEN (kind = 'iteration_item'::text) THEN ((index IS NOT NULL) AND (metadata ? 'index'::text) AND (jsonb_typeof((metadata -> 'index'::text)) = 'number'::text) AND ((metadata -> 'index'::text) = to_jsonb(index)) AND (\"invocationKey\" = ('iteration-item:'::text || (index)::text)))\n    ELSE (index IS NULL)\nEND)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_lifecycle",
+      "type": "c",
+      "definition": "CHECK ((((status = 'running'::text) AND (\"completedAt\" IS NULL) AND (error IS NULL)) OR ((status = ANY (ARRAY['completed'::text, 'cancelled'::text])) AND (\"completedAt\" IS NOT NULL) AND (error IS NULL)) OR ((status = 'failed'::text) AND (\"completedAt\" IS NOT NULL) AND (error IS NOT NULL))))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_parentNodeRunId_workflowRunId_projectId_pa_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"parentNodeRunId\", \"workflowRunId\", \"projectId\", \"parentNodeId\") REFERENCES node_run(id, \"workflowRunId\", \"projectId\", \"nodeId\") ON UPDATE RESTRICT ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_scope_nonempty",
+      "type": "c",
+      "definition": "CHECK (((length(\"scopeKey\") > 0) AND (\"scopeKey\" = btrim(\"scopeKey\"))))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_workflowRunId_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"workflowRunId\", \"projectId\") REFERENCES workflow_run(id, \"projectId\") ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "model_configuration_model_check",
+      "type": "c",
+      "definition": "CHECK ((length(btrim((model)::text)) > 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "model_configuration_ownerId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"ownerId\") REFERENCES auth_user(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "model_configuration_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "model_configuration_providerId_ownerId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"providerId\", \"ownerId\") REFERENCES model_provider(id, \"ownerId\") ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "model_configuration_settings_check",
+      "type": "c",
+      "definition": "CHECK ((jsonb_typeof(settings) = 'object'::text))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "model_provider",
+      "name": "model_provider_configuration_check",
+      "type": "c",
+      "definition": "CHECK ((jsonb_typeof(configuration) = 'object'::text))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "model_provider",
+      "name": "model_provider_ownerId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"ownerId\") REFERENCES auth_user(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "model_provider",
+      "name": "model_provider_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "model_provider",
+      "name": "model_provider_pluginVersion_check",
+      "type": "c",
+      "definition": "CHECK ((\"pluginVersion\" > 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "model_provider",
+      "name": "model_provider_providerDefinitionId_check",
+      "type": "c",
+      "definition": "CHECK (((\"providerDefinitionId\" IS NULL) OR ((\"providerDefinitionId\")::text ~ '^[a-z][a-z0-9_]{0,99}$'::text)))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "node_occurrence_node_nonempty",
+      "type": "c",
+      "definition": "CHECK (((length(\"nodeId\") > 0) AND (\"nodeId\" = btrim(\"nodeId\"))))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "node_occurrence_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "node_occurrence_scope_nonempty",
+      "type": "c",
+      "definition": "CHECK (((length(\"scopeKey\") > 0) AND (\"scopeKey\" = btrim(\"scopeKey\"))))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "node_occurrence_workflowRunId_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"workflowRunId\", \"projectId\") REFERENCES workflow_run(id, \"projectId\") ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_attempt_positive",
+      "type": "c",
+      "definition": "CHECK ((attempt > 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_childExecutionId_workflowRunId_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"childExecutionId\", \"workflowRunId\", \"projectId\") REFERENCES child_execution(id, \"workflowRunId\", \"projectId\") ON UPDATE RESTRICT ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_inputs_object",
+      "type": "c",
+      "definition": "CHECK (((inputs IS NULL) OR (jsonb_typeof(inputs) = 'object'::text)))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_lifecycle",
+      "type": "c",
+      "definition": "CHECK ((((status = 'running'::text) AND (\"completedAt\" IS NULL) AND (outputs IS NULL) AND (error IS NULL)) OR ((status = 'completed'::text) AND (\"completedAt\" IS NOT NULL) AND (inputs IS NOT NULL) AND (outputs IS NOT NULL) AND (error IS NULL)) OR ((status = 'failed'::text) AND (\"completedAt\" IS NOT NULL) AND (outputs IS NULL) AND (error IS NOT NULL)) OR ((status = 'cancelled'::text) AND (\"completedAt\" IS NOT NULL) AND (outputs IS NULL) AND (error IS NULL))))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_occurrenceId_workflowRunId_projectId_nodeId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"occurrenceId\", \"workflowRunId\", \"projectId\", \"nodeId\") REFERENCES node_occurrence(id, \"workflowRunId\", \"projectId\", \"nodeId\") ON UPDATE RESTRICT ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_outputs_object",
+      "type": "c",
+      "definition": "CHECK (((outputs IS NULL) OR (jsonb_typeof(outputs) = 'object'::text)))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"projectId\") REFERENCES canvas_project(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_workflowRunId_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"workflowRunId\", \"projectId\") REFERENCES workflow_run(id, \"projectId\") ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "user_profile",
+      "name": "user_profile_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (\"userId\")",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "user_profile",
+      "name": "user_profile_userId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"userId\") REFERENCES auth_user(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow",
+      "name": "workflow_draft_object",
+      "type": "c",
+      "definition": "CHECK ((jsonb_typeof(draft) = 'object'::text))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow",
+      "name": "workflow_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow",
+      "name": "workflow_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"projectId\") REFERENCES canvas_project(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow",
+      "name": "workflow_revision_positive",
+      "type": "c",
+      "definition": "CHECK ((revision > 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "workflow_execution_outbox_attempts_check",
+      "type": "c",
+      "definition": "CHECK ((attempts >= 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "workflow_execution_outbox_kind_check",
+      "type": "c",
+      "definition": "CHECK ((kind = ANY (ARRAY['start'::text, 'resume'::text])))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "workflow_execution_outbox_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "workflow_execution_outbox_status_check",
+      "type": "c",
+      "definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'published'::text, 'executing'::text, 'completed'::text, 'failed'::text, 'recovery_required'::text, 'cancelled'::text])))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "workflow_execution_outbox_waitingRevision_check",
+      "type": "c",
+      "definition": "CHECK ((\"waitingRevision\" >= 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "workflow_execution_outbox_workflowRunId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"workflowRunId\") REFERENCES workflow_run(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "workflow_execution_payload_identity",
+      "type": "c",
+      "definition": "CHECK ((((jsonb_typeof(payload) = 'object'::text) AND ((payload ->> 'kind'::text) = kind) AND ((payload ->> 'workflowRunId'::text) = \"workflowRunId\") AND (((kind = 'start'::text) AND (\"waitingRevision\" = 0) AND (payload = jsonb_build_object('kind', 'start', 'workflowRunId', \"workflowRunId\"))) OR ((kind = 'resume'::text) AND (\"waitingRevision\" >= 0) AND ((payload ->> 'executionId'::text) = id) AND (payload ? 'value'::text) AND ((payload - ARRAY['kind'::text, 'workflowRunId'::text, 'executionId'::text, 'value'::text]) = '{}'::jsonb)))) IS TRUE))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_error_object",
+      "type": "c",
+      "definition": "CHECK (((error IS NULL) OR (jsonb_typeof(error) = 'object'::text)))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_inputs_object",
+      "type": "c",
+      "definition": "CHECK ((jsonb_typeof(inputs) = 'object'::text))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_lifecycle",
+      "type": "c",
+      "definition": "CHECK ((((status = 'pending'::text) AND (\"startedAt\" IS NULL) AND (\"completedAt\" IS NULL) AND (outputs IS NULL) AND (error IS NULL)) OR ((status = ANY (ARRAY['running'::text, 'waiting'::text])) AND (\"startedAt\" IS NOT NULL) AND (\"completedAt\" IS NULL) AND (outputs IS NULL) AND (error IS NULL)) OR ((status = 'completed'::text) AND (\"startedAt\" IS NOT NULL) AND (\"completedAt\" IS NOT NULL) AND (outputs IS NOT NULL) AND (error IS NULL)) OR ((status = 'failed'::text) AND (\"startedAt\" IS NOT NULL) AND (\"completedAt\" IS NOT NULL) AND (outputs IS NULL) AND (error IS NOT NULL)) OR ((status = 'cancelled'::text) AND (\"completedAt\" IS NOT NULL) AND (outputs IS NULL) AND (error IS NULL) AND ((\"startedAt\" IS NOT NULL) OR (\"cancellationRequestedAt\" IS NOT NULL)))))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_outputs_object",
+      "type": "c",
+      "definition": "CHECK (((outputs IS NULL) OR (jsonb_typeof(outputs) = 'object'::text)))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_projectId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"projectId\") REFERENCES canvas_project(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_waitingRevision_check",
+      "type": "c",
+      "definition": "CHECK ((\"waitingRevision\" >= 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "workflow_version_definition_object",
+      "type": "c",
+      "definition": "CHECK ((jsonb_typeof(definition) = 'object'::text))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "workflow_version_number_positive",
+      "type": "c",
+      "definition": "CHECK ((version > 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "workflow_version_pkey",
+      "type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "workflow_version_source_revision_positive",
+      "type": "c",
+      "definition": "CHECK ((\"sourceRevision\" > 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "workflow_version_workflowId_fkey",
+      "type": "f",
+      "definition": "FOREIGN KEY (\"workflowId\") REFERENCES workflow(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    }
+  ],
+  "indexes": [
+    {
+      "table_name": "artifact",
+      "name": "artifact_nodeRunId_idx",
+      "definition": "CREATE INDEX \"artifact_nodeRunId_idx\" ON public.artifact USING btree (\"nodeRunId\")"
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_pkey",
+      "definition": "CREATE UNIQUE INDEX artifact_pkey ON public.artifact USING btree (id)"
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_projectId_createdAt_idx",
+      "definition": "CREATE INDEX \"artifact_projectId_createdAt_idx\" ON public.artifact USING btree (\"projectId\", \"createdAt\")"
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_status_idx",
+      "definition": "CREATE INDEX artifact_status_idx ON public.artifact USING btree (status)"
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_storageKey_key",
+      "definition": "CREATE UNIQUE INDEX \"artifact_storageKey_key\" ON public.artifact USING btree (\"storageKey\")"
+    },
+    {
+      "table_name": "artifact",
+      "name": "artifact_workflowRunId_idx",
+      "definition": "CREATE INDEX \"artifact_workflowRunId_idx\" ON public.artifact USING btree (\"workflowRunId\")"
+    },
+    {
+      "table_name": "auth_account",
+      "name": "auth_account_pkey",
+      "definition": "CREATE UNIQUE INDEX auth_account_pkey ON public.auth_account USING btree (id)"
+    },
+    {
+      "table_name": "auth_account",
+      "name": "auth_account_providerId_accountId_key",
+      "definition": "CREATE UNIQUE INDEX \"auth_account_providerId_accountId_key\" ON public.auth_account USING btree (\"providerId\", \"accountId\")"
+    },
+    {
+      "table_name": "auth_account",
+      "name": "auth_account_userId_idx",
+      "definition": "CREATE INDEX \"auth_account_userId_idx\" ON public.auth_account USING btree (\"userId\")"
+    },
+    {
+      "table_name": "auth_rate_limit",
+      "name": "auth_rate_limit_key_key",
+      "definition": "CREATE UNIQUE INDEX auth_rate_limit_key_key ON public.auth_rate_limit USING btree (key)"
+    },
+    {
+      "table_name": "auth_rate_limit",
+      "name": "auth_rate_limit_pkey",
+      "definition": "CREATE UNIQUE INDEX auth_rate_limit_pkey ON public.auth_rate_limit USING btree (id)"
+    },
+    {
+      "table_name": "auth_session",
+      "name": "auth_session_expiresAt_idx",
+      "definition": "CREATE INDEX \"auth_session_expiresAt_idx\" ON public.auth_session USING btree (\"expiresAt\")"
+    },
+    {
+      "table_name": "auth_session",
+      "name": "auth_session_pkey",
+      "definition": "CREATE UNIQUE INDEX auth_session_pkey ON public.auth_session USING btree (id)"
+    },
+    {
+      "table_name": "auth_session",
+      "name": "auth_session_token_key",
+      "definition": "CREATE UNIQUE INDEX auth_session_token_key ON public.auth_session USING btree (token)"
+    },
+    {
+      "table_name": "auth_session",
+      "name": "auth_session_userId_idx",
+      "definition": "CREATE INDEX \"auth_session_userId_idx\" ON public.auth_session USING btree (\"userId\")"
+    },
+    {
+      "table_name": "auth_user",
+      "name": "auth_user_email_key",
+      "definition": "CREATE UNIQUE INDEX auth_user_email_key ON public.auth_user USING btree (email)"
+    },
+    {
+      "table_name": "auth_user",
+      "name": "auth_user_pkey",
+      "definition": "CREATE UNIQUE INDEX auth_user_pkey ON public.auth_user USING btree (id)"
+    },
+    {
+      "table_name": "auth_verification",
+      "name": "auth_verification_identifier_idx",
+      "definition": "CREATE INDEX auth_verification_identifier_idx ON public.auth_verification USING btree (identifier)"
+    },
+    {
+      "table_name": "auth_verification",
+      "name": "auth_verification_pkey",
+      "definition": "CREATE UNIQUE INDEX auth_verification_pkey ON public.auth_verification USING btree (id)"
+    },
+    {
+      "table_name": "canvas_project",
+      "name": "canvas_project_ownerId_updatedAt_id_idx",
+      "definition": "CREATE INDEX \"canvas_project_ownerId_updatedAt_id_idx\" ON public.canvas_project USING btree (\"ownerId\", \"updatedAt\", id)"
+    },
+    {
+      "table_name": "canvas_project",
+      "name": "canvas_project_pkey",
+      "definition": "CREATE UNIQUE INDEX canvas_project_pkey ON public.canvas_project USING btree (id)"
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_id_workflowRunId_projectId_key",
+      "definition": "CREATE UNIQUE INDEX \"child_execution_id_workflowRunId_projectId_key\" ON public.child_execution USING btree (id, \"workflowRunId\", \"projectId\")"
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_parentNodeRunId_index_key",
+      "definition": "CREATE UNIQUE INDEX \"child_execution_parentNodeRunId_index_key\" ON public.child_execution USING btree (\"parentNodeRunId\", index)"
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_parentNodeRunId_invocationKey_key",
+      "definition": "CREATE UNIQUE INDEX \"child_execution_parentNodeRunId_invocationKey_key\" ON public.child_execution USING btree (\"parentNodeRunId\", \"invocationKey\")"
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_pkey",
+      "definition": "CREATE UNIQUE INDEX child_execution_pkey ON public.child_execution USING btree (id)"
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_workflowRunId_idx",
+      "definition": "CREATE INDEX \"child_execution_workflowRunId_idx\" ON public.child_execution USING btree (\"workflowRunId\")"
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_workflowRunId_scopeKey_key",
+      "definition": "CREATE UNIQUE INDEX \"child_execution_workflowRunId_scopeKey_key\" ON public.child_execution USING btree (\"workflowRunId\", \"scopeKey\")"
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "model_configuration_ownerId_idx",
+      "definition": "CREATE INDEX \"model_configuration_ownerId_idx\" ON public.model_configuration USING btree (\"ownerId\")"
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "model_configuration_pkey",
+      "definition": "CREATE UNIQUE INDEX model_configuration_pkey ON public.model_configuration USING btree (id)"
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "model_configuration_providerId_idx",
+      "definition": "CREATE INDEX \"model_configuration_providerId_idx\" ON public.model_configuration USING btree (\"providerId\")"
+    },
+    {
+      "table_name": "model_provider",
+      "name": "model_provider_id_ownerId_key",
+      "definition": "CREATE UNIQUE INDEX \"model_provider_id_ownerId_key\" ON public.model_provider USING btree (id, \"ownerId\")"
+    },
+    {
+      "table_name": "model_provider",
+      "name": "model_provider_ownerId_idx",
+      "definition": "CREATE INDEX \"model_provider_ownerId_idx\" ON public.model_provider USING btree (\"ownerId\")"
+    },
+    {
+      "table_name": "model_provider",
+      "name": "model_provider_pkey",
+      "definition": "CREATE UNIQUE INDEX model_provider_pkey ON public.model_provider USING btree (id)"
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "node_occurrence_id_workflowRunId_projectId_nodeId_key",
+      "definition": "CREATE UNIQUE INDEX \"node_occurrence_id_workflowRunId_projectId_nodeId_key\" ON public.node_occurrence USING btree (id, \"workflowRunId\", \"projectId\", \"nodeId\")"
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "node_occurrence_pkey",
+      "definition": "CREATE UNIQUE INDEX node_occurrence_pkey ON public.node_occurrence USING btree (id)"
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "node_occurrence_workflowRunId_scopeKey_nodeId_key",
+      "definition": "CREATE UNIQUE INDEX \"node_occurrence_workflowRunId_scopeKey_nodeId_key\" ON public.node_occurrence USING btree (\"workflowRunId\", \"scopeKey\", \"nodeId\")"
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_childExecutionId_idx",
+      "definition": "CREATE INDEX \"node_run_childExecutionId_idx\" ON public.node_run USING btree (\"childExecutionId\")"
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_id_workflowRunId_projectId_key",
+      "definition": "CREATE UNIQUE INDEX \"node_run_id_workflowRunId_projectId_key\" ON public.node_run USING btree (id, \"workflowRunId\", \"projectId\")"
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_id_workflowRunId_projectId_nodeId_key",
+      "definition": "CREATE UNIQUE INDEX \"node_run_id_workflowRunId_projectId_nodeId_key\" ON public.node_run USING btree (id, \"workflowRunId\", \"projectId\", \"nodeId\")"
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_occurrenceId_attempt_key",
+      "definition": "CREATE UNIQUE INDEX \"node_run_occurrenceId_attempt_key\" ON public.node_run USING btree (\"occurrenceId\", attempt)"
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_pkey",
+      "definition": "CREATE UNIQUE INDEX node_run_pkey ON public.node_run USING btree (id)"
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_projectId_workflowRunId_idx",
+      "definition": "CREATE INDEX \"node_run_projectId_workflowRunId_idx\" ON public.node_run USING btree (\"projectId\", \"workflowRunId\")"
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_workflowRunId_idx",
+      "definition": "CREATE INDEX \"node_run_workflowRunId_idx\" ON public.node_run USING btree (\"workflowRunId\")"
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_workflowRunId_nodeId_idx",
+      "definition": "CREATE INDEX \"node_run_workflowRunId_nodeId_idx\" ON public.node_run USING btree (\"workflowRunId\", \"nodeId\")"
+    },
+    {
+      "table_name": "user_profile",
+      "name": "user_profile_pkey",
+      "definition": "CREATE UNIQUE INDEX user_profile_pkey ON public.user_profile USING btree (\"userId\")"
+    },
+    {
+      "table_name": "workflow",
+      "name": "workflow_pkey",
+      "definition": "CREATE UNIQUE INDEX workflow_pkey ON public.workflow USING btree (id)"
+    },
+    {
+      "table_name": "workflow",
+      "name": "workflow_projectId_key",
+      "definition": "CREATE UNIQUE INDEX \"workflow_projectId_key\" ON public.workflow USING btree (\"projectId\")"
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "workflow_execution_outbox_pkey",
+      "definition": "CREATE UNIQUE INDEX workflow_execution_outbox_pkey ON public.workflow_execution_outbox USING btree (id)"
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "workflow_execution_outbox_status_availableAt_createdAt_idx",
+      "definition": "CREATE INDEX \"workflow_execution_outbox_status_availableAt_createdAt_idx\" ON public.workflow_execution_outbox USING btree (status, \"availableAt\", \"createdAt\")"
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "workflow_execution_outbox_workflowRunId_kind_waitingRevisio_key",
+      "definition": "CREATE UNIQUE INDEX \"workflow_execution_outbox_workflowRunId_kind_waitingRevisio_key\" ON public.workflow_execution_outbox USING btree (\"workflowRunId\", kind, \"waitingRevision\")"
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_id_projectId_key",
+      "definition": "CREATE UNIQUE INDEX \"workflow_run_id_projectId_key\" ON public.workflow_run USING btree (id, \"projectId\")"
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_pkey",
+      "definition": "CREATE UNIQUE INDEX workflow_run_pkey ON public.workflow_run USING btree (id)"
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_projectId_idx",
+      "definition": "CREATE INDEX \"workflow_run_projectId_idx\" ON public.workflow_run USING btree (\"projectId\")"
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_status_idx",
+      "definition": "CREATE INDEX workflow_run_status_idx ON public.workflow_run USING btree (status)"
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_threadId_key",
+      "definition": "CREATE UNIQUE INDEX \"workflow_run_threadId_key\" ON public.workflow_run USING btree (\"threadId\")"
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_workflowId_idx",
+      "definition": "CREATE INDEX \"workflow_run_workflowId_idx\" ON public.workflow_run USING btree (\"workflowId\")"
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_workflowId_invocationKey_key",
+      "definition": "CREATE UNIQUE INDEX \"workflow_run_workflowId_invocationKey_key\" ON public.workflow_run USING btree (\"workflowId\", \"invocationKey\")"
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_workflowVersionId_idx",
+      "definition": "CREATE INDEX \"workflow_run_workflowVersionId_idx\" ON public.workflow_run USING btree (\"workflowVersionId\")"
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "workflow_version_pkey",
+      "definition": "CREATE UNIQUE INDEX workflow_version_pkey ON public.workflow_version USING btree (id)"
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "workflow_version_workflowId_idx",
+      "definition": "CREATE INDEX \"workflow_version_workflowId_idx\" ON public.workflow_version USING btree (\"workflowId\")"
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "workflow_version_workflowId_sourceRevision_key",
+      "definition": "CREATE UNIQUE INDEX \"workflow_version_workflowId_sourceRevision_key\" ON public.workflow_version USING btree (\"workflowId\", \"sourceRevision\")"
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "workflow_version_workflowId_version_key",
+      "definition": "CREATE UNIQUE INDEX \"workflow_version_workflowId_version_key\" ON public.workflow_version USING btree (\"workflowId\", version)"
+    }
+  ],
+  "triggers": [
+    {
+      "table_name": "artifact",
+      "name": "artifact_write_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER artifact_write_guard BEFORE UPDATE ON public.artifact FOR EACH ROW EXECUTE FUNCTION guard_artifact_write()"
+    },
+    {
+      "table_name": "child_execution",
+      "name": "child_execution_update_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER child_execution_update_guard BEFORE UPDATE ON public.child_execution FOR EACH ROW EXECUTE FUNCTION guard_child_execution_update()"
+    },
+    {
+      "table_name": "model_configuration",
+      "name": "model_configuration_identity_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER model_configuration_identity_guard BEFORE UPDATE ON public.model_configuration FOR EACH ROW EXECUTE FUNCTION guard_model_configuration_identity()"
+    },
+    {
+      "table_name": "model_provider",
+      "name": "model_provider_identity_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER model_provider_identity_guard BEFORE UPDATE ON public.model_provider FOR EACH ROW EXECUTE FUNCTION guard_model_provider_identity()"
+    },
+    {
+      "table_name": "node_occurrence",
+      "name": "node_occurrence_update_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER node_occurrence_update_guard BEFORE UPDATE ON public.node_occurrence FOR EACH ROW EXECUTE FUNCTION guard_node_occurrence_update()"
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_child_scope_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER node_run_child_scope_guard BEFORE INSERT ON public.node_run FOR EACH ROW EXECUTE FUNCTION guard_node_run_child_scope()"
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_identity_update_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER node_run_identity_update_guard BEFORE UPDATE ON public.node_run FOR EACH ROW EXECUTE FUNCTION guard_node_run_identity_update()"
+    },
+    {
+      "table_name": "node_run",
+      "name": "node_run_terminal_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER node_run_terminal_guard BEFORE UPDATE ON public.node_run FOR EACH ROW EXECUTE FUNCTION guard_node_run_terminal()"
+    },
+    {
+      "table_name": "workflow_execution_outbox",
+      "name": "workflow_execution_intent_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER workflow_execution_intent_guard BEFORE UPDATE ON public.workflow_execution_outbox FOR EACH ROW EXECUTE FUNCTION guard_workflow_execution_intent()"
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_run_update_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER workflow_run_update_guard BEFORE UPDATE ON public.workflow_run FOR EACH ROW EXECUTE FUNCTION guard_workflow_run_update()"
+    },
+    {
+      "table_name": "workflow_run",
+      "name": "workflow_waiting_revision_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER workflow_waiting_revision_guard BEFORE UPDATE ON public.workflow_run FOR EACH ROW EXECUTE FUNCTION advance_workflow_waiting_revision()"
+    },
+    {
+      "table_name": "workflow_version",
+      "name": "workflow_version_update_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER workflow_version_update_guard BEFORE UPDATE ON public.workflow_version FOR EACH ROW EXECUTE FUNCTION guard_workflow_version_update()"
+    }
+  ],
+  "functions": [
+    {
+      "name": "advance_workflow_waiting_revision",
+      "definition": "CREATE OR REPLACE FUNCTION public.advance_workflow_waiting_revision()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF NEW.\"waitingRevision\" IS DISTINCT FROM OLD.\"waitingRevision\" THEN\n    RAISE EXCEPTION 'Workflow waiting revision is managed by lifecycle' USING ERRCODE = '23514';\n  END IF;\n  IF OLD.\"status\" = 'running' AND NEW.\"status\" = 'waiting' THEN\n    NEW.\"waitingRevision\" := OLD.\"waitingRevision\" + 1;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_artifact_write",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_artifact_write()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF ROW(NEW.\"id\", NEW.\"projectId\", NEW.\"workflowRunId\", NEW.\"nodeRunId\", NEW.\"nodeId\", NEW.\"outputKey\", NEW.\"type\", NEW.\"contentKind\", NEW.\"storageKey\", NEW.\"mimeType\", NEW.\"size\", NEW.\"checksum\", NEW.\"createdAt\")\n    IS DISTINCT FROM ROW(OLD.\"id\", OLD.\"projectId\", OLD.\"workflowRunId\", OLD.\"nodeRunId\", OLD.\"nodeId\", OLD.\"outputKey\", OLD.\"type\", OLD.\"contentKind\", OLD.\"storageKey\", OLD.\"mimeType\", OLD.\"size\", OLD.\"checksum\", OLD.\"createdAt\") THEN\n    RAISE EXCEPTION 'Artifact content identity is immutable' USING ERRCODE = '23514';\n  END IF;\n  IF OLD.\"status\" <> 'writing' OR NEW.\"status\" NOT IN ('ready', 'failed') THEN\n    RAISE EXCEPTION 'Invalid artifact write transition' USING ERRCODE = '23514';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_child_execution_update",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_child_execution_update()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF ROW(NEW.\"id\", NEW.\"projectId\", NEW.\"workflowRunId\", NEW.\"parentNodeRunId\", NEW.\"parentNodeId\", NEW.\"scopeKey\", NEW.\"kind\", NEW.\"invocationKey\", NEW.\"metadata\", NEW.\"index\", NEW.\"createdAt\", NEW.\"startedAt\")\n    IS DISTINCT FROM ROW(OLD.\"id\", OLD.\"projectId\", OLD.\"workflowRunId\", OLD.\"parentNodeRunId\", OLD.\"parentNodeId\", OLD.\"scopeKey\", OLD.\"kind\", OLD.\"invocationKey\", OLD.\"metadata\", OLD.\"index\", OLD.\"createdAt\", OLD.\"startedAt\") THEN\n    RAISE EXCEPTION 'ChildExecution identity is immutable' USING ERRCODE = '23514';\n  END IF;\n  IF OLD.\"status\" <> 'running' AND NEW IS DISTINCT FROM OLD THEN\n    RAISE EXCEPTION 'ChildExecution terminal record is immutable' USING ERRCODE = '23514';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_model_configuration_identity",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_model_configuration_identity()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF ROW(NEW.\"id\", NEW.\"ownerId\", NEW.\"providerId\", NEW.\"capability\", NEW.\"model\", NEW.\"settings\", NEW.\"createdAt\")\n    IS DISTINCT FROM ROW(OLD.\"id\", OLD.\"ownerId\", OLD.\"providerId\", OLD.\"capability\", OLD.\"model\", OLD.\"settings\", OLD.\"createdAt\") THEN\n    RAISE EXCEPTION 'Model capability binding is immutable' USING ERRCODE = '23514';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_model_provider_identity",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_model_provider_identity()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF ROW(NEW.\"id\", NEW.\"ownerId\", NEW.\"name\", NEW.\"pluginId\", NEW.\"pluginVersion\", NEW.\"configuration\", NEW.\"providerDefinitionId\", NEW.\"createdAt\")\n    IS DISTINCT FROM ROW(OLD.\"id\", OLD.\"ownerId\", OLD.\"name\", OLD.\"pluginId\", OLD.\"pluginVersion\", OLD.\"configuration\", OLD.\"providerDefinitionId\", OLD.\"createdAt\") THEN\n    RAISE EXCEPTION 'Model provider configuration is immutable' USING ERRCODE = '23514';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_node_occurrence_update",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_node_occurrence_update()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF NEW IS DISTINCT FROM OLD THEN\n    RAISE EXCEPTION 'NodeOccurrence identity is immutable' USING ERRCODE = '23514';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_node_run_child_scope",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_node_run_child_scope()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE occurrence_scope TEXT; child_scope TEXT;\nBEGIN\n  SELECT \"scopeKey\" INTO occurrence_scope FROM \"node_occurrence\" WHERE \"id\" = NEW.\"occurrenceId\";\n  IF NEW.\"childExecutionId\" IS NULL THEN\n    IF occurrence_scope <> 'root' THEN\n      RAISE EXCEPTION 'Non-root NodeRun requires ChildExecution' USING ERRCODE = '23514';\n    END IF;\n  ELSE\n    SELECT \"scopeKey\" INTO child_scope FROM \"child_execution\" WHERE \"id\" = NEW.\"childExecutionId\";\n    IF child_scope IS NULL OR child_scope IS DISTINCT FROM occurrence_scope OR occurrence_scope = 'root' THEN\n      RAISE EXCEPTION 'NodeRun child execution scope mismatch' USING ERRCODE = '23514';\n    END IF;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_node_run_identity_update",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_node_run_identity_update()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF ROW(NEW.\"id\", NEW.\"projectId\", NEW.\"workflowRunId\", NEW.\"nodeId\", NEW.\"occurrenceId\", NEW.\"childExecutionId\", NEW.\"attempt\", NEW.\"startedAt\")\n    IS DISTINCT FROM ROW(OLD.\"id\", OLD.\"projectId\", OLD.\"workflowRunId\", OLD.\"nodeId\", OLD.\"occurrenceId\", OLD.\"childExecutionId\", OLD.\"attempt\", OLD.\"startedAt\") THEN\n    RAISE EXCEPTION 'NodeRun occurrence, child execution and attempt identity are immutable' USING ERRCODE = '23514';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_node_run_terminal",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_node_run_terminal()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF OLD.\"status\" <> 'running' AND NEW IS DISTINCT FROM OLD THEN\n    RAISE EXCEPTION 'NodeRun terminal record is immutable' USING ERRCODE = '23514';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_workflow_execution_intent",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_workflow_execution_intent()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF ROW(NEW.\"id\", NEW.\"kind\", NEW.\"workflowRunId\", NEW.\"waitingRevision\", NEW.\"payload\", NEW.\"createdAt\")\n    IS DISTINCT FROM ROW(OLD.\"id\", OLD.\"kind\", OLD.\"workflowRunId\", OLD.\"waitingRevision\", OLD.\"payload\", OLD.\"createdAt\") THEN\n    RAISE EXCEPTION 'Workflow execution intent is immutable' USING ERRCODE = '23514';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_workflow_run_update",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_workflow_run_update()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF ROW(NEW.\"id\", NEW.\"projectId\", NEW.\"workflowId\", NEW.\"workflowVersionId\", NEW.\"threadId\", NEW.\"invocationKey\", NEW.\"inputs\", NEW.\"createdAt\")\n    IS DISTINCT FROM ROW(OLD.\"id\", OLD.\"projectId\", OLD.\"workflowId\", OLD.\"workflowVersionId\", OLD.\"threadId\", OLD.\"invocationKey\", OLD.\"inputs\", OLD.\"createdAt\") THEN\n    RAISE EXCEPTION 'WorkflowRun identity, version and inputs are immutable' USING ERRCODE = '23514';\n  END IF;\n  IF OLD.\"startedAt\" IS NOT NULL AND NEW.\"startedAt\" IS DISTINCT FROM OLD.\"startedAt\" THEN\n    RAISE EXCEPTION 'WorkflowRun startedAt is immutable after start' USING ERRCODE = '23514';\n  END IF;\n  IF OLD.\"cancellationRequestedAt\" IS NOT NULL AND NEW.\"cancellationRequestedAt\" IS DISTINCT FROM OLD.\"cancellationRequestedAt\" THEN\n    RAISE EXCEPTION 'WorkflowRun cancellation request is immutable' USING ERRCODE = '23514';\n  END IF;\n  IF NOT (\n    (OLD.\"status\" IN ('pending', 'waiting') AND NEW.\"status\" = 'running' AND NEW.\"cancellationRequestedAt\" IS NULL) OR\n    (OLD.\"status\" = 'running' AND NEW.\"status\" IN ('waiting', 'completed', 'failed')) OR\n    (OLD.\"status\" IN ('pending', 'running', 'waiting') AND NEW.\"status\" = 'cancelled' AND NEW.\"cancellationRequestedAt\" IS NOT NULL AND (OLD.\"status\" <> 'pending' OR NEW.\"startedAt\" IS NULL)) OR\n    -- 不改变执行状态，只首次写取消意图；终态不接受新请求或任何更新。\n    (OLD.\"status\" IN ('pending', 'running', 'waiting') AND NEW.\"status\" = OLD.\"status\" AND OLD.\"cancellationRequestedAt\" IS NULL AND NEW.\"cancellationRequestedAt\" IS NOT NULL AND\n      (to_jsonb(NEW) - 'cancellationRequestedAt') = (to_jsonb(OLD) - 'cancellationRequestedAt'))\n  ) THEN\n    RAISE EXCEPTION 'Invalid WorkflowRun status transition' USING ERRCODE = '23514';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_workflow_version_update",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_workflow_version_update()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  RAISE EXCEPTION 'WorkflowVersion is immutable' USING ERRCODE = '23514';\nEND;\n$function$\n"
+    }
+  ],
+  "enums": []
+}
