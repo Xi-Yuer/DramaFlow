@@ -32,7 +32,7 @@ afterAll(async () => {
 });
 async function fixture() {
   const project = await db.project.create({
-    data: { ownerId, name: 'Invocation', viewport: {} },
+    data: { ownerId, name: 'Invocation' },
   });
   const definition: WorkflowDefinition = {
     inputs: [{ name: 'a', type: AnyType, required: false }],

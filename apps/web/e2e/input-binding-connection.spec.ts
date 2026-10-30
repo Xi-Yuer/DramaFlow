@@ -1,9 +1,6 @@
+import { createProjectWithWorkflow } from './fixtures.js';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
-import {
-  projectSchema,
-  workflowResponseSchema,
-  type WorkflowDefinition,
-} from '@dramaflow/contracts';
+import { workflowResponseSchema, type WorkflowDefinition } from '@dramaflow/contracts';
 import { expect, origin, test } from './fixtures.js';
 
 const replaceTitle = '该输入已有内容。连接后将改为使用上游节点输出，当前内容将被替换。';
@@ -81,16 +78,9 @@ function definition(): WorkflowDefinition {
 }
 
 async function createProject(api: APIRequestContext) {
-  const project = projectSchema.parse(
-    await (
-      await api.post('/api/v1/projects', {
-        headers: { Origin: origin },
-        data: { name: '连线替换确认' },
-      })
-    ).json(),
-  );
+  const project = await createProjectWithWorkflow(api, '画布测试项目');
   const workflow = workflowResponseSchema.parse(
-    await (await api.get(`/api/v1/projects/${project.id}/workflow`)).json(),
+    await (await api.get(`/api/v1/projects/${project.id}/workflows/${project.workflowId}`)).json(),
   );
   const saved = await api.put(`/api/v1/workflows/${workflow.id}/draft`, {
     headers: { Origin: origin },
@@ -100,9 +90,9 @@ async function createProject(api: APIRequestContext) {
   return project;
 }
 
-async function readWorkflow(api: APIRequestContext, projectId: string) {
+async function readWorkflow(api: APIRequestContext, projectId: string, workflowId: string) {
   return workflowResponseSchema.parse(
-    await (await api.get(`/api/v1/projects/${projectId}/workflow`)).json(),
+    await (await api.get(`/api/v1/projects/${projectId}/workflows/${workflowId}`)).json(),
   );
 }
 
@@ -149,7 +139,7 @@ test('已有输入内容时连接前确认，取消保持原图，确认后才�
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 2400, height: 1400 });
   const project = await createProject(request);
-  await page.goto(`/projects/${project.id}/workflows`);
+  await page.goto(`/projects/${project.id}/workflows/${project.workflowId}`);
   const blank = node(page, 'blank');
   const constant = node(page, 'constant');
   const template = node(page, 'template');
@@ -205,7 +195,7 @@ test('已有输入内容时连接前确认，取消保持原图，确认后才�
   await expect(page.locator('.react-flow__edge')).toHaveCount(4);
 
   expect((await save(page)).ok()).toBeTruthy();
-  const stored = await readWorkflow(request, project.id);
+  const stored = await readWorkflow(request, project.id, project.workflowId);
   const inputs = (id: string) => stored.draft.nodes.find((item) => item.id === id)?.inputs;
   expect(inputs('blank')).toEqual({});
   expect(inputs('constant')).toEqual({});

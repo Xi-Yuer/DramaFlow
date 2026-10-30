@@ -55,6 +55,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 const workflow: WorkflowResponse = {
+  viewport: { x: 0, y: 0, zoom: 1 },
+  metadataRevision: 1,
   id: 'workflow',
   projectId: '7ac10b00-33cc-4e50-9a2b-05ef764c44f4',
   name: '工作流',

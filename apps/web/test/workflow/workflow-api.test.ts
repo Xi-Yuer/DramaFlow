@@ -28,6 +28,8 @@ const workflow = {
   projectId: '7ac10b00-33cc-4e50-9a2b-05ef764c44f4',
   name: '默认工作流',
   revision: 3,
+  metadataRevision: 1,
+  viewport: { x: 0, y: 0, zoom: 1 },
   draft,
   createdAt: '2026-10-21T00:00:00.000Z',
   updatedAt: '2026-10-21T00:00:00.000Z',
@@ -55,7 +57,7 @@ describe('Workflow 编辑 HTTP 边界', () => {
     expect(request.definition).toEqual(before);
     expect(request.definition.edges).toEqual([]);
     mockResponse({ ...workflow, revision: 4, draft: request.definition });
-    const loaded = (await workflowApi.get(workflow.projectId)).draft;
+    const loaded = (await workflowApi.get(workflow.projectId, workflow.id)).draft;
     expect(loaded).toEqual(before);
     expect(toReactFlowEdges(loaded)).toEqual(edges);
     const resave = mockResponse({ revision: 5 });
@@ -77,7 +79,7 @@ describe('Workflow 编辑 HTTP 边界', () => {
         request.definition.edges.every((edge: { kind: string }) => edge.kind === 'control'),
       ).toBe(true);
       mockResponse({ ...workflow, revision: 4, draft: request.definition });
-      const loaded = (await workflowApi.get(workflow.projectId)).draft;
+      const loaded = (await workflowApi.get(workflow.projectId, workflow.id)).draft;
       expect(loaded).toEqual(draft);
       expect(JSON.stringify(loaded)).toBe(JSON.stringify(draft));
       expect(toReactFlowEdges(loaded)).toEqual(toReactFlowEdges(draft));
@@ -99,7 +101,7 @@ describe('Workflow 编辑 HTTP 边界', () => {
       const request = JSON.parse(fetch.mock.calls[0]![1].body as string);
       expect(request.definition).toEqual(draft);
       mockResponse({ ...workflow, revision: 4, draft: request.definition });
-      expect((await workflowApi.get(workflow.projectId)).draft).toEqual(draft);
+      expect((await workflowApi.get(workflow.projectId, workflow.id)).draft).toEqual(draft);
       expect(projectWorkflowEnd(draft).edges).toHaveLength(draft.outputs[0]!.sources!.length);
     }
   });
@@ -133,7 +135,7 @@ describe('Workflow 编辑 HTTP 边界', () => {
     const request = JSON.parse(fetch.mock.calls[0]![1].body as string);
     expect(request.definition).toEqual(complete);
     mockResponse({ ...workflow, revision: 5, draft: request.definition });
-    const reloaded = await workflowApi.get(workflow.projectId);
+    const reloaded = await workflowApi.get(workflow.projectId, workflow.id);
     expect(reloaded.draft).toEqual(complete);
     expect(conditionToFields(reloaded.draft.nodes[0]!.config.condition)).toEqual({
       operator: 'not_contains',
@@ -142,24 +144,26 @@ describe('Workflow 编辑 HTTP 边界', () => {
   });
   it('GET 保留真实身份、草稿和独立 revision，并使用同源会话', async () => {
     const fetch = mockResponse(workflow);
-    expect(await workflowApi.get(workflow.projectId)).toEqual(workflow);
+    expect(await workflowApi.get(workflow.projectId, workflow.id)).toEqual(workflow);
     expect(fetch).toHaveBeenCalledWith(
-      `/api/v1/projects/${workflow.projectId}/workflow`,
+      `/api/v1/projects/${workflow.projectId}/workflows/${workflow.id}`,
       expect.objectContaining({ credentials: 'same-origin' }),
     );
   });
-  it('GET 404 传播给显式初始化 UI，不自动 POST', async () => {
+  it('GET 404 传播给明确身份的错误 UI，不自动 POST', async () => {
     const fetch = mockResponse({ message: '工作流不存在' }, 404);
-    await expect(workflowApi.get(workflow.projectId)).rejects.toMatchObject({ status: 404 });
+    await expect(workflowApi.get(workflow.projectId, workflow.id)).rejects.toMatchObject({
+      status: 404,
+    });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch.mock.calls[0][1].method).toBeUndefined();
   });
-  it('初始化是独立 POST 操作', async () => {
+  it('创建是显式命名的独立 POST 操作', async () => {
     const fetch = mockResponse(workflow);
-    await workflowApi.initialize(workflow.projectId);
+    await workflowApi.create(workflow.projectId, '新工作流');
     expect(fetch).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ method: 'POST', body: '{}' }),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: '新工作流' }) }),
     );
   });
   it('PUT 完整草稿与 expectedRevision，空配置草稿不执行发布校验', async () => {
@@ -186,7 +190,7 @@ describe('Workflow 编辑 HTTP 边界', () => {
   });
   it('网络失败不转为成功或空草稿', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('网络中断')));
-    await expect(workflowApi.get(workflow.projectId)).rejects.toThrow('网络中断');
+    await expect(workflowApi.get(workflow.projectId, workflow.id)).rejects.toThrow('网络中断');
   });
   it('End output 保存后重新读取无损，boundary node / edge 不进入请求', async () => {
     const definitionWithOutput = addWorkflowOutput(
@@ -207,7 +211,7 @@ describe('Workflow 编辑 HTTP 边界', () => {
     ).toBe(false);
     expect(request.definition.edges).toEqual([]);
     mockResponse({ ...workflow, revision: 4, draft: request.definition });
-    const reloaded = await workflowApi.get(workflow.projectId);
+    const reloaded = await workflowApi.get(workflow.projectId, workflow.id);
     expect(reloaded.draft.outputs).toEqual(definitionWithOutput.outputs);
     expect(projectWorkflowEnd(reloaded.draft).edges).toHaveLength(1);
   });

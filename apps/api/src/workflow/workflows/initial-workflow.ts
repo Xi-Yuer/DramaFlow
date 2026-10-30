@@ -1,7 +1,7 @@
-// 新项目与已有项目的显式初始化共用同一份初始值；不建立版本或运行。
-export function createInitialWorkflowData() {
+// 显式创建独立 Workflow 的空草稿；不建立版本或运行。
+export function createInitialWorkflowData(name: string) {
   return {
-    name: '默认工作流',
+    name,
     draft: { inputs: [], nodes: [], edges: [], outputs: [] },
   };
 }

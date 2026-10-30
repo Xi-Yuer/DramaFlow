@@ -1,44 +1,24 @@
-import { useCallback, useRef, useState, type RefObject } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { OnMove } from '@xyflow/react';
 import { App } from 'antd';
 import { useQueryClient } from '@tanstack/react-query';
 import { saveProjectSchema, type Project } from '@dramaflow/contracts';
 import { ApiError } from '@/lib/http';
 import { projectApi, projectKeys } from '@/features/projects/project-api';
-import type { GraphCanvasSessionHandle } from '../navigation/graph-canvas-session';
-import { clampViewport, draftSignature } from '../navigation/viewport';
 
-export function useProjectMetadata(
-  project: Project,
-  graphSession: RefObject<GraphCanvasSessionHandle | null>,
-) {
+export function useProjectMetadata(project: Project) {
   const cache = useQueryClient();
   const router = useRouter();
   const { message, modal } = App.useApp();
   const [name, setName] = useState(project.name);
-  const [viewport, setViewport] = useState(project.viewport);
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [projectError, setProjectError] = useState<string | null>(null);
   const [reloadingProject, setReloadingProject] = useState(false);
   const [revision, setRevision] = useState(project.revision);
-  const [savedSignature, setSavedSignature] = useState(() =>
-    draftSignature(project.name, project.viewport),
-  );
-  const signature = draftSignature(name, viewport);
+  const [savedSignature, setSavedSignature] = useState(() => project.name);
+  const signature = name.trim();
   const dirty = signature !== savedSignature;
-
-  const onMoveEnd = useCallback<OnMove>((_, next) => {
-    const view = clampViewport(next);
-    setViewport((current) =>
-      current.x.toFixed(2) === view.x.toFixed(2) &&
-      current.y.toFixed(2) === view.y.toFixed(2) &&
-      current.zoom.toFixed(3) === view.zoom.toFixed(3)
-        ? current
-        : view,
-    );
-  }, []);
 
   const savingLock = useRef(false);
   const save = useCallback(async () => {
@@ -48,8 +28,7 @@ export function useProjectMetadata(
       void message.error('请填写项目名称');
       return;
     }
-    const view = clampViewport(graphSession.current?.getRootViewport() ?? viewport);
-    const payload = { revision, name: trimmed, viewport: view };
+    const payload = { revision, name: trimmed };
     const parsed = saveProjectSchema.safeParse(payload);
     if (!parsed.success) {
       void message.error(parsed.error.issues[0]?.message ?? '画布内容不符合保存协议');
@@ -61,12 +40,10 @@ export function useProjectMetadata(
     try {
       const result = await projectApi.save(project.id, parsed.data);
       setRevision(result.revision);
-      setSavedSignature(draftSignature(trimmed, view));
+      setSavedSignature(trimmed);
       setConflict(false);
       cache.setQueryData<Project>(projectKeys.detail(project.id), (current) =>
-        current
-          ? { ...current, name: trimmed, viewport: view, revision: result.revision }
-          : current,
+        current ? { ...current, name: trimmed, revision: result.revision } : current,
       );
       void cache.invalidateQueries({ queryKey: projectKeys.list, exact: true });
       void message.success('项目信息已保存');
@@ -81,18 +58,7 @@ export function useProjectMetadata(
       savingLock.current = false;
       setSaving(false);
     }
-  }, [
-    dirty,
-    reloadingProject,
-    conflict,
-    message,
-    name,
-    project.id,
-    revision,
-    viewport,
-    graphSession,
-    cache,
-  ]);
+  }, [dirty, reloadingProject, conflict, message, name, project.id, revision, cache]);
 
   function reloadProject() {
     const read = async () => {
@@ -102,10 +68,8 @@ export function useProjectMetadata(
       try {
         const result = await projectApi.get(project.id);
         setName(result.name);
-        setViewport(result.viewport);
-        graphSession.current?.setRootViewport(result.viewport);
         setRevision(result.revision);
-        setSavedSignature(draftSignature(result.name, result.viewport));
+        setSavedSignature(result.name);
         setConflict(false);
         setProjectError(null);
         cache.setQueryData(projectKeys.detail(project.id), result);
@@ -121,8 +85,7 @@ export function useProjectMetadata(
       return;
     }
     modal.confirm({
-      title: '重新读取项目信息会放弃名称和视口修改',
-      content: '当前工作流草稿的修改会保留。',
+      title: '重新读取项目信息会放弃名称修改',
       okText: '读取服务器项目信息',
       cancelText: '继续编辑',
       onOk: read,
@@ -155,14 +118,12 @@ export function useProjectMetadata(
   return {
     name,
     setName,
-    viewport,
     saving,
     conflict,
     projectError,
     reloadingProject,
     revision,
     dirty,
-    onMoveEnd,
     save,
     reloadProject,
     removeProject,

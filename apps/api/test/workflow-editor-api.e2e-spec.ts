@@ -684,14 +684,30 @@ function api(
   });
 }
 
+const fixtureWorkflows = new Map<string, string>();
 async function createProject(name = '工作流编辑测试', actor = 0) {
   const response = await api('/projects', 'POST', { name }, actor);
   expect(response.status).toBe(201);
-  return projectSchema.parse(await response.json());
+  const project = projectSchema.parse(await response.json());
+  const created = await api(
+    `/projects/${project.id}/workflows`,
+    'POST',
+    { name: '编辑测试工作流' },
+    actor,
+  );
+  expect(created.status).toBe(201);
+  fixtureWorkflows.set(project.id, workflowResponseSchema.parse(await created.json()).id);
+  return project;
 }
 
 async function readWorkflow(projectId: string, instance = 0, actor = 0) {
-  const response = await api(`/projects/${projectId}/workflow`, 'GET', undefined, actor, instance);
+  const response = await api(
+    `/projects/${projectId}/workflows/${fixtureWorkflows.get(projectId)!}`,
+    'GET',
+    undefined,
+    actor,
+    instance,
+  );
   expect(response.status).toBe(200);
   expect(response.headers.get('Cache-Control')).toBe('no-store');
   return workflowResponseSchema.parse(await response.json());
@@ -723,30 +739,28 @@ function definition(prompt: string): WorkflowDefinition {
   };
 }
 
-describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
-  it('新建项目即持久化独立 Workflow；另一 API 实例可以读取，且不发布或运行', async () => {
-    const project = await createProject();
-    const workflow = await readWorkflow(project.id, 1);
+describe('Workflow 集合、明确身份读取与草稿保存 HTTP', () => {
+  it('Project 从空集合开始；显式创建独立 Workflow 后另一 API 实例可按 ID 读取', async () => {
+    const response = await api('/projects', 'POST', { name: '空 Workspace' });
+    const project = projectSchema.parse(await response.json());
+    expect(await db.workflow.count({ where: { projectId: project.id } })).toBe(0);
+    expect((await (await api(`/projects/${project.id}/workflows`)).json()).items).toEqual([]);
+    const created = await api(`/projects/${project.id}/workflows`, 'POST', { name: '独立工作流' });
+    expect(created.status).toBe(201);
+    const workflow = workflowResponseSchema.parse(await created.json());
+    fixtureWorkflows.set(project.id, workflow.id);
+    expect(await readWorkflow(project.id, 1)).toEqual(workflow);
     expect(workflow).toMatchObject({
       projectId: project.id,
       revision: 1,
+      metadataRevision: 1,
       draft: emptyDraft,
     });
-    expect(workflow.id).not.toBe(project.id);
-    expect(await db.workflow.count({ where: { projectId: project.id } })).toBe(1);
-    const initialized = await api(`/projects/${project.id}/workflow`, 'POST');
-    expect(initialized.status).toBe(200);
-    expect(await initialized.json()).toEqual(workflow);
     expect(await db.workflowVersion.count({ where: { workflowId: workflow.id } })).toBe(0);
     expect(await db.workflowRun.count({ where: { projectId: project.id } })).toBe(0);
-    expect(
-      await db.workflowExecutionOutbox.count({
-        where: { workflowRun: { projectId: project.id } },
-      }),
-    ).toBe(0);
   });
 
-  it('新项目的 Workflow 创建失败时 Project 一同回滚', async () => {
+  it('创建 Workflow 失败不影响已经独立存在的 Project', async () => {
     const name = `atomic-${randomUUID()}`;
     const guard = `test_workflow_${randomUUID().replaceAll('-', '')}`;
     // 只拒绝本用例的项目；验证真实嵌套写入事务，不替换生产数据库或服务。
@@ -763,48 +777,45 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
         `CREATE TRIGGER "${guard}" BEFORE INSERT ON "workflow" FOR EACH ROW EXECUTE FUNCTION "${guard}"()`,
       );
       const response = await api('/projects', 'POST', { name });
-      expect(response.status).toBe(500);
-      expect(await db.project.count({ where: { ownerId: userIds[0], name } })).toBe(0);
+      expect(response.status).toBe(201);
+      const project = projectSchema.parse(await response.json());
+      expect(
+        (await api(`/projects/${project.id}/workflows`, 'POST', { name: '失败的工作流' })).status,
+      ).toBe(500);
+      expect(await db.project.count({ where: { ownerId: userIds[0], name } })).toBe(1);
+      expect(await db.workflow.count({ where: { projectId: project.id } })).toBe(0);
     } finally {
       await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${guard}" ON "workflow"`);
       await db.$executeRawUnsafe(`DROP FUNCTION "${guard}"()`);
     }
   });
 
-  it('读取旧项目不会写库；两个 API 实例的 12 次初始化得到同一默认 Workflow', async () => {
-    const project = await db.project.create({
-      data: {
-        ownerId: userIds[0]!,
-        name: '尚未初始化',
-        viewport: { x: 0, y: 0, zoom: 1 },
-      },
-    });
-    const path = `/projects/${project.id}/workflow`;
-    expect((await api(path)).status).toBe(404);
-    expect(await db.workflow.count({ where: { projectId: project.id } })).toBe(0);
+  it('同 Project 跨实例并发创建多个 Workflow，各自拥有独立空草稿', async () => {
+    const project = await db.project.create({ data: { ownerId: userIds[0]!, name: '多个工作流' } });
+    const path = `/projects/${project.id}/workflows`;
+    expect((await api(path)).status).toBe(200);
     const responses = await Promise.all(
-      Array.from({ length: 12 }, (_, index) => api(path, 'POST', {}, 0, index % 2)),
+      Array.from({ length: 12 }, (_, index) =>
+        api(path, 'POST', { name: `工作流 ${index}` }, 0, index % 2),
+      ),
     );
     const workflows = [];
     for (const response of responses) {
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(201);
       workflows.push(workflowResponseSchema.parse(await response.json()));
     }
-    expect(new Set(workflows.map(({ id }) => id)).size).toBe(1);
-    expect(workflows.every((workflow) => workflow.revision === 1)).toBe(true);
-    expect(await db.workflow.count({ where: { projectId: project.id } })).toBe(1);
+    expect(new Set(workflows.map(({ id }) => id)).size).toBe(12);
+    expect((await (await api(path)).json()).items).toHaveLength(12);
     expect(await db.project.findUniqueOrThrow({ where: { id: project.id } })).toEqual(project);
-    expect(await readWorkflow(project.id)).toEqual(workflows[0]);
   });
 
-  it('草稿保存与 Project revision 独立；重新初始化不覆盖草稿或更新任何修订', async () => {
+  it('草稿保存与 Project revision 独立；创建其他 Workflow 不覆盖既有草稿', async () => {
     const project = await createProject();
     const workflow = await readWorkflow(project.id);
     for (const revision of [1, 2]) {
       const response = await api(`/projects/${project.id}`, 'PUT', {
         name: `项目修订 ${revision + 1}`,
         revision,
-        viewport: project.viewport,
       });
       expect(response.status).toBe(200);
     }
@@ -820,9 +831,12 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
     expect(await response.json()).toEqual({ revision: 2 });
     const saved = await readWorkflow(project.id, 1);
     expect(saved).toMatchObject({ id: workflow.id, revision: 2, draft });
-    const initialized = await api(`/projects/${project.id}/workflow`, 'POST', {});
-    expect(initialized.status).toBe(200);
-    expect(await initialized.json()).toEqual(saved);
+    const created = await api(`/projects/${project.id}/workflows`, 'POST', {
+      name: '另一个工作流',
+    });
+    expect(created.status).toBe(201);
+    expect(workflowResponseSchema.parse(await created.json()).id).not.toBe(saved.id);
+    expect(await readWorkflow(project.id)).toEqual(saved);
     expect(await db.project.findUniqueOrThrow({ where: { id: project.id } })).toEqual(
       projectBefore,
     );
@@ -868,13 +882,13 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
     const project = await createProject();
     const workflow = await readWorkflow(project.id);
     const legacy = await db.project.create({
-      data: { ownerId: userIds[0]!, name: '受保护的旧项目', viewport: {} },
+      data: { ownerId: userIds[0]!, name: '受保护的旧项目' },
     });
     const save = { expectedRevision: 1, definition: definition('越权修改') };
     for (const [path, method, body] of [
-      [`/projects/${project.id}/workflow`, 'GET', undefined],
-      [`/projects/${project.id}/workflow`, 'POST', {}],
-      [`/projects/${legacy.id}/workflow`, 'POST', {}],
+      [`/projects/${project.id}/workflows/${workflow.id}`, 'GET', undefined],
+      [`/projects/${project.id}/workflows`, 'POST', { name: '受保护创建' }],
+      [`/projects/${legacy.id}/workflows`, 'POST', { name: '受保护创建' }],
       [`/workflows/${workflow.id}/draft`, 'PUT', save],
     ] as const) {
       expect((await api(path, method, body, null)).status).toBe(401);
@@ -883,8 +897,8 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
         expect((await api(path, method, body, 0, 0, 'https://untrusted.invalid')).status).toBe(403);
     }
     for (const [path, method, body] of [
-      [`/projects/${randomUUID()}/workflow`, 'GET', undefined],
-      [`/projects/${randomUUID()}/workflow`, 'POST', {}],
+      [`/projects/${randomUUID()}/workflows`, 'GET', undefined],
+      [`/projects/${randomUUID()}/workflows`, 'POST', { name: '无项目' }],
       [`/workflows/${randomUUID()}/draft`, 'PUT', save],
     ] as const)
       expect((await api(path, method, body)).status).toBe(404);
@@ -899,8 +913,10 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
       where: { id: project.id },
       data: { ownerId: userIds[1] },
     });
-    expect((await api(`/projects/${project.id}/workflow`)).status).toBe(404);
-    expect((await api(`/projects/${project.id}/workflow`, 'POST', {})).status).toBe(404);
+    expect((await api(`/projects/${project.id}/workflows/${workflow.id}`)).status).toBe(404);
+    expect(
+      (await api(`/projects/${project.id}/workflows`, 'POST', { name: '受保护创建' })).status,
+    ).toBe(404);
     expect(
       (
         await api(`/workflows/${workflow.id}/draft`, 'PUT', {
@@ -909,7 +925,12 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
         })
       ).status,
     ).toBe(404);
-    const response = await api(`/projects/${project.id}/workflow`, 'POST', {}, 1);
+    const response = await api(
+      `/projects/${project.id}/workflows/${workflow.id}`,
+      'GET',
+      undefined,
+      1,
+    );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(workflow);
   });
@@ -928,8 +949,8 @@ describe('默认 Workflow 初始化、读取与草稿保存 HTTP', () => {
     ])
       expect((await api(`/workflows/${workflow.id}/draft`, 'PUT', body)).status).toBe(400);
     for (const body of [null, { workflowId: 'other' }, { draft: emptyDraft }])
-      expect((await api(`/projects/${project.id}/workflow`, 'POST', body)).status).toBe(400);
-    expect((await api('/projects/invalid/workflow')).status).toBe(400);
+      expect((await api(`/projects/${project.id}/workflows`, 'POST', body)).status).toBe(400);
+    expect((await api('/projects/invalid/workflows')).status).toBe(400);
     const unsafe = definition('秘密不能写入节点配置');
     unsafe.nodes[0]!.config = { apiKey: 'test-secret-marker' };
     const response = await api(`/workflows/${workflow.id}/draft`, 'PUT', {

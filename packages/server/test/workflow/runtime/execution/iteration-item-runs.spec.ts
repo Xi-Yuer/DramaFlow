@@ -37,9 +37,7 @@ describe.skipIf(!enabled)('ChildExecution PostgreSQL 持久化', () => {
       await db().user.create({
         data: { id, name: 'ItemRun 测试', email: `${id}@example.test` },
       });
-    projectId = (
-      await db().project.create({ data: { ownerId, name: 'ItemRun 测试', viewport: {} } })
-    ).id;
+    projectId = (await db().project.create({ data: { ownerId, name: 'ItemRun 测试' } })).id;
   });
   afterAll(async () => {
     if (database) {

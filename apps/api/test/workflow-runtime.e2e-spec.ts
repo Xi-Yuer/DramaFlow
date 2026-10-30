@@ -79,7 +79,7 @@ afterAll(async () => {
 });
 async function fixture(unknownNode = false) {
   const project = await db.project.create({
-    data: { ownerId, name: '装配', viewport: {} },
+    data: { ownerId, name: '装配' },
   });
   const definition: WorkflowDefinition = {
     inputs: [],

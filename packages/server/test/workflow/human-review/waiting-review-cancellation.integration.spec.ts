@@ -104,7 +104,7 @@ describe.skipIf(!enabled)('waiting Human Review 取消事务 / 真实 checkpoint
   async function fixture(definition = serial) {
     const project = randomUUID();
     await db().project.create({
-      data: { id: project, ownerId: owner, name: '审核取消测试', viewport: {} },
+      data: { id: project, ownerId: owner, name: '审核取消测试' },
     });
 
     const workflow = await db().workflow.create({

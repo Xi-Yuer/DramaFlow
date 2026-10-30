@@ -44,6 +44,8 @@ describe('AI 文本 Composite 沿用 Draft / Reload / Publish 服务', () => {
     let stored = {
       id: 'workflow',
       projectId: '00000000-0000-4000-8000-000000000002',
+      metadataRevision: 1,
+      viewport: { x: 0, y: 0, zoom: 1 },
       name: '默认工作流',
       revision: 1,
       draft: workflowDraftDefinitionSchema.parse({ inputs: [], nodes: [], edges: [], outputs: [] }),
@@ -104,7 +106,7 @@ describe('AI 文本 Composite 沿用 Draft / Reload / Publish 服务', () => {
     await expect(
       service.updateDraft('owner', { workflowId: stored.id, expectedRevision: 1, definition }),
     ).resolves.toEqual({ revision: 2 });
-    const first = await service.getForProject('owner', stored.projectId);
+    const first = await service.get('owner', stored.projectId, stored.id);
     expect(first.draft).toEqual(definition);
     expect(tx.workflowVersion.create).not.toHaveBeenCalled();
     expect(assertModel).not.toHaveBeenCalled();
@@ -129,7 +131,7 @@ describe('AI 文本 Composite 沿用 Draft / Reload / Publish 服务', () => {
     });
     // 保存后再改客户端对象，不能污染持久化快照。
     action.config = {};
-    const reloaded = await service.getForProject('owner', stored.projectId);
+    const reloaded = await service.get('owner', stored.projectId, stored.id);
     expect(reloaded.revision).toBe(3);
     const savedComposite = reloaded.draft.nodes[0]!.composite;
     if (savedComposite?.kind !== 'subworkflow') throw new Error('缺少子图');

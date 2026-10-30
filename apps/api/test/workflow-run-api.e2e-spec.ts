@@ -201,7 +201,7 @@ async function failure(response: Response, status: number, code: string) {
 }
 async function version(native = false, inputs: WorkflowDefinition['inputs'] = []) {
   const project = await db.project.create({
-    data: { ownerId, name: 'Run HTTP', viewport: {} },
+    data: { ownerId, name: 'Run HTTP' },
   });
   const definition: WorkflowDefinition = {
     inputs,

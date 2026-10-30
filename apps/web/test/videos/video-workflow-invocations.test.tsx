@@ -59,6 +59,7 @@ vi.mock('../../src/features/workflow/workflow-api', async (original) => ({
   ...(await original<typeof import('../../src/features/workflow/workflow-api')>()),
   workflowApi: {
     get: vi.fn(),
+    list: vi.fn(),
     listVersions: vi.fn(),
     getVersion: vi.fn(),
     startRun: vi.fn(),
@@ -73,7 +74,6 @@ const project: Project = {
   id: '00000000-0000-4000-8000-000000000001',
   name: '作品项目',
   revision: 1,
-  viewport: { x: 0, y: 0, zoom: 1 },
   createdAt,
   updatedAt: createdAt,
 };
@@ -87,6 +87,8 @@ const video: Video = {
   updatedAt: createdAt,
 };
 const workflow: WorkflowResponse = {
+  viewport: { x: 0, y: 0, zoom: 1 },
+  metadataRevision: 1,
   id: 'workflow-1',
   projectId: project.id,
   name: '当前项目工作流',
@@ -147,7 +149,7 @@ const context = {
   registerLeaveGuard: () => () => {},
 };
 
-function mount() {
+function mount(selectedWorkflowId: string | null = workflow.id) {
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -156,7 +158,7 @@ function mount() {
       <App>
         <QueryClientProvider client={cache}>
           <ProjectWorkspaceContext.Provider value={context}>
-            <VideoDetail videoId={video.id} />
+            <VideoDetail videoId={video.id} selectedWorkflowId={selectedWorkflowId ?? undefined} />
           </ProjectWorkspaceContext.Provider>
         </QueryClientProvider>
       </App>
@@ -199,7 +201,7 @@ beforeEach(() => {
     },
   );
   vi.mocked(videoApi.get).mockResolvedValue(video);
-  vi.mocked(workflowApi.get).mockResolvedValue(workflow);
+  vi.mocked(workflowApi.list).mockResolvedValue({ items: [workflow], nextCursor: null });
   vi.mocked(workflowApi.listVersions).mockResolvedValue({
     items: [version],
     nextBeforeVersion: null,
@@ -242,25 +244,95 @@ afterEach(() => {
 });
 
 describe('Video 的真实 Workflow 调用入口', () => {
+  it('显式切换同项目 Workflow 后只加载它的版本与输入，不沿用 A 的调用身份', async () => {
+    const second = { ...workflow, id: 'workflow-2', name: '另一个工作流' };
+    const secondVersion = { ...version, id: 'version-2', workflowId: second.id };
+    vi.mocked(workflowApi.list).mockResolvedValue({ items: [workflow, second], nextCursor: null });
+    vi.mocked(workflowApi.listVersions).mockImplementation(async (id) => ({
+      items: [id === second.id ? secondVersion : version],
+      nextBeforeVersion: null,
+    }));
+    vi.mocked(workflowApi.getVersion).mockImplementation(async (id) =>
+      id === secondVersion.id ? secondVersion : version,
+    );
+    vi.mocked(productInvocationApi.start).mockImplementation(async (_project, _video, input) => {
+      const workflowId = input.workflowVersionId === secondVersion.id ? second.id : workflow.id;
+      const result = {
+        ...run,
+        id: `run-${workflowId}`,
+        workflowId,
+        workflowVersionId: input.workflowVersionId,
+        invocationKey: input.invocationKey,
+        inputs: input.inputs,
+      };
+      vi.mocked(workflowApi.getRun).mockResolvedValue(result);
+      return {
+        invocation: {
+          ...invocation,
+          workflowRunId: result.id,
+          invocationKey: result.invocationKey,
+        },
+        run: result,
+      };
+    });
+    mount();
+    await submit();
+    expect(await screen.findByText('已完成')).toBeTruthy();
+    const firstKey = vi.mocked(productInvocationApi.start).mock.calls[0]![2].invocationKey;
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '选择工作流' }));
+    fireEvent.click(
+      await screen.findByText(`${second.name} · ${second.id.slice(0, 8)}`, {
+        selector: '.ant-select-item-option-content',
+      }),
+    );
+    await waitFor(() => expect(workflowApi.getVersion).toHaveBeenCalledWith(secondVersion.id));
+    expect(
+      ((await screen.findByRole('textbox', { name: 'prompt 输入' })) as HTMLInputElement).value,
+    ).toBe('');
+    await submit();
+    await waitFor(() => expect(productInvocationApi.start).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(productInvocationApi.start).mock.calls[1]![2]).toMatchObject({
+      workflowVersionId: secondVersion.id,
+    });
+    expect(vi.mocked(productInvocationApi.start).mock.calls[1]![2].invocationKey).not.toBe(
+      firstKey,
+    );
+    expect(workflowApi.startRun).not.toHaveBeenCalled();
+  });
+  it('刷新时按 URL 身份恢复不在列表首屏的 Workflow，不读取其他默认对象', async () => {
+    vi.mocked(workflowApi.list).mockResolvedValue({ items: [], nextCursor: 'next-page' });
+    vi.mocked(workflowApi.get).mockResolvedValue(workflow);
+    mount(workflow.id);
+    expect(await screen.findByRole('textbox', { name: 'prompt 输入' })).toBeTruthy();
+    expect(workflowApi.get).toHaveBeenCalledExactlyOnceWith(project.id, workflow.id);
+    expect(productInvocationApi.start).not.toHaveBeenCalled();
+  });
   it('后台工作流读取短暂失败保留当前输入；明确拒绝访问时隐藏调用入口', async () => {
     const view = mount();
     const input = await screen.findByRole('textbox', { name: 'prompt 输入' });
     fireEvent.change(input, { target: { value: '尚未提交的作品输入' } });
-    vi.mocked(workflowApi.get).mockRejectedValue(new Error('暂时断开'));
-    await view.cache.invalidateQueries({ queryKey: ['project-workflow', project.id] });
+    vi.mocked(workflowApi.list).mockRejectedValue(new Error('暂时断开'));
+    await view.cache.invalidateQueries({ queryKey: ['project-workflows', project.id] });
     expect(await screen.findByText('工作流信息暂时无法刷新，当前输入仍保留')).toBeTruthy();
     expect((screen.getByRole('textbox', { name: 'prompt 输入' }) as HTMLInputElement).value).toBe(
       '尚未提交的作品输入',
     );
-    vi.mocked(workflowApi.get).mockRejectedValue(new ApiError('无权访问', 403));
-    await view.cache.invalidateQueries({ queryKey: ['project-workflow', project.id] });
+    vi.mocked(workflowApi.list).mockRejectedValue(new ApiError('无权访问', 403));
+    await view.cache.invalidateQueries({ queryKey: ['project-workflows', project.id] });
     expect(await screen.findByText('项目工作流读取失败')).toBeTruthy();
     expect(screen.queryByRole('textbox', { name: 'prompt 输入' })).toBeNull();
     expect(productInvocationApi.start).not.toHaveBeenCalled();
   });
   it('从空调用记录选择发布版本、复用输入表单，通过产品入口受理并查看现有运行与 Tree', async () => {
-    mount();
+    mount(null);
     expect(await screen.findByText('尚未从这个视频发起工作流调用。')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: '选择已发布版本' })).toBeNull();
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '选择工作流' }));
+    fireEvent.click(
+      await screen.findByText(`${workflow.name} · ${workflow.id.slice(0, 8)}`, {
+        selector: '.ant-select-item-option-content',
+      }),
+    );
     expect(await screen.findByRole('combobox', { name: '选择已发布版本' })).toBeTruthy();
     await submit();
     await waitFor(() =>

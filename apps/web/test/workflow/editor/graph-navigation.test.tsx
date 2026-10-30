@@ -964,6 +964,8 @@ it('正式 Body Picker → 子流程 Entry → graph 编辑 → Draft save/read'
     JSON.parse(JSON.stringify(view.definition())),
   );
   const response = workflowResponseSchema.parse({
+    metadataRevision: 1,
+    viewport: { x: 0, y: 0, zoom: 1 },
     id: 'workflow',
     projectId: '00000000-0000-4000-8000-000000000001',
     name: '默认工作流',

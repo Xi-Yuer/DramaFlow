@@ -8,10 +8,10 @@ import { ApiError } from '../../../src/lib/http';
 
 const safe: EditorLeaveState = {
   draftDirty: false,
-  projectDirty: false,
+  metadataDirty: false,
   draftOperation: 'idle',
-  savingProject: false,
-  reloadingProject: false,
+  savingMetadata: false,
+  reloadingMetadata: false,
   publishing: false,
   run: { phase: 'idle', request: null, accepted: null, error: null },
 };
@@ -19,9 +19,9 @@ const safe: EditorLeaveState = {
 describe('Editor session 离开安全语义', () => {
   it.each([
     { draftDirty: true },
-    { projectDirty: true },
-    { savingProject: true },
-    { reloadingProject: true },
+    { metadataDirty: true },
+    { savingMetadata: true },
+    { reloadingMetadata: true },
     { draftOperation: 'saving' as const },
     { draftOperation: 'reloading' as const },
     { publishing: true },

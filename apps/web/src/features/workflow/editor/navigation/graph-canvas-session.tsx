@@ -18,7 +18,7 @@ import { workflowKeys } from '../../workflow-api';
 import { selectGraphExecutionInstance } from '../../runtime/projection/graph-execution-projection';
 import { useIterationItemSelection } from '../../iteration/execution/use-iteration-item-selection';
 import { IterationItemSelector } from '../../iteration/execution/iteration-item-selector';
-import type { NodeRun, Project, WorkflowDefinition } from '@dramaflow/contracts';
+import type { NodeRun, WorkflowResponse, WorkflowDefinition } from '@dramaflow/contracts';
 import { WorkflowCanvas } from '@/features/workflow/canvas/workflow-canvas';
 import type {
   ModelSelectionIntent,
@@ -86,7 +86,7 @@ export const GraphCanvasSession = forwardRef<
     onModelResumeConsumed?: () => void;
     reloading: boolean;
     interactionLocked?: boolean;
-    initialRootViewport: Project['viewport'];
+    initialRootViewport: WorkflowResponse['viewport'];
     onRootViewportChange: OnMove;
     runStatus?: WorkflowRunStatusState | null;
     reviewActions?: HumanReviewActions;

@@ -88,7 +88,7 @@ function launch(command: object) {
 }
 async function fixture(native = false, businessFailure = false) {
   const project = await db.project.create({
-    data: { ownerId, name: 'Queue 故障验证', viewport: {} },
+    data: { ownerId, name: 'Queue 故障验证' },
   });
   const definition: WorkflowDefinition = {
     inputs: [],
@@ -166,8 +166,14 @@ beforeAll(async () => {
   });
 });
 afterAll(async () => {
-  for (const child of children)
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  await Promise.all(
+    [...children].map(async (child) => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+      child.kill('SIGKILL');
+      await exited;
+    }),
+  );
   const records = await db.workflowRun.findMany({
     where: { project: { ownerId } },
     select: { threadId: true },

@@ -105,17 +105,16 @@ model RateLimit {
   @@map("auth_rate_limit")
 }
 
-// 项目保存基础画布信息；Workflow 定义与运行入口独立接入。
+// 项目是创作 Workspace；画布及其视口属于具体 Workflow。
 model Project {
   id                  String                      @id @default(uuid()) @db.Uuid
   ownerId             String
   name                String                      @db.VarChar(80)
   revision            Int                         @default(1)
-  viewport            Json
   createdAt           DateTime                    @default(now())
   updatedAt           DateTime                    @updatedAt
   owner               User                        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  workflow            Workflow?
+  workflows           Workflow[]
   videos              Video[]
   nodeRuns            NodeRun[]
   workflowRuns        WorkflowRun[]
@@ -141,16 +140,19 @@ model Video {
 }
 
 model Workflow {
-  id        String            @id @default(uuid())
-  projectId String            @unique @db.Uuid
-  name      String            @db.VarChar(80)
-  draft     Json
-  revision  Int               @default(1)
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  versions  WorkflowVersion[]
+  id               String            @id @default(uuid())
+  projectId        String            @db.Uuid
+  name             String            @db.VarChar(80)
+  draft            Json
+  revision         Int               @default(1)
+  metadataRevision Int               @default(1)
+  viewport         Json              @default("{\"x\":0,\"y\":0,\"zoom\":1}")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versions         WorkflowVersion[]
 
+  @@index([projectId, createdAt, id])
   @@map("workflow")
 }
 

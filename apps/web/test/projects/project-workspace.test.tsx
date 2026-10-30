@@ -11,6 +11,7 @@ import OverviewPage from '../../src/app/projects/[id]/overview/page';
 import VideosPage from '../../src/app/projects/[id]/videos/page';
 import AssetsPage from '../../src/app/projects/[id]/assets/page';
 import WorkflowsPage from '../../src/app/projects/[id]/workflows/page';
+import WorkflowCanvasPage from '../../src/app/projects/[id]/workflows/[workflowId]/page';
 import SettingsPage from '../../src/app/projects/[id]/settings/page';
 import { projectApi, projectKeys } from '../../src/features/projects/project-api';
 import { workflowApi } from '../../src/features/workflow/workflow-api';
@@ -57,7 +58,13 @@ vi.mock('../../src/features/projects/project-api', async (importOriginal) => ({
 }));
 vi.mock('../../src/features/workflow/workflow-api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/features/workflow/workflow-api')>()),
-  workflowApi: { get: vi.fn(), initialize: vi.fn() },
+  workflowApi: {
+    get: vi.fn(),
+    list: vi.fn(),
+    create: vi.fn(),
+    saveMetadata: vi.fn(),
+    remove: vi.fn(),
+  },
 }));
 vi.mock('../../src/features/videos/api/video-api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/features/videos/api/video-api')>()),
@@ -75,12 +82,13 @@ const project: Project = {
   id: '7ac10b00-33cc-4e50-9a2b-05ef764c44f4',
   name: '视频创作测试',
   revision: 1,
-  viewport: { x: 40, y: 20, zoom: 1.2 },
   createdAt: '2026-10-30T00:00:00.000Z',
   updatedAt: '2026-10-30T00:00:00.000Z',
 };
 const workflow: WorkflowResponse = {
-  id: 'workflow-1',
+  viewport: { x: 0, y: 0, zoom: 1 },
+  metadataRevision: 1,
+  id: '00000000-0000-4000-8000-000000000009',
   projectId: project.id,
   name: '原有工作流',
   revision: 3,
@@ -93,7 +101,7 @@ const routes = [
   { segment: 'overview', label: '概览', page: OverviewPage, heading: '项目概览' },
   { segment: 'videos', label: '视频', page: VideosPage, heading: '视频' },
   { segment: 'assets', label: '素材', page: AssetsPage, heading: '素材' },
-  { segment: 'workflows', label: '工作流', page: WorkflowsPage, heading: null },
+  { segment: 'workflows', label: '工作流', page: WorkflowsPage, heading: '工作流' },
   { segment: 'settings', label: '设置', page: SettingsPage, heading: '项目设置' },
 ];
 
@@ -102,8 +110,10 @@ async function mount(segment = 'overview', id = project.id) {
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const page = routes.find((route) => route.segment === segment)!.page;
-  const layout = await ProjectLayout({ params: Promise.resolve({ id }), children: page() });
+  const page = segment.startsWith('workflows/')
+    ? await WorkflowCanvasPage({ params: Promise.resolve({ workflowId: segment.split('/')[1]! }) })
+    : routes.find((route) => route.segment === segment)!.page();
+  const layout = await ProjectLayout({ params: Promise.resolve({ id }), children: page });
   const view = render(
     <ConfigProvider theme={{ token: { motion: false } }}>
       <App>
@@ -130,7 +140,10 @@ beforeEach(() => {
   vi.mocked(projectApi.get).mockReset().mockResolvedValue(project);
   vi.mocked(projectApi.save).mockReset().mockResolvedValue({ revision: 2 });
   vi.mocked(workflowApi.get).mockReset().mockResolvedValue(workflow);
-  vi.mocked(workflowApi.initialize).mockReset().mockResolvedValue(workflow);
+  vi.mocked(workflowApi.list)
+    .mockReset()
+    .mockResolvedValue({ items: [workflow], nextCursor: null });
+  vi.mocked(workflowApi.create).mockReset().mockResolvedValue(workflow);
   vi.mocked(videoApi.list).mockReset().mockResolvedValue({ items: [], nextCursor: null });
 });
 afterEach(() => {
@@ -143,7 +156,7 @@ describe('Project Workspace 路由与导航', () => {
     await ProjectPage({ params: Promise.resolve({ id: project.id }) });
     expect(navigation.redirect).toHaveBeenCalledExactlyOnceWith(`${base}/overview`);
     expect(projectApi.get).not.toHaveBeenCalled();
-    expect(workflowApi.initialize).not.toHaveBeenCalled();
+    expect(workflowApi.create).not.toHaveBeenCalled();
   });
 
   it.each(routes)('直接打开 /$segment 恢复对应页面和选中导航', async ({ segment, heading }) => {
@@ -158,8 +171,9 @@ describe('Project Workspace 路由与导航', () => {
     if (heading) expect(screen.getByRole('heading', { name: heading })).toBeTruthy();
     else expect(await screen.findByRole('main', { name: '工作流画布' })).toBeTruthy();
     expect(projectApi.get).toHaveBeenCalledExactlyOnceWith(project.id);
-    expect(workflowApi.get).toHaveBeenCalledTimes(segment === 'workflows' ? 1 : 0);
-    expect(workflowApi.initialize).not.toHaveBeenCalled();
+    expect(workflowApi.list).toHaveBeenCalledTimes(segment === 'workflows' ? 1 : 0);
+    expect(workflowApi.get).not.toHaveBeenCalled();
+    expect(workflowApi.create).not.toHaveBeenCalled();
   });
 
   it('导航与概览入口进入指定路由，点击当前页面不重复导航', async () => {
@@ -171,7 +185,7 @@ describe('Project Workspace 路由与导航', () => {
         expect(navigation.push).toHaveBeenLastCalledWith(`${base}/${segment}`);
       else expect(navigation.push).not.toHaveBeenCalled();
     }
-    fireEvent.click(screen.getByRole('link', { name: '打开工作流画布' }));
+    fireEvent.click(screen.getByRole('link', { name: '查看工作流' }));
     expect(navigation.push).toHaveBeenLastCalledWith(`${base}/workflows`);
     fireEvent.click(screen.getByRole('link', { name: '项目列表' }));
     expect(navigation.push).toHaveBeenLastCalledWith('/projects');
@@ -185,7 +199,7 @@ describe('Project Workspace 路由与导航', () => {
       expect(await screen.findByText(message)).toBeTruthy();
       expect(screen.queryByRole('button', { name: /上传|新建视频|生成视频/ })).toBeNull();
       expect(workflowApi.get).not.toHaveBeenCalled();
-      expect(workflowApi.initialize).not.toHaveBeenCalled();
+      expect(workflowApi.create).not.toHaveBeenCalled();
     },
   );
 
@@ -220,37 +234,93 @@ describe('Project Workspace 路由与导航', () => {
   });
 });
 
-describe('Workflows 承接原 Canvas 加载协议', () => {
-  it('传递原有项目和工作流，不创建新草稿', async () => {
+describe('Workflows 集合与明确 Canvas 身份', () => {
+  it('在列表改名保持 Workflow 身份，删除未发布草稿后恢复空集合', async () => {
+    vi.mocked(workflowApi.saveMetadata).mockResolvedValue({
+      metadataRevision: 2,
+      updatedAt: workflow.updatedAt,
+    });
+    vi.mocked(workflowApi.remove).mockResolvedValue(null);
     await mount('workflows');
-    expect((await screen.findByRole('main', { name: '工作流画布' })).textContent).toBe(
-      '视频创作测试 · 原有工作流 · 修订 3',
+    fireEvent.click(await screen.findByRole('button', { name: /^改\s*名$/ }));
+    fireEvent.change(await screen.findByRole('textbox', { name: '工作流名称' }), {
+      target: { value: '改名工作流' },
+    });
+    vi.mocked(workflowApi.list).mockResolvedValue({
+      items: [{ ...workflow, name: '改名工作流', metadataRevision: 2 }],
+      nextCursor: null,
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保存工作流名称' }));
+    await waitFor(() =>
+      expect(workflowApi.saveMetadata).toHaveBeenCalledExactlyOnceWith(project.id, workflow.id, {
+        expectedMetadataRevision: 1,
+        name: '改名工作流',
+      }),
     );
-    expect(workflowApi.get).toHaveBeenCalledExactlyOnceWith(project.id);
-    expect(workflowApi.initialize).not.toHaveBeenCalled();
+    const link = await screen.findByRole('link', { name: '改名工作流' });
+    expect(link.getAttribute('href')).toBe(`${base}/workflows/${workflow.id}`);
+    fireEvent.click(await screen.findByRole('button', { name: /^删\s*除$/ }));
+    expect(workflowApi.remove).not.toHaveBeenCalled();
+    vi.mocked(workflowApi.list).mockResolvedValue({ items: [], nextCursor: null });
+    fireEvent.click(await screen.findByRole('button', { name: '删除工作流' }));
+    await waitFor(() =>
+      expect(workflowApi.remove).toHaveBeenCalledExactlyOnceWith(project.id, workflow.id, {
+        expectedRevision: workflow.revision,
+        expectedMetadataRevision: 2,
+      }),
+    );
+    expect(await screen.findByText('项目还没有工作流')).toBeTruthy();
   });
-
-  it('缺少工作流只在用户明确操作后初始化', async () => {
-    vi.mocked(workflowApi.get).mockRejectedValue(new ApiError('尚未初始化', 404));
-    await mount('workflows');
-    const initialize = await screen.findByRole('button', { name: '初始化工作流' });
-    expect(workflowApi.initialize).not.toHaveBeenCalled();
-    fireEvent.click(initialize);
+  it('集合展示独立工作流入口，进入时按身份加载；刷新仍读取同一 Workflow', async () => {
+    const view = await mount('workflows');
+    const link = await screen.findByRole('link', { name: workflow.name });
+    expect(link.getAttribute('href')).toBe(`${base}/workflows/${workflow.id}`);
+    expect(workflowApi.get).not.toHaveBeenCalled();
+    view.unmount();
+    const canvas = await mount(`workflows/${workflow.id}`);
     expect(await screen.findByRole('main', { name: '工作流画布' })).toBeTruthy();
-    expect(workflowApi.initialize).toHaveBeenCalledExactlyOnceWith(project.id);
+    expect(workflowApi.get).toHaveBeenLastCalledWith(project.id, workflow.id);
+    expect(
+      within(screen.getByRole('navigation'))
+        .getByRole('link', { name: '工作流' })
+        .getAttribute('aria-current'),
+    ).toBe('page');
+    canvas.unmount();
+    await mount(`workflows/${workflow.id}`);
+    expect(await screen.findByRole('main', { name: '工作流画布' })).toBeTruthy();
+    expect(workflowApi.get).toHaveBeenCalledTimes(2);
+    expect(workflowApi.create).not.toHaveBeenCalled();
   });
-
-  it('读取失败可以重试且不误当成缺少工作流', async () => {
-    vi.mocked(workflowApi.get).mockRejectedValueOnce(new ApiError('暂时不可用', 503));
+  it('空集合只在明确命名后创建并进入相应 Canvas', async () => {
+    vi.mocked(workflowApi.list).mockResolvedValue({ items: [], nextCursor: null });
     await mount('workflows');
-    fireEvent.click(await screen.findByRole('button', { name: '重新读取工作流' }));
-    expect(await screen.findByRole('main', { name: '工作流画布' })).toBeTruthy();
-    expect(workflowApi.initialize).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: '创建第一个工作流' }));
+    expect(workflowApi.create).not.toHaveBeenCalled();
+    fireEvent.change(await screen.findByRole('textbox', { name: '工作流名称' }), {
+      target: { value: ' 文本工作流 ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '创建并进入画布' }));
+    await waitFor(() =>
+      expect(workflowApi.create).toHaveBeenCalledExactlyOnceWith(project.id, '文本工作流'),
+    );
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(`${base}/workflows/${workflow.id}`),
+    );
+  });
+  it('跨 Project 响应或不存在 Workflow 不装配 Canvas，不自动初始化', async () => {
+    vi.mocked(workflowApi.get).mockResolvedValue({
+      ...workflow,
+      projectId: '00000000-0000-4000-8000-000000000099',
+    });
+    await mount(`workflows/${workflow.id}`);
+    expect(await screen.findByText('工作流读取失败')).toBeTruthy();
+    expect(screen.queryByRole('main', { name: '工作流画布' })).toBeNull();
+    expect(workflowApi.create).not.toHaveBeenCalled();
   });
 });
 
 describe('项目设置复用原项目操作', () => {
-  it('改名使用原保存协议并保留视口，同步 Workspace 项目名称', async () => {
+  it('改名只保存 Project 身份，同步 Workspace 项目名称', async () => {
     await mount('settings');
     fireEvent.change(await screen.findByRole('textbox', { name: '项目名称' }), {
       target: { value: '新的项目名' },
@@ -260,11 +330,10 @@ describe('项目设置复用原项目操作', () => {
       expect(projectApi.save).toHaveBeenCalledExactlyOnceWith(project.id, {
         revision: 1,
         name: '新的项目名',
-        viewport: project.viewport,
       }),
     );
     await waitFor(() => expect(screen.getByRole('banner').textContent).toContain('新的项目名'));
-    expect(workflowApi.initialize).not.toHaveBeenCalled();
+    expect(workflowApi.create).not.toHaveBeenCalled();
     const unload = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(false);

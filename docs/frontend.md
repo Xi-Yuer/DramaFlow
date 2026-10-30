@@ -4,7 +4,7 @@ Web 使用 Next.js、React Flow、TanStack Query、Ant Design，主题以 [theme
 
 ## Canvas 与编辑状态
 
-Canvas 是 Workflow Definition 的编辑空间。React Flow 只负责视图和交互：selected、dragging、measured 及投影边不持久化；ui.position 保存布局，项目保存根视口。转换和领域修改集中在 `workflow/canvas/adapter/`，交互确认在 `editing/`，会话状态在 `view/`，渲染在 `rendering/`。
+Canvas 是明确 Workflow 身份的编辑空间，路径为 `/projects/[id]/workflows/[workflowId]`；集合路径 `/projects/[id]/workflows` 负责创建、改名和受约束删除。React Flow 只负责视图和交互：selected、dragging、measured 及投影边不持久化；ui.position 保存布局，Workflow 保存自己的根视口。转换和领域修改集中在 `workflow/canvas/adapter/`，交互确认在 `editing/`，会话状态在 `view/`，渲染在 `rendering/`。
 
 DataEdge、ControlEdge 按原协议序列化。模板与候选连线从绑定投影，共用目标输入 Handle，不写入真实 edges；重复 alias 共用数据依赖投影。断连 / 重连核对完整旧快照，拒绝过期事件。替换静态输入必须确认；已有节点输出来源时明确选择替换或添加候选。
 
@@ -58,13 +58,13 @@ Execution Tree 是独立只读浏览器，每次读取 parent 的一层，使用
 
 ## 保存、离开与请求恢复
 
-保存失败不显示已保存；修订冲突阻止覆盖。短暂后台会话检查故障保留 Editor，明确拒绝访问则隐藏内容。项目元数据与 Workflow 草稿分别保存。
+保存失败不显示已保存；修订冲突阻止覆盖。短暂后台会话检查或 Workflow 读取故障保留 Editor，明确拒绝访问则隐藏内容。Project 名称在设置页保存；Canvas 的 Workflow 名称与视口使用 metadataRevision 保存，与草稿 revision 分开。草稿及元数据重读都使用当前 Project / Workflow 双重身份，不读取项目内任意一条 Workflow。
 
 统一离开 guard 协调草稿与元数据保存、丢弃、取消；Project 共享导航必须接入当前页面的 guard，页面卸载后解除注册，不能绕过 Canvas 或设置页的未保存保护。Logout 先确认，标准 beforeunload 保护未保存状态。不改写 Router / history，也不保证崩溃或强制关闭可拦截。
 
 invocation recovery 只在用户 namespace 保存 workflow / version / key、可选 Run ID 等身份，不保存输入内容或 Secret。页面重进只 lookup；未找到或查询失败时保留身份，不自动 POST 或换 key。storage event 同步集合，不当跨 Tab 锁；退出后清用户记录并拒绝晚到响应。终态 receipt 清理不清空当前页面结果。
 
-`useWorkflowRun` 可注入调用方的 start / lookup 与 callerNamespace，复用原表单和恢复控制器。视频产品入口使用产品 API 并按来源 Video 分隔 namespace；Canvas 默认 API 与存储 key 保持不变，产品记录不能被 Canvas 的通用 lookup 误恢复。视频详情将提交中和未确认调用状态合并到现有离开 guard；历史抽屉读取正式 Run 状态及执行树，不保存状态副本。
+`useWorkflowRun` 可注入调用方的 start / lookup 与 callerNamespace，复用原表单和恢复控制器。视频产品入口先显式选择项目内 Workflow，再选择它的已发布版本；选择的 Workflow ID 写入 URL，刷新按 ID 恢复，不依赖列表首屏或默认对象。切换 Workflow 前保护未确认调用，输入和恢复状态按 Workflow 隔离。产品 API 按来源 Video 分隔 namespace；Canvas 默认 API 与存储 key 保持不变，产品记录不能被 Canvas 的通用 lookup 误恢复。视频详情将提交中和未确认调用状态合并到现有离开 guard；历史抽屉读取正式 Run 状态及执行树，不保存状态副本。
 
 ## 视觉与组件规范
 

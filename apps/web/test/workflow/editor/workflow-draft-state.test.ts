@@ -7,6 +7,8 @@ import {
 } from '../../../src/features/workflow/editor/draft/workflow-draft-state';
 
 const workflow: WorkflowResponse = {
+  viewport: { x: 0, y: 0, zoom: 1 },
+  metadataRevision: 1,
   id: 'workflow-1',
   projectId: '7ac10b00-33cc-4e50-9a2b-05ef764c44f4',
   name: '默认工作流',

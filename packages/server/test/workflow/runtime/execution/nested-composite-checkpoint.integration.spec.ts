@@ -65,9 +65,7 @@ describe.skipIf(!enabled)('Iteration → SubWorkflow 真实 PostgreSQL / Postgre
     await db().user.create({
       data: { id: ownerId, name: '组合 checkpoint 测试', email: `${ownerId}@example.test` },
     });
-    projectId = (
-      await db().project.create({ data: { ownerId, name: '组合 checkpoint 测试', viewport: {} } })
-    ).id;
+    projectId = (await db().project.create({ data: { ownerId, name: '组合 checkpoint 测试' } })).id;
   });
   afterEach(() => vi.restoreAllMocks());
   afterAll(async () => {

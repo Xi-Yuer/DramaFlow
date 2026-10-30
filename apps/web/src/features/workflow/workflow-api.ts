@@ -18,6 +18,12 @@ import {
   saveWorkflowDraftRequestSchema,
   saveWorkflowDraftResponseSchema,
   workflowResponseSchema,
+  workflowListResponseSchema,
+  createWorkflowRequestSchema,
+  saveWorkflowMetadataRequestSchema,
+  saveWorkflowMetadataResponseSchema,
+  deleteWorkflowRequestSchema,
+  type SaveWorkflowMetadataRequest,
   type SaveWorkflowDraftRequest,
   type StartWorkflowRunRequest,
 } from '@dramaflow/contracts';
@@ -34,7 +40,9 @@ export const workflowKeys = {
   versions: (workflowId: string) => ['workflow-versions', workflowId] as const,
   publication: (workflowId: string, revision: number) =>
     ['workflow-versions', workflowId, revision] as const,
-  project: (projectId: string) => ['project-workflow', projectId] as const,
+  list: (projectId: string) => ['project-workflows', projectId] as const,
+  detail: (projectId: string, workflowId: string) =>
+    ['project-workflows', projectId, 'detail', workflowId] as const,
 };
 
 export const workflowApi = {
@@ -137,13 +145,37 @@ export const workflowApi = {
     } while (beforeVersion !== undefined);
     return { latest, current: null };
   },
-  get: (projectId: string) =>
-    request(`/projects/${encodeURIComponent(projectId)}/workflow`, workflowResponseSchema),
-  initialize: (projectId: string) =>
-    request(`/projects/${encodeURIComponent(projectId)}/workflow`, workflowResponseSchema, {
+  list: (projectId: string, cursor?: string) =>
+    request(
+      `/projects/${encodeURIComponent(projectId)}/workflows${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+      workflowListResponseSchema,
+    ),
+  get: (projectId: string, workflowId: string) =>
+    request(
+      `/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(workflowId)}`,
+      workflowResponseSchema,
+    ),
+  create: (projectId: string, name: string) =>
+    request(`/projects/${encodeURIComponent(projectId)}/workflows`, workflowResponseSchema, {
       method: 'POST',
-      body: jsonBody({}),
+      body: jsonBody(createWorkflowRequestSchema.parse({ name })),
     }),
+  saveMetadata: (projectId: string, workflowId: string, input: SaveWorkflowMetadataRequest) =>
+    request(
+      `/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(workflowId)}`,
+      saveWorkflowMetadataResponseSchema,
+      { method: 'PUT', body: jsonBody(saveWorkflowMetadataRequestSchema.parse(input)) },
+    ),
+  remove: (
+    projectId: string,
+    workflowId: string,
+    input: { expectedRevision: number; expectedMetadataRevision: number },
+  ) =>
+    request(
+      `/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(workflowId)}`,
+      z.null(),
+      { method: 'DELETE', body: jsonBody(deleteWorkflowRequestSchema.parse(input)) },
+    ),
   saveDraft: (workflowId: string, input: SaveWorkflowDraftRequest) =>
     request(`/workflows/${encodeURIComponent(workflowId)}/draft`, saveWorkflowDraftResponseSchema, {
       method: 'PUT',

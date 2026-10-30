@@ -44,7 +44,7 @@ const origin = new URL(authBaseUrl()).origin;
 const inputs = (value = '作品输入') => ({
   prompt: { storage: 'inline' as const, type: StringType, value },
 });
-const request = (versionId: string, key = randomUUID()): StartWorkflowRunRequest => ({
+const request = (versionId: string, key: string = randomUUID()): StartWorkflowRunRequest => ({
   workflowVersionId: versionId,
   invocationKey: key,
   inputs: inputs(),
@@ -63,7 +63,9 @@ async function fixture(actor = 0) {
     await (await api('/projects', 'POST', { name: '产品调用项目' }, actor)).json(),
   );
   const workflow = workflowResponseSchema.parse(
-    await (await api(`/projects/${project.id}/workflow`, 'GET', undefined, actor)).json(),
+    await (
+      await api(`/projects/${project.id}/workflows`, 'POST', { name: '产品调用工作流' }, actor)
+    ).json(),
   );
   const definition = {
     inputs: [{ name: 'prompt', type: StringType, required: true }],
@@ -203,6 +205,190 @@ afterAll(async () => {
 }, 60000);
 
 describe('产品调用正式 HTTP 与持久化边界', () => {
+  it('Publish 与删除并发时只可能保留已发布历史，或先删除尚未发布草稿', async () => {
+    const f = await fixture();
+    for (let index = 0; index < 4; index++) {
+      const workflow = workflowResponseSchema.parse(
+        await (
+          await api(`/projects/${f.project.id}/workflows`, 'POST', { name: '发布与删除并发' })
+        ).json(),
+      );
+      const [publish, remove] = await Promise.all([
+        api(`/workflows/${workflow.id}/publish`, 'POST', { expectedRevision: 1 }),
+        api(`/projects/${f.project.id}/workflows/${workflow.id}`, 'DELETE', {
+          expectedRevision: 1,
+          expectedMetadataRevision: 1,
+        }),
+      ]);
+      if (publish.status === 201) {
+        expect(remove.status).toBe(409);
+        expect(
+          await database.client.workflowVersion.count({ where: { workflowId: workflow.id } }),
+        ).toBe(1);
+        expect((await api(`/projects/${f.project.id}/workflows/${workflow.id}`)).status).toBe(200);
+      } else {
+        expect(remove.status).toBe(204);
+        expect(publish.status).toBe(404);
+        expect(
+          await database.client.workflowVersion.count({ where: { workflowId: workflow.id } }),
+        ).toBe(0);
+      }
+    }
+  });
+  it('同 Project 多 Workflow 独立 Draft / Version / 视口，同 Foundation key 不串联，产品 key 不改挂', async () => {
+    const f = await fixture();
+    const created = await api(`/projects/${f.project.id}/workflows`, 'POST', {
+      name: 'Workflow B',
+    });
+    expect(created.status).toBe(201);
+    const b = workflowResponseSchema.parse(await created.json());
+    const definition = structuredClone(f.definition);
+    definition.nodes[0]!.name = 'B 的独立草稿';
+    expect(
+      (await api(`/workflows/${b.id}/draft`, 'PUT', { expectedRevision: 1, definition })).status,
+    ).toBe(200);
+    const published = await api(`/workflows/${b.id}/publish`, 'POST', { expectedRevision: 2 });
+    expect(published.status).toBe(201);
+    const versionB = workflowVersionResponseSchema.parse(await published.json());
+    expect(versionB).toMatchObject({
+      workflowId: b.id,
+      projectId: f.project.id,
+      version: 1,
+      sourceRevision: 2,
+    });
+    expect(versionB.id).not.toBe(f.version.id);
+    expect(
+      (await (await api(`/projects/${f.project.id}/workflows/${f.workflow.id}`)).json()).draft,
+    ).toEqual(f.definition);
+    expect(
+      (
+        await api(`/projects/${f.project.id}/workflows/${b.id}`, 'PUT', {
+          expectedMetadataRevision: 1,
+          name: '改名后的 B',
+          viewport: { x: 40, y: -20, zoom: 1.5 },
+        })
+      ).status,
+    ).toBe(200);
+    const renamed = workflowResponseSchema.parse(
+      await (await api(`/projects/${f.project.id}/workflows/${b.id}`)).json(),
+    );
+    expect(renamed).toMatchObject({
+      name: '改名后的 B',
+      revision: 2,
+      metadataRevision: 2,
+      viewport: { x: 40, y: -20, zoom: 1.5 },
+      draft: definition,
+    });
+    expect(
+      (await (await api(`/projects/${f.project.id}/workflows/${f.workflow.id}`)).json()).viewport,
+    ).toEqual({ x: 0, y: 0, zoom: 1 });
+    expect((await api(`/workflows/${b.id}/publish`, 'POST', { expectedRevision: 2 })).status).toBe(
+      409,
+    );
+    expect(await (await api(`/workflow-versions/${versionB.id}`)).json()).toEqual(versionB);
+    const sharedKey = randomUUID();
+    const rootA = await api('/workflow-runs', 'POST', request(f.version.id, sharedKey));
+    const rootB = await api('/workflow-runs', 'POST', request(versionB.id, sharedKey));
+    expect(rootA.status).toBe(202);
+    expect(rootB.status).toBe(202);
+    const runA = await rootA.json(),
+      runB = await rootB.json();
+    expect(runA.id).not.toBe(runB.id);
+    expect(runA.workflowId).toBe(f.workflow.id);
+    expect(runB.workflowId).toBe(b.id);
+    const productA = await accepted(f.path, request(f.version.id));
+    const productB = await accepted(f.path, request(versionB.id));
+    expect(productA.run.workflowId).toBe(f.workflow.id);
+    expect(productB.run.workflowId).toBe(b.id);
+    expect(productA.invocation.id).not.toBe(productB.invocation.id);
+    // 产品 key 保持原有 Project 作用域，不能因选择 B 而重新解释 A 的调用。
+    expect(
+      (await api(f.path, 'POST', request(versionB.id, productA.invocation.invocationKey))).status,
+    ).toBe(409);
+    expect(
+      (
+        await api(
+          entry(f.project.id, f.videos[1]!.id),
+          'POST',
+          request(versionB.id, productA.invocation.invocationKey),
+        )
+      ).status,
+    ).toBe(409);
+    expect(await counts(f.project.id)).toEqual({ invocations: 2, runs: 4, outbox: 4 });
+    const blocked = await api(`/projects/${f.project.id}/workflows/${b.id}`, 'DELETE', {
+      expectedRevision: 2,
+      expectedMetadataRevision: 2,
+    });
+    expect(blocked.status).toBe(409);
+    expect((await blocked.json()).code).toBe('WORKFLOW_HAS_HISTORY');
+    const empty = workflowResponseSchema.parse(
+      await (
+        await api(`/projects/${f.project.id}/workflows`, 'POST', { name: '未发布草稿' })
+      ).json(),
+    );
+    expect(
+      (
+        await api(`/projects/${f.project.id}/workflows/${empty.id}`, 'DELETE', {
+          expectedRevision: 1,
+          expectedMetadataRevision: 1,
+        })
+      ).status,
+    ).toBe(204);
+    expect((await api(`/projects/${f.project.id}/workflows/${empty.id}`)).status).toBe(404);
+  });
+
+  it('集合与 Workflow 身份读写、删除限定 Project / owner，重名分页仍保留独立身份', async () => {
+    const f = await fixture(),
+      other = await fixture();
+    for (const method of ['GET', 'PUT', 'DELETE']) {
+      const payload =
+        method === 'GET'
+          ? undefined
+          : method === 'PUT'
+            ? { name: '越权改名', expectedMetadataRevision: 1 }
+            : { expectedRevision: 2, expectedMetadataRevision: 1 };
+      expect(
+        (await api(`/projects/${other.project.id}/workflows/${f.workflow.id}`, method, payload))
+          .status,
+      ).toBe(404);
+      expect(
+        (await api(`/projects/${f.project.id}/workflows/${f.workflow.id}`, method, payload, 1))
+          .status,
+      ).toBe(404);
+    }
+    expect((await api(`/projects/${f.project.id}/workflows`, 'GET', undefined, 1)).status).toBe(
+      404,
+    );
+    expect((await api(`/projects/${randomUUID()}/workflows`)).status).toBe(404);
+    expect((await api(`/projects/${f.project.id}/workflows?cursor=bad`)).status).toBe(400);
+    for (let index = 0; index < 31; index++)
+      expect(
+        (await api(`/projects/${f.project.id}/workflows`, 'POST', { name: '相同名称' })).status,
+      ).toBe(201);
+    await database.client.workflow.updateMany({
+      where: { projectId: f.project.id },
+      data: { createdAt: new Date('2026-10-30T00:00:00.000Z') },
+    });
+    const first = await (await api(`/projects/${f.project.id}/workflows`)).json();
+    const second = await (
+      await api(`/projects/${f.project.id}/workflows?cursor=${first.nextCursor}`)
+    ).json();
+    expect(first.items).toHaveLength(30);
+    expect(second.items).toHaveLength(2);
+    expect(
+      new Set([...first.items, ...second.items].map((item: { id: string }) => item.id)).size,
+    ).toBe(32);
+    expect(second.nextCursor).toBeNull();
+    expect(
+      (
+        await api(`/projects/${f.project.id}/workflows/${f.workflow.id}`, 'PUT', {
+          expectedMetadataRevision: 9,
+          name: '过期改名',
+        })
+      ).status,
+    ).toBe(409);
+  });
+
   it('Video 正常发起：Invocation、Run、start Outbox 同时存在且没有复制运行事实', async () => {
     const f = await fixture();
     const dispatcher = app.get(WorkflowOutboxDispatcher);
@@ -514,6 +700,19 @@ describe('产品调用正式 HTTP 与持久化边界', () => {
     expect(
       await database.client.artifact.findUnique({ where: { id: artifact.id } }),
     ).not.toBeNull();
+    const blockedDeletion = await api(
+      `/projects/${f.project.id}/workflows/${f.workflow.id}`,
+      'DELETE',
+      { expectedRevision: 2, expectedMetadataRevision: 1 },
+    );
+    expect(blockedDeletion.status).toBe(409);
+    expect(
+      await database.client.artifact.findUnique({ where: { id: artifact.id } }),
+    ).not.toBeNull();
+    expect(
+      (await api(`/projects/${f.project.id}/workflow-invocations/${original.invocation.id}`))
+        .status,
+    ).toBe(200);
     const productRun = await database.client.workflowRun.findUniqueOrThrow({
       where: { id: original.run.id },
     });

@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
-  initializeProjectWorkflowRequestSchema,
+  createWorkflowRequestSchema,
   saveWorkflowDraftRequestSchema,
   saveWorkflowDraftResponseSchema,
   workflowResponseSchema,
   publishWorkflowRequestSchema,
   workflowVersionResponseSchema,
   workflowVersionListResponseSchema,
+  saveWorkflowMetadataRequestSchema,
+  workflowListResponseSchema,
+  deleteWorkflowRequestSchema,
+  encodeWorkflowCursor,
+  decodeWorkflowCursor,
 } from '../src/index.js';
 
 const draft = { inputs: [], nodes: [], edges: [], outputs: [] };
@@ -15,12 +20,37 @@ const workflow = {
   projectId: '00000000-0000-4000-8000-000000000001',
   name: '默认工作流',
   revision: 3,
+  metadataRevision: 1,
+  viewport: { x: 0, y: 0, zoom: 1 },
   draft,
   createdAt: '2026-10-21T00:00:00.000Z',
   updatedAt: '2026-10-21T00:01:00.000Z',
 };
 
 describe('Workflow 编辑 HTTP 契约', () => {
+  it('元数据修订独立于 Draft；删除必须确认两个修订，列表不包含草稿或视口', () => {
+    const metadata = { expectedMetadataRevision: 1, name: '新名称', viewport: workflow.viewport };
+    expect(saveWorkflowMetadataRequestSchema.parse(metadata)).toEqual(metadata);
+    expect(
+      saveWorkflowMetadataRequestSchema.safeParse({ ...metadata, expectedRevision: 3 }).success,
+    ).toBe(false);
+    expect(deleteWorkflowRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      deleteWorkflowRequestSchema.parse({ expectedRevision: 3, expectedMetadataRevision: 1 }),
+    ).toEqual({ expectedRevision: 3, expectedMetadataRevision: 1 });
+    const { draft: _draft, viewport: _viewport, ...summary } = workflow;
+    expect(workflowListResponseSchema.parse({ items: [summary], nextCursor: null }).items).toEqual([
+      summary,
+    ]);
+    expect(
+      workflowListResponseSchema.safeParse({ items: [workflow], nextCursor: null }).success,
+    ).toBe(false);
+    const cursor = { id: workflow.projectId, createdAt: workflow.createdAt };
+    expect(decodeWorkflowCursor(encodeWorkflowCursor(cursor))).toEqual(cursor);
+    expect(() => decodeWorkflowCursor('broken')).toThrow();
+    expect(_draft).toBeDefined();
+    expect(_viewport).toBeDefined();
+  });
   it('读取响应保留独立身份、完整草稿与修订，拒绝内部字段', () => {
     expect(workflowResponseSchema.parse(JSON.parse(JSON.stringify(workflow)))).toEqual(workflow);
     for (const extra of [
@@ -31,11 +61,18 @@ describe('Workflow 编辑 HTTP 契约', () => {
       expect(workflowResponseSchema.safeParse({ ...workflow, ...extra }).success).toBe(false);
   });
 
-  it('初始化仅接受空请求，身份与初始草稿不由调用方指定', () => {
-    expect(initializeProjectWorkflowRequestSchema.parse(undefined)).toEqual({});
-    expect(initializeProjectWorkflowRequestSchema.parse({})).toEqual({});
-    for (const value of [null, { workflowId: 'chosen' }, { ownerId: 'other' }, { draft }])
-      expect(initializeProjectWorkflowRequestSchema.safeParse(value).success).toBe(false);
+  it('创建必须显式提供名称，不接受草稿或调用方身份覆盖', () => {
+    expect(createWorkflowRequestSchema.parse({ name: ' 工作流 A ' })).toEqual({ name: '工作流 A' });
+    for (const value of [
+      undefined,
+      null,
+      {},
+      { name: '' },
+      { name: 'A', workflowId: 'chosen' },
+      { name: 'A', ownerId: 'other' },
+      { name: 'A', draft },
+    ])
+      expect(createWorkflowRequestSchema.safeParse(value).success).toBe(false);
   });
 
   it('保存必须显式传 expectedRevision 与完整 Definition，不能混入项目 revision 或发布字段', () => {

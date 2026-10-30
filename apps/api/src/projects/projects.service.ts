@@ -23,7 +23,6 @@ import {
   WorkflowExecutionQueue,
   workflowExecutionJobId,
 } from '@dramaflow/server';
-import { createInitialWorkflowData } from '../workflow/workflows/initial-workflow.js';
 
 @Injectable()
 export class ProjectsService {
@@ -81,9 +80,6 @@ export class ProjectsService {
       data: {
         ownerId,
         name,
-        viewport: { x: 0, y: 0, zoom: 1 },
-        // 嵌套创建与 Project 原子提交；不会留下没有默认 Workflow 的新项目。
-        workflow: { create: createInitialWorkflowData() },
       },
     });
     return this.dto(project);
@@ -104,7 +100,6 @@ export class ProjectsService {
       where: { id, ownerId, revision: input.revision },
       data: {
         name: input.name,
-        viewport: input.viewport,
         revision: { increment: 1 },
       },
     });
@@ -191,7 +186,6 @@ export class ProjectsService {
     revision: number;
     createdAt: Date;
     updatedAt: Date;
-    viewport: unknown;
   }) {
     // 协议是严格对象，不能把 ownerId 等内部字段带进响应。
     return projectSchema.parse({
@@ -200,7 +194,6 @@ export class ProjectsService {
       revision: project.revision,
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
-      viewport: project.viewport,
     });
   }
 }

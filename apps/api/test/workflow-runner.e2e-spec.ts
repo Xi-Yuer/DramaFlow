@@ -62,7 +62,7 @@ afterAll(async () => {
 async function fixture(editDefinition?: (definition: WorkflowDefinition) => void) {
   const projectId = (
     await db.project.create({
-      data: { ownerId, name: '运行版本测试', viewport: {} },
+      data: { ownerId, name: '运行版本测试' },
     })
   ).id;
   const execute = vi.fn(async (input: { a: number; b: number }) => ({

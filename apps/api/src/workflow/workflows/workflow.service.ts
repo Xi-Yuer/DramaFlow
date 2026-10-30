@@ -2,8 +2,6 @@ import {
   saveWorkflowDraftRequestSchema,
   publishWorkflowRequestSchema,
   workflowIdentifierSchema,
-  workflowResponseSchema,
-  type WorkflowResponse,
 } from '@dramaflow/contracts';
 import { Prisma } from '@dramaflow/database';
 import { DatabaseService, ModelProviderService } from '@dramaflow/server';
@@ -16,7 +14,7 @@ import {
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 import { validateWorkflowNodeConfigurations } from './validate-node-configurations.js';
-import { createInitialWorkflowData } from './initial-workflow.js';
+import { WorkflowCollection } from './management/workflow-collection.js';
 import { WorkflowVersions } from './versions/workflow-versions.js';
 import { validateWorkflowPublication } from './publish/validate-workflow-publication.js';
 
@@ -48,6 +46,7 @@ export class WorkflowService {
     private readonly models: ModelProviderService,
   ) {
     this.versions = new WorkflowVersions(db);
+    this.collection = new WorkflowCollection(db);
   }
 
   private readonly versions: WorkflowVersions;
@@ -60,49 +59,21 @@ export class WorkflowService {
     return this.versions.getVersion(ownerId, rawVersionId);
   }
 
-  async initializeForProject(ownerId: string, rawProjectId: string): Promise<WorkflowResponse> {
-    const projectId = z.uuid().parse(rawProjectId);
-    return this.db.client.$transaction(
-      async (tx) => {
-        // 锁定项目而非尚不存在的 Workflow，串行化跨进程首次初始化，并固定本次权限。
-        const projects = await tx.$queryRaw<{ id: string }[]>`
-          SELECT "id" FROM "canvas_project"
-          WHERE "id" = ${projectId}::uuid AND "ownerId" = ${ownerId}
-          FOR UPDATE
-        `;
-        if (!projects[0]) throw new NotFoundException('项目不存在或无权访问');
-        const existing = await tx.workflow.findUnique({ where: { projectId } });
-        const workflow =
-          existing ??
-          (await tx.workflow.create({
-            data: { projectId, ...createInitialWorkflowData() },
-          }));
-        // 已存在时不执行 UPDATE，不重置草稿、名称、revision 或 updatedAt。
-        return this.response(workflow);
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
-    );
+  private readonly collection: WorkflowCollection;
+  listForProject(ownerId: string, projectId: string, query: unknown) {
+    return this.collection.list(ownerId, projectId, query);
   }
-
-  async getForProject(ownerId: string, rawProjectId: string): Promise<WorkflowResponse> {
-    const projectId = z.uuid().parse(rawProjectId);
-    const workflow = await this.db.client.workflow.findFirst({
-      where: { projectId, project: { ownerId } },
-    });
-    if (!workflow) throw new NotFoundException('工作流不存在或无权访问');
-    return this.response(workflow);
+  createForProject(ownerId: string, projectId: string, body: unknown) {
+    return this.collection.create(ownerId, projectId, body);
   }
-
-  private response(workflow: Prisma.WorkflowGetPayload<Record<string, never>>): WorkflowResponse {
-    return workflowResponseSchema.parse({
-      id: workflow.id,
-      projectId: workflow.projectId,
-      name: workflow.name,
-      revision: workflow.revision,
-      draft: workflow.draft,
-      createdAt: workflow.createdAt.toISOString(),
-      updatedAt: workflow.updatedAt.toISOString(),
-    });
+  get(ownerId: string, projectId: string, workflowId: string) {
+    return this.collection.get(ownerId, projectId, workflowId);
+  }
+  saveMetadata(ownerId: string, projectId: string, workflowId: string, body: unknown) {
+    return this.collection.saveMetadata(ownerId, projectId, workflowId, body);
+  }
+  remove(ownerId: string, projectId: string, workflowId: string, body: unknown) {
+    return this.collection.remove(ownerId, projectId, workflowId, body);
   }
 
   async updateDraft(ownerId: string, input: unknown): Promise<{ revision: number }> {

@@ -94,11 +94,12 @@ const project: Project = {
   id: '7ac10b00-33cc-4e50-9a2b-05ef764c44f4',
   name: '测试项目',
   revision: 1,
-  viewport: { x: 0, y: 0, zoom: 1 },
   createdAt: '2026-10-22T00:00:00.000Z',
   updatedAt: '2026-10-22T00:00:00.000Z',
 };
 const workflow: WorkflowResponse = {
+  viewport: { x: 0, y: 0, zoom: 1 },
+  metadataRevision: 1,
   id: 'workflow-1',
   projectId: project.id,
   name: '测试工作流',
@@ -292,9 +293,9 @@ describe('Editor 真实主动离开入口', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('项目名称未保存也使用同一保护', async () => {
+  it('工作流名称未保存也使用同一保护', async () => {
     mountEditor();
-    fireEvent.change(screen.getByRole('textbox', { name: '项目名称' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: '工作流名称' }), {
       target: { value: '本地修改' },
     });
     await attempt('account');
@@ -306,10 +307,10 @@ describe('Editor 真实主动离开入口', () => {
 describe('Editor beforeunload', () => {
   const safe: EditorLeaveState = {
     draftDirty: false,
-    projectDirty: false,
+    metadataDirty: false,
     draftOperation: 'idle',
-    savingProject: false,
-    reloadingProject: false,
+    savingMetadata: false,
+    reloadingMetadata: false,
     publishing: false,
     run: { phase: 'idle', request: null, accepted: null, error: null },
   };

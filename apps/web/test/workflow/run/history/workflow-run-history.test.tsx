@@ -167,7 +167,6 @@ function setupEditor() {
           id: f.projectId,
           name: '历史测试',
           revision: 1,
-          viewport: { x: 0, y: 0, zoom: 1 },
           createdAt: f.run.createdAt,
           updatedAt: f.run.createdAt,
         }}
@@ -177,6 +176,8 @@ function setupEditor() {
           name: '工作流',
           revision: 2,
           draft,
+          metadataRevision: 1,
+          viewport: { x: 0, y: 0, zoom: 1 },
           createdAt: f.run.createdAt,
           updatedAt: f.run.createdAt,
         }}

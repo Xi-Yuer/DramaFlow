@@ -230,6 +230,8 @@ function setupCanvas({
     currentDraft = useWorkflowDraft({
       id: 'workflow-1',
       projectId: 'project-1',
+      metadataRevision: 1,
+      viewport: { x: 0, y: 0, zoom: 1 },
       name: '工作流',
       revision: 1,
       draft: definition,
@@ -396,6 +398,8 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
     vi.spyOn(workflowApi, 'get').mockImplementation(async () => ({
       id: 'workflow-1',
       projectId: 'project-1',
+      metadataRevision: 1,
+      viewport: { x: 0, y: 0, zoom: 1 },
       name: '工作流',
       revision: 2,
       draft: savedSnapshot!,
@@ -622,6 +626,8 @@ describe('Workflow Canvas Interaction Foundation 核心交互', () => {
       currentDraft = useWorkflowDraft({
         id: 'workflow-1',
         projectId: 'project-1',
+        metadataRevision: 1,
+        viewport: { x: 0, y: 0, zoom: 1 },
         name: '工作流',
         revision: 1,
         draft: createFullWorkflow(),

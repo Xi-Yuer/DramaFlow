@@ -25,6 +25,10 @@ import { NumberType } from '@dramaflow/contracts';
 import { END, interrupt, START, StateGraph } from '@langchain/langgraph';
 import { Module } from '@nestjs/common';
 
+// 父测试进程异常退出时不得留下 Worker / Outbox Pump 干扰后续隔离用例。
+const parentDisconnected = () => process.exit(1);
+process.once('disconnect', parentDisconnected);
+
 const send = (message: object) =>
   new Promise<void>((resolve, reject) =>
     process.send?.(message, (error) => (error ? reject(error) : resolve())),
@@ -229,5 +233,10 @@ try {
   }
   await new Promise<void>((resolve) => process.once('message', resolve));
 } finally {
-  await app.close();
+  try {
+    await app.close();
+  } finally {
+    process.removeListener('disconnect', parentDisconnected);
+    if (process.connected) process.disconnect();
+  }
 }

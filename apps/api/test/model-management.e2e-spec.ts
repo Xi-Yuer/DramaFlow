@@ -682,7 +682,9 @@ describe('用户模型管理 HTTP', () => {
   it('管理变更不改写旧发布快照；启停影响新发布，不推进 Project / Workflow revision', async () => {
     const f = await fixture();
     const workflow = workflowResponseSchema.parse(
-      await (await http(`/projects/${f.p.id}/workflow`)).json(),
+      await (
+        await http(`/projects/${f.p.id}/workflows`, 'POST', { name: '模型测试工作流' })
+      ).json(),
     );
     const draft = {
       inputs: [],
@@ -751,8 +753,9 @@ describe('用户模型管理 HTTP', () => {
       ).status,
     ).toBe(201);
     expect(
-      workflowResponseSchema.parse(await (await http(`/projects/${f.p.id}/workflow`)).json())
-        .revision,
+      workflowResponseSchema.parse(
+        await (await http(`/projects/${f.p.id}/workflows/${workflow.id}`)).json(),
+      ).revision,
     ).toBe(nextRevision);
   });
 

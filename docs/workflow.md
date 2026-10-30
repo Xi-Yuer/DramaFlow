@@ -4,7 +4,7 @@ Workflow Foundation 保持[业务无关](architecture.md#业务解耦)。运行�
 
 ## Definition、Draft 与 Version
 
-一个项目拥有一个逻辑 Workflow。GraphDefinition 由 inputs、nodes、edges、outputs 组成；root 与局部图复用同一协议。Project.revision、Workflow.revision、发布 version 分别管理项目元数据、草稿与不可变版本。
+一个项目可以没有 Workflow，也可以拥有多个独立 Workflow。GraphDefinition 由 inputs、nodes、edges、outputs 组成；root 与局部图复用同一协议。Project.revision 管理项目名称，Workflow.metadataRevision 管理工作流名称和根视口，Workflow.revision 管理草稿，发布 version 管理不可变版本。改名和视口保存不推进草稿 revision，也不改变已发布快照。
 
 保存与发布使用 expectedRevision；过期请求冲突。同一 workflowId / sourceRevision 只能发布一次。Publish 冻结完整快照，检查图语义、执行准入和 Owner 的能力绑定，不调用模型、不修改草稿 revision；失败不消耗版本号。运行只读取指定 WorkflowVersion，不读取 draft / latest。
 

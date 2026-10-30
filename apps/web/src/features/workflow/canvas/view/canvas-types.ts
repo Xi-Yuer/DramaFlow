@@ -1,4 +1,9 @@
-import type { NodeRun, NodeTypeManifest, Project, WorkflowDefinition } from '@dramaflow/contracts';
+import type {
+  NodeRun,
+  NodeTypeManifest,
+  WorkflowResponse,
+  WorkflowDefinition,
+} from '@dramaflow/contracts';
 import type { OnMove } from '@xyflow/react';
 import type { ReactNode } from 'react';
 import type {
@@ -31,7 +36,7 @@ export type WorkflowCanvasProps = {
   onModelResumeConsumed?: () => void;
   reloading: boolean;
   interactionLocked?: boolean;
-  defaultViewport: Project['viewport'];
+  defaultViewport: WorkflowResponse['viewport'];
   onMoveEnd: OnMove;
   initialSelectedNodeId?: string | null;
   initialSelectedEdgeIds?: readonly string[];

@@ -1,9 +1,6 @@
+import { createProjectWithWorkflow } from './fixtures.js';
 import type { APIRequestContext, Page } from '@playwright/test';
-import {
-  projectSchema,
-  workflowResponseSchema,
-  type WorkflowDefinition,
-} from '@dramaflow/contracts';
+import { workflowResponseSchema, type WorkflowDefinition } from '@dramaflow/contracts';
 import { expect, origin, test } from './fixtures.js';
 
 const imageManifest = {
@@ -59,15 +56,8 @@ function definition(): WorkflowDefinition {
 }
 
 async function createProject(api: APIRequestContext) {
-  const project = projectSchema.parse(
-    await (
-      await api.post('/api/v1/projects', {
-        headers: { Origin: origin },
-        data: { name: '模板变量测试' },
-      })
-    ).json(),
-  );
-  const workflow = await readWorkflow(api, project.id);
+  const project = await createProjectWithWorkflow(api, '画布测试项目');
+  const workflow = await readWorkflow(api, project.id, project.workflowId);
   const saved = await api.put(`/api/v1/workflows/${workflow.id}/draft`, {
     headers: { Origin: origin },
     data: { expectedRevision: workflow.revision, definition: definition() },
@@ -76,9 +66,9 @@ async function createProject(api: APIRequestContext) {
   return project;
 }
 
-async function readWorkflow(api: APIRequestContext, projectId: string) {
+async function readWorkflow(api: APIRequestContext, projectId: string, workflowId: string) {
   return workflowResponseSchema.parse(
-    await (await api.get(`/api/v1/projects/${projectId}/workflow`)).json(),
+    await (await api.get(`/api/v1/projects/${projectId}/workflows/${workflowId}`)).json(),
   );
 }
 
@@ -104,7 +94,7 @@ test('文本节点插入多个上游变量，保存刷新后恢复，并过滤�
     }
     await route.fulfill({ json: [...body, imageManifest] });
   });
-  await page.goto(`/projects/${project.id}/workflows`);
+  await page.goto(`/projects/${project.id}/workflows/${project.workflowId}`);
   const script = page.locator('.react-flow__node[data-id="script"]');
   const prompt = script.getByRole('group', { name: '提示词', exact: true });
   await prompt.getByRole('textbox').fill('请根据 ');
@@ -145,7 +135,7 @@ test('文本节点插入多个上游变量，保存刷新后恢复，并过滤�
 
   const saved = await save(page);
   expect(saved.ok()).toBeTruthy();
-  const stored = await readWorkflow(request, project.id);
+  const stored = await readWorkflow(request, project.id, project.workflowId);
   const scriptNode = stored.draft.nodes.find((item) => item.id === 'script');
   expect(scriptNode?.inputs).toEqual({
     prompt: {
@@ -173,7 +163,7 @@ test('文本节点插入多个上游变量，保存刷新后恢复，并过滤�
   await expect(prompt).not.toContainText('生成大纲 · 生成文本');
   await expect(script.getByRole('button', { name: '删除变量 生成大纲 生成文本' })).toHaveCount(0);
   expect((await save(page)).ok()).toBeTruthy();
-  const removed = await readWorkflow(request, project.id);
+  const removed = await readWorkflow(request, project.id, project.workflowId);
   expect(removed.draft.nodes.find((item) => item.id === 'script')?.inputs.prompt).toEqual({
     type: 'template',
     value: '请根据  和 {{text2}} 生成剧本',
@@ -183,7 +173,7 @@ test('文本节点插入多个上游变量，保存刷新后恢复，并过滤�
 
   await script.getByRole('button', { name: '删除变量 人物 生成文本' }).click();
   expect((await save(page)).ok()).toBeTruthy();
-  const plain = await readWorkflow(request, project.id);
+  const plain = await readWorkflow(request, project.id, project.workflowId);
   expect(plain.draft.nodes.find((item) => item.id === 'script')?.inputs.prompt).toEqual({
     type: 'constant',
     value: '请根据  和  生成剧本',

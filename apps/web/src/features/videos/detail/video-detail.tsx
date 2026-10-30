@@ -15,7 +15,13 @@ import workspace from '@/features/projects/workspace/workspace.module.css';
 import styles from '../videos.module.css';
 import { VideoWorkflowInvocations } from '../workflow-invocations/video-workflow-invocations';
 
-export function VideoDetail({ videoId }: { videoId: string }) {
+export function VideoDetail({
+  videoId,
+  selectedWorkflowId,
+}: {
+  videoId: string;
+  selectedWorkflowId?: string;
+}) {
   const { project } = useProjectWorkspace();
   const valid = z.uuid().safeParse(videoId).success;
   const video = useQuery({
@@ -56,14 +62,18 @@ export function VideoDetail({ videoId }: { videoId: string }) {
               action={<Button onClick={() => void video.refetch()}>重试</Button>}
             />
           ) : null}
-          <VideoEditor key={video.data.id} video={video.data} />
+          <VideoEditor
+            key={video.data.id}
+            video={video.data}
+            selectedWorkflowId={selectedWorkflowId}
+          />
         </>
       )}
     </main>
   );
 }
 
-function VideoEditor({ video }: { video: Video }) {
+function VideoEditor({ video, selectedWorkflowId }: { video: Video; selectedWorkflowId?: string }) {
   const { project } = useProjectWorkspace();
   const [invocationUnsafe, setInvocationUnsafe] = useState(false);
   const editor = useVideoEditor(video, invocationUnsafe);
@@ -79,6 +89,7 @@ function VideoEditor({ video }: { video: Video }) {
         <VideoWorkflowInvocations
           projectId={project.id}
           videoId={video.id}
+          selectedWorkflowId={selectedWorkflowId}
           onUnsafeChange={setInvocationUnsafe}
         />
         {editor.error ? (

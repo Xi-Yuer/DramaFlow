@@ -654,15 +654,6 @@
       "attgenerated": ""
     },
     {
-      "table_name": "canvas_project",
-      "name": "viewport",
-      "type": "jsonb",
-      "not_null": true,
-      "default_value": null,
-      "attidentity": "",
-      "attgenerated": ""
-    },
-    {
       "table_name": "child_execution",
       "name": "completedAt",
       "type": "timestamp(3) without time zone",
@@ -1339,6 +1330,15 @@
     },
     {
       "table_name": "workflow",
+      "name": "metadataRevision",
+      "type": "integer",
+      "not_null": true,
+      "default_value": "1",
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow",
       "name": "name",
       "type": "character varying(80)",
       "not_null": true,
@@ -1370,6 +1370,15 @@
       "type": "timestamp(3) without time zone",
       "not_null": true,
       "default_value": null,
+      "attidentity": "",
+      "attgenerated": ""
+    },
+    {
+      "table_name": "workflow",
+      "name": "viewport",
+      "type": "jsonb",
+      "not_null": true,
+      "default_value": "'{\"x\": 0, \"y\": 0, \"zoom\": 1}'::jsonb",
       "attidentity": "",
       "attgenerated": ""
     },
@@ -2223,6 +2232,15 @@
     },
     {
       "table_name": "workflow",
+      "name": "workflow_metadata_revision_positive",
+      "type": "c",
+      "definition": "CHECK ((\"metadataRevision\" > 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow",
       "name": "workflow_pkey",
       "type": "p",
       "definition": "PRIMARY KEY (id)",
@@ -2244,6 +2262,15 @@
       "name": "workflow_revision_positive",
       "type": "c",
       "definition": "CHECK ((revision > 0))",
+      "condeferrable": false,
+      "condeferred": false,
+      "convalidated": true
+    },
+    {
+      "table_name": "workflow",
+      "name": "workflow_viewport_object",
+      "type": "c",
+      "definition": "CHECK ((jsonb_typeof(viewport) = 'object'::text))",
       "condeferrable": false,
       "condeferred": false,
       "convalidated": true
@@ -2688,8 +2715,8 @@
     },
     {
       "table_name": "workflow",
-      "name": "workflow_projectId_key",
-      "definition": "CREATE UNIQUE INDEX \"workflow_projectId_key\" ON public.workflow USING btree (\"projectId\")"
+      "name": "workflow_projectId_createdAt_id_idx",
+      "definition": "CREATE INDEX \"workflow_projectId_createdAt_id_idx\" ON public.workflow USING btree (\"projectId\", \"createdAt\", id)"
     },
     {
       "table_name": "workflow_execution_outbox",
@@ -2829,6 +2856,12 @@
       "definition": "CREATE TRIGGER product_invocation_insert_guard BEFORE INSERT ON public.product_workflow_invocation FOR EACH ROW EXECUTE FUNCTION guard_product_workflow_invocation_insert()"
     },
     {
+      "table_name": "workflow",
+      "name": "workflow_delete_history_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER workflow_delete_history_guard BEFORE DELETE ON public.workflow FOR EACH ROW EXECUTE FUNCTION guard_workflow_delete_history()"
+    },
+    {
       "table_name": "workflow_execution_outbox",
       "name": "workflow_execution_intent_guard",
       "enabled": "O",
@@ -2897,6 +2930,10 @@
     {
       "name": "guard_product_workflow_invocation_insert",
       "definition": "CREATE OR REPLACE FUNCTION public.guard_product_workflow_invocation_insert()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  PERFORM 1 FROM video WHERE id = NEW.\"sourceVideoId\" AND \"projectId\" = NEW.\"projectId\" FOR KEY SHARE;\n  IF NOT FOUND THEN\n    RAISE EXCEPTION 'Product invocation source must belong to project' USING ERRCODE = '23503';\n  END IF;\n  PERFORM 1 FROM workflow_run WHERE id = NEW.\"workflowRunId\" AND \"projectId\" = NEW.\"projectId\" AND \"invocationKey\" = NEW.\"invocationKey\" FOR KEY SHARE;\n  IF NOT FOUND THEN\n    RAISE EXCEPTION 'Product invocation must match accepted run identity' USING ERRCODE = '23514';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+    },
+    {
+      "name": "guard_workflow_delete_history",
+      "definition": "CREATE OR REPLACE FUNCTION public.guard_workflow_delete_history()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF EXISTS (SELECT 1 FROM canvas_project WHERE id = OLD.\"projectId\") AND (\n    EXISTS (SELECT 1 FROM workflow_version WHERE \"workflowId\" = OLD.id) OR\n    EXISTS (SELECT 1 FROM workflow_run WHERE \"workflowId\" = OLD.id)\n  ) THEN\n    RAISE EXCEPTION 'Workflow with published versions or runs cannot be deleted' USING ERRCODE = '23514';\n  END IF;\n  RETURN OLD;\nEND;\n$function$\n"
     },
     {
       "name": "guard_workflow_execution_intent",

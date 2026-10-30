@@ -5,22 +5,20 @@ import {
   modelProviderListSchema,
   modelConfigurationListSchema,
 } from '@dramaflow/contracts';
-import { test, expect, origin } from './fixtures.js';
+import { test, expect, createProjectWithWorkflow } from './fixtures.js';
 
+const fixtureWorkflowIds = new Map<string, string>();
 async function project(api: APIRequestContext, name = '模型管理测试') {
-  const response = await api.post('/api/v1/projects', {
-    headers: { Origin: origin },
-    data: { name },
-  });
-  expect(response.ok()).toBeTruthy();
-  return projectSchema.parse(await response.json());
+  const fixture = await createProjectWithWorkflow(api, name);
+  fixtureWorkflowIds.set(fixture.id, fixture.workflowId);
+  return fixture;
 }
 const drawer = (page: Page) => page.getByRole('dialog', { name: '模型设置', exact: true });
 const dialog = (page: Page, name: string) => page.getByRole('dialog', { name, exact: true });
 const suppliersTab = (page: Page) => drawer(page).getByRole('tab', { name: /模型供应商/ });
 const modelsTab = (page: Page) => drawer(page).getByRole('tab', { name: /^模型（/ });
 async function open(page: Page, id: string) {
-  await page.goto(`/projects/${id}/workflows`);
+  await page.goto(`/projects/${id}/workflows/${fixtureWorkflowIds.get(id)!}`);
   await page.getByRole('button', { name: '模型设置', exact: true }).click();
   await expect(drawer(page).getByRole('tab', { name: /^模型（/ })).toBeVisible();
 }
@@ -519,20 +517,20 @@ test('自定义接入仍可配置兼容地址，刷新后保留', async ({ page,
   await expectNoSecret(page, secret);
 });
 
-test('模型设置保留画布内未保存的项目信息，管理操作不推进图和项目 revision', async ({
+test('模型设置保留画布内未保存的工作流信息，管理操作不推进图和项目 revision', async ({
   page,
   request,
 }) => {
   const p = await project(request);
-  await page.goto(`/projects/${p.id}/workflows`);
-  await page.getByRole('textbox', { name: '项目名称' }).fill('未保存的项目名称');
+  await page.goto(`/projects/${p.id}/workflows/${p.workflowId}`);
+  await page.getByRole('textbox', { name: '工作流名称' }).fill('未保存的工作流名称');
   await page.getByRole('button', { name: '模型设置', exact: true }).click();
   await expect(modelsTab(page)).toBeVisible();
   await addSupplier(page, `test-only-${randomUUID()}`);
   await addModel(page, 'independent-model');
   await drawer(page).getByRole('button', { name: '关闭模型设置' }).click();
-  await expect(page.getByRole('textbox', { name: '项目名称' })).toHaveValue('未保存的项目名称');
-  await expect(page.getByRole('status', { name: '项目信息状态' })).toHaveText('项目信息未保存');
+  await expect(page.getByRole('textbox', { name: '工作流名称' })).toHaveValue('未保存的工作流名称');
+  await expect(page.getByRole('status', { name: '工作流信息状态' })).toHaveText('工作流信息未保存');
   expect(
     projectSchema.parse(await (await request.get(`/api/v1/projects/${p.id}`)).json()).revision,
   ).toBe(p.revision);

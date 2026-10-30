@@ -1,35 +1,67 @@
 import {
-  initializeProjectWorkflowRequestSchema,
   saveWorkflowDraftRequestSchema,
   saveWorkflowDraftResponseSchema,
   publishWorkflowRequestSchema,
   workflowVersionResponseSchema,
 } from '@dramaflow/contracts';
-import { Body, Controller, Get, Header, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { Actor } from '../../auth/auth.guard.js';
 import type { AuthActor } from '../../auth/auth.service.js';
 import { WorkflowService } from './workflow.service.js';
 
-@Controller('projects/:projectId/workflow')
+@Controller('projects/:projectId/workflows')
 export class ProjectWorkflowsController {
   constructor(private readonly workflows: WorkflowService) {}
-
   @Get()
   @Header('Cache-Control', 'no-store')
-  get(@Actor() actor: AuthActor, @Param('projectId') projectId: string) {
-    return this.workflows.getForProject(actor.user.id, projectId);
+  list(@Actor() actor: AuthActor, @Param('projectId') projectId: string, @Query() query: unknown) {
+    return this.workflows.listForProject(actor.user.id, projectId, query);
   }
-
   @Post()
-  @HttpCode(200)
   @Header('Cache-Control', 'no-store')
-  initialize(
+  create(@Actor() actor: AuthActor, @Param('projectId') projectId: string, @Body() body: unknown) {
+    return this.workflows.createForProject(actor.user.id, projectId, body);
+  }
+  @Get(':workflowId')
+  @Header('Cache-Control', 'no-store')
+  get(
     @Actor() actor: AuthActor,
     @Param('projectId') projectId: string,
+    @Param('workflowId') workflowId: string,
+  ) {
+    return this.workflows.get(actor.user.id, projectId, workflowId);
+  }
+  @Put(':workflowId')
+  @Header('Cache-Control', 'no-store')
+  save(
+    @Actor() actor: AuthActor,
+    @Param('projectId') projectId: string,
+    @Param('workflowId') workflowId: string,
     @Body() body: unknown,
   ) {
-    initializeProjectWorkflowRequestSchema.parse(body);
-    return this.workflows.initializeForProject(actor.user.id, projectId);
+    return this.workflows.saveMetadata(actor.user.id, projectId, workflowId, body);
+  }
+  @Delete(':workflowId')
+  @HttpCode(204)
+  @Header('Cache-Control', 'no-store')
+  remove(
+    @Actor() actor: AuthActor,
+    @Param('projectId') projectId: string,
+    @Param('workflowId') workflowId: string,
+    @Body() body: unknown,
+  ) {
+    return this.workflows.remove(actor.user.id, projectId, workflowId, body);
   }
 }
 

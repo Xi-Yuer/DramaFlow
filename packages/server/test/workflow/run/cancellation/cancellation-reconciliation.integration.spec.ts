@@ -49,7 +49,7 @@ describe.skipIf(!enabled)('取消 reconciliation / PostgreSQL + Redis 证据', (
   });
   async function fixture() {
     const project = await db().project.create({
-      data: { ownerId: owner, name: '取消核查', viewport: {} },
+      data: { ownerId: owner, name: '取消核查' },
     });
     const workflow = await db().workflow.create({
       data: { projectId: project.id, name: '核查', draft: {} },

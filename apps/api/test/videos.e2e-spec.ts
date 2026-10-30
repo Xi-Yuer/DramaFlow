@@ -93,7 +93,7 @@ describe.skipIf(!enabled)('Video 真实 Auth / HTTP / Prisma 项目隔离', () =
     projects = [];
     for (const ownerId of [users[0]!, users[0]!, users[1]!]) {
       const project = await db.project.create({
-        data: { ownerId, name: '视频隔离项目', viewport: { x: 0, y: 0, zoom: 1 } },
+        data: { ownerId, name: '视频隔离项目' },
       });
       projects.push(project.id);
     }

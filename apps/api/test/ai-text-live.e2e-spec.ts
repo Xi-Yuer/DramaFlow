@@ -206,7 +206,7 @@ describe('显式启用：真实外部文本模型端到端验收', () => {
           .map((value) => value.split(';')[0])
           .join('; ');
         const project = await db.project.create({
-          data: { ownerId, name: '真实文本模型验收', viewport: {} },
+          data: { ownerId, name: '真实文本模型验收' },
         });
         const providers = app.get(ModelProviderService);
         const provider = await providers.createProvider(ownerId, {

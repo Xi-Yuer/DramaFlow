@@ -78,7 +78,7 @@ function snapshot(input: unknown) {
 
 async function fixture(draft: WorkflowDefinition = definition('A')) {
   const project = await db.project.create({
-    data: { ownerId, name: '版本测试', viewport: {} },
+    data: { ownerId, name: '版本测试' },
   });
   const workflow = await db.workflow.create({
     data: { projectId: project.id, name: '工作流', draft: snapshot(draft) },
@@ -183,17 +183,17 @@ describe('真实 PostgreSQL Workflow / WorkflowVersion', () => {
     );
   });
 
-  it('每项目一个 Workflow、同工作流版本号唯一，版本和 revision 为正数', async () => {
+  it('每项目多个独立 Workflow，同工作流版本号唯一，版本和 revision 为正数', async () => {
     const f = await fixture();
-    await expect(
-      db.workflow.create({
-        data: {
-          projectId: f.project.id,
-          name: '重复工作流',
-          draft: snapshot(definition('A')),
-        },
-      }),
-    ).rejects.toMatchObject({ code: 'P2002' });
+    const other = await db.workflow.create({
+      data: {
+        projectId: f.project.id,
+        name: '重复工作流',
+        draft: snapshot(definition('A')),
+      },
+    });
+    expect(other.id).not.toBe(f.workflow.id);
+    expect(other.projectId).toBe(f.project.id);
     await storeVersion(f.workflow.id, 1);
     await expect(storeVersion(f.workflow.id, 1)).rejects.toMatchObject({
       code: 'P2002',
@@ -257,10 +257,12 @@ describe('真实 PostgreSQL Workflow / WorkflowVersion', () => {
     await expect(f.repository.getVersion(version.id)).rejects.toBeInstanceOf(z.ZodError);
   });
 
-  it('删除 Workflow 级联删除版本，读取不返回已删除快照', async () => {
+  it('已有版本的 Workflow 不能单独删除；Project 删除继续级联清理', async () => {
     const f = await fixture();
     const version = await storeVersion(f.workflow.id, 1);
-    await db.workflow.delete({ where: { id: f.workflow.id } });
+    await expect(db.workflow.delete({ where: { id: f.workflow.id } })).rejects.toThrow();
+    expect(await f.repository.getVersion(version.id)).not.toBeNull();
+    await db.project.delete({ where: { id: f.project.id } });
     expect(await f.repository.getVersion(version.id)).toBeNull();
     expect(await db.workflowVersion.count({ where: { workflowId: f.workflow.id } })).toBe(0);
   });

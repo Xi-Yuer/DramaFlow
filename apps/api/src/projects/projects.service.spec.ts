@@ -13,7 +13,6 @@ import { ProjectsService } from './projects.service.js';
 
 const projectId = '00000000-0000-4000-8000-000000000001';
 const ownerId = 'owner-a';
-const viewport = { x: 10, y: -20, zoom: 1.5 };
 const timestamp = new Date('2026-10-19T00:00:00.000Z');
 const summary = {
   id: projectId,
@@ -22,8 +21,8 @@ const summary = {
   createdAt: timestamp,
   updatedAt: timestamp,
 };
-const record = { ...summary, ownerId, viewport };
-const saveInput = { name: '修改后的项目', revision: 3, viewport };
+const record = { ...summary, ownerId };
+const saveInput = { name: '修改后的项目', revision: 3 };
 
 async function setup() {
   // 仅在测试中替换数据库和外部清理；生产服务始终使用真实实现。
@@ -81,20 +80,13 @@ async function setup() {
 }
 
 describe('基础项目与所有者隔离', () => {
-  it('创建归属当前所有者的项目，并原子初始化视口和默认工作流', async () => {
+  it('创建归属当前所有者的项目，从空 Workspace 开始', async () => {
     const { service, project } = await setup();
     const result = await service.create(ownerId, { name: ' 第一集 ' });
     expect(project.create).toHaveBeenCalledWith({
       data: {
         ownerId,
         name: '第一集',
-        viewport: { x: 0, y: 0, zoom: 1 },
-        workflow: {
-          create: {
-            name: '默认工作流',
-            draft: { inputs: [], nodes: [], edges: [], outputs: [] },
-          },
-        },
       },
     });
     expect(result).not.toHaveProperty('ownerId');
@@ -110,7 +102,6 @@ describe('基础项目与所有者隔离', () => {
     });
     expect(result).toEqual({
       ...summary,
-      viewport,
       createdAt: timestamp.toISOString(),
       updatedAt: timestamp.toISOString(),
     });
@@ -202,7 +193,7 @@ describe('基础项目与所有者隔离', () => {
     });
     expect(project.updateMany).toHaveBeenCalledWith({
       where: { id: projectId, ownerId, revision: 3 },
-      data: { name: saveInput.name, viewport, revision: { increment: 1 } },
+      data: { name: saveInput.name, revision: { increment: 1 } },
     });
     expect(project.findFirst).not.toHaveBeenCalled();
   });

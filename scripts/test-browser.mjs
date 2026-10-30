@@ -57,14 +57,6 @@ try {
     process.env[`WEB_TEST_${kind}_PASSWORD`] = password;
   }
   // 显式初始化路径使用缺少 Workflow 的项目；普通项目和图通过正式 HTTP 创建。
-  const uninitialized = await db.project.create({
-    data: {
-      ownerId: users[0],
-      name: '未初始化项目',
-      viewport: { x: 0, y: 0, zoom: 1 },
-    },
-  });
-  process.env.WEB_TEST_UNINITIALIZED_PROJECT_ID = uninitialized.id;
   await run(['--filter', '@dramaflow/web', 'exec', 'playwright', 'test', ...process.argv.slice(2)]);
 } finally {
   await db.user.deleteMany({ where: { id: { in: users } } });

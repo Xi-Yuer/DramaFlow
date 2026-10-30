@@ -1,59 +1,46 @@
 'use client';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Spin } from 'antd';
-import { CanvasEditor } from './canvas-editor';
 import type { Project } from '@dramaflow/contracts';
 import { ApiError } from '@/lib/http';
+import { z } from 'zod';
+import { CanvasEditor } from './canvas-editor';
 import { workflowApi, workflowKeys } from '@/features/workflow/workflow-api';
 
-export function CanvasPage({ project }: { project: Project }) {
-  const cache = useQueryClient();
-  const key = workflowKeys.project(project.id);
+export function CanvasPage({ project, workflowId }: { project: Project; workflowId: string }) {
+  if (!z.uuid().safeParse(workflowId).success)
+    return <Alert type="error" showIcon title="工作流地址无效" />;
+  return (
+    <>
+      <CanvasLoader key={`${project.id}:${workflowId}`} project={project} workflowId={workflowId} />
+    </>
+  );
+}
+function CanvasLoader({ project, workflowId }: { project: Project; workflowId: string }) {
   const workflow = useQuery({
-    queryKey: key,
-    queryFn: () => workflowApi.get(project.id),
+    queryKey: workflowKeys.detail(project.id, workflowId),
+    queryFn: async () => {
+      const result = await workflowApi.get(project.id, workflowId);
+      if (result.id !== workflowId || result.projectId !== project.id)
+        throw new ApiError('工作流响应与当前地址不匹配', 200);
+      return result;
+    },
     retry: false,
     staleTime: 0,
     gcTime: 0,
     refetchOnMount: 'always',
     refetchOnReconnect: false,
   });
-  const initialize = useMutation({
-    mutationFn: () => workflowApi.initialize(project.id),
-    retry: false,
-    onSuccess: (result) => cache.setQueryData(key, result),
-  });
-  if (workflow.isPending || workflow.isFetching)
+  if (workflow.isPending)
     return (
       <div className="page-loading" role="status">
         <Spin size="large" />
         <span>正在读取工作流草稿…</span>
       </div>
     );
-  if (workflow.error instanceof ApiError && workflow.error.status === 404)
-    return (
-      <div className="page-loading">
-        <Alert
-          type="info"
-          title="此项目尚未建立工作流"
-          description="初始化后会创建可保存的空白草稿。已有工作流不会被覆盖。"
-          showIcon
-        />
-        {initialize.error ? (
-          <Alert
-            type="error"
-            title="工作流初始化失败"
-            description={initialize.error.message}
-            showIcon
-          />
-        ) : null}
-        <Button type="primary" loading={initialize.isPending} onClick={() => initialize.mutate()}>
-          {initialize.isPending ? '正在初始化工作流…' : '初始化工作流'}
-        </Button>
-        <Button href="/projects">返回项目</Button>
-      </div>
-    );
-  if (workflow.error || !workflow.data)
+  const denied =
+    workflow.error instanceof ApiError && [401, 403, 404].includes(workflow.error.status);
+  if (!workflow.data || denied)
     return (
       <div className="page-loading">
         <Alert
@@ -63,8 +50,19 @@ export function CanvasPage({ project }: { project: Project }) {
           showIcon
         />
         <Button onClick={() => void workflow.refetch()}>重新读取工作流</Button>
-        <Button href="/projects">返回项目</Button>
       </div>
     );
-  return <CanvasEditor project={project} workflow={workflow.data} />;
+  return (
+    <>
+      {workflow.error ? (
+        <Alert
+          type="warning"
+          showIcon
+          title="工作流暂时无法刷新，当前编辑仍保留"
+          action={<Button onClick={() => void workflow.refetch()}>重试</Button>}
+        />
+      ) : null}
+      <CanvasEditor project={project} workflow={workflow.data} />
+    </>
+  );
 }

@@ -251,7 +251,7 @@ afterAll(async () => {
 
 async function project(owner = ownerId) {
   return db.project.create({
-    data: { ownerId: owner, name: '文本 AI', viewport: {} },
+    data: { ownerId: owner, name: '文本 AI' },
   });
 }
 async function configured(model = `model-${randomUUID()}`, providerType?: 'openai' | 'anthropic') {

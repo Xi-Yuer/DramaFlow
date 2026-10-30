@@ -32,8 +32,10 @@ export function ProjectOverview() {
         <section className={styles.card}>
           <Workflow size={24} aria-hidden />
           <h2>工作流</h2>
-          <p className={styles.description}>进入项目工作流，编辑草稿、发布版本并查看运行结果。</p>
-          <WorkspaceLink href={`${base}/workflows`}>打开工作流画布</WorkspaceLink>
+          <p className={styles.description}>
+            管理项目中的多个工作流，分别编辑草稿、发布版本并查看运行结果。
+          </p>
+          <WorkspaceLink href={`${base}/workflows`}>查看工作流</WorkspaceLink>
         </section>
       </div>
     </main>

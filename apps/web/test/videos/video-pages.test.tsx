@@ -55,7 +55,6 @@ const project: Project = {
   id: '00000000-0000-4000-8000-000000000001',
   name: '视频项目',
   revision: 1,
-  viewport: { x: 0, y: 0, zoom: 1 },
   createdAt: '2026-10-30T00:00:00.000Z',
   updatedAt: '2026-10-30T00:00:00.000Z',
 };

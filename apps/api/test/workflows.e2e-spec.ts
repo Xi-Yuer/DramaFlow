@@ -61,7 +61,7 @@ function definition(text: string): WorkflowDefinition {
 async function fixture(revision = 10) {
   const draft = definition('A');
   const project = await db.project.create({
-    data: { ownerId, name: '发布测试', viewport: {} },
+    data: { ownerId, name: '发布测试' },
   });
   const workflow = await db.workflow.create({
     data: {

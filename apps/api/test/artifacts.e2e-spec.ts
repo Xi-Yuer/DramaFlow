@@ -78,7 +78,7 @@ afterAll(async () => {
 async function fixture(owner = ownerId) {
   const db = database.client;
   const project = await db.project.create({
-    data: { ownerId: owner, name: '产物', viewport: {} },
+    data: { ownerId: owner, name: '产物' },
   });
   const workflow = await db.workflow.create({
     data: {

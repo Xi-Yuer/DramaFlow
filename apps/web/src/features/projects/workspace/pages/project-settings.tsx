@@ -1,16 +1,14 @@
 'use client';
 
 import { Alert, Button, Form, Input } from 'antd';
-import { useRef } from 'react';
-import { useProjectMetadata } from '@/features/workflow/editor/project/use-project-metadata';
+import { useProjectMetadata } from '@/features/projects/metadata/use-project-metadata';
 import { useLeaveGuard } from '@/lib/navigation/use-leave-guard';
 import { useProjectNavigationGuard, useProjectWorkspace } from '../workspace-context';
 import styles from '../workspace.module.css';
 
 export function ProjectSettings() {
   const { project } = useProjectWorkspace();
-  const graphSession = useRef(null);
-  const metadata = useProjectMetadata(project, graphSession);
+  const metadata = useProjectMetadata(project);
   const { requestLeave } = useLeaveGuard(
     metadata.dirty || metadata.saving || metadata.reloadingProject,
     '确认离开项目设置？',

@@ -43,12 +43,12 @@ beforeAll(async () => {
     });
   projectId = (
     await db.project.create({
-      data: { ownerId, name: '运行记录测试', viewport: {} },
+      data: { ownerId, name: '运行记录测试' },
     })
   ).id;
   otherProjectId = (
     await db.project.create({
-      data: { ownerId: otherId, name: '其他项目', viewport: {} },
+      data: { ownerId: otherId, name: '其他项目' },
     })
   ).id;
   repository = await repositories.forProject(ownerId, projectId);

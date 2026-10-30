@@ -17,7 +17,7 @@ import { WorkflowPublishControls } from '../publish/workflow-publish-controls';
 import { WorkflowExecutionWorkspace } from './workflow-execution-workspace';
 import { workflowPublishDisabledReason } from './draft/workflow-draft-state';
 import { useWorkflowDraft } from './draft/use-workflow-draft';
-import { useProjectMetadata } from './project/use-project-metadata';
+import { useWorkflowMetadata } from './metadata/use-workflow-metadata';
 import { useEditorModelSettings } from './models/use-editor-model-settings';
 import { EditorToolbar } from './presentation/editor-toolbar';
 import { EditorNotices } from './presentation/editor-notices';
@@ -47,15 +47,15 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
     draft.workflowId,
     publication.latestPublishedVersion,
   );
-  const metadata = useProjectMetadata(project, graphSession);
+  const metadata = useWorkflowMetadata(workflow, graphSession);
   const modelSettings = useEditorModelSettings();
   const { modelSettingsOpen, modelResume } = modelSettings;
   const { requestLeave } = useEditorLeaveGuard({
     draftDirty: draft.dirty,
-    projectDirty: metadata.dirty,
+    metadataDirty: metadata.dirty,
     draftOperation: draft.operation,
-    savingProject: metadata.saving,
-    reloadingProject: metadata.reloadingProject,
+    savingMetadata: metadata.saving,
+    reloadingMetadata: metadata.reloadingMetadata,
     publishing: publication.publishing,
     run: workflowRun.state,
     uncertainInvocation: workflowRun.uncertainInvocation,
@@ -95,7 +95,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
         inWorkspace={!!workspace}
         onBack={() =>
           requestLeave(() =>
-            router.push(workspace ? `/projects/${project.id}/overview` : '/projects'),
+            router.push(workspace ? `/projects/${project.id}/workflows` : '/projects'),
           )
         }
         onOpenModels={modelSettings.openSettings}
@@ -201,7 +201,7 @@ function CanvasBoard({ project, workflow }: { project: Project; workflow: Workfl
             interactionLocked={
               !!workflowRun.historyRun || modelSettingsOpen || publication.publishing
             }
-            initialRootViewport={workflowRun.historyRun ? project.viewport : metadata.viewport}
+            initialRootViewport={workflowRun.historyRun ? workflow.viewport : metadata.viewport}
             onRootViewportChange={workflowRun.historyRun ? () => undefined : metadata.onMoveEnd}
             runStatus={workflowRun.runStatus}
             nodeRuns={workflowRun.runStatus.nodeRuns}

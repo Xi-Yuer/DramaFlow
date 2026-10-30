@@ -1,27 +1,16 @@
 import type { APIRequestContext, Page } from '@playwright/test';
-import {
-  nodeTypeManifestListSchema,
-  projectSchema,
-  workflowResponseSchema,
-} from '@dramaflow/contracts';
-import { test, expect, origin } from './fixtures.js';
+import { nodeTypeManifestListSchema, workflowResponseSchema } from '@dramaflow/contracts';
+import { test, expect, origin, createProjectWithWorkflow } from './fixtures.js';
 
 const status = (page: Page) => page.getByRole('status', { name: '工作流草稿状态' });
 const nodes = (page: Page) => page.locator('.react-flow__node');
-async function readWorkflow(request: APIRequestContext, projectId: string) {
+async function readWorkflow(request: APIRequestContext, projectId: string, workflowId: string) {
   return workflowResponseSchema.parse(
-    await (await request.get(`/api/v1/projects/${projectId}/workflow`)).json(),
+    await (await request.get(`/api/v1/projects/${projectId}/workflows/${workflowId}`)).json(),
   );
 }
 async function createProject(request: APIRequestContext) {
-  return projectSchema.parse(
-    await (
-      await request.post('/api/v1/projects', {
-        headers: { Origin: origin },
-        data: { name: '节点创建测试' },
-      })
-    ).json(),
-  );
+  return await createProjectWithWorkflow(request, '画布测试项目');
 }
 async function save(page: Page) {
   const saved = page.waitForResponse(
@@ -39,9 +28,9 @@ test('从真实目录向空画布和已有画布添加 incomplete 节点，按�
   const viewport = { x: 175, y: -80, zoom: 0.7 };
   expect(
     (
-      await request.put(`/api/v1/projects/${project.id}`, {
+      await request.put(`/api/v1/projects/${project.id}/workflows/${project.workflowId}`, {
         headers: { Origin: origin },
-        data: { revision: project.revision, name: project.name, viewport },
+        data: { expectedMetadataRevision: 1, name: '测试工作流', viewport },
       })
     ).ok(),
   ).toBeTruthy();
@@ -50,7 +39,7 @@ test('从真实目录向空画布和已有画布添加 incomplete 节点，按�
   );
   const manifest = catalog.find((item) => item.type === 'ai.text_generate')!;
   expect(manifest).toBeDefined();
-  await page.goto(`/projects/${project.id}/workflows`);
+  await page.goto(`/projects/${project.id}/workflows/${project.workflowId}`);
   await expect(nodes(page)).toHaveCount(0);
   await page.getByRole('button', { name: '添加节点', exact: true }).click();
   const option = page.getByRole('button', {
@@ -70,7 +59,7 @@ test('从真实目录向空画布和已有画布添加 incomplete 节点，按�
   const firstId = await nodes(page).first().getAttribute('data-id');
   expect(firstId).toBeTruthy();
   await save(page);
-  const first = await readWorkflow(request, project.id);
+  const first = await readWorkflow(request, project.id, project.workflowId);
   expect(first.draft.nodes).toHaveLength(1);
   expect(first.draft.nodes[0]).toMatchObject({
     id: firstId,
@@ -106,7 +95,7 @@ test('从真实目录向空画布和已有画布添加 incomplete 节点，按�
   await expect(nodes(page)).toHaveCount(2);
   await expect(status(page)).toHaveText('草稿未保存');
   await save(page);
-  const second = await readWorkflow(request, project.id);
+  const second = await readWorkflow(request, project.id, project.workflowId);
   expect(second.draft.nodes[0]).toEqual(first.draft.nodes[0]);
   expect(second.draft.nodes[1].ui.position).not.toEqual(first.draft.nodes[0].ui.position);
   expect(new Set(second.draft.nodes.map((node) => node.id)).size).toBe(2);
@@ -138,7 +127,7 @@ test('Picker 使用目录中的任意类型、版本、描述和默认配置，�
     },
   ]);
   await page.route('**/api/v1/workflow/node-types', (route) => route.fulfill({ json: catalog }));
-  await page.goto(`/projects/${project.id}/workflows`);
+  await page.goto(`/projects/${project.id}/workflows/${project.workflowId}`);
   await page.getByRole('button', { name: '添加节点', exact: true }).click();
   const option = page.getByRole('button', { name: '添加 示例转换 · v9', exact: true });
   await expect(option).toContainText('仅用于验证通用目录创建');
@@ -163,14 +152,14 @@ for (const invalidCatalog of [false, true]) {
           : { status: 503, json: { message: '目录暂不可用' } },
       ),
     );
-    await page.goto(`/projects/${project.id}/workflows`);
+    await page.goto(`/projects/${project.id}/workflows/${project.workflowId}`);
     await expect(page.getByText('节点目录加载失败，已有草稿仍保留。')).toBeVisible({
       timeout: 15000,
     });
     await expect(page.getByRole('button', { name: '添加节点', exact: true })).toBeDisabled();
     await expect(nodes(page)).toHaveCount(0);
     await expect(status(page)).toHaveText('草稿已保存 · 修订 1');
-    expect((await readWorkflow(request, project.id)).draft.nodes).toEqual([]);
+    expect((await readWorkflow(request, project.id, project.workflowId)).draft.nodes).toEqual([]);
     await page.unroute('**/api/v1/workflow/node-types');
     await page.getByRole('button', { name: '重试加载目录', exact: true }).click();
     await expect(page.getByRole('button', { name: '添加节点', exact: true })).toBeEnabled();

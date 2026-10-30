@@ -23,8 +23,7 @@ describe.skipIf(!enabled)('只读 Execution Tree PostgreSQL Adapter', () => {
     await db().user.create({
       data: { id: ownerId, name: '运行树测试', email: `${ownerId}@example.test` },
     });
-    projectId = (await db().project.create({ data: { ownerId, name: '运行树测试', viewport: {} } }))
-      .id;
+    projectId = (await db().project.create({ data: { ownerId, name: '运行树测试' } })).id;
   });
   afterAll(async () => {
     if (database) {

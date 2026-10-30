@@ -33,7 +33,7 @@ describe.skipIf(!enabled)('Cancellation 持久化闸门 PostgreSQL', () => {
     for (const id of [owner, outsider])
       await client().user.create({ data: { id, name: '取消测试', email: `${id}@example.test` } });
     await client().project.create({
-      data: { id: project, ownerId: owner, name: '取消测试', viewport: {} },
+      data: { id: project, ownerId: owner, name: '取消测试' },
     });
   });
   afterAll(async () => {

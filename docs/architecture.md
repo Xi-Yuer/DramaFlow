@@ -42,17 +42,29 @@ React Flow 负责编辑，LangGraph 负责调度、State 通道、Send、checkpo
 
 Web 的 Project 是视频创作工作空间。`/projects/[id]` 重定向至 `/projects/[id]/overview`，共享 Project Layout 在顶部展示项目名称、返回项目列表和账号菜单，主体采用左侧纵向菜单、右侧页面内容的布局；窄屏收窄侧栏并保留文字入口。五个子路由可以直接访问及刷新恢复，不依赖页面内临时 Tab 状态。
 
-| 子路由      | 职责                                            |
-| ----------- | ----------------------------------------------- |
-| `overview`  | 项目概览与视频、素材、工作流入口                |
-| `videos`    | 项目内视频作品列表、创建与独立作品详情入口      |
-| `assets`    | 正式素材页面入口；目前只显示功能未开放的空状态  |
-| `workflows` | 复用现有 Canvas、Draft、Publish、Run 与运行查看 |
-| `settings`  | 复用现有项目改名、修订冲突处理与删除            |
+| 子路由      | 职责                                                       |
+| ----------- | ---------------------------------------------------------- |
+| `overview`  | 项目概览与视频、素材、工作流入口                           |
+| `videos`    | 项目内视频作品列表、创建与独立作品详情入口                 |
+| `assets`    | 正式素材页面入口；目前只显示功能未开放的空状态             |
+| `workflows` | 项目内工作流集合、创建、改名、受约束删除与明确 Canvas 入口 |
+| `settings`  | 复用现有项目改名、修订冲突处理与删除                       |
 
-项目身份与权限加载由共享布局负责，工作流页加载 Canvas，视频详情按需只读查询项目 Workflow 与已发布版本；页面进入不会自动初始化、保存、发布或运行工作流。共享导航、返回项目列表和账号操作接入当前页面的离开保护；Canvas 与项目设置仍使用标准 beforeunload 保护，取消离开保留本地编辑。后台项目读取临时失败保留当前页面，明确拒绝访问则隐藏内容。
+项目身份与权限加载由共享布局负责，工作流集合按需加载列表，具体 Canvas 按 Project / Workflow 双重身份加载；视频详情查询可选 Workflow 集合及所选工作流的已发布版本；页面进入不会自动初始化、保存、发布或运行工作流。共享导航、返回项目列表和账号操作接入当前页面的离开保护；Canvas 与项目设置仍使用标准 beforeunload 保护，取消离开保留本地编辑。后台项目读取临时失败保留当前页面，明确拒绝访问则隐藏内容。
 
-数据库仍是一个 Project 至多一个逻辑 Workflow（`Workflow.projectId` 唯一）；新建项目原子创建默认 Workflow，缺失时工作流页保留明确初始化操作。Project 名称、根视口与修订仍独立于 Workflow Draft 保存。这个关系足以支撑当前 Workspace；若后续需要项目内多个 Workflow，才需要调整基数与按 Project 定位 Workflow 的接口。没有 Asset 持久领域模型，也没有把通用 Artifact 当作产品素材库。
+数据库为 `Project 1 → N Workflow`，允许空集合。Project 创建只创建 Workspace，不隐式创建、初始化或选定 Workflow。Workflow.projectId 是非唯一外键，以 `(projectId, createdAt, id)` 索引支持集合查询；各自的 Draft、Version、Run 身份与生命周期保持独立。Project 只保存项目身份与 revision；Workflow 名称和根视口使用独立 metadataRevision 保存，不推进草稿 revision。追加迁移 `20261030070029_project_workflow_collection` 将既有视口从 Project 搬到对应 Workflow，再移除 Project.viewport，不保留单 Workflow 兼容 API。没有 Asset 持久领域模型，也没有把通用 Artifact 当作产品素材库。
+
+| API（均以 `/api/v1` 为前缀）                        | 行为                                                                                                           |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET /projects/:projectId/workflows`                | 项目内集合，按 createdAt / ID 倒序，每页 30 个，游标分页，不读取完整 Draft                                     |
+| `POST /projects/:projectId/workflows`               | 以显式名称创建独立空草稿，201 返回 Workflow；创建时保护 Project 生命周期                                       |
+| `GET /projects/:projectId/workflows/:workflowId`    | 双重身份读取指定 Workflow；Canvas 刷新及草稿重读复用此入口                                                     |
+| `PUT /projects/:projectId/workflows/:workflowId`    | 按 expectedMetadataRevision 保存名称和可选根视口，独立 CAS，不更新 Draft 或版本                                |
+| `DELETE /projects/:projectId/workflows/:workflowId` | 校验 expectedRevision / expectedMetadataRevision，成功 204；有已发布版本或 Run 时返回 409 WORKFLOW_HAS_HISTORY |
+
+集合、读取、改名和删除均同时限定路径 Project、Workflow 身份与 Project.ownerId。Canvas 路径为 `/projects/[id]/workflows/[workflowId]`，Query key 和编辑会话固定该身份；共享侧栏在 Canvas 中仍选中工作流入口。`features/workflow/management/` 管理集合，Canvas 复用原编辑器；Project 设置元数据逻辑位于 `features/projects/metadata/`。
+
+Workflow 删除只允许未发布且无运行历史的草稿。服务端锁定 Project 与 Workflow 行，再检查两个修订和历史，和 Publish / Draft 写入互斥；数据库 delete guard 同样拒绝删除存在已发布版本或 Run 的逻辑 Workflow。不会通过删除 Workflow 级联抹除版本或执行历史，也不新增软删除、归档或用途分类。Project 整体删除仍按现有项目生命周期清理全部 Workflow、Version、Run、Artifact、Invocation、checkpoint 与队列任务。
 
 前端实现按职责放在 `features/projects/workspace/`：共享布局与导航在入口，页面在 `pages/`；Canvas 继续位于 `features/workflow/editor/`，通用 Workflow Foundation 语义保持独立。
 
@@ -93,7 +105,7 @@ Contract 在 `packages/contracts/src/product/`，产品应用服务在 `apps/api
 
 Run 复合外键保证 Project 一致；插入 guard 验证当前 Video 属于 Project、Run 的 key 与产品 key 一致。来源 ID 没有 Video 外键，避免永久删除作品抹除来源；数据库禁止更新来源记录或在 Project 存在时单独删除历史。Video 改名不改写受理时名称，删除 Video 不删除调用、Run、Artifact 或执行树；Project 整体删除按既有生命周期级联清理。这不是 Video 软删除或归档系统。
 
-视频详情复用现有版本选择、Workflow Inputs 表单、运行身份恢复、状态 / 取消 / 审核和 ExecutionTreeBrowser。调用列表按需加载，选择后在抽屉读取真实 Run 状态和执行树；不复制状态表或搭建 Production History。恢复标识按用户、Project、Workflow 及产品来源 namespace 隔离；重进只查询，未确认请求接入作品离开保护。当前项目仍至多一个逻辑 Workflow，因此入口选择它的已发布版本，没有新增多 Workflow 模型或模板系统。
+视频详情复用现有版本选择、Workflow Inputs 表单、运行身份恢复、状态 / 取消 / 审核和 ExecutionTreeBrowser。调用列表按需加载，选择后在抽屉读取真实 Run 状态和执行树；不复制状态表或搭建 Production History。恢复标识按用户、Project、Workflow 及产品来源 namespace 隔离；重进只查询，未确认请求接入作品离开保护。入口可以选择同 Project 不同 Workflow 的已发布版本，Video 不保存固定 workflowId。选择的 Workflow ID 保存在 URL；即使不在集合首屏，刷新也会按明确 ID 查询恢复。Foundation 的相同 invocationKey 在不同 Workflow 下分别受理；产品 key 仍为 Project 作用域，相同 key 切换 Workflow 返回冲突，不重新解释来源或认领另一条 Run。
 
 ## Provider 与能力装配
 

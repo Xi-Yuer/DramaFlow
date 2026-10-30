@@ -12,7 +12,6 @@ export const saveProjectSchema = z
   .object({
     revision: z.number().int().positive(),
     name: createProjectSchema.shape.name,
-    viewport: viewportSchema,
   })
   .strict();
 export const projectSummarySchema = z
@@ -24,7 +23,7 @@ export const projectSummarySchema = z
     updatedAt: z.string().datetime(),
   })
   .strict();
-export const projectSchema = projectSummarySchema.extend({ viewport: viewportSchema });
+export const projectSchema = projectSummarySchema;
 const projectPageCursorTokenSchema = z
   .string()
   .min(1)

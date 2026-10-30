@@ -83,6 +83,8 @@ describe('真实 AI 文本 Catalog 实例的 Web 编辑链路', () => {
     expect(edited.nodes[0]!.inputs).toEqual(node.inputs);
     expect(entry).toEqual(createAiTextCompositeTestEntry());
     const response = workflowResponseSchema.parse({
+      metadataRevision: 1,
+      viewport: { x: 0, y: 0, zoom: 1 },
       id: 'workflow',
       projectId: '00000000-0000-4000-8000-000000000002',
       name: '默认工作流',

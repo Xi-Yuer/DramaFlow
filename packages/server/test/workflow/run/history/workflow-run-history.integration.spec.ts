@@ -30,8 +30,8 @@ describe.skipIf(!enabled)('Run History PostgreSQL 分页与权限', () => {
           id: projectIds[i],
           ownerId: i === 2 ? other : owner,
           name: '运行历史测试',
-          viewport: {},
-          workflow: { create: { id: workflowIds[i], name: '测试', draft: {} } },
+
+          workflows: { create: { id: workflowIds[i], name: '测试', draft: {} } },
         },
       });
     for (let i = 0; i < 2; i++)

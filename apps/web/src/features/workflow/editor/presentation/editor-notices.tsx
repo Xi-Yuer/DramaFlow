@@ -1,5 +1,5 @@
 import { Alert, App, Button } from 'antd';
-import type { ProjectMetadata } from '../project/use-project-metadata';
+import type { WorkflowMetadata } from '../metadata/use-workflow-metadata';
 import type { useWorkflowDraft } from '../draft/use-workflow-draft';
 
 export function EditorNotices({
@@ -7,12 +7,12 @@ export function EditorNotices({
   draft,
   publishing,
 }: {
-  metadata: ProjectMetadata;
+  metadata: WorkflowMetadata;
   draft: ReturnType<typeof useWorkflowDraft>;
   publishing: boolean;
 }) {
   const { modal } = App.useApp();
-  const { conflict, projectError, reloadingProject, saving, reloadProject } = metadata;
+  const { conflict, metadataError, reloadingMetadata, saving, reloadMetadata } = metadata;
   function reloadDraft() {
     if (!draft.dirty) {
       void draft.reload();
@@ -20,7 +20,7 @@ export function EditorNotices({
     }
     modal.confirm({
       title: '重新读取会放弃当前图修改',
-      content: '项目名称和视口的修改会保留。',
+      content: '工作流名称和视口的修改会保留。',
       okText: '读取服务器草稿',
       cancelText: '继续编辑',
       onOk: draft.reload,
@@ -29,22 +29,22 @@ export function EditorNotices({
 
   return (
     <>
-      {conflict || projectError ? (
+      {conflict || metadataError ? (
         <Alert
           className="canvas-notice"
           showIcon
           type={conflict ? 'warning' : 'error'}
-          title={conflict ? '项目信息已在其他页面更新' : '项目信息保存未确认'}
-          description={`${projectError ?? ''} 当前本地修改仍保留。`}
+          title={conflict ? '工作流信息已在其他页面更新' : '工作流信息保存未确认'}
+          description={`${metadataError ?? ''} 当前本地修改仍保留。`}
           action={
             conflict ? (
               <Button
                 size="small"
-                loading={reloadingProject}
+                loading={reloadingMetadata}
                 disabled={saving}
-                onClick={reloadProject}
+                onClick={reloadMetadata}
               >
-                重新读取项目信息
+                重新读取工作流信息
               </Button>
             ) : undefined
           }

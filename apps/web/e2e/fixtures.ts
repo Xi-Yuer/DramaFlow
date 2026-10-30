@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
 import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { createDatabase } from '../../../packages/database/dist/index.js';
-import { currentUserSchema, projectSchema } from '@dramaflow/contracts';
+import { currentUserSchema, projectSchema, workflowResponseSchema } from '@dramaflow/contracts';
 export { expect };
 export const origin = 'http://127.0.0.1:3200';
 const loginHeaders = {
@@ -78,3 +78,19 @@ test.beforeEach(async ({ page, request }) => {
 test.afterEach(async ({ page }) => {
   expect(pageErrors.get(page)).toEqual([]);
 });
+
+// 需要画布的测试显式创建两种资源，保存 Workflow 身份，不依赖 Project 的隐式默认对象。
+export async function createProjectWithWorkflow(api: APIRequestContext, name: string) {
+  const project = projectSchema.parse(
+    await (
+      await api.post('/api/v1/projects', { headers: { Origin: origin }, data: { name } })
+    ).json(),
+  );
+  const response = await api.post(`/api/v1/projects/${project.id}/workflows`, {
+    headers: { Origin: origin },
+    data: { name: '测试工作流' },
+  });
+  expect(response.status()).toBe(201);
+  const workflow = workflowResponseSchema.parse(await response.json());
+  return { ...project, workflowId: workflow.id };
+}

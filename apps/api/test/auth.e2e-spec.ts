@@ -166,7 +166,7 @@ it('真实项目 API 保留基础字段、所有者隔离和修订号并发校�
   const created = projectSchema.parse(await createdResponse.json());
   expect(created.name).toBe('第一集');
   expect(created.revision).toBe(1);
-  expect(created.viewport).toEqual({ x: 0, y: 0, zoom: 1 });
+  expect(created).not.toHaveProperty('viewport');
   expect(created).not.toHaveProperty('ownerId');
   expect(created).not.toHaveProperty('definition');
   expect(created).not.toHaveProperty('nodeCount');
@@ -204,7 +204,6 @@ it('真实项目 API 保留基础字段、所有者隔离和修订号并发校�
   const update = {
     revision: created.revision,
     name: '第一集修改版',
-    viewport: { x: 120, y: -80, zoom: 1.5 },
   };
   const saved = await call(path, 'PUT', update, cookie);
   expect(saved.status).toBe(200);
@@ -213,7 +212,6 @@ it('真实项目 API 保留基础字段、所有者隔离和修订号并发校�
   expect(loaded.status).toBe(200);
   expect(projectSchema.parse(await loaded.json())).toMatchObject({
     name: update.name,
-    viewport: update.viewport,
     revision: 2,
   });
   const stale = await call(path, 'PUT', update, secondCookie);
@@ -263,7 +261,7 @@ it('真实项目列表跨页保留相同毫秒记录的顺序，始终隔离所�
       id,
       ownerId: index < ownIds.length ? userId : ids[1]!,
       name: '分页测试',
-      viewport: { x: 0, y: 0, zoom: 1 },
+
       updatedAt,
     })),
   });

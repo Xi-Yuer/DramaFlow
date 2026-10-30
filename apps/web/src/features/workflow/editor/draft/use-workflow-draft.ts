@@ -77,7 +77,12 @@ export function useWorkflowDraft(initial: WorkflowResponse) {
     operation.current = 'reloading';
     send({ type: 'reload-started' });
     try {
-      const workflow = await workflowApi.get(current.current.projectId);
+      const workflow = await workflowApi.get(current.current.projectId, current.current.workflowId);
+      if (
+        workflow.id !== current.current.workflowId ||
+        workflow.projectId !== current.current.projectId
+      )
+        throw new ApiError('重读草稿的工作流身份不匹配', 200);
       send({ type: 'reload-succeeded', workflow });
     } catch (error) {
       send({

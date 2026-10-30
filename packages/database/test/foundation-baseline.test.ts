@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import pg from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -9,6 +11,7 @@ const enabled = process.env.DRAMAFLOW_INTEGRATION === '1';
 const execute = promisify(execFile);
 const baseline = '20261030000000_foundation_v1_baseline';
 const videoMigration = '20261030032909_video_identity';
+const workflowCollectionMigration = '20261030070029_project_workflow_collection';
 const invocationMigration = '20261030062304_product_workflow_invocations';
 const databaseName = `dramaflow_test_baseline_${randomUUID().replaceAll('-', '')}`;
 const cwd = new URL('..', import.meta.url).pathname;
@@ -36,7 +39,7 @@ async function fixture() {
     [user, `${user}@example.test`],
   );
   await db.query(
-    'INSERT INTO canvas_project (id,"ownerId",name,viewport,"updatedAt") VALUES ($1,$2,\'test\',\'{}\',now())',
+    'INSERT INTO canvas_project (id,"ownerId",name,"updatedAt") VALUES ($1,$2,\'test\',now())',
     [project, user],
   );
   await db.query(
@@ -127,6 +130,7 @@ describe.skipIf(!enabled)('Foundation v1 空数据库基线', () => {
       { migration_name: baseline },
       { migration_name: videoMigration },
       { migration_name: invocationMigration },
+      { migration_name: workflowCollectionMigration },
     ]);
     expect(
       (await db.query("SELECT count(*)::int AS count FROM pg_namespace WHERE nspname='langgraph'"))
@@ -162,6 +166,144 @@ describe.skipIf(!enabled)('Foundation v1 空数据库基线', () => {
     for (const [key, sql] of Object.entries(queries))
       actual[key] = (await db.query<Record<string, unknown>>(sql)).rows;
     expect(actual).toEqual(expected);
+  });
+
+  it('从既有单 Workflow 数据升级时搬迁根视口，保留版本、Run、Artifact 与产品来源', async () => {
+    const name = `${databaseName}_u`,
+      directory = mkdtempSync(join(tmpdir(), 'dramaflow-migration-'));
+    const connection = new URL(target);
+    connection.pathname = `/${name}`;
+    let legacy: pg.Client | undefined,
+      made = false;
+    try {
+      await admin.query(`CREATE DATABASE "${name}"`);
+      made = true;
+      for (const entry of [baseline, videoMigration, invocationMigration, 'migration_lock.toml'])
+        cpSync(
+          new URL(`../prisma/migrations/${entry}`, import.meta.url),
+          join(directory, 'migrations', entry),
+          { recursive: true },
+        );
+      const configuration = join(directory, 'prisma.config.ts');
+      writeFileSync(
+        configuration,
+        `export default { schema: ${JSON.stringify(join(cwd, 'prisma/schema.prisma'))}, migrations: { path: ${JSON.stringify(join(directory, 'migrations'))} }, datasource: { url: process.env.DATABASE_URL } };`,
+      );
+      const options = { cwd, env: { ...process.env, DATABASE_URL: connection.href } };
+      await execute(
+        'pnpm',
+        ['exec', 'prisma', 'migrate', 'deploy', '--config', configuration],
+        options,
+      );
+      legacy = new pg.Client({ connectionString: connection.href });
+      await legacy.connect();
+      const user = randomUUID(),
+        project = randomUUID(),
+        workflow = randomUUID(),
+        version = randomUUID(),
+        run = randomUUID(),
+        video = randomUUID();
+      const viewport = { x: 123, y: -45, zoom: 1.4 },
+        definition = { inputs: [], nodes: [], edges: [], outputs: [] };
+      await legacy.query(
+        'INSERT INTO auth_user (id,name,email,"updatedAt") VALUES ($1,\'upgrade\',$2,now())',
+        [user, `${user}@example.test`],
+      );
+      await legacy.query(
+        'INSERT INTO canvas_project (id,"ownerId",name,viewport,"updatedAt") VALUES ($1,$2,\'旧项目\',$3,now())',
+        [project, user, viewport],
+      );
+      await legacy.query(
+        'INSERT INTO workflow (id,"projectId",name,draft,revision,"updatedAt") VALUES ($1,$2,\'旧画布\',$3,7,now())',
+        [workflow, project, definition],
+      );
+      await legacy.query(
+        'INSERT INTO workflow_version (id,"workflowId",version,"sourceRevision",definition) VALUES ($1,$2,1,7,$3)',
+        [version, workflow, definition],
+      );
+      await legacy.query(
+        'INSERT INTO workflow_run (id,"projectId","workflowId","workflowVersionId","invocationKey","threadId",inputs) VALUES ($1,$2,$3,$4,$1,$1,\'{}\')',
+        [run, project, workflow, version],
+      );
+      await legacy.query(
+        'INSERT INTO workflow_execution_outbox (id,kind,"workflowRunId",payload) VALUES ($1,\'start\',$2,$3)',
+        [randomUUID(), run, { kind: 'start', workflowRunId: run }],
+      );
+      await legacy.query(
+        'INSERT INTO artifact (id,"projectId","workflowRunId","nodeId","outputKey",type,"contentKind","storageKey","mimeType",size,checksum) VALUES ($1,$2,$3,\'node\',\'out\',\'{}\',\'json\',$4,\'application/json\',1,\'test\')',
+        [randomUUID(), project, run, randomUUID()],
+      );
+      await legacy.query(
+        'INSERT INTO video (id,"projectId",name,"updatedAt") VALUES ($1,$2,\'旧作品\',now())',
+        [video, project],
+      );
+      await legacy.query(
+        'INSERT INTO product_workflow_invocation (id,"projectId","sourceVideoId","sourceVideoName","workflowRunId","invocationKey") VALUES ($1,$2,$3,\'旧作品\',$4,$5)',
+        [randomUUID(), project, video, run, run],
+      );
+      await execute('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], options);
+      expect(
+        (
+          await legacy.query<Record<string, unknown>>(
+            'SELECT viewport,revision,"metadataRevision" FROM workflow WHERE id=$1',
+            [workflow],
+          )
+        ).rows,
+      ).toEqual([{ viewport, revision: 7, metadataRevision: 1 }]);
+      for (const table of [
+        'workflow_version',
+        'workflow_run',
+        'artifact',
+        'product_workflow_invocation',
+        'workflow_execution_outbox',
+      ])
+        expect((await legacy.query(`SELECT count(*)::int AS count FROM ${table}`)).rows).toEqual([
+          { count: 1 },
+        ]);
+      await legacy.query('DELETE FROM canvas_project WHERE id=$1', [project]);
+      expect((await legacy.query('SELECT count(*)::int AS count FROM workflow_run')).rows).toEqual([
+        { count: 0 },
+      ]);
+    } finally {
+      await legacy?.end();
+      if (made) await admin.query(`DROP DATABASE "${name}"`);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 30000);
+
+  it('Project 多 Workflow、独立视口和元数据修订有效；直接删除已有历史的 Workflow 被拒绝', async () => {
+    const f = await fixture(),
+      empty = randomUUID();
+    await db.query(
+      'INSERT INTO workflow (id,"projectId",name,draft,"updatedAt") VALUES ($1,$2,\'独立草稿\',\'{}\',now())',
+      [empty, f.project],
+    );
+    expect(
+      (await db.query('SELECT id FROM workflow WHERE "projectId"=$1', [f.project])).rowCount,
+    ).toBe(2);
+    await db.query(
+      'UPDATE workflow SET name=\'改名\',viewport=\'{"x":40,"y":20,"zoom":1.5}\',"metadataRevision"=2 WHERE id=$1',
+      [empty],
+    );
+    expect(
+      (
+        await db.query('SELECT revision,"metadataRevision",viewport FROM workflow WHERE id=$1', [
+          f.workflow,
+        ])
+      ).rows,
+    ).toEqual([{ revision: 1, metadataRevision: 1, viewport: { x: 0, y: 0, zoom: 1 } }]);
+    await rejected('UPDATE workflow SET "metadataRevision"=0 WHERE id=$1', [empty]);
+    await rejected("UPDATE workflow SET viewport='[]' WHERE id=$1", [empty]);
+    await rejected('DELETE FROM workflow WHERE id=$1', [f.workflow]);
+    await db.query('DELETE FROM workflow WHERE id=$1', [empty]);
+    expect(
+      (await db.query('SELECT id FROM workflow_version WHERE id=$1', [f.version])).rowCount,
+    ).toBe(1);
+    expect((await db.query('SELECT id FROM workflow_run WHERE id=$1', [f.run])).rowCount).toBe(1);
+    await db.query('DELETE FROM canvas_project WHERE id=$1', [f.project]);
+    expect(
+      (await db.query('SELECT id FROM workflow WHERE "projectId"=$1', [f.project])).rowCount,
+    ).toBe(0);
   });
 
   it('Video 基础生命周期、名称、修订与 Project 外键受保护，项目删除级联且不影响其他项目', async () => {

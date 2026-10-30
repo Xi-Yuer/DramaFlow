@@ -29,7 +29,7 @@ describe.skipIf(!enabled)('Cancel 产品 service → 正式 PostgreSQL transacti
   });
   async function fixture() {
     const project = await db!.client.project.create({
-      data: { ownerId: owner, name: 'Cancel', viewport: {} },
+      data: { ownerId: owner, name: 'Cancel' },
     });
     const workflow = await db!.client.workflow.create({
       data: { projectId: project.id, name: 'Cancel', draft: {} },

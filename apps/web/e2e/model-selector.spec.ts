@@ -1,10 +1,10 @@
+import { createProjectWithWorkflow } from './fixtures.js';
 import { randomUUID } from 'node:crypto';
 import type { APIRequestContext, Page } from '@playwright/test';
 import {
   managedModelConfigurationSchema,
   modelConfigurationListSchema,
   modelProviderSchema,
-  projectSchema,
   workflowResponseSchema,
   type WorkflowDefinition,
 } from '@dramaflow/contracts';
@@ -30,16 +30,9 @@ function definition(): WorkflowDefinition {
 }
 
 async function createProject(api: APIRequestContext) {
-  const project = projectSchema.parse(
-    await (
-      await api.post('/api/v1/projects', {
-        headers: { Origin: origin },
-        data: { name: '模型选择测试' },
-      })
-    ).json(),
-  );
+  const project = await createProjectWithWorkflow(api, '画布测试项目');
   const workflow = workflowResponseSchema.parse(
-    await (await api.get(`/api/v1/projects/${project.id}/workflow`)).json(),
+    await (await api.get(`/api/v1/projects/${project.id}/workflows/${project.workflowId}`)).json(),
   );
   const saved = await api.put(`/api/v1/workflows/${workflow.id}/draft`, {
     headers: { Origin: origin },
@@ -76,9 +69,9 @@ async function createTextModel(api: APIRequestContext, providerId: string, model
   return managedModelConfigurationSchema.parse(await response.json());
 }
 
-async function readWorkflow(api: APIRequestContext, projectId: string) {
+async function readWorkflow(api: APIRequestContext, projectId: string, workflowId: string) {
   return workflowResponseSchema.parse(
-    await (await api.get(`/api/v1/projects/${projectId}/workflow`)).json(),
+    await (await api.get(`/api/v1/projects/${projectId}/workflows/${workflowId}`)).json(),
   );
 }
 
@@ -92,7 +85,7 @@ test('文本节点只列出 text.generate 模型，选择后保存并在刷新�
   page.on('request', (incoming) => {
     if (incoming.url().includes('/model-catalog')) catalogUrls.push(incoming.url());
   });
-  await page.goto(`/projects/${project.id}/workflows`);
+  await page.goto(`/projects/${project.id}/workflows/${project.workflowId}`);
   await page.getByRole('button', { name: '选择模型', exact: true }).click();
   const panel = selector(page);
   await expect(
@@ -138,7 +131,9 @@ test('文本节点只列出 text.generate 模型，选择后保存并在刷新�
   await expect(
     page.getByRole('button', { name: '已选 GPT-4o，最大输出 128', exact: true }),
   ).toBeVisible();
-  expect((await readWorkflow(request, project.id)).draft.nodes[0]?.config).toEqual({
+  expect(
+    (await readWorkflow(request, project.id, project.workflowId)).draft.nodes[0]?.config,
+  ).toEqual({
     modelConfigurationId: model.id,
   });
 });
@@ -149,7 +144,7 @@ test('供应商已配置但目录模型尚无配置时，用现有创建接口�
 }) => {
   const project = await createProject(request);
   await createProvider(request, 'openai');
-  await page.goto(`/projects/${project.id}/workflows`);
+  await page.goto(`/projects/${project.id}/workflows/${project.workflowId}`);
   await page.getByRole('button', { name: '选择模型', exact: true }).click();
   await selector(page).getByRole('button', { name: '添加 GPT-4o', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '添加 GPT-4o', exact: true });
@@ -163,7 +158,7 @@ test('供应商已配置但目录模型尚无配置时，用现有创建接口�
   );
   await page.getByRole('button', { name: '保存草稿', exact: true }).click();
   await saved;
-  const workflow = await readWorkflow(request, project.id);
+  const workflow = await readWorkflow(request, project.id, project.workflowId);
   const configurationId = workflow.draft.nodes[0]?.config.modelConfigurationId;
   expect(workflow.draft.nodes[0]?.config).toEqual({ modelConfigurationId: configurationId });
   const models = modelConfigurationListSchema.parse(
@@ -207,7 +202,7 @@ async function configureProvider(page: Page, name: string) {
 
 test('未配置供应商时从目录模型配置，添加后自动选择并在刷新后恢复', async ({ page, request }) => {
   const project = await createProject(request);
-  await page.goto(`/projects/${project.id}/workflows`);
+  await page.goto(`/projects/${project.id}/workflows/${project.workflowId}`);
   await configureProvider(page, 'Anthropic');
   const dialog = page.getByRole('dialog', { name: '添加 Claude Sonnet 4', exact: true });
   await expect(dialog).toBeVisible();
@@ -221,7 +216,7 @@ test('未配置供应商时从目录模型配置，添加后自动选择并在�
   await expect(selected).toBeVisible();
   await expect(selected).toContainText('最大输出 256 · 随机度 0.3');
   await saveDraft(page);
-  const workflow = await readWorkflow(request, project.id);
+  const workflow = await readWorkflow(request, project.id, project.workflowId);
   const configurationId = workflow.draft.nodes[0]?.config.modelConfigurationId;
   expect(workflow.draft.nodes[0]?.config).toEqual({ modelConfigurationId: configurationId });
   const models = modelConfigurationListSchema.parse(
@@ -259,7 +254,7 @@ test('供应商配置完成时目录模型已有可用配置，直接选中且�
     expect(created.ok()).toBeTruthy();
     await route.fulfill({ status: response.status(), json: provider });
   });
-  await page.goto(`/projects/${project.id}/workflows`);
+  await page.goto(`/projects/${project.id}/workflows/${project.workflowId}`);
   await configureProvider(page, 'Anthropic');
   await expect(page.getByRole('dialog', { name: '添加 Claude Sonnet 4', exact: true })).toHaveCount(
     0,
@@ -273,14 +268,16 @@ test('供应商配置完成时目录模型已有可用配置，直接选中且�
   await saveDraft(page);
   await page.reload();
   await expect(selected).toBeVisible();
-  expect((await readWorkflow(request, project.id)).draft.nodes[0]?.config).toEqual({
+  expect(
+    (await readWorkflow(request, project.id, project.workflowId)).draft.nodes[0]?.config,
+  ).toEqual({
     modelConfigurationId: expect.any(String),
   });
 });
 
 test('取消供应商配置或取消添加模型后，节点保持未选择', async ({ page, request }) => {
   const project = await createProject(request);
-  await page.goto(`/projects/${project.id}/workflows`);
+  await page.goto(`/projects/${project.id}/workflows/${project.workflowId}`);
   await page.getByRole('button', { name: '选择模型', exact: true }).click();
   await selector(page).getByRole('button', { name: '配置 Anthropic', exact: true }).click();
   await page
@@ -299,12 +296,14 @@ test('取消供应商配置或取消添加模型后，节点保持未选择', as
   await dialog.getByRole('button', { name: '取消', exact: true }).click();
   await expect(page.getByRole('button', { name: '选择模型', exact: true })).toBeVisible();
   await expect(page.getByRole('status', { name: '工作流草稿状态' })).not.toContainText('未保存');
-  expect((await readWorkflow(request, project.id)).draft.nodes[0]?.config).toEqual({});
+  expect(
+    (await readWorkflow(request, project.id, project.workflowId)).draft.nodes[0]?.config,
+  ).toEqual({});
 });
 
 test('从设置页配置供应商不会继续节点上的模型选择', async ({ page, request }) => {
   const project = await createProject(request);
-  await page.goto(`/projects/${project.id}/workflows`);
+  await page.goto(`/projects/${project.id}/workflows/${project.workflowId}`);
   await page.getByRole('button', { name: '模型设置', exact: true }).click();
   const drawer = page.getByRole('dialog', { name: '模型设置', exact: true });
   await drawer.getByRole('tab', { name: /模型供应商/ }).click();
@@ -323,5 +322,7 @@ test('从设置页配置供应商不会继续节点上的模型选择', async ({
   ).toBeVisible();
   await expect(page.getByRole('dialog', { name: '添加 GPT-4o', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '选择模型', exact: true })).toBeVisible();
-  expect((await readWorkflow(request, project.id)).draft.nodes[0]?.config).toEqual({});
+  expect(
+    (await readWorkflow(request, project.id, project.workflowId)).draft.nodes[0]?.config,
+  ).toEqual({});
 });

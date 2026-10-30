@@ -133,7 +133,7 @@ function launch(command: object, env: NodeJS.ProcessEnv = process.env) {
 
 async function fixture() {
   const project = await db.project.create({
-    data: { ownerId, name: '持久恢复测试', viewport: {} },
+    data: { ownerId, name: '持久恢复测试' },
   });
   const workflow = await db.workflow.create({
     data: {

@@ -62,7 +62,6 @@ beforeAll(async () => {
       data: {
         ownerId,
         name: '节点执行测试',
-        viewport: { x: 0, y: 0, zoom: 1 },
       },
     })
   ).id;
@@ -71,7 +70,6 @@ beforeAll(async () => {
       data: {
         ownerId: otherId,
         name: '隔离项目',
-        viewport: { x: 0, y: 0, zoom: 1 },
       },
     })
   ).id;
@@ -252,10 +250,8 @@ async function reviewFixture(running = true, includeAction = false) {
       ui: { position: { x: 0, y: 0 } },
     });
   const json = z.record(z.string(), z.json()).parse(definition);
-  const workflow = await db.workflow.upsert({
-    where: { projectId },
-    create: { projectId, name: '审核审计测试', draft: json },
-    update: {},
+  const workflow = await db.workflow.create({
+    data: { projectId, name: '审核审计测试', draft: json },
   });
   const previous = await db.workflowVersion.aggregate({
     where: { workflowId: workflow.id },

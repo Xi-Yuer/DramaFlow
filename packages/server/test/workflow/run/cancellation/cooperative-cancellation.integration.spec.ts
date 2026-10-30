@@ -52,7 +52,7 @@ describe.skipIf(!enabled)(
         data: { id: owner, name: '协作取消测试', email: `${owner}@example.test` },
       });
       await db().project.create({
-        data: { id: project, ownerId: owner, name: '取消测试', viewport: {} },
+        data: { id: project, ownerId: owner, name: '取消测试' },
       });
     });
     afterAll(async () => {
@@ -69,7 +69,7 @@ describe.skipIf(!enabled)(
     ) {
       const project = randomUUID();
       await db().project.create({
-        data: { id: project, ownerId: owner, name: '协作取消 fixture', viewport: {} },
+        data: { id: project, ownerId: owner, name: '协作取消 fixture' },
       });
       const f =
         form === 'iteration' ? iterationSubworkflowFixture() : nestedCompositeFixture(false);

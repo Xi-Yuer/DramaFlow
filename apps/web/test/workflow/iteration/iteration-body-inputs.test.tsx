@@ -732,13 +732,15 @@ describe('Iteration Inspector 与 Body 画布', () => {
         id: 'workflow',
         projectId,
         name: '数组输入验收',
+        metadataRevision: 1,
+        viewport: { x: 0, y: 0, zoom: 1 },
         revision: 2,
         draft: request.definition,
         createdAt: '2026-10-26T00:00:00.000Z',
         updatedAt: '2026-10-26T00:00:00.000Z',
       }),
     );
-    const loaded = (await workflowApi.get(projectId)).draft;
+    const loaded = (await workflowApi.get(projectId, 'workflow')).draft;
     expect(fetch).toHaveBeenCalledTimes(2);
     cleanup();
     setup(loaded);

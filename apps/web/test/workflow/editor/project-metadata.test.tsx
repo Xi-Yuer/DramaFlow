@@ -1,13 +1,11 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react';
-import type { RefObject } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Project } from '@dramaflow/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../src/lib/http';
 import { projectApi, projectKeys } from '../../../src/features/projects/project-api';
-import type { GraphCanvasSessionHandle } from '../../../src/features/workflow/editor/navigation/graph-canvas-session';
-import { useProjectMetadata } from '../../../src/features/workflow/editor/project/use-project-metadata';
+import { useProjectMetadata } from '../../../src/features/projects/metadata/use-project-metadata';
 
 const feedback = vi.hoisted(() => ({
   success: vi.fn(),
@@ -28,7 +26,6 @@ const project: Project = {
   id: '7ac10b00-33cc-4e50-9a2b-05ef764c44f4',
   name: '原项目',
   revision: 1,
-  viewport: { x: 0, y: 0, zoom: 1 },
   createdAt: '2026-10-27T00:00:00.000Z',
   updatedAt: '2026-10-27T00:00:00.000Z',
 };
@@ -36,16 +33,12 @@ const project: Project = {
 function mount() {
   const cache = new QueryClient();
   cache.setQueryData(projectKeys.detail(project.id), project);
-  const session: RefObject<GraphCanvasSessionHandle | null> = {
-    current: { getRootViewport: () => project.viewport, setRootViewport: vi.fn() },
-  };
   return {
-    ...renderHook(() => useProjectMetadata(project, session), {
+    ...renderHook(() => useProjectMetadata(project), {
       wrapper: ({ children }) => (
         <QueryClientProvider client={cache}>{children}</QueryClientProvider>
       ),
     }),
-    session,
     cache,
   };
 }
@@ -73,7 +66,6 @@ describe('项目元数据保存与冲突恢复', () => {
     expect(projectApi.save).toHaveBeenCalledExactlyOnceWith(project.id, {
       revision: 1,
       name: '第一次修改',
-      viewport: project.viewport,
     });
     act(() => result.current.setName('保存期间继续修改'));
     await act(async () => {
@@ -90,16 +82,15 @@ describe('项目元数据保存与冲突恢复', () => {
     });
   });
 
-  it('409 保留本地修改并阻止覆盖，确认重读后同步根画布视口与修订', async () => {
+  it('409 保留本地修改并阻止覆盖，确认重读后同步项目名称与修订', async () => {
     vi.mocked(projectApi.save).mockRejectedValue(new ApiError('修订冲突', 409));
     const server = {
       ...project,
       name: '服务器项目',
       revision: 3,
-      viewport: { x: 40, y: 20, zoom: 1.2 },
     };
     vi.mocked(projectApi.get).mockResolvedValue(server);
-    const { result, session } = mount();
+    const { result } = mount();
     act(() => result.current.setName('本地修改'));
     await act(async () => {
       await result.current.save();
@@ -115,7 +106,6 @@ describe('项目元数据保存与冲突恢复', () => {
     await act(async () => {
       await feedback.confirm.mock.calls[0]![0].onOk();
     });
-    expect(session.current!.setRootViewport).toHaveBeenCalledWith(server.viewport);
     expect(result.current.name).toBe(server.name);
     expect(result.current.revision).toBe(3);
     expect(result.current.conflict).toBe(false);

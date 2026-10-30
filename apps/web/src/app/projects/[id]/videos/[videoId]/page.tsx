@@ -1,6 +1,18 @@
 import { VideoDetail } from '@/features/videos/detail/video-detail';
 
-export default async function VideoPage({ params }: { params: Promise<{ videoId: string }> }) {
+export default async function VideoPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ videoId: string }>;
+  searchParams?: Promise<{ workflowId?: string | string[] }>;
+}) {
   const { videoId } = await params;
-  return <VideoDetail videoId={videoId} />;
+  const selected = (await searchParams)?.workflowId;
+  return (
+    <VideoDetail
+      videoId={videoId}
+      selectedWorkflowId={typeof selected === 'string' ? selected : undefined}
+    />
+  );
 }

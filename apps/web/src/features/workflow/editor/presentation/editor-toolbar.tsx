@@ -1,7 +1,7 @@
 import { Button } from 'antd';
 import { ArrowLeft, Settings2 } from 'lucide-react';
 import { AccountMenuButton } from '@/features/auth/account-menu';
-import type { ProjectMetadata } from '../project/use-project-metadata';
+import type { WorkflowMetadata } from '../metadata/use-workflow-metadata';
 import type { useWorkflowDraft } from '../draft/use-workflow-draft';
 import type { useEditorLeaveGuard } from '../navigation/use-editor-leave-guard';
 
@@ -14,7 +14,7 @@ export function EditorToolbar({
   requestLeave,
   inWorkspace = false,
 }: {
-  metadata: ProjectMetadata;
+  metadata: WorkflowMetadata;
   draft: ReturnType<typeof useWorkflowDraft>;
   publishing: boolean;
   onBack: () => void;
@@ -22,46 +22,55 @@ export function EditorToolbar({
   requestLeave: ReturnType<typeof useEditorLeaveGuard>['requestLeave'];
   inWorkspace?: boolean;
 }) {
-  const { name, setName, saving, reloadingProject, conflict, projectError, dirty, revision, save } =
-    metadata;
+  const {
+    name,
+    setName,
+    saving,
+    reloadingMetadata,
+    conflict,
+    metadataError,
+    dirty,
+    revision,
+    save,
+  } = metadata;
   return (
     <header className="canvas-top">
       <Button
         type="text"
         icon={<ArrowLeft size={16} />}
         onClick={onBack}
-        aria-label={inWorkspace ? '返回项目概览' : '返回项目'}
+        aria-label={inWorkspace ? '返回工作流列表' : '返回项目'}
       >
-        {inWorkspace ? '概览' : '项目'}
+        {inWorkspace ? '工作流' : '项目'}
       </Button>
       <input
         className="canvas-name"
         value={name}
         maxLength={80}
-        aria-label="项目名称"
+        aria-label="工作流名称"
         onChange={(event) => setName(event.target.value)}
       />
-      <div className="canvas-save-group" role="group" aria-label="项目信息">
-        <span className="canvas-status" role="status" aria-label="项目信息状态">
+      <div className="canvas-save-group" role="group" aria-label="工作流信息">
+        <span className="canvas-status" role="status" aria-label="工作流信息状态">
           {saving
-            ? '正在保存项目信息…'
-            : reloadingProject
-              ? '正在读取项目信息…'
+            ? '正在保存工作流信息…'
+            : reloadingMetadata
+              ? '正在读取工作流信息…'
               : conflict
-                ? '项目信息冲突'
-                : projectError
-                  ? '项目信息保存未确认'
+                ? '工作流信息冲突'
+                : metadataError
+                  ? '工作流信息保存未确认'
                   : dirty
-                    ? '项目信息未保存'
-                    : `项目已保存 · 修订 ${revision}`}
+                    ? '工作流信息未保存'
+                    : `工作流信息已保存 · 修订 ${revision}`}
         </span>
         <Button
           size="small"
           loading={saving}
-          disabled={!dirty || conflict || reloadingProject}
+          disabled={!dirty || conflict || reloadingMetadata}
           onClick={() => void save()}
         >
-          保存项目信息
+          保存工作流信息
         </Button>
       </div>
       <div className="canvas-save-group" role="group" aria-label="工作流草稿">
@@ -90,15 +99,6 @@ export function EditorToolbar({
         </Button>
       </div>
       <div className="canvas-actions">
-        <Button
-          type="text"
-          danger
-          size="small"
-          aria-label="删除项目"
-          onClick={metadata.removeProject}
-        >
-          删除项目
-        </Button>
         <Button
           size="small"
           icon={<Settings2 size={15} />}
